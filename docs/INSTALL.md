@@ -27,18 +27,20 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 Полный список: [CLI.md](./CLI.md) или `stealthsurf help`.
 
 ```sh
-stealthsurf set-key 'stlth_…'
-stealthsurf sync
-stealthsurf apply <config_id>
-stealthsurf set-mode redirect
-stealthsurf start
-stealthsurf stop
-stealthsurf restart
-stealthsurf status
-stealthsurf check-update    # проверка GitHub
-stealthsurf update          # установка, если есть новее
-stealthsurf update --force  # всегда latest
-stealthsurf diag
+ssurf key 'stlth_…'          # короткое CLI: ssurf (или stealthsurf)
+ssurf sy                     # sync
+ssurf ap <config_id>         # apply
+ssurf mode redirect
+ssurf up                     # start
+ssurf dn                     # stop
+ssurf re                     # restart
+ssurf st                     # status
+ssurf cu                     # check-update
+ssurf upd                    # update если новее
+ssurf upd -f                 # force latest
+ssurf d                      # diag
+ssurf m                      # интерактивное меню
+ssurf h                      # справка по коротким командам
 ```
 
 ## Обновление из WebUI

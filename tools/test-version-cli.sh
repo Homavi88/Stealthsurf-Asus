@@ -5,7 +5,7 @@ TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 export ADDON_TAG=stealthsurf
-export ADDON_VERSION=1.0.6
+export ADDON_VERSION=1.0.8
 export ADDON_REPO=Homavi88/Stealthsurf-Asus
 export ADDON_RELEASE_TGZ="https://github.com/${ADDON_REPO}/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz"
 export ADDON_RELEASE_API="https://api.github.com/repos/${ADDON_REPO}/releases/latest"
@@ -51,16 +51,32 @@ ss_version_write "1.0.6" "1.0.6" "v1.0.6" "https://example/rel" "" "https://exam
 assert_eq "$(jq -r '.update_available' "$SS_VERSION_FILE")" "false" "uptodate"
 
 # CLI help / aliases present in source
-grep -q 'uninstall | remove | purge' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall aliases" || {
+grep -q 'uninstall | remove | purge | un | rm' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall aliases" || {
   echo "FAIL uninstall aliases"
   fail=$((fail + 1))
 }
-grep -q 'force-update' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  force-update" || {
+grep -q 'force-update | update-force | uf' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  force-update" || {
   echo "FAIL force-update"
   fail=$((fail + 1))
 }
 grep -q 'ss_cli_help' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  help" || {
   echo "FAIL help"
+  fail=$((fail + 1))
+}
+grep -q 'start | up | on)' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  short start" || {
+  echo "FAIL short start"
+  fail=$((fail + 1))
+}
+grep -q 'sync | sy)' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  short sync" || {
+  echo "FAIL short sync"
+  fail=$((fail + 1))
+}
+grep -q 'ss_cli_menu' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  menu" || {
+  echo "FAIL menu"
+  fail=$((fail + 1))
+}
+grep -q '/opt/bin/ssurf' "$ROOT/src/backend/install.sh" && echo "OK  ssurf symlink" || {
+  echo "FAIL ssurf symlink"
   fail=$((fail + 1))
 }
 

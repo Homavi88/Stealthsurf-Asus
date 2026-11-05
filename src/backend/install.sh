@@ -150,6 +150,8 @@ ss_install() {
 
   chmod 0755 "$ADDON_SCRIPT" 2>/dev/null
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+  # Short CLI name (avoid /opt/bin/ss — conflicts with iproute2)
+  ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
 
   ss_hook_scripts
   ss_install_service_event_hook
@@ -180,7 +182,7 @@ ss_uninstall() {
   ss_remove_cron 2>/dev/null || true
 
   # Symlinks and addon-owned paths
-  rm -f "/opt/bin/$ADDON_TAG"
+  rm -f "/opt/bin/$ADDON_TAG" "/opt/bin/ssurf"
   rm -f "/opt/sbin/$ADDON_TAG" 2>/dev/null
   rm -rf "$ADDON_JFFS_ADN_DIR" "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR"
   rm -rf "$ADDON_BACKUP_DIR" 2>/dev/null
