@@ -92,7 +92,8 @@
   - [ ] `nat-start` / `firewall-start` — восстановление правил после reboot / переподъёма WAN
 - [ ] Блокировка `flock` на start/stop/restart (без гонок)
 - [ ] Корректный PID Xray **без** глобального `killall xray` (не трогать чужие процессы)
-- [ ] GitHub Release + `asuswrt-merlin-stealthsurf.tar.gz` + install one-liner в README
+- [x] One-liner установка с GitHub: `curl …/install.sh | sh` (проверка Entware обязательна, зависимости через `opkg`, пакет из `packaged/` / Releases)
+- [ ] GitHub Release automation (CI) + тот же one-liner предпочитает Releases
 - [ ] Довести мост WebUI → backend (стабильная запись payload и вызов `service_event`)
 
 ---

@@ -1,14 +1,31 @@
 #!/bin/sh
 
-ss_install_deps() {
-  if ! command -v opkg >/dev/null 2>&1; then
-    ss_warn "opkg not found — install Entware via amtm first"
-    return 0
+ss_require_entware() {
+  if [ ! -d /opt ] || { [ ! -x /opt/bin/opkg ] && [ ! -x /opt/sbin/opkg ]; }; then
+    ss_error "Entware is not installed. Install Entware via amtm first, then re-run: stealthsurf install"
+    return 1
   fi
+  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
+  return 0
+}
+
+ss_install_deps() {
+  ss_require_entware || return 1
+  if ! command -v opkg >/dev/null 2>&1; then
+    ss_error "opkg not found in PATH"
+    return 1
+  fi
+  opkg update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
   for pkg in curl jq ca-certificates; do
     if ! opkg list-installed 2>/dev/null | grep -q "^$pkg "; then
       ss_info "Installing $pkg…"
       opkg install "$pkg" || ss_warn "Could not install $pkg"
+    fi
+  done
+  # best-effort extras used by installer/dataplane
+  for pkg in flock coreutils-base64 openssl-util; do
+    if ! opkg list-installed 2>/dev/null | grep -q "^$pkg "; then
+      opkg install "$pkg" >/dev/null 2>&1 || true
     fi
   done
 }
@@ -28,7 +45,7 @@ ss_hook_scripts() {
 
 ss_install() {
   ss_ensure_dirs
-  ss_install_deps
+  ss_install_deps || return 1
 
   if [ ! -f "$SS_CONF_FILE" ]; then
     SS_API_KEY=""

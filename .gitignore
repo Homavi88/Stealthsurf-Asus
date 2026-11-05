@@ -1,6 +1,8 @@
 node_modules/
 dist/
 *.tar.gz
+!packaged/*.tar.gz
 .DS_Store
 .env
 *.log
+.pack-stage/

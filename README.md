@@ -24,23 +24,38 @@
 ## Требования
 
 - Asuswrt-Merlin `384.15+` / `3006.102.1+`
-- JFFS custom scripts
-- Entware (`amtm`)
-- Пакеты: `curl`, `jq`, `ca-certificates` (и бинарь `xray` — ставится аддоном или вручную)
+- JFFS custom scripts включены
+- **Entware уже установлен** через `amtm` (установщик аддона Entware **не** ставит — только проверяет)
 
-## Установка (после релиза)
+## Установка одной командой
+
+На роутере по SSH (Entware должен быть уже установлен):
 
 ```sh
-wget -O /tmp/asuswrt-merlin-stealthsurf.tar.gz \
-  https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz && \
-rm -rf /jffs/addons/stealthsurf && \
-tar -xzf /tmp/asuswrt-merlin-stealthsurf.tar.gz -C /jffs/addons && \
-mv /jffs/addons/stealthsurf/stealthsurf /jffs/scripts/stealthsurf && \
-chmod 0755 /jffs/scripts/stealthsurf && \
-sh /jffs/scripts/stealthsurf install
+curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
+Альтернатива без curl:
+
+```sh
+wget -qO- https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
+```
+
+Что делает установщик:
+
+1. Проверяет `/jffs` и что Entware есть (`/opt` + `opkg`); если Entware нет — **останавливается** с понятной ошибкой  
+2. Ставит зависимости через `opkg` (`curl`, `jq`, `ca-certificates`, …)  
+3. Скачивает пакет аддона с GitHub (`packaged/` или Releases)  
+4. Раскладывает файлы в `/jffs/addons/stealthsurf` и `/jffs/scripts/stealthsurf`  
+5. Запускает `stealthsurf install` (UI-вкладка, хуки)
+
 После установки: выйти из WebUI и зайти снова → **VPN → StealthSurf**.
+
+Удаление:
+
+```sh
+stealthsurf uninstall
+```
 
 ## Быстрый старт в UI
 
