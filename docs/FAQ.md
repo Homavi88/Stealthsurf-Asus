@@ -20,10 +20,13 @@ JFFS custom scripts должны быть включены.
 
 `stealthsurf stop` и `uninstall` чистят цепочки `STEALTHSURF` и `ip rule`. Если интернет пропал — перезапустите firewall роутера (`service restart_firewall`) или reboot.
 
-## Протокол «в разработке» / apply не работает
+## Протокол «недоступен» / apply не работает
 
-Xray-протоколы (vless/trojan/ss) работают из коробки.  
-Hysteria2 / WireGuard / AmneziaWG требуют соответствующие бинарники на роутере. OpenFlux — статус in development.
+- **vless / trojan / ss / openflux / http / socks5 / wg** — через Xray (`xray_config` предпочтительнее URI; OpenFlux почти всегда из `xray_config`)
+- **hysteria2** — клиент скачивается при apply (или положите `/opt/sbin/hysteria`)
+- **amnezia-wg-2** — нужен `awg-quick` / AmneziaWG на роутере
+
+Матрица: `stealthsurf protocols` или бейджи в UI. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).
 
 ## Rate-limit API
 

@@ -6,6 +6,7 @@ ss_parse_vless() {
   local link="$1"
   local rest uuid hostport host port qs name
   local encryption security type flow sni fp pbk sid spx path host_header
+  local mode service_name alpn
 
   rest="${link#vless://}"
   name=""
@@ -45,6 +46,12 @@ ss_parse_vless() {
   encryption=$(ss_get_query_param "$qs" encryption 2>/dev/null || echo none)
   security=$(ss_get_query_param "$qs" security 2>/dev/null || echo none)
   type=$(ss_get_query_param "$qs" type 2>/dev/null || echo tcp)
+  # Normalize alias network names used by clients / OpenFlux
+  case "$type" in
+  h2 | http) type="h2" ;;
+  httpupgrade | http_upgrade) type="httpupgrade" ;;
+  xhttp | splithttp) type="xhttp" ;;
+  esac
   flow=$(ss_get_query_param "$qs" flow 2>/dev/null || echo "")
   sni=$(ss_get_query_param "$qs" sni 2>/dev/null || echo "")
   fp=$(ss_get_query_param "$qs" fp 2>/dev/null || echo chrome)
@@ -53,6 +60,9 @@ ss_parse_vless() {
   spx=$(ss_get_query_param "$qs" spx 2>/dev/null || echo "")
   path=$(ss_get_query_param "$qs" path 2>/dev/null || echo "")
   host_header=$(ss_get_query_param "$qs" host 2>/dev/null || echo "")
+  mode=$(ss_get_query_param "$qs" mode 2>/dev/null || echo "")
+  service_name=$(ss_get_query_param "$qs" serviceName 2>/dev/null || ss_get_query_param "$qs" servicename 2>/dev/null || echo "")
+  alpn=$(ss_get_query_param "$qs" alpn 2>/dev/null || echo "")
 
   jq -nc \
     --arg tag "${name:-stealthsurf}" \
@@ -69,7 +79,10 @@ ss_parse_vless() {
     --arg sid "$sid" \
     --arg spx "$spx" \
     --arg path "$path" \
-    --arg host_header "$host_header" '
+    --arg host_header "$host_header" \
+    --arg mode "$mode" \
+    --arg service_name "$service_name" \
+    --arg alpn "$alpn" '
     {
       tag: $tag,
       protocol: "vless",
@@ -101,8 +114,9 @@ ss_parse_vless() {
             tlsSettings: {
               serverName: (if $sni == "" then $address else $sni end),
               fingerprint: $fp,
-              allowInsecure: false
-            }
+              allowInsecure: false,
+              alpn: (if $alpn == "" then null else ($alpn | split(",")) end)
+            } | with_entries(select(.value != null))
           } else {} end)
         + (if $network == "ws" then {
             wsSettings: {
@@ -111,7 +125,23 @@ ss_parse_vless() {
             }
           } elif $network == "grpc" then {
             grpcSettings: {
-              serviceName: (if $path == "" then "" else $path end)
+              serviceName: (if $service_name != "" then $service_name elif $path == "" then "" else $path end)
+            }
+          } elif $network == "h2" then {
+            httpSettings: {
+              path: (if $path == "" then "/" else $path end),
+              host: (if $host_header == "" then [] else [$host_header] end)
+            }
+          } elif $network == "httpupgrade" then {
+            httpupgradeSettings: {
+              path: (if $path == "" then "/" else $path end),
+              host: $host_header
+            }
+          } elif $network == "xhttp" or $network == "splithttp" then {
+            xhttpSettings: {
+              path: (if $path == "" then "/" else $path end),
+              host: $host_header,
+              mode: (if $mode == "" then "auto" else $mode end)
             }
           } else {} end)
       )

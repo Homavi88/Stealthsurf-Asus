@@ -217,8 +217,9 @@
   - [x] `amnezia-wg-2` (AmneziaWG)
   - [x] `openflux` (если доступен в аккаунте / API)
   - [x] HTTP / SOCKS5 subconfig (доп. прокси конфигурации, где отдаёт StealthSurf)
-  - [x] Единый Apply: парсинг `connection_url` / конфига протокола → нужный runtime (Xray / hysteria / awg / wg) + firewall
-  - [x] В UI: только реально поддерживаемые на роутере протоколы активны; остальные — понятный статус «в разработке», без «тихого» apply
+  - [x] Единый Apply: `xray_config` (приоритет) / `connection_url` / `awg_config` → runtime (Xray / hysteria / awg) + firewall
+  - [x] OpenFlux и расширенные транспорты через API `xray_config`; WG → Xray wireguard outbound; Hy2 salamander + auto-download
+  - [x] В UI: матрица `protocols.json`, бейджи runtime; недоступные (нет awg) — disabled с причиной
   - [x] Multi-protocol: разные конфиги в каталоге могут работать на разных runtime одновременно (где это позволяет роутер)
 - [x] Сборные подписки StealthSurf (`custom-subscriptions`) в каталоге наравне с `/configs`
 - [x] Watchdog / failover: если outbound `ss-<id>` упал — fallback на другой конфиг / direct

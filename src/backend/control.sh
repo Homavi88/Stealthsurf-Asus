@@ -43,7 +43,10 @@ ss_write_state() {
       version: $version
     }' >"$SS_STATE_FILE"
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
-  # Keep version.json installed field in sync
+  # Keep protocol matrix + version for UI
+  if type ss_protocol_status_matrix >/dev/null 2>&1; then
+    ss_protocol_status_matrix >/dev/null 2>&1 || true
+  fi
   if type ss_version_local >/dev/null 2>&1; then
     ss_version_local >/dev/null 2>&1 || true
   fi
@@ -53,7 +56,7 @@ ss_apply_config_id() {
   # Enable this config as outbound (+ optionally sole default) and rebuild
   local config_id="$1"
   local sole="${2:-1}" # 1 = make this the only/default outbound (legacy UX)
-  local entry link proto runtime
+  local entry link xray_cfg proto runtime
 
   [ -n "$config_id" ] || {
     ss_error "usage: apply <config_id>"
@@ -76,14 +79,25 @@ ss_apply_config_id() {
 
   proto=$(printf '%s' "$entry" | jq -r '.protocol // "vless"')
   runtime=$(ss_protocol_runtime "$proto")
-  if [ "$runtime" = "unsupported" ] || { [ "$runtime" != "xray" ] && ! ss_protocol_supported_on_router "$proto"; }; then
-    ss_error "Протокол $proto не поддерживается на этом роутере (статус: в разработке / нет бинаря)"
+  if [ "$runtime" = "unsupported" ]; then
+    ss_error "Протокол $proto не поддерживается"
     return 1
+  fi
+  # Soft check: hysteria can auto-download; openflux/wg need xray; awg needs awg-quick
+  if ! ss_protocol_supported_on_router "$proto"; then
+    case "$runtime" in
+    hysteria) ss_info "Hysteria binary missing — will try auto-download on apply" ;;
+    *)
+      ss_error "Протокол $proto не поддерживается на этом роутере (нет runtime: $runtime)"
+      return 1
+      ;;
+    esac
   fi
 
   link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
-  if [ -z "$link" ]; then
-    ss_error "Config $config_id has empty connection_url"
+  xray_cfg=$(printf '%s' "$entry" | jq -r '.xray_config // empty')
+  if [ -z "$link" ] && { [ -z "$xray_cfg" ] || [ "$xray_cfg" = "null" ]; }; then
+    ss_error "Config $config_id has neither connection_url nor xray_config"
     return 1
   fi
 
@@ -96,10 +110,9 @@ ss_apply_config_id() {
   SS_ACTIVE_CONFIG_ID="$config_id"
   ss_save_conf
 
-  # Non-xray runtimes
-  if [ "$runtime" != "xray" ]; then
-    ss_apply_protocol_config "$config_id" || return 1
-  fi
+  # Build/persist outbound (starts Hy2/AWG side runtimes when needed)
+  rm -f "$ADDON_DATA_DIR/outbound-ss-${config_id}.json" 2>/dev/null
+  ss_apply_protocol_config "$config_id" || return 1
 
   ss_rebuild_and_restart || {
     ss_activity "apply.fail" "config_id=$config_id proto=$proto"
@@ -114,19 +127,18 @@ ss_rebuild_xray_config() {
   ss_ensure_dirs
   ss_ensure_xray || ss_warn "xray binary missing"
 
-  # Start non-xray enabled outbounds first (bridges)
-  local id entry proto runtime
+  # Refresh outbounds for enabled configs (starts Hy2/AWG/WG bridges when needed)
+  local id entry
   for id in $SS_ENABLED_OUTBOUNDS; do
     entry=$(ss_cache_get_config "$id" 2>/dev/null) || continue
-    proto=$(printf '%s' "$entry" | jq -r '.protocol // "vless"')
-    runtime=$(ss_protocol_runtime "$proto")
-    if [ "$runtime" != "xray" ] && [ "$runtime" != "unsupported" ]; then
-      ss_apply_protocol_config "$id" || ss_warn "Failed to start $runtime for $id"
-    fi
+    [ -n "$entry" ] && [ "$entry" != "null" ] || continue
+    rm -f "$ADDON_DATA_DIR/outbound-ss-${id}.json" 2>/dev/null
+    ss_apply_protocol_config "$id" || ss_warn "Failed to prepare outbound for $id"
   done
 
   if [ -z "$SS_ENABLED_OUTBOUNDS" ] && [ -n "$SS_ACTIVE_CONFIG_ID" ]; then
-    full=$(ss_build_xray_config "$(ss_parse_link_to_outbound "$(ss_cache_get_config "$SS_ACTIVE_CONFIG_ID" | jq -r '.connection_url')")") || return 1
+    entry=$(ss_cache_get_config "$SS_ACTIVE_CONFIG_ID") || return 1
+    full=$(ss_build_xray_config "$(ss_outbound_from_entry "$entry" "proxy")") || return 1
   else
     full=$(ss_build_xray_config_multi) || return 1
   fi
@@ -205,15 +217,8 @@ ss_start_inner() {
   return 1
 }
 
-ss_stop_inner() {
+ss_kill_our_xray() {
   local pid=""
-  [ -f "$XRAY_PIDFILE" ] && pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
-  ss_activity "stop.begin" "pid=${pid:-none}"
-  ss_desired_clear 2>/dev/null || true
-  ss_cleanup_firewall 2>/dev/null
-  ss_dnsmasq_cleanup 2>/dev/null
-  ss_stop_all_runtimes 2>/dev/null
-
   if [ -f "$XRAY_PIDFILE" ]; then
     pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
     if [ -n "$pid" ]; then
@@ -229,6 +234,17 @@ ss_stop_inner() {
     fi
     rm -f "$XRAY_PIDFILE"
   fi
+}
+
+ss_stop_inner() {
+  local pid=""
+  [ -f "$XRAY_PIDFILE" ] && pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
+  ss_activity "stop.begin" "pid=${pid:-none}"
+  ss_desired_clear 2>/dev/null || true
+  ss_cleanup_firewall 2>/dev/null
+  ss_dnsmasq_cleanup 2>/dev/null
+  ss_stop_all_runtimes 2>/dev/null
+  ss_kill_our_xray
   # Do NOT killall xray — other addons may use it
   ss_ok "Stopped (firewall cleaned, our PID only)"
   ss_activity "stop.done" "firewall cleaned"
@@ -244,7 +260,12 @@ ss_stop() {
 }
 
 ss_restart_inner() {
-  ss_stop_inner
+  # Restart Xray without dropping Hy2/AWG bridges (stop clears those intentionally)
+  ss_activity "restart.begin" ""
+  ss_cleanup_firewall 2>/dev/null
+  ss_kill_our_xray
+  # Re-materialize side runtimes + outbounds then start
+  ss_rebuild_xray_config 2>/dev/null || true
   ss_start_inner
 }
 

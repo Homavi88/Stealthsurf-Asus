@@ -191,10 +191,11 @@ ss_router_ip() {
 }
 
 ss_protocol_runtime() {
-  # Map StealthSurf protocol → runtime: xray|hysteria|wg|awg|openflux|unsupported
+  # Map StealthSurf protocol → runtime: xray|hysteria|wg|awg|unsupported
+  # openflux and wg prefer Xray (xray_config / wireguard outbound); awg needs awg-quick.
   local proto="$1"
   case "$proto" in
-  vless | vless-2410 | trojan | trojan-2901 | shadowsocks-2022 | shadowsocks | ss)
+  vless | vless-2410 | trojan | trojan-2901 | shadowsocks-2022 | shadowsocks | ss | openflux)
     echo xray
     ;;
   hysteria2 | hy2)
@@ -205,9 +206,6 @@ ss_protocol_runtime() {
     ;;
   amnezia-wg-2 | amneziawg | awg)
     echo awg
-    ;;
-  openflux)
-    echo openflux
     ;;
   http | socks5 | socks)
     echo xray
@@ -224,19 +222,21 @@ ss_protocol_supported_on_router() {
   runtime=$(ss_protocol_runtime "$proto")
   case "$runtime" in
   xray)
+    # openflux / vless* / trojan* / ss / http / socks → need Xray
     [ -x "$XRAY_BIN" ] || command -v xray >/dev/null 2>&1
     ;;
   hysteria)
-    [ -x "$HYSTERIA_BIN" ] || command -v hysteria >/dev/null 2>&1
+    [ -x "$HYSTERIA_BIN" ] || command -v hysteria >/dev/null 2>&1 || [ -x /opt/sbin/hysteria ]
     ;;
   wg)
+    # Preferred path is Xray wireguard outbound; iface fallback needs wg/wg-quick
+    if [ -x "$XRAY_BIN" ] || command -v xray >/dev/null 2>&1; then
+      return 0
+    fi
     command -v wg >/dev/null 2>&1 || [ -x /usr/sbin/wg ]
     ;;
   awg)
-    command -v awg >/dev/null 2>&1 || [ -x "$AWG_BIN" ]
-    ;;
-  openflux)
-    return 1
+    command -v awg-quick >/dev/null 2>&1 || command -v awg >/dev/null 2>&1 || [ -x "$AWG_BIN" ]
     ;;
   *)
     return 1

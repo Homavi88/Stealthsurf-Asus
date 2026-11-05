@@ -173,16 +173,22 @@ ss_routing_apply_preset() {
 
 ss_collect_endpoints() {
   # Write endpoint IPs/hosts of enabled outbounds for anti-loop
-  local id entry link host
+  local id entry link host xray_cfg
   local tmp="$ADDON_TMP_DIR/endpoints.$$"
   echo '[]' >"$tmp"
   for id in $SS_ENABLED_OUTBOUNDS; do
     [ -n "$id" ] || continue
     entry=$(ss_cache_get_config "$id" 2>/dev/null) || continue
     [ -n "$entry" ] && [ "$entry" != "null" ] || continue
-    link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
-    [ -n "$link" ] || continue
-    host=$(ss_extract_host_from_link "$link")
+    host=""
+    xray_cfg=$(printf '%s' "$entry" | jq -r '.xray_config // empty')
+    if [ -n "$xray_cfg" ] && [ "$xray_cfg" != "null" ]; then
+      host=$(ss_extract_host_from_xray_config "$xray_cfg")
+    fi
+    if [ -z "$host" ]; then
+      link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
+      [ -n "$link" ] && host=$(ss_extract_host_from_link "$link")
+    fi
     [ -n "$host" ] || continue
     jq --arg addr "$host" --argjson id "$id" \
       '. + [{config_id:$id, address:$addr}]' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
@@ -191,13 +197,35 @@ ss_collect_endpoints() {
   if [ -n "$SS_ACTIVE_CONFIG_ID" ]; then
     entry=$(ss_cache_get_config "$SS_ACTIVE_CONFIG_ID" 2>/dev/null) || true
     if [ -n "$entry" ] && [ "$entry" != "null" ]; then
-      link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
-      host=$(ss_extract_host_from_link "$link")
+      host=""
+      xray_cfg=$(printf '%s' "$entry" | jq -r '.xray_config // empty')
+      if [ -n "$xray_cfg" ] && [ "$xray_cfg" != "null" ]; then
+        host=$(ss_extract_host_from_xray_config "$xray_cfg")
+      fi
+      if [ -z "$host" ]; then
+        link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
+        host=$(ss_extract_host_from_link "$link")
+      fi
       [ -n "$host" ] && jq --arg addr "$host" --argjson id "$SS_ACTIVE_CONFIG_ID" \
         '. + [{config_id:$id, address:$addr}] | unique_by(.address)' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
     fi
   fi
   mv "$tmp" "$SS_ENDPOINTS_FILE"
+}
+
+ss_extract_host_from_xray_config() {
+  local xray_json="$1"
+  printf '%s' "$xray_json" | jq -r '
+    (if type == "string" then (fromjson? // .) else . end) as $root |
+    ($root.outbounds // $root.outbound // (if $root.protocol then [$root] else [] end)) as $obs |
+    ($obs | map(select(.protocol != "freedom" and .protocol != "blackhole" and .protocol != "dns")) | first) as $o |
+    (
+      $o.settings.vnext[0].address //
+      $o.settings.servers[0].address //
+      $o.settings.peers[0].endpoint //
+      empty
+    ) | split(":")[0]
+  ' 2>/dev/null
 }
 
 ss_extract_host_from_link() {
@@ -223,7 +251,14 @@ ss_extract_host_from_link() {
       ;;
     esac
     ;;
-  hy2://* | hysteria2://*)
+  hy2://* | hysteria2://* | hysteria://*)
+    rest="${link#*://}"
+    rest="${rest#*@}"
+    rest="${rest%%\?*}"
+    rest="${rest%%#*}"
+    hostport="$rest"
+    ;;
+  http://* | socks5://* | socks://*)
     rest="${link#*://}"
     rest="${rest#*@}"
     rest="${rest%%\?*}"
@@ -231,7 +266,12 @@ ss_extract_host_from_link() {
     hostport="$rest"
     ;;
   *)
-    hostport=""
+    # WireGuard INI blob
+    if printf '%s' "$link" | grep -q '\[Peer\]'; then
+      hostport=$(printf '%s' "$link" | awk -F'= *' '/^Endpoint/{gsub(/\r/,""); print $2; exit}')
+    else
+      hostport=""
+    fi
     ;;
   esac
   case "$hostport" in
@@ -291,9 +331,9 @@ ss_build_routing_rules_json() {
 }
 
 ss_build_multi_outbounds() {
-  # Build JSON array of outbound objects for all enabled configs
-  local id entry link outbound tag proto runtime
-  local list="[]"
+  # Build JSON array of outbound objects for all enabled configs via ss_outbound_from_entry
+  # (xray_config preferred, then URI / WG INI / Hy2 SOCKS bridge / AWG freedom+iface)
+  local id entry outbound tag proto
   local tmp="$ADDON_TMP_DIR/outbounds.$$"
   echo '[]' >"$tmp"
 
@@ -310,29 +350,23 @@ ss_build_multi_outbounds() {
       continue
     }
     proto=$(printf '%s' "$entry" | jq -r '.protocol // "vless"')
-    runtime=$(ss_protocol_runtime "$proto")
-    if [ "$runtime" != "xray" ] && [ "$runtime" != "unsupported" ]; then
-      # Non-xray runtimes are started separately; still add a freedom dialer via socks if local bridge exists
-      ss_info "Config $id uses runtime $runtime — outbound bridge tag ss-$id (see protocols)"
-    fi
-    link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
-    if [ -z "$link" ]; then
-      ss_warn "Config $id has empty connection_url"
+    if [ "$(ss_protocol_runtime "$proto")" = "unsupported" ]; then
+      ss_warn "Protocol $proto for config $id is unsupported — skipping outbound"
       continue
     fi
-    if [ "$runtime" = "xray" ] || [ "$runtime" = "unsupported" ]; then
-      if [ "$runtime" = "unsupported" ]; then
-        ss_warn "Protocol $proto for config $id is unsupported — skipping outbound"
-        continue
-      fi
-      outbound=$(ss_parse_link_to_outbound "$link") || {
-        ss_warn "Failed to parse link for config $id"
+    tag=$(ss_outbound_tag "$id")
+    # Prefer previously persisted outbound from apply (avoids re-starting Hy2/AWG twice)
+    if [ -f "$ADDON_DATA_DIR/outbound-ss-${id}.json" ]; then
+      outbound=$(cat "$ADDON_DATA_DIR/outbound-ss-${id}.json")
+    else
+      outbound=$(ss_outbound_from_entry "$entry" "$tag") || {
+        ss_warn "Failed to build outbound for config $id ($proto)"
         continue
       }
-      tag=$(ss_outbound_tag "$id")
-      outbound=$(printf '%s' "$outbound" | jq --arg tag "$tag" '.tag = $tag')
-      jq --argjson ob "$outbound" '. + [$ob]' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
+      printf '%s\n' "$outbound" >"$ADDON_DATA_DIR/outbound-ss-${id}.json"
     fi
+    outbound=$(printf '%s' "$outbound" | jq --arg tag "$tag" '.tag = $tag')
+    jq --argjson ob "$outbound" '. + [$ob]' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
   done
 
   # Always include direct + block

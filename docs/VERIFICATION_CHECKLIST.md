@@ -44,7 +44,11 @@
 ## 4. Протоколы и продукт
 
 - [ ] VLESS / Trojan / Shadowsocks-2022: Apply + start OK
-- [ ] PATCH location/protocol в UI → новый URL → rebuild без SSH
+- [ ] PATCH location/protocol в UI → новый URL / xray_config → rebuild без SSH
+- [ ] `stealthsurf protocols` — openflux/wg/hy2/awg статусы соответствуют железу
+- [ ] Apply openflux с `xray_config` → outbound без ручного URI
+- [ ] Apply wg INI → Xray wireguard outbound в multi-outbound
+- [ ] Apply hysteria2 → локальный SOCKS bridge + tag `ss-<id>`
 - [ ] Hysteria2 / WG / AWG: если бинарь есть — поднимаются; если нет — понятный статус «нужен бинарь / в разработке»
 - [ ] OpenFlux в UI помечен как in development, тихий apply не проходит
 - [ ] Autosync (cron) обновляет кэш; watchdog поднимает упавший Xray

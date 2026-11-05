@@ -172,8 +172,21 @@ function fillOutboundSelects() {
 
 function protoSupported(proto) {
   const info = protocolsCache[proto];
-  if (!info) return proto.startsWith("vless") || proto === "trojan" || proto.includes("shadowsocks");
+  if (!info) {
+    // Optimistic defaults until protocols.json loads (all API protocols are handled)
+    return PROTO_OPTIONS.includes(proto);
+  }
   return !!info.supported;
+}
+
+function protoBadge(proto) {
+  const info = protocolsCache[proto];
+  if (!info) return "";
+  if (info.supported) {
+    const st = info.status ? String(info.status) : info.runtime || "ok";
+    return ' <span class="pill on" title="' + st + '">' + (info.runtime || "ok") + "</span>";
+  }
+  return ' <span class="pill warn" title="' + (info.status || "") + '">n/a</span>';
 }
 
 function renderConfigs(configs) {
@@ -198,7 +211,7 @@ function renderConfigs(configs) {
       (c.title || "—") +
       "</td><td>" +
       (c.protocol || "—") +
-      (supported ? "" : ' <span class="pill warn">n/a</span>') +
+      protoBadge(c.protocol) +
       "</td><td>" +
       (c.location_id ?? "—") +
       "</td><td>" +
@@ -261,7 +274,9 @@ function renderProtocolSelect() {
     const opt = document.createElement("option");
     opt.value = proto;
     const ok = protoSupported(proto);
-    opt.textContent = ok ? proto : proto + " (в разработке)";
+    const info = protocolsCache[proto];
+    const note = info && info.status ? " — " + info.status : ok ? "" : " (недоступен)";
+    opt.textContent = proto + note;
     opt.disabled = !ok;
     p.appendChild(opt);
   });
@@ -369,7 +384,7 @@ function onConfigChange() {
 
 async function refreshAll() {
   try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, response] =
+    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, protocols, response] =
       await Promise.all([
         fetchJson(EXT + "/state.json").catch(() => null),
         fetchJson(EXT + "/configs.json").catch(() => []),
@@ -380,9 +395,11 @@ async function refreshAll() {
         fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
         fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
         fetchJson(EXT + "/version.json").catch(() => null),
+        fetchJson(EXT + "/protocols.json").catch(() => null),
         fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
       ]);
     outboundsCache = outbounds || { enabled: [], default: "" };
+    if (protocols && typeof protocols === "object") protocolsCache = protocols;
     renderState(state);
     if (version) renderVersion(version);
     else if (state && state.version) renderVersion({ installed: state.version, latest: null });
