@@ -25,7 +25,8 @@
 - routing по доменам, CIDR, geoip/geosite;
 - DNS hijack + dnsmasq/ipset;
 - восстановления правил после reboot / WAN up;
-- надёжной поставки Xray-бинаря и Release-установки.
+- надёжной поставки Xray-бинаря и Release-установки;
+- поддержки **всех** протоколов StealthSurf (сейчас MVP: VLESS / Trojan / Shadowsocks через Xray; нет Hysteria2, WireGuard, AmneziaWG, OpenFlux и полного покрытия вариантов API).
 
 Сейчас устройства ходят через VPN **только если** сами настроены на SOCKS/HTTP прокси роутера. Без transparent proxy весь Wi‑Fi/LAN через StealthSurf не пойдёт.
 
@@ -44,6 +45,7 @@
 | Правило domain/CIDR | часть трафика direct, часть proxy (или block) |
 | Stop / uninstall | iptables и ip rule очищены, интернет жив |
 | Смена сервера/протокола в UI | PATCH в StealthSurf API → новый `connection_url` → apply без ручного SSH |
+| Любой протокол аккаунта StealthSurf | Можно выбрать в UI и поднять на роутере (VLESS/Trojan/SS/Hysteria2/WG/AWG/OpenFlux и subconfig HTTP/SOCKS5) |
 
 ---
 
@@ -152,10 +154,19 @@
 - [ ] Авто-sync `connection_url` по cron и после `PATCH /configs/:id/settings`
 - [ ] Отображение server stats / online / expires в UI
 - [ ] Обработка rate-limit и ошибок API с понятными сообщениями
-- [ ] Поддержка протоколов вне чистого Xray (по мере необходимости):
-  - [ ] Hysteria2
-  - [ ] WireGuard
-  - [ ] AmneziaWG
+- [ ] **Полная поддержка всех протоколов StealthSurf** (как у провайдера в API / docs; UI и dataplane должны уметь выбрать, применить и поднять каждый):
+  - [ ] `vless`
+  - [ ] `vless-2410`
+  - [ ] `trojan`
+  - [ ] `trojan-2901`
+  - [ ] `shadowsocks-2022`
+  - [ ] `hysteria2` (клиент Hysteria2 на роутере, не только Xray)
+  - [ ] `wg` (WireGuard)
+  - [ ] `amnezia-wg-2` (AmneziaWG)
+  - [ ] `openflux` (если доступен в аккаунте / API)
+  - [ ] HTTP / SOCKS5 subconfig (доп. прокси конфигурации, где отдаёт StealthSurf)
+  - [ ] Единый Apply: парсинг `connection_url` / конфига протокола → нужный runtime (Xray / hysteria / awg / wg) + firewall
+  - [ ] В UI: только реально поддерживаемые на роутере протоколы активны; остальные — понятный статус «в разработке», без «тихого» apply
 - [ ] Сборные подписки StealthSurf (`custom-subscriptions`) — опционально
 - [ ] Watchdog / failover при падении ноды
 
