@@ -5,18 +5,17 @@
 # Payload JSON may be posted by the ASP page into /tmp/stealthsurf_payload.json
 
 ss_read_payload() {
+  # Prefer fresh amng_custom from the WebUI form submit; fall back to payload file.
   local f="/tmp/stealthsurf_payload.json"
   local custom
-  if [ -f "$f" ]; then
-    if jq -e . "$f" >/dev/null 2>&1; then
-      cat "$f"
-      return 0
-    fi
-  fi
   custom=$(nvram get amng_custom 2>/dev/null)
   if [ -n "$custom" ] && printf '%s' "$custom" | jq -e . >/dev/null 2>&1; then
     printf '%s' "$custom" >"$f"
     printf '%s' "$custom"
+    return 0
+  fi
+  if [ -f "$f" ] && jq -e . "$f" >/dev/null 2>&1; then
+    cat "$f"
     return 0
   fi
   echo '{}'
@@ -290,24 +289,36 @@ ss_service_event() {
       ss_json_response false "restore failed" null
     fi
     ;;
-  update)
+  update | upgrade)
+    # force=1 → always reinstall latest; otherwise only when update_available
     local force
     force=$(printf '%s' "$payload" | jq -r '.force // "0"')
+    ss_activity "ui.update" "force=$force"
     if [ "$force" = "1" ] || [ "$force" = "true" ]; then
+      ss_version_check >/dev/null 2>&1 || true
       if ss_update_self; then
-        ss_version_local >/dev/null 2>&1 || true
         ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       else
-        ss_json_response false "update failed" null
+        ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       fi
     else
       if ss_version_update_if_available 0; then
-        ss_version_check >/dev/null 2>&1 || true
         ss_json_response true "update finished" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       else
-        ss_json_response false "update failed" null
+        ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       fi
     fi
+    ;;
+  uninstall | remove | purge)
+    # Dangerous — only via explicit CLI normally; allow UI if payload.confirm=1
+    local confirm
+    confirm=$(printf '%s' "$payload" | jq -r '.confirm // "0"')
+    if [ "$confirm" != "1" ] && [ "$confirm" != "true" ]; then
+      ss_json_response false "uninstall requires confirm=1" null
+      return 1
+    fi
+    ss_uninstall
+    ss_json_response true "uninstalled" null
     ;;
   geodata)
     ss_geodata_update && ss_json_response true "geodata updated" null || ss_json_response false "geodata failed" null

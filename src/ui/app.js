@@ -39,8 +39,18 @@ async function fetchJson(url) {
   return res.json();
 }
 
-function triggerService(action, payload) {
+function triggerService(action, payload, opts) {
   const data = payload || {};
+  const options = opts || {};
+  // Update downloads a release — needs a longer httpd wait / refresh
+  let wait = Number(options.wait || 0);
+  if (!wait) {
+    if (action === "update" || action === "upgrade") wait = 40;
+    else if (action === "checkupdate") wait = 15;
+    else if (action === "installxray" || action === "sync") wait = 20;
+    else wait = 10;
+  }
+
   try {
     sessionStorage.setItem("ss_payload", JSON.stringify(data));
   } catch (_) {}
@@ -53,19 +63,23 @@ function triggerService(action, payload) {
 
   const blob = JSON.stringify(data);
   $("ss_payload_field").value = blob.slice(0, 2048);
-  // Best-effort: also drop payload for service-event hook
-  try {
-    // Some firmwares ignore this; amng_custom is the primary path
-  } catch (_) {}
 
   form.action_script.value = "stealthsurf_" + action;
   form.action_mode.value = "apply";
-  form.action_wait.value = "10";
+  form.action_wait.value = String(wait);
 
-  setMsg("Выполняется: " + action + "…", "");
+  const labels = {
+    checkupdate: "Проверка версии на GitHub…",
+    update: "Установка обновления с GitHub (скачивание)…",
+    upgrade: "Установка обновления с GitHub…",
+    start: "Запуск…",
+    stop: "Остановка…",
+    restart: "Рестарт…",
+  };
+  setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
   form.submit();
-  setTimeout(() => refreshAll(), 9000);
+  setTimeout(() => refreshAll(), Math.max(3000, wait * 1000 - 1000));
 }
 
 function switchTab(name) {
@@ -404,6 +418,13 @@ async function refreshAll() {
       if (response.data && (response.data.installed || response.data.update_available != null)) {
         renderVersion(response.data);
       }
+      if (response.message && /version checked|update finished|updated/i.test(response.message)) {
+        // Prefer version payload from the action response
+        if (response.data && response.data.installed) renderVersion(response.data);
+        fetchJson(EXT + "/version.json")
+          .then((v) => renderVersion(v))
+          .catch(() => {});
+      }
     }
   } catch (e) {
     setMsg(String(e), "err");
@@ -432,19 +453,25 @@ function bind() {
   $("btnStop").addEventListener("click", () => triggerService("stop", {}));
   $("btnRestart").addEventListener("click", () => triggerService("restart", {}));
   $("btnRefresh").addEventListener("click", () => refreshAll());
-  $("btnCheckUpdate").addEventListener("click", () => {
-    triggerService("checkupdate", {});
-    setTimeout(refreshAll, 9000);
+  $("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
+  $("btnUpdate").addEventListener("click", () => {
+    if (!confirm("Установить новую версию с GitHub Releases?")) return;
+    triggerService("update", { force: "0" });
   });
-  $("btnUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
   if ($("btnBannerUpdate")) {
-    $("btnBannerUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
+    $("btnBannerUpdate").addEventListener("click", () => {
+      if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
+      triggerService("update", { force: "0" });
+    });
   }
   if ($("btnCheckUpdate2")) {
     $("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
   }
   if ($("btnForceUpdate")) {
-    $("btnForceUpdate").addEventListener("click", () => triggerService("update", { force: "1" }));
+    $("btnForceUpdate").addEventListener("click", () => {
+      if (!confirm("Принудительно скачать и установить latest с GitHub (даже если версия та же)?")) return;
+      triggerService("update", { force: "1" });
+    });
   }
 
   $("btnApplySole").addEventListener("click", () =>
