@@ -23,6 +23,7 @@ let routingCache = { rules: [] };
 let policiesCache = { catchall: true, rules: [] };
 let protocolsCache = {};
 let clientsCache = [];
+let versionCache = { installed: "—", latest: null, update_available: false };
 
 function setMsg(text, kind) {
   const el = $("msg");
@@ -95,6 +96,48 @@ function renderState(state) {
   $("defaultPill").textContent = "default: " + (state.default_outbound || "—");
   if (state.mode) $("modeSelect").value = state.mode;
   if (state.dns_mode) $("dnsModeSelect").value = state.dns_mode;
+  if (state.version) $("installedVer").textContent = "версия: " + state.version;
+}
+
+function renderVersion(info) {
+  if (!info) return;
+  versionCache = info;
+  const installed = info.installed || "—";
+  const latest = info.latest || null;
+  const upd = !!info.update_available;
+
+  $("installedVer").textContent = "версия: " + installed;
+  $("installedVer").className = "pill " + (upd ? "warn" : "on");
+  $("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
+  $("latestVer").className = "pill" + (upd ? " update" : "");
+
+  const pill = $("updatePill");
+  const banner = $("updateBanner");
+  const btnUpdate = $("btnUpdate");
+  if (upd) {
+    pill.style.display = "inline-block";
+    pill.className = "pill update";
+    pill.textContent = "есть обновление " + latest;
+    banner.classList.add("show");
+    $("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
+    $("bannerInstalled").textContent = installed;
+    btnUpdate.style.display = "inline-block";
+  } else {
+    pill.style.display = "none";
+    banner.classList.remove("show");
+    btnUpdate.style.display = "none";
+  }
+
+  const detail = $("verDetail");
+  if (detail) {
+    let t = "установлена " + installed;
+    if (latest) t += " · GitHub " + latest;
+    if (info.error) t += " · ошибка проверки: " + info.error;
+    else if (upd) t += " · доступно обновление";
+    else if (latest) t += " · актуально";
+    detail.textContent = t;
+    detail.className = "pill " + (upd ? "update" : latest ? "on" : "");
+  }
 }
 
 function enabledSet() {
@@ -326,7 +369,7 @@ function onConfigChange() {
 
 async function refreshAll() {
   try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, response] =
+    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, response] =
       await Promise.all([
         fetchJson(EXT + "/state.json").catch(() => null),
         fetchJson(EXT + "/configs.json").catch(() => []),
@@ -336,10 +379,13 @@ async function refreshAll() {
         fetchJson(EXT + "/outbounds.json").catch(() => ({ enabled: [], default: "" })),
         fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
         fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
+        fetchJson(EXT + "/version.json").catch(() => null),
         fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
       ]);
     outboundsCache = outbounds || { enabled: [], default: "" };
     renderState(state);
+    if (version) renderVersion(version);
+    else if (state && state.version) renderVersion({ installed: state.version, latest: null });
     const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
     renderProtocolSelect();
     renderConfigs(cfgList);
@@ -354,6 +400,9 @@ async function refreshAll() {
         protocolsCache = response.data.protocols;
         renderProtocolSelect();
         renderConfigs(cfgList);
+      }
+      if (response.data && (response.data.installed || response.data.update_available != null)) {
+        renderVersion(response.data);
       }
     }
   } catch (e) {
@@ -383,6 +432,20 @@ function bind() {
   $("btnStop").addEventListener("click", () => triggerService("stop", {}));
   $("btnRestart").addEventListener("click", () => triggerService("restart", {}));
   $("btnRefresh").addEventListener("click", () => refreshAll());
+  $("btnCheckUpdate").addEventListener("click", () => {
+    triggerService("checkupdate", {});
+    setTimeout(refreshAll, 9000);
+  });
+  $("btnUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
+  if ($("btnBannerUpdate")) {
+    $("btnBannerUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
+  }
+  if ($("btnCheckUpdate2")) {
+    $("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
+  }
+  if ($("btnForceUpdate")) {
+    $("btnForceUpdate").addEventListener("click", () => triggerService("update", { force: "1" }));
+  }
 
   $("btnApplySole").addEventListener("click", () =>
     triggerService("apply", { config_id: Number($("configSelect").value), sole: "1" })
@@ -455,7 +518,6 @@ function bind() {
     triggerService("setdnsmode", { dns_mode: $("dnsModeSelect").value })
   );
   $("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
-  $("btnUpdate").addEventListener("click", () => triggerService("update", {}));
   $("btnBackup").addEventListener("click", () =>
     triggerService("backup", { note: $("backupNote").value.trim() || "manual" })
   );
@@ -560,3 +622,16 @@ bind();
 refreshAll();
 loadBackups();
 setTimeout(loadLogPreview, 300);
+// Soft re-check: only if version.json is older than 6h (avoids form submit every open)
+setTimeout(async () => {
+  try {
+    const v = await fetchJson(EXT + "/version.json");
+    renderVersion(v);
+    const age = Date.now() / 1000 - Number(v.checked_at || 0);
+    if (!v.checked_at || age > 6 * 3600) {
+      triggerService("checkupdate", {});
+    }
+  } catch (_) {
+    /* offline / first install — user can press «Проверить версию» */
+  }
+}, 800);

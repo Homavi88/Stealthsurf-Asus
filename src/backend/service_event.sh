@@ -31,11 +31,15 @@ ss_service_event() {
   case "$action" in
   init)
     ss_write_state
+    ss_version_local >/dev/null 2>&1 || true
+    # Soft auto-check (best-effort, non-fatal)
+    ss_version_check >/dev/null 2>&1 || true
     ss_json_response true "ok" "$(jq -nc \
       --slurpfile state "$SS_STATE_FILE" \
       --slurpfile outbounds "$SS_OUTBOUNDS_FILE" \
       --slurpfile routing "$SS_ROUTING_FILE" \
       --slurpfile policies "$SS_POLICIES_FILE" \
+      --slurpfile version "$SS_VERSION_FILE" \
       --argjson protocols "$(ss_protocol_status_matrix)" \
       --arg has_key "$( [ -n "$SS_API_KEY" ] && echo true || echo false )" \
       '{
@@ -43,9 +47,17 @@ ss_service_event() {
         outbounds: ($outbounds[0] // {}),
         routing: ($routing[0] // {}),
         policies: ($policies[0] // {}),
+        version: ($version[0] // {installed:"'"$ADDON_VERSION"'"}),
         protocols: $protocols,
         has_api_key: ($has_key == "true")
       }')"
+    ;;
+  checkupdate)
+    if ss_version_check >/dev/null; then
+      ss_json_response true "version checked" "$(cat "$SS_VERSION_FILE")"
+    else
+      ss_json_response false "version check failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
+    fi
     ;;
   setkey)
     SS_API_KEY=$(printf '%s' "$payload" | jq -r '.api_key // empty')
@@ -279,10 +291,22 @@ ss_service_event() {
     fi
     ;;
   update)
-    if ss_update_self; then
-      ss_json_response true "updated" null
+    local force
+    force=$(printf '%s' "$payload" | jq -r '.force // "0"')
+    if [ "$force" = "1" ] || [ "$force" = "true" ]; then
+      if ss_update_self; then
+        ss_version_local >/dev/null 2>&1 || true
+        ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
+      else
+        ss_json_response false "update failed" null
+      fi
     else
-      ss_json_response false "update failed" null
+      if ss_version_update_if_available 0; then
+        ss_version_check >/dev/null 2>&1 || true
+        ss_json_response true "update finished" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
+      else
+        ss_json_response false "update failed" null
+      fi
     fi
     ;;
   geodata)

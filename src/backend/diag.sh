@@ -74,16 +74,28 @@ ss_connectivity_check() {
 # ss_tail_logs provided by logging.sh (addon|activity|errors|devices|access|xray-error)
 
 ss_watchdog_tick() {
-  # If watchdog enabled and xray should be running, restart on death; optional failover tag
+  # If watchdog enabled and xray should be running, restart on death
   [ "$SS_WATCHDOG" = "1" ] || return 0
   [ -f "$XRAY_CONFIG_FILE" ] || return 0
-  if ! ss_xray_running; then
-    ss_warn "Watchdog: Xray not running — restarting"
-    ss_start || {
-      if [ -n "$SS_FALLBACK_OUTBOUND" ] && [ "$SS_FALLBACK_OUTBOUND" != "direct" ]; then
-        ss_warn "Watchdog: trying fallback outbound $SS_FALLBACK_OUTBOUND"
-      fi
-      return 1
-    }
+  # Respect intentional stop (xrayui desired-state pattern)
+  if type ss_desired_is_set >/dev/null 2>&1; then
+    if ! ss_desired_is_set; then
+      return 0
+    fi
   fi
+  if ss_xray_running; then
+    if ! ss_firewall_is_configured 2>/dev/null; then
+      ss_warn "Watchdog: firewall rules missing while running — restoring"
+      ss_configure_firewall 2>/dev/null || true
+    fi
+    return 0
+  fi
+  ss_warn "Watchdog: Xray not running but desired — restarting"
+  ss_activity "watchdog.restart" "desired=1"
+  ss_start || {
+    if [ -n "$SS_FALLBACK_OUTBOUND" ] && [ "$SS_FALLBACK_OUTBOUND" != "direct" ]; then
+      ss_warn "Watchdog: start failed (fallback=$SS_FALLBACK_OUTBOUND)"
+    fi
+    return 1
+  }
 }

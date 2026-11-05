@@ -43,6 +43,10 @@ ss_write_state() {
       version: $version
     }' >"$SS_STATE_FILE"
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
+  # Keep version.json installed field in sync
+  if type ss_version_local >/dev/null 2>&1; then
+    ss_version_local >/dev/null 2>&1 || true
+  fi
 }
 
 ss_apply_config_id() {
@@ -143,6 +147,7 @@ ss_rebuild_and_restart() {
 
 ss_start_inner() {
   ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
+  ss_desired_mark 2>/dev/null || true
   if [ ! -f "$XRAY_CONFIG_FILE" ]; then
     ss_error "No local Xray config. Run: stealthsurf apply <config_id> or rebuild"
     ss_activity "start.fail" "no xray config"
@@ -154,9 +159,13 @@ ss_start_inner() {
     return 1
   }
   [ -x "$XRAY_BIN" ] || XRAY_BIN=$(command -v xray)
+  ss_prepare_runtime 2>/dev/null || ss_sysctl_dataplane 2>/dev/null || true
 
   if ss_xray_running; then
     ss_info "Already running (pid $(cat "$XRAY_PIDFILE"))"
+    if ! ss_firewall_is_configured 2>/dev/null; then
+      ss_warn "Xray running but firewall rules missing — restoring"
+    fi
     ss_configure_firewall
     ss_log_devices_snapshot 2>/dev/null || true
     ss_write_state
@@ -172,7 +181,8 @@ ss_start_inner() {
 
   "$XRAY_BIN" run -c "$XRAY_CONFIG_FILE" >/dev/null 2>&1 &
   echo $! >"$XRAY_PIDFILE"
-  sleep 1
+  # Give Xray time to bind dokodemo ports before firewall hijack
+  sleep 3
   if ss_xray_running; then
     ss_configure_firewall
     case "$SS_DNS_MODE" in
@@ -199,6 +209,7 @@ ss_stop_inner() {
   local pid=""
   [ -f "$XRAY_PIDFILE" ] && pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
   ss_activity "stop.begin" "pid=${pid:-none}"
+  ss_desired_clear 2>/dev/null || true
   ss_cleanup_firewall 2>/dev/null
   ss_dnsmasq_cleanup 2>/dev/null
   ss_stop_all_runtimes 2>/dev/null
@@ -207,7 +218,11 @@ ss_stop_inner() {
     pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
     if [ -n "$pid" ]; then
       kill "$pid" 2>/dev/null
-      sleep 1
+      local waited=0
+      while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 8 ]; do
+        sleep 1
+        waited=$((waited + 1))
+      done
       if kill -0 "$pid" 2>/dev/null; then
         kill -9 "$pid" 2>/dev/null
       fi

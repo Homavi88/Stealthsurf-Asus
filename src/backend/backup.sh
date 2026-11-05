@@ -289,16 +289,20 @@ ss_install_cron() {
     cru a stealthsurf_sync "*/30 * * * * /jffs/scripts/$ADDON_TAG autosync"
     cru a stealthsurf_watch "*/5 * * * * /jffs/scripts/$ADDON_TAG watchdog"
     cru a stealthsurf_backup "0 3 * * * /jffs/scripts/$ADDON_TAG backup nightly"
-    ss_ok "Cron jobs installed via cru (sync/watchdog/nightly-backup)"
+    cru d stealthsurf_ver 2>/dev/null || true
+    cru a stealthsurf_ver "15 */12 * * * /jffs/scripts/$ADDON_TAG check-update"
+    ss_ok "Cron jobs installed via cru (sync/watchdog/backup/version-check)"
     return 0
   fi
 
   local cronf="/var/spool/cron/crontabs/admin"
+  local ver_line="15 */12 * * * /jffs/scripts/$ADDON_TAG check-update >/dev/null 2>&1"
   if [ -d "$(dirname "$cronf")" ]; then
     touch "$cronf"
     grep -q "$ADDON_TAG autosync" "$cronf" 2>/dev/null || echo "$sync_line" >>"$cronf"
     grep -q "$ADDON_TAG watchdog" "$cronf" 2>/dev/null || echo "$watch_line" >>"$cronf"
     grep -q "$ADDON_TAG backup" "$cronf" 2>/dev/null || echo "$backup_line" >>"$cronf"
+    grep -q "$ADDON_TAG check-update" "$cronf" 2>/dev/null || echo "$ver_line" >>"$cronf"
     ss_ok "Cron lines appended to $cronf"
   else
     ss_warn "No cru/crontab — schedule autosync/backup manually"
@@ -310,5 +314,6 @@ ss_remove_cron() {
     cru d stealthsurf_sync 2>/dev/null || true
     cru d stealthsurf_watch 2>/dev/null || true
     cru d stealthsurf_backup 2>/dev/null || true
+    cru d stealthsurf_ver 2>/dev/null || true
   fi
 }

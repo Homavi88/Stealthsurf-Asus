@@ -65,11 +65,15 @@ stealthsurf diag | test-config | connectivity
 stealthsurf backup [note] | backups | restore <file>
 stealthsurf logs activity|errors|devices
 stealthsurf devices                    # снимок LAN IP/MAC в лог
-stealthsurf update                     # с GitHub Releases
+stealthsurf check-update               # сравнить с GitHub Releases
+stealthsurf update                     # поставить latest с GitHub
 stealthsurf uninstall
 ```
 
-Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).
+В UI всегда видны **Старт / Стоп / Рестарт**, установленная версия и подсветка, если на GitHub есть новее.
+
+Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).  
+Паттерны Merlin/dataplane vs xrayui: [docs/XRAYUI_COMPARISON.md](./docs/XRAYUI_COMPARISON.md).
 
 Полный список: `stealthsurf` без аргументов.
 
