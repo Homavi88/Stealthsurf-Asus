@@ -18,6 +18,24 @@ SCRIPT_DST="/jffs/scripts/${ADDON_TAG}"
 
 SS_STEP=0
 SS_STEPS=6
+OPKG=""
+
+# Absolute PATH for Merlin SSH / curl|sh (login profile may not be sourced)
+ss_export_path() {
+  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin${PATH:+:$PATH}"
+}
+
+ss_find_opkg() {
+  OPKG=""
+  if [ -x /opt/bin/opkg ]; then
+    OPKG="/opt/bin/opkg"
+  elif [ -x /opt/sbin/opkg ]; then
+    OPKG="/opt/sbin/opkg"
+  elif [ -x /opt/usr/bin/opkg ]; then
+    OPKG="/opt/usr/bin/opkg"
+  fi
+  [ -n "$OPKG" ]
+}
 
 # ── colors (TTY only; respect NO_COLOR) ───────────────────────────────
 ss_color_init() {
@@ -98,40 +116,73 @@ require_rootish() {
 
 check_merlin_jffs() {
   step_begin "Asuswrt-Merlin / JFFS"
+  ss_export_path
   if [ ! -d /jffs ]; then
     die "/jffs не найден — нужен Asuswrt-Merlin с JFFS"
   fi
   ok "Каталог /jffs найден"
-  if command -v nvram >/dev/null 2>&1; then
-    jffs_enable=$(nvram get jffs2_scripts 2>/dev/null || true)
+  NVRAM=""
+  if [ -x /bin/nvram ]; then
+    NVRAM=/bin/nvram
+  elif [ -x /sbin/nvram ]; then
+    NVRAM=/sbin/nvram
+  elif [ -x /usr/sbin/nvram ]; then
+    NVRAM=/usr/sbin/nvram
+  fi
+  if [ -n "$NVRAM" ]; then
+    jffs_enable=$("$NVRAM" get jffs2_scripts 2>/dev/null || true)
     if [ "$jffs_enable" = "0" ]; then
       die "JFFS custom scripts выключены. Administration -> System -> Enable JFFS custom scripts = Yes, затем reboot"
     fi
     ok "JFFS custom scripts включены (jffs2_scripts=$jffs_enable)"
   else
-    warn "nvram недоступен — пропускаю проверку флага scripts"
+    warn "nvram недоступен — проверьте вручную: Enable JFFS custom scripts = Yes"
   fi
 }
 
 check_entware() {
   step_begin "Entware"
+  ss_export_path
+
+  # Entware на Merlin живёт на USB и монтируется в /opt (часто через post-mount)
   if [ ! -d /opt ]; then
-    die "Entware не найден (/opt). Сначала поставьте Entware через amtm"
+    die "Нет /opt. Сначала в amtm установите Entware, подождите mount USB, повторите install"
   fi
-  if [ ! -x /opt/bin/opkg ] && [ ! -x /opt/sbin/opkg ]; then
-    die "opkg не найден. Установите Entware через amtm ДО этого аддона"
+
+  # Подтянуть PATH Entware, если profile есть (USB уже смонтирован)
+  if [ -f /opt/etc/profile ]; then
+    # shellcheck disable=SC1091
+    . /opt/etc/profile 2>/dev/null || true
+    ss_export_path
   fi
-  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
-  if ! command -v opkg >/dev/null 2>&1; then
-    die "opkg не в PATH после проверки Entware"
+
+  if ! ss_find_opkg; then
+    ss_blank
+    ss_out "  ${C_YEL}Диагностика /opt:${C_RESET}"
+    info "ls /opt → $(ls /opt 2>/dev/null | tr '\n' ' ' | cut -c1-80)"
+    info "USB/Entware часто ещё не смонтирован после reboot"
+    ss_blank
+    die "Entware/opkg не найден. Откройте amtm → установите Entware → убедитесь: ls -l /opt/bin/opkg"
   fi
-  ok "Entware OK -> $(command -v opkg)"
+
+  # Проверяем, что бинарь реально запускается (не битый mount)
+  if ! "$OPKG" --version >/dev/null 2>&1 && ! "$OPKG" version >/dev/null 2>&1 && ! "$OPKG" 2>/dev/null | head -1 >/dev/null; then
+    # некоторые сборки opkg печатают usage и exit 1 без аргументов — это OK, файл живой
+    if [ ! -s "$OPKG" ]; then
+      die "Файл $OPKG пустой/битый. Переустановите Entware через amtm"
+    fi
+  fi
+
+  ok "Entware OK → ${C_GRN}$OPKG${C_RESET}"
+  info "PATH: ${C_DIM}$(printf '%s' "$PATH" | cut -c1-72)…${C_RESET}"
 }
 
 install_entware_deps() {
   step_begin "Зависимости Entware"
-  info "opkg update..."
-  opkg update >/dev/null 2>&1 || warn "opkg update не удался — продолжаю с локальным индексом"
+  ss_export_path
+  ss_find_opkg || die "opkg пропал перед установкой зависимостей"
+  info "opkg update ($OPKG)..."
+  "$OPKG" update >/dev/null 2>&1 || warn "opkg update не удался — продолжаю с локальным индексом"
 
   for spec in \
     "curl:curl" \
@@ -146,13 +197,13 @@ install_entware_deps() {
   do
     pkg=${spec%%:*}
     alts=${spec#*:}
-    if opkg list-installed 2>/dev/null | grep -q "^${pkg} "; then
+    if "$OPKG" list-installed 2>/dev/null | grep -q "^${pkg} "; then
       ok "уже есть: ${C_DIM}$pkg${C_RESET}"
       continue
     fi
     installed=0
     for cand in $alts; do
-      if opkg install "$cand" >/dev/null 2>&1; then
+      if "$OPKG" install "$cand" >/dev/null 2>&1; then
         ok "установлен: ${C_GRN}$cand${C_RESET}"
         installed=1
         break
@@ -163,9 +214,9 @@ install_entware_deps() {
     fi
   done
 
-  if ! command -v xray >/dev/null 2>&1 && [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
+  if [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
     for cand in xray xray-core; do
-      if opkg install "$cand" >/dev/null 2>&1; then
+      if "$OPKG" install "$cand" >/dev/null 2>&1; then
         ok "dataplane: ${C_GRN}$cand${C_RESET}"
         break
       fi
@@ -174,44 +225,74 @@ install_entware_deps() {
     ok "xray уже на роутере"
   fi
 
-  if ! command -v xray >/dev/null 2>&1 && [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
+  if [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
     info "Xray не в opkg — скачается на шаге install аддона (ssurf xray)"
   fi
 
-  if ! command -v unzip >/dev/null 2>&1; then
-    opkg install unzip >/dev/null 2>&1 || warn "unzip отсутствует — скачивание Xray с GitHub может не сработать"
+  if [ ! -x /opt/bin/unzip ] && [ ! -x /usr/bin/unzip ] && ! type unzip >/dev/null 2>&1; then
+    "$OPKG" install unzip >/dev/null 2>&1 || warn "unzip отсутствует — скачивание Xray с GitHub может не сработать"
   fi
 
-  command -v curl >/dev/null 2>&1 || die "curl обязателен, но недоступен после установки зависимостей"
-  command -v jq >/dev/null 2>&1 || die "jq обязателен, но недоступен после установки зависимостей"
-  ok "curl + jq готовы"
+  CURL_BIN=""
+  if [ -x /opt/bin/curl ]; then
+    CURL_BIN=/opt/bin/curl
+  elif [ -x /usr/bin/curl ]; then
+    CURL_BIN=/usr/bin/curl
+  elif type curl >/dev/null 2>&1; then
+    CURL_BIN=$(type curl 2>/dev/null | awk '{print $NF}')
+  fi
+  JQ_BIN=""
+  if [ -x /opt/bin/jq ]; then
+    JQ_BIN=/opt/bin/jq
+  elif type jq >/dev/null 2>&1; then
+    JQ_BIN=$(type jq 2>/dev/null | awk '{print $NF}')
+  fi
+  [ -n "$CURL_BIN" ] || die "curl обязателен — поставьте через amtm/opkg: opkg install curl"
+  [ -n "$JQ_BIN" ] || die "jq обязателен — поставьте: /opt/bin/opkg install jq"
+  ok "curl + jq готовы ($CURL_BIN, $JQ_BIN)"
 }
 
 download_package() {
   step_begin "Скачивание пакета"
   rm -f "$TMP_TGZ"
   info "GitHub Releases (latest)..."
+  ss_export_path
 
-  if command -v curl >/dev/null 2>&1; then
-    if curl -fsSL -o "$TMP_TGZ" "$REPO_TARBALL_RELEASE" 2>/dev/null; then
+  _curl=""
+  if [ -x /opt/bin/curl ]; then
+    _curl=/opt/bin/curl
+  elif [ -x /usr/bin/curl ]; then
+    _curl=/usr/bin/curl
+  elif [ -n "${CURL_BIN:-}" ]; then
+    _curl=$CURL_BIN
+  fi
+
+  if [ -n "$_curl" ]; then
+    if "$_curl" -fsSL -o "$TMP_TGZ" "$REPO_TARBALL_RELEASE" 2>/dev/null; then
       ok "Скачано из ${C_GRN}GitHub Releases${C_RESET}"
       sz=$(wc -c <"$TMP_TGZ" 2>/dev/null | tr -d ' ')
       info "размер: ${C_DIM}${sz} bytes${C_RESET}"
       return 0
     fi
     warn "Releases недоступны — пробую packaged/ на main"
-    if curl -fsSL -o "$TMP_TGZ" "$REPO_TARBALL_RAW" 2>/dev/null; then
+    if "$_curl" -fsSL -o "$TMP_TGZ" "$REPO_TARBALL_RAW" 2>/dev/null; then
       ok "Скачано из репозитория ${C_DIM}packaged/${C_RESET}"
       return 0
     fi
   fi
 
-  if command -v wget >/dev/null 2>&1; then
-    if wget -q -O "$TMP_TGZ" "$REPO_TARBALL_RELEASE" 2>/dev/null; then
+  _wget=""
+  if [ -x /opt/bin/wget ]; then
+    _wget=/opt/bin/wget
+  elif [ -x /usr/bin/wget ]; then
+    _wget=/usr/bin/wget
+  fi
+  if [ -n "$_wget" ]; then
+    if "$_wget" -q -O "$TMP_TGZ" "$REPO_TARBALL_RELEASE" 2>/dev/null; then
       ok "Скачано из GitHub Releases (wget)"
       return 0
     fi
-    if wget -q -O "$TMP_TGZ" "$REPO_TARBALL_RAW" 2>/dev/null; then
+    if "$_wget" -q -O "$TMP_TGZ" "$REPO_TARBALL_RAW" 2>/dev/null; then
       ok "Скачано из packaged/ (wget)"
       return 0
     fi
@@ -277,6 +358,7 @@ finale() {
 
 main() {
   ss_color_init
+  ss_export_path
   banner
   hr
   info "Установщик one-liner · Entware обязателен (amtm)"
