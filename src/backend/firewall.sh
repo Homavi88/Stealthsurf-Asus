@@ -77,10 +77,31 @@ ss_fw_unlink_chain() {
   done
 }
 
+ss_fw_exclude_wan_ifaces() {
+  # Do not hijack packets arriving from WAN / PPPoE / LTE (xrayui pattern)
+  local tbl="$1"
+  local chain="$2"
+  local wan_if
+  for wan_if in $(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' |
+    grep -E '^(ppp|pppoe|wan|wwan|lte|l2tp|tun|wg)[0-9]*' | sed 's/@.*//'); do
+    [ -n "$wan_if" ] || continue
+    ss_fw_ipt "$tbl" -I "$chain" 1 -i "$wan_if" -j RETURN
+  done
+  # Common Merlin WAN ifnames from nvram
+  for wan_if in "$(nvram get wan0_ifname 2>/dev/null)" "$(nvram get wan1_ifname 2>/dev/null)" \
+    "$(nvram get wan0_gw_ifname 2>/dev/null)"; do
+    [ -n "$wan_if" ] || continue
+    ss_fw_ipt "$tbl" -C "$chain" -i "$wan_if" -j RETURN 2>/dev/null ||
+      ss_fw_ipt "$tbl" -I "$chain" 1 -i "$wan_if" -j RETURN
+  done
+}
+
 ss_fw_exclude_private() {
   local tbl="$1"
   local chain="$2"
   local cidr
+  # First: never process WAN ingress
+  ss_fw_exclude_wan_ifaces "$tbl" "$chain"
   for cidr in 0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4; do
     ss_fw_ipt "$tbl" -A "$chain" -d "$cidr" -j RETURN
   done
@@ -88,6 +109,21 @@ ss_fw_exclude_private() {
   local rip
   rip=$(ss_router_ip)
   [ -n "$rip" ] && ss_fw_ipt "$tbl" -A "$chain" -d "$rip" -j RETURN
+}
+
+ss_firewall_is_configured() {
+  local chain="$SS_FW_CHAIN"
+  case "$(ss_fw_detect_mode)" in
+  tproxy)
+    iptables -w -t mangle -L "$chain" -n >/dev/null 2>&1
+    ;;
+  redirect)
+    iptables -w -t nat -L "$chain" -n >/dev/null 2>&1
+    ;;
+  *)
+    return 0
+    ;;
+  esac
 }
 
 ss_fw_exclude_endpoints() {
@@ -226,6 +262,7 @@ ss_configure_firewall_redirect() {
 
 ss_configure_firewall_tproxy() {
   local chain="$SS_FW_CHAIN"
+  local divert="${SS_FW_CHAIN}_DIVERT"
   local port="$SS_TPROXY_PORT"
   local mark="$SS_TPROXY_MARK"
   local mask="$SS_TPROXY_MASK"
@@ -237,6 +274,21 @@ ss_configure_firewall_tproxy() {
   ip rule del fwmark "$mark" lookup "$table" 2>/dev/null || true
   ip rule add fwmark "$mark" lookup "$table" 2>/dev/null || true
   ip route replace local 0.0.0.0/0 dev lo table "$table" 2>/dev/null || true
+
+  # DIVERT for already-transparent sockets (xrayui pattern)
+  ss_fw_ensure_chain mangle "$divert"
+  ss_fw_ipt mangle -A "$divert" -j MARK --set-mark "${mark}/${mask}"
+  ss_fw_ipt mangle -A "$divert" -j ACCEPT
+  if ! ss_fw_ipt mangle -C PREROUTING -p tcp -m socket --transparent -j "$divert" 2>/dev/null; then
+    ss_fw_ipt mangle -I PREROUTING 1 -p tcp -m socket --transparent -j "$divert" || true
+  fi
+  if ! ss_fw_ipt mangle -C PREROUTING -p udp -m socket --transparent -j "$divert" 2>/dev/null; then
+    ss_fw_ipt mangle -I PREROUTING 1 -p udp -m socket --transparent -j "$divert" || true
+  fi
+  # Accept marked packets in filter
+  if ! iptables -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; then
+    iptables -w -I INPUT 1 -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || true
+  fi
 
   ss_fw_ensure_chain mangle "$chain"
   ss_fw_exclude_private mangle "$chain"
@@ -291,13 +343,29 @@ ss_configure_firewall() {
 
 ss_cleanup_firewall() {
   local chain="$SS_FW_CHAIN"
+  local divert="${SS_FW_CHAIN}_DIVERT"
+  local mark="$SS_TPROXY_MARK"
+  local mask="$SS_TPROXY_MASK"
   ss_activity "firewall.cleanup" "chain=$chain"
+  # Remove divert jumps
+  while ss_fw_ipt mangle -C PREROUTING -p tcp -m socket --transparent -j "$divert" 2>/dev/null; do
+    ss_fw_ipt mangle -D PREROUTING -p tcp -m socket --transparent -j "$divert"
+  done
+  while ss_fw_ipt mangle -C PREROUTING -p udp -m socket --transparent -j "$divert" 2>/dev/null; do
+    ss_fw_ipt mangle -D PREROUTING -p udp -m socket --transparent -j "$divert"
+  done
+  while iptables -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; do
+    iptables -w -D INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || break
+  done
+
   ss_fw_unlink_chain nat PREROUTING "$chain"
   ss_fw_unlink_chain mangle PREROUTING "$chain"
   ss_fw_ipt nat -F "$chain" 2>/dev/null
   ss_fw_ipt nat -X "$chain" 2>/dev/null
   ss_fw_ipt mangle -F "$chain" 2>/dev/null
   ss_fw_ipt mangle -X "$chain" 2>/dev/null
+  ss_fw_ipt mangle -F "$divert" 2>/dev/null
+  ss_fw_ipt mangle -X "$divert" 2>/dev/null
   ss_fw_ip6 nat -F "$chain" 2>/dev/null
   ss_fw_ip6 nat -X "$chain" 2>/dev/null
   ss_fw_ip6 mangle -F "$chain" 2>/dev/null
@@ -306,16 +374,23 @@ ss_cleanup_firewall() {
   ip rule del fwmark "$SS_TPROXY_MARK" lookup "$SS_TPROXY_TABLE" 2>/dev/null || true
   ip route flush table "$SS_TPROXY_TABLE" 2>/dev/null || true
 
-  # Remove our TCPMSS clamp if we added a dedicated one — leave shared clamp alone
   ss_ok "Firewall cleaned up"
 }
 
 ss_restore_firewall() {
-  # Called from nat-start / firewall-start after reboot/WAN up
-  if ss_xray_running 2>/dev/null || [ -f "$XRAY_PIDFILE" ]; then
+  # Called from nat-start / firewall-start / wan-start after reboot/WAN up
+  if ss_xray_running 2>/dev/null; then
     if [ -f "$XRAY_CONFIG_FILE" ]; then
+      if ss_firewall_is_configured; then
+        # Still rebuild — WAN ifnames / NAT may have changed
+        ss_info "Re-applying firewall after network event"
+      fi
       ss_cleanup_firewall 2>/dev/null
       ss_configure_firewall
+      ss_activity "firewall.restore" "reconfigured while running"
     fi
+  elif type ss_desired_is_set >/dev/null 2>&1 && ss_desired_is_set && [ -f "$XRAY_CONFIG_FILE" ]; then
+    ss_warn "Desired state set but Xray down — attempting start"
+    ss_start 2>/dev/null || true
   fi
 }

@@ -14,6 +14,7 @@ import ./xray_bin.sh
 import ./diag.sh
 import ./backup.sh
 import ./version.sh
+import ./startup.sh
 import ./control.sh
 import ./mount.sh
 import ./hooks.sh
@@ -45,6 +46,12 @@ unmount_ui)
   ;;
 autostart)
   ss_autostart || exit 1
+  ;;
+startup)
+  ss_startup "$2" || exit 1
+  ;;
+wan-up)
+  ss_wan_up_hook || exit 1
   ;;
 firewall-restore)
   ss_firewall_restore_hook || exit 1
@@ -193,7 +200,7 @@ Usage: $0 <command>
 
 Lifecycle:
   install | uninstall | update | version | check-update | update-if-newer
-  start | stop | restart | status | watchdog | autostart
+  start | stop | restart | status | watchdog | autostart | startup | wan-up
   mount_ui | unmount_ui | firewall-restore
 
 API / catalog:

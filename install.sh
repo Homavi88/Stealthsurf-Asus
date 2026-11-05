@@ -66,7 +66,10 @@ install_entware_deps() {
     "ca-certificates:ca-certificates" \
     "libopenssl:libopenssl openssl-util" \
     "coreutils-base64:coreutils-base64" \
-    "flock:flock"
+    "flock:flock" \
+    "iptables:iptables" \
+    "ipset:ipset" \
+    "unzip:unzip"
   do
     pkg=${spec%%:*}
     alts=${spec#*:}

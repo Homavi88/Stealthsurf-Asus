@@ -72,7 +72,8 @@ stealthsurf uninstall
 
 В UI всегда видны **Старт / Стоп / Рестарт**, установленная версия и подсветка, если на GitHub есть новее.
 
-Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).
+Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).  
+Паттерны Merlin/dataplane vs xrayui: [docs/XRAYUI_COMPARISON.md](./docs/XRAYUI_COMPARISON.md).
 
 Полный список: `stealthsurf` без аргументов.
 

@@ -37,11 +37,17 @@ ss_remove_service_event_hook() {
 }
 
 ss_autostart() {
-  # Called from services-start after mount_ui
+  # Lightweight services-start path: only mount UI; real start is post-mount
+  # (Entware on USB is often not ready yet). Keep as fallback if post-mount missing.
   [ "${SS_AUTO_START:-1}" = "1" ] || return 0
-  if [ -f "$XRAY_CONFIG_FILE" ]; then
-    ss_info "Autostart: starting dataplane"
-    ss_start || ss_warn "Autostart failed"
+  if [ -x /opt/bin/opkg ] || [ -x /opt/sbin/xray ] || [ -x /opt/bin/xray ]; then
+    if [ -f "$XRAY_CONFIG_FILE" ]; then
+      ss_info "Autostart (services-start fallback)"
+      ss_desired_mark 2>/dev/null || true
+      ss_start || ss_warn "Autostart failed"
+    fi
+  else
+    ss_info "Autostart deferred — waiting for post-mount (Entware)"
   fi
 }
 
