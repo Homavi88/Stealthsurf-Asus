@@ -227,11 +227,18 @@
             <select id="protocolSelect"></select>
           </div>
         </div>
+        <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:12px">
+          <label><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
+          <label><input type="checkbox" id="optUseGrpc"> use_grpc</label>
+          <label><input type="checkbox" id="optUseWarp"> use_warp</label>
+          <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
+          <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
+        </div>
         <div class="row">
           <button id="btnUpdateSettings" class="secondary" type="button">PATCH на StealthSurf</button>
           <button id="btnApplySole" type="button">Apply как единственный</button>
         </div>
-        <div id="protoHint" class="hint"></div>
+        <div id="protoHint" class="hint">После смены на сайте нажмите «Синхронизировать» — включённые outbound пересоберутся автоматически.</div>
       </div>
       <div>
         <h2>Сборные подписки</h2>
@@ -322,7 +329,12 @@
       <button id="btnCheckUpdate2" class="secondary" type="button">Проверить на GitHub</button>
       <button id="btnForceUpdate" class="warn" type="button">Установить latest с GitHub</button>
     </div>
-    <div class="hint">Автопроверка при открытии UI и каждые 12 часов (cron). Подсветка, если latest &gt; установленной.</div>
+    <div class="hint">
+      Проверка и установка идут через UI (кнопки выше и в шапке) или CLI:
+      <code>stealthsurf check-update</code> / <code>stealthsurf update</code>.
+      Автопроверка при открытии UI (если старше 6 ч) и каждые 12 часов (cron).
+      При наличии новой версии — баннер и подсветка «есть обновление».
+    </div>
 
     <div class="row" style="margin-top:12px">
       <button id="btnInstallXray" class="secondary" type="button">Установить / найти Xray</button>

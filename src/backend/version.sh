@@ -30,17 +30,24 @@ ss_version_write() {
   local tag="${3:-}"
   local url="${4:-}"
   local err="${5:-}"
+  local download_url="${6:-}"
   local cmp update_available="false"
   ss_ensure_dirs
   if [ -n "$latest" ]; then
     cmp=$(ss_version_cmp "$latest" "$installed")
     [ "$cmp" = "1" ] && update_available="true"
   fi
+  # Keep previous download_url if new one empty
+  if [ -z "$download_url" ] && [ -f "$SS_VERSION_FILE" ]; then
+    download_url=$(jq -r '.download_url // empty' "$SS_VERSION_FILE" 2>/dev/null)
+  fi
+  [ -n "$download_url" ] || download_url="$ADDON_RELEASE_TGZ"
   jq -nc \
     --arg installed "$installed" \
     --arg latest "${latest:-}" \
     --arg tag "${tag:-}" \
     --arg url "${url:-}" \
+    --arg download_url "$download_url" \
     --arg repo "${ADDON_REPO}" \
     --arg err "${err:-}" \
     --argjson update_available "$update_available" \
@@ -50,6 +57,7 @@ ss_version_write() {
       latest: (if $latest == "" then null else $latest end),
       tag: (if $tag == "" then null else $tag end),
       release_url: (if $url == "" then null else $url end),
+      download_url: $download_url,
       repo: $repo,
       update_available: $update_available,
       checked_at: $checked_at,
@@ -61,20 +69,21 @@ ss_version_write() {
 
 ss_version_local() {
   # Always refresh installed field even offline
-  local prev_latest prev_tag prev_url
+  local prev_latest prev_tag prev_url prev_dl
   if [ -f "$SS_VERSION_FILE" ]; then
     prev_latest=$(jq -r '.latest // empty' "$SS_VERSION_FILE" 2>/dev/null)
     prev_tag=$(jq -r '.tag // empty' "$SS_VERSION_FILE" 2>/dev/null)
     prev_url=$(jq -r '.release_url // empty' "$SS_VERSION_FILE" 2>/dev/null)
-    ss_version_write "$ADDON_VERSION" "$prev_latest" "$prev_tag" "$prev_url"
+    prev_dl=$(jq -r '.download_url // empty' "$SS_VERSION_FILE" 2>/dev/null)
+    ss_version_write "$ADDON_VERSION" "$prev_latest" "$prev_tag" "$prev_url" "" "$prev_dl"
   else
-    ss_version_write "$ADDON_VERSION" "" "" ""
+    ss_version_write "$ADDON_VERSION" "" "" "" "" "$ADDON_RELEASE_TGZ"
   fi
 }
 
 ss_version_check() {
   # Query GitHub latest release; update version.json
-  local resp tag latest url http_code tmp err=""
+  local resp tag latest url http_code tmp err="" asset=""
   ss_ensure_dirs
   ss_activity "version.check" "repo=$ADDON_REPO installed=$ADDON_VERSION"
   tmp="$ADDON_TMP_DIR/gh-release.$$"
@@ -94,9 +103,10 @@ ss_version_check() {
         "$(jq -r '.latest // empty' "$SS_VERSION_FILE")" \
         "$(jq -r '.tag // empty' "$SS_VERSION_FILE")" \
         "$(jq -r '.release_url // empty' "$SS_VERSION_FILE")" \
-        "$err" >/dev/null
+        "$err" \
+        "$(jq -r '.download_url // empty' "$SS_VERSION_FILE")" >/dev/null
     else
-      ss_version_write "$ADDON_VERSION" "" "" "" "$err" >/dev/null
+      ss_version_write "$ADDON_VERSION" "" "" "" "$err" "$ADDON_RELEASE_TGZ" >/dev/null
     fi
     rm -f "$tmp"
     cat "$SS_VERSION_FILE"
@@ -106,16 +116,18 @@ ss_version_check() {
   tag=$(jq -r '.tag_name // empty' "$tmp")
   latest=$(ss_version_normalize "$tag")
   url=$(jq -r '.html_url // empty' "$tmp")
-  # Prefer asset download URL if present
   asset=$(jq -r '
     (.assets // [])[]
     | select(.name == "asuswrt-merlin-stealthsurf.tar.gz")
     | .browser_download_url
   ' "$tmp" 2>/dev/null | head -1)
-  [ -n "$asset" ] && ADDON_RELEASE_TGZ="$asset"
+  if [ -z "$asset" ]; then
+    # Releases without uploaded asset: use /latest/download redirect URL
+    asset="$ADDON_RELEASE_TGZ"
+  fi
 
   rm -f "$tmp"
-  ss_version_write "$ADDON_VERSION" "$latest" "$tag" "$url" >/dev/null
+  ss_version_write "$ADDON_VERSION" "$latest" "$tag" "$url" "" "$asset" >/dev/null
   if jq -e '.update_available == true' "$SS_VERSION_FILE" >/dev/null 2>&1; then
     ss_ok "Update available: $ADDON_VERSION → $latest ($tag)"
     ss_activity "version.update_available" "installed=$ADDON_VERSION latest=$latest"
@@ -126,14 +138,25 @@ ss_version_check() {
   cat "$SS_VERSION_FILE"
 }
 
+ss_version_download_url() {
+  local url=""
+  if [ -f "$SS_VERSION_FILE" ]; then
+    url=$(jq -r '.download_url // empty' "$SS_VERSION_FILE" 2>/dev/null)
+  fi
+  [ -n "$url" ] || url="$ADDON_RELEASE_TGZ"
+  printf '%s' "$url"
+}
+
 ss_version_update_if_available() {
-  # Install from GitHub only if newer (or force=1)
+  # Install from GitHub only if newer (or force=1).
+  # Exit 2 = already up to date (no download); 0 = installed; 1 = failure.
   local force="${1:-0}"
   local info
   info=$(ss_version_check) || true
   if [ "$force" != "1" ] && ! printf '%s' "$info" | jq -e '.update_available == true' >/dev/null 2>&1; then
-    ss_info "No newer release to install"
-    return 0
+    ss_info "No newer release to install (installed=$ADDON_VERSION)"
+    printf '%s\n' "$info"
+    return 2
   fi
   ss_update_self
 }

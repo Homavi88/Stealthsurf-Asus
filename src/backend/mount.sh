@@ -71,6 +71,9 @@ ss_mount_ui() {
     ss_version_local >/dev/null 2>&1 || true
   fi
   ln -sf "$SS_VERSION_FILE" "$ADDON_WEB_DIR/version.json" 2>/dev/null || true
+  if type ss_protocol_status_matrix >/dev/null 2>&1; then
+    ss_protocol_status_matrix >/dev/null 2>&1 || true
+  fi
   ln -sf "$SS_UI_RESPONSE" "$ADDON_WEB_DIR/stealthsurf-response.json" 2>/dev/null || : >"$SS_UI_RESPONSE"
 
   # Helper CGI-like drop for payload (writable by httpd via tmp)

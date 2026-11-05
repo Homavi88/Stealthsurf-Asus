@@ -22,6 +22,19 @@
 | restore firewall if missing while running | watchdog + start path |
 | geoip/geosite | `stealthsurf geodata` |
 
+## Протоколы (StealthSurf API ↔ addon ↔ Xray dataplane)
+
+| API protocol | Как в StealthSurf | Аналог в xrayui |
+| --- | --- | --- |
+| vless / trojan / ss2022 | Xray outbound (`xray_config` или URI) | Xray outbound |
+| openflux | Xray через `xray_config` | Xray outbound JSON |
+| wg | Xray `wireguard` outbound из INI | wireguard outbound / iface |
+| amnezia-wg-2 | `awg-quick` + freedom/interface | обычно вне xrayui |
+| hysteria2 | hysteria + SOCKS bridge | отдельный клиент / outbound |
+| http / socks5 | Xray http/socks outbound | то же |
+
+См. [PROTOCOLS.md](./PROTOCOLS.md).
+
 ## Намеренно не переносим (не нужны для StealthSurf UX)
 
 - b4sni / rtls-scanner / reality helpers — диагностика xrayui

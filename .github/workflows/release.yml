@@ -22,6 +22,12 @@ jobs:
         with:
           node-version: "20"
 
+      - name: Unit tests
+        run: |
+          sh tools/test-protocols.sh
+          sh tools/test-version-cli.sh
+          sh tools/test-sync-fingerprint.sh
+
       - name: Build and pack
         run: |
           npm run pack

@@ -5,18 +5,17 @@
 # Payload JSON may be posted by the ASP page into /tmp/stealthsurf_payload.json
 
 ss_read_payload() {
+  # Prefer fresh amng_custom from the WebUI form submit; fall back to payload file.
   local f="/tmp/stealthsurf_payload.json"
   local custom
-  if [ -f "$f" ]; then
-    if jq -e . "$f" >/dev/null 2>&1; then
-      cat "$f"
-      return 0
-    fi
-  fi
   custom=$(nvram get amng_custom 2>/dev/null)
   if [ -n "$custom" ] && printf '%s' "$custom" | jq -e . >/dev/null 2>&1; then
     printf '%s' "$custom" >"$f"
     printf '%s' "$custom"
+    return 0
+  fi
+  if [ -f "$f" ] && jq -e . "$f" >/dev/null 2>&1; then
+    cat "$f"
     return 0
   fi
   echo '{}'
@@ -91,12 +90,14 @@ ss_service_event() {
     ss_json_response true "key removed" "$(cat "$SS_CACHE_KEYS")"
     ;;
   sync)
-    if ss_api_sync_all >/dev/null; then
+    # Pull from StealthSurf API and rebuild dataplane if enabled configs changed
+    if ss_sync_from_provider >/dev/null; then
       ss_json_response true "synced" "$(jq -nc \
         --slurpfile configs "$SS_CACHE_CONFIGS" \
         --slurpfile locations "$SS_CACHE_LOCATIONS" \
         --slurpfile subs "$SS_CACHE_SUBSCRIPTIONS" \
-        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // [])}')"
+        --slurpfile state "$SS_STATE_FILE" \
+        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {})}')"
     else
       ss_json_response false "sync failed" null
       return 1
@@ -117,14 +118,30 @@ ss_service_event() {
   enableoutbound)
     local id
     id=$(printf '%s' "$payload" | jq -r '.config_id // empty')
-    ss_enable_outbound "$id" && ss_rebuild_and_restart
-    ss_json_response true "enabled $id" "$(cat "$SS_OUTBOUNDS_FILE")"
+    if [ -z "$id" ] || [ "$id" = "null" ]; then
+      ss_json_response false "config_id required" null
+      return 1
+    fi
+    if ss_enable_outbound "$id" && ss_rebuild_and_restart; then
+      ss_json_response true "enabled $id" "$(cat "$SS_OUTBOUNDS_FILE")"
+    else
+      ss_json_response false "enable outbound failed" "$(ss_jq_file_or "$SS_OUTBOUNDS_FILE" '{}')"
+      return 1
+    fi
     ;;
   disableoutbound)
     local id
     id=$(printf '%s' "$payload" | jq -r '.config_id // empty')
-    ss_disable_outbound "$id" && ss_rebuild_and_restart
-    ss_json_response true "disabled $id" "$(cat "$SS_OUTBOUNDS_FILE")"
+    if [ -z "$id" ] || [ "$id" = "null" ]; then
+      ss_json_response false "config_id required" null
+      return 1
+    fi
+    if ss_disable_outbound "$id" && ss_rebuild_and_restart; then
+      ss_json_response true "disabled $id" "$(cat "$SS_OUTBOUNDS_FILE")"
+    else
+      ss_json_response false "disable outbound failed" "$(ss_jq_file_or "$SS_OUTBOUNDS_FILE" '{}')"
+      return 1
+    fi
     ;;
   setdefault)
     local tag
@@ -215,10 +232,7 @@ ss_service_event() {
       return 1
     fi
     if ss_api_update_settings "$id" "$body" >/dev/null; then
-      # Re-apply if this outbound is enabled
-      if echo " $SS_ENABLED_OUTBOUNDS " | grep -q " $id "; then
-        ss_rebuild_and_restart || true
-      fi
+      # ss_api_update_settings already syncs + rebuilds when this id is enabled
       ss_json_response true "settings updated" "$(cat "$SS_CACHE_CONFIGS")"
     else
       ss_json_response false "settings update failed" null
@@ -249,9 +263,13 @@ ss_service_event() {
     fi
     ;;
   connectivity)
-    local via
+    local via result
     via=$(printf '%s' "$payload" | jq -r '.via // "socks"')
-    ss_json_response true "connectivity" "$(ss_connectivity_check "" "$via")"
+    if result=$(ss_connectivity_check "" "$via"); then
+      ss_json_response true "connectivity" "$result"
+    else
+      ss_json_response false "connectivity failed" "$(jq -nc --arg via "$via" '{ok:false, via:$via}')"
+    fi
     ;;
   logs)
     local kind lines
@@ -290,24 +308,37 @@ ss_service_event() {
       ss_json_response false "restore failed" null
     fi
     ;;
-  update)
+  update | upgrade)
+    # force=1 → always reinstall latest; otherwise only when update_available
     local force
     force=$(printf '%s' "$payload" | jq -r '.force // "0"')
+    ss_activity "ui.update" "force=$force"
     if [ "$force" = "1" ] || [ "$force" = "true" ]; then
+      ss_version_check >/dev/null 2>&1 || true
       if ss_update_self; then
-        ss_version_local >/dev/null 2>&1 || true
         ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       else
-        ss_json_response false "update failed" null
+        ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       fi
     else
-      if ss_version_update_if_available 0; then
-        ss_version_check >/dev/null 2>&1 || true
-        ss_json_response true "update finished" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
-      else
-        ss_json_response false "update failed" null
-      fi
+      ss_version_update_if_available 0
+      case $? in
+      0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      2) ss_json_response true "already up to date" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      *) ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      esac
     fi
+    ;;
+  uninstall | remove | purge)
+    # Dangerous — only via explicit CLI normally; allow UI if payload.confirm=1
+    local confirm
+    confirm=$(printf '%s' "$payload" | jq -r '.confirm // "0"')
+    if [ "$confirm" != "1" ] && [ "$confirm" != "true" ]; then
+      ss_json_response false "uninstall requires confirm=1" null
+      return 1
+    fi
+    ss_uninstall
+    ss_json_response true "uninstalled" null
     ;;
   geodata)
     ss_geodata_update && ss_json_response true "geodata updated" null || ss_json_response false "geodata failed" null

@@ -39,8 +39,18 @@ async function fetchJson(url) {
   return res.json();
 }
 
-function triggerService(action, payload) {
+function triggerService(action, payload, opts) {
   const data = payload || {};
+  const options = opts || {};
+  // Update downloads a release — needs a longer httpd wait / refresh
+  let wait = Number(options.wait || 0);
+  if (!wait) {
+    if (action === "update" || action === "upgrade") wait = 40;
+    else if (action === "checkupdate") wait = 15;
+    else if (action === "installxray" || action === "sync") wait = 20;
+    else wait = 10;
+  }
+
   try {
     sessionStorage.setItem("ss_payload", JSON.stringify(data));
   } catch (_) {}
@@ -52,20 +62,32 @@ function triggerService(action, payload) {
   }
 
   const blob = JSON.stringify(data);
-  $("ss_payload_field").value = blob.slice(0, 2048);
-  // Best-effort: also drop payload for service-event hook
-  try {
-    // Some firmwares ignore this; amng_custom is the primary path
-  } catch (_) {}
+  // Merlin amng_custom is size-limited; reject oversized payloads instead of truncating JSON
+  if (blob.length > 3500) {
+    setMsg(
+      "Payload слишком большой (" + blob.length + " байт). Упростите routing/policies или правьте через CLI.",
+      "err"
+    );
+    return;
+  }
+  $("ss_payload_field").value = blob;
 
   form.action_script.value = "stealthsurf_" + action;
   form.action_mode.value = "apply";
-  form.action_wait.value = "10";
+  form.action_wait.value = String(wait);
 
-  setMsg("Выполняется: " + action + "…", "");
+  const labels = {
+    checkupdate: "Проверка версии на GitHub…",
+    update: "Установка обновления с GitHub (скачивание)…",
+    upgrade: "Установка обновления с GitHub…",
+    start: "Запуск…",
+    stop: "Остановка…",
+    restart: "Рестарт…",
+  };
+  setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
   form.submit();
-  setTimeout(() => refreshAll(), 9000);
+  setTimeout(() => refreshAll(), Math.max(3000, wait * 1000 - 1000));
 }
 
 function switchTab(name) {
@@ -172,8 +194,21 @@ function fillOutboundSelects() {
 
 function protoSupported(proto) {
   const info = protocolsCache[proto];
-  if (!info) return proto.startsWith("vless") || proto === "trojan" || proto.includes("shadowsocks");
+  if (!info) {
+    // Optimistic defaults until protocols.json loads (all API protocols are handled)
+    return PROTO_OPTIONS.includes(proto);
+  }
   return !!info.supported;
+}
+
+function protoBadge(proto) {
+  const info = protocolsCache[proto];
+  if (!info) return "";
+  if (info.supported) {
+    const st = info.status ? String(info.status) : info.runtime || "ok";
+    return ' <span class="pill on" title="' + st + '">' + (info.runtime || "ok") + "</span>";
+  }
+  return ' <span class="pill warn" title="' + (info.status || "") + '">n/a</span>';
 }
 
 function renderConfigs(configs) {
@@ -198,7 +233,7 @@ function renderConfigs(configs) {
       (c.title || "—") +
       "</td><td>" +
       (c.protocol || "—") +
-      (supported ? "" : ' <span class="pill warn">n/a</span>') +
+      protoBadge(c.protocol) +
       "</td><td>" +
       (c.location_id ?? "—") +
       "</td><td>" +
@@ -261,7 +296,9 @@ function renderProtocolSelect() {
     const opt = document.createElement("option");
     opt.value = proto;
     const ok = protoSupported(proto);
-    opt.textContent = ok ? proto : proto + " (в разработке)";
+    const info = protocolsCache[proto];
+    const note = info && info.status ? " — " + info.status : ok ? "" : " (недоступен)";
+    opt.textContent = proto + note;
     opt.disabled = !ok;
     p.appendChild(opt);
   });
@@ -351,6 +388,30 @@ function renderClients(clients) {
   });
 }
 
+function parseXraySettingsFlags(raw) {
+  const flags = {
+    use_xhttp: false,
+    use_grpc: false,
+    use_warp: false,
+    use_salamander: false,
+    disable_reality: false,
+  };
+  if (!raw) return flags;
+  let obj = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch (_) {
+      return flags;
+    }
+  }
+  if (!obj || typeof obj !== "object") return flags;
+  ["use_xhttp", "use_grpc", "use_warp", "use_salamander", "disable_reality"].forEach((k) => {
+    if (obj[k] != null) flags[k] = !!obj[k];
+  });
+  return flags;
+}
+
 function onConfigChange() {
   const opt = $("configSelect").selectedOptions[0];
   if (!opt) return;
@@ -361,15 +422,25 @@ function onConfigChange() {
       p.value = opt.dataset.protocol;
     }
   }
+  const cfg = (configsCache || []).find((c) => c && String(c.id) === String(opt.value));
+  const flags = parseXraySettingsFlags(cfg && cfg.xray_config);
+  $("optUseXhttp").checked = flags.use_xhttp;
+  $("optUseGrpc").checked = flags.use_grpc;
+  $("optUseWarp").checked = flags.use_warp;
+  $("optUseSalamander").checked = flags.use_salamander;
+  $("optDisableReality").checked = flags.disable_reality;
   const info = protocolsCache[opt.dataset.protocol];
-  $("protoHint").textContent = info
+  const runtime = info
     ? "runtime: " + info.runtime + (info.status ? " · " + info.status : "")
     : "";
+  $("protoHint").textContent =
+    (runtime ? runtime + ". " : "") +
+    "Смена на сайте → «Синхронизировать» (или autosync */15) подтянет connection_url и пересоберёт включённые outbound.";
 }
 
 async function refreshAll() {
   try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, response] =
+    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, protocols, response] =
       await Promise.all([
         fetchJson(EXT + "/state.json").catch(() => null),
         fetchJson(EXT + "/configs.json").catch(() => []),
@@ -380,9 +451,11 @@ async function refreshAll() {
         fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
         fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
         fetchJson(EXT + "/version.json").catch(() => null),
+        fetchJson(EXT + "/protocols.json").catch(() => null),
         fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
       ]);
     outboundsCache = outbounds || { enabled: [], default: "" };
+    if (protocols && typeof protocols === "object") protocolsCache = protocols;
     renderState(state);
     if (version) renderVersion(version);
     else if (state && state.version) renderVersion({ installed: state.version, latest: null });
@@ -396,13 +469,45 @@ async function refreshAll() {
     renderPolicies(policies);
     if (response && response.message) {
       setMsg(response.message, response.status ? "ok" : "err");
-      if (response.data && response.data.protocols) {
-        protocolsCache = response.data.protocols;
+      const data = response.data;
+      if (data && data.protocols) {
+        protocolsCache = data.protocols;
         renderProtocolSelect();
         renderConfigs(cfgList);
       }
-      if (response.data && (response.data.installed || response.data.update_available != null)) {
-        renderVersion(response.data);
+      if (data && (data.installed || data.update_available != null)) {
+        renderVersion(data);
+      }
+      if (/version checked|updated|already up to date/i.test(response.message)) {
+        if (data && data.installed) renderVersion(data);
+        fetchJson(EXT + "/version.json")
+          .then((v) => renderVersion(v))
+          .catch(() => {});
+      }
+      if (/^updated$/i.test(response.message)) {
+        setTimeout(() => location.reload(), 1500);
+      }
+      // clients → array
+      if (Array.isArray(data) && /clients/i.test(response.message)) {
+        renderClients(data);
+      }
+      // diag dump
+      if (data && (data.firewall || data.xray || data.protocols) && /diag/i.test(response.message)) {
+        $("diagBox").textContent = JSON.stringify(data, null, 2);
+      }
+      // connectivity
+      if (data && (data.ip != null || data.via != null) && /connectivity/i.test(response.message)) {
+        $("diagBox").textContent =
+          "IP: " + (data.ip || "—") + "\nvia: " + (data.via || "—") + "\nok: " + String(!!data.ok);
+      }
+      // backups list embedded in backup/backuplist responses
+      if (data && Array.isArray(data.backups)) {
+        renderBackups(data.backups);
+      } else if (Array.isArray(data) && /backups/i.test(response.message)) {
+        renderBackups(data);
+      }
+      if (data && data.text && /logs|devices/i.test(response.message)) {
+        $("diagBox").textContent = data.text;
       }
     }
   } catch (e) {
@@ -432,19 +537,25 @@ function bind() {
   $("btnStop").addEventListener("click", () => triggerService("stop", {}));
   $("btnRestart").addEventListener("click", () => triggerService("restart", {}));
   $("btnRefresh").addEventListener("click", () => refreshAll());
-  $("btnCheckUpdate").addEventListener("click", () => {
-    triggerService("checkupdate", {});
-    setTimeout(refreshAll, 9000);
+  $("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
+  $("btnUpdate").addEventListener("click", () => {
+    if (!confirm("Установить новую версию с GitHub Releases?")) return;
+    triggerService("update", { force: "0" });
   });
-  $("btnUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
   if ($("btnBannerUpdate")) {
-    $("btnBannerUpdate").addEventListener("click", () => triggerService("update", { force: "0" }));
+    $("btnBannerUpdate").addEventListener("click", () => {
+      if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
+      triggerService("update", { force: "0" });
+    });
   }
   if ($("btnCheckUpdate2")) {
     $("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
   }
   if ($("btnForceUpdate")) {
-    $("btnForceUpdate").addEventListener("click", () => triggerService("update", { force: "1" }));
+    $("btnForceUpdate").addEventListener("click", () => {
+      if (!confirm("Принудительно скачать и установить latest с GitHub (даже если версия та же)?")) return;
+      triggerService("update", { force: "1" });
+    });
   }
 
   $("btnApplySole").addEventListener("click", () =>
@@ -456,6 +567,11 @@ function bind() {
       settings: {
         location_id: Number($("locationSelect").value),
         protocol: $("protocolSelect").value,
+        use_xhttp: !!$("optUseXhttp").checked,
+        use_grpc: !!$("optUseGrpc").checked,
+        use_warp: !!$("optUseWarp").checked,
+        use_salamander: !!$("optUseSalamander").checked,
+        disable_reality: !!$("optDisableReality").checked,
       },
     })
   );
