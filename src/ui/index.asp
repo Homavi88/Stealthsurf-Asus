@@ -93,6 +93,9 @@
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
   @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
   .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .hint.ok { color: var(--ok); }
+  .hint.err { color: var(--bad); }
+  #logBox { max-height: 360px; margin-top: 8px; }
   code { font-size: 12px; background: #0b1015; padding: 1px 4px; border-radius: 4px; }
   .logbox {
     background: #0b1015; border: 1px solid var(--border); border-radius: 6px;
@@ -174,6 +177,7 @@
     <button class="tab" data-tab="routing" type="button">Routing</button>
     <button class="tab" data-tab="policies" type="button">Политики MAC</button>
     <button class="tab" data-tab="general" type="button">Режим / DNS</button>
+    <button class="tab" data-tab="backup" type="button">Backup / Логи</button>
     <button class="tab" data-tab="diag" type="button">Диагностика</button>
   </div>
 
@@ -340,29 +344,31 @@
       <button id="btnInstallXray" class="secondary" type="button">Установить / найти Xray</button>
     </div>
 
-    <h2 style="margin-top:16px">Backup конфигураций</h2>
-    <div class="hint">Сохраняет conf, routing, outbounds, policies (с IP устройств), configs, xray.json. Ночной backup в 03:00. Авто-backup перед apply / restore / сменой режима.</div>
+    <div class="hint" style="margin-top:14px">Backup и просмотр логов — вкладка <b>Backup / Логи</b>.</div>
+  </div>
+
+  <div class="panel" id="tab-backup">
+    <h2>Backup конфигураций</h2>
+    <div class="hint">
+      В архив: conf, routing, outbounds, policies (+ IP устройств), configs/keys, xray.json.
+      Ночной backup в 03:00. Авто-backup перед apply / restore / сменой режима.
+      Файлы: <code>/opt/share/stealthsurf/backups/</code>
+    </div>
     <div class="row">
-      <input id="backupNote" placeholder="заметка (опц.)" style="max-width:200px">
+      <input id="backupNote" placeholder="заметка (опц.)" style="max-width:220px">
       <button id="btnBackup" type="button">Создать backup</button>
       <button id="btnBackupList" class="secondary" type="button">Обновить список</button>
     </div>
+    <div id="backupStatus" class="hint">Список загружается…</div>
     <table>
-      <thead><tr><th>Файл</th><th>Когда</th><th>Заметка</th><th></th></tr></thead>
+      <thead><tr><th>Файл</th><th>Когда</th><th>Заметка</th><th>Версия</th><th></th></tr></thead>
       <tbody id="backupsTable"></tbody>
     </table>
-  </div>
 
-  <div class="panel" id="tab-diag">
-    <h2>Диагностика и логи</h2>
+    <h2 style="margin-top:22px">Логи аддона</h2>
+    <div class="hint">Результат показывается ниже в окне — без SSH. Activity: start/stop/apply/sync/firewall + IP/MAC.</div>
     <div class="row">
-      <button id="btnDiag" type="button">Снять diag dump</button>
-      <button id="btnTestCfg" class="secondary" type="button">Тест xray.json</button>
-      <button id="btnConnSocks" class="secondary" type="button">IP через SOCKS</button>
-      <button id="btnConnDirect" class="secondary" type="button">IP напрямую</button>
-    </div>
-    <div class="row">
-      <select id="logKind" style="max-width:160px">
+      <select id="logKind" style="max-width:180px">
         <option value="activity">activity (действия)</option>
         <option value="errors">errors</option>
         <option value="devices">devices (IP/MAC)</option>
@@ -374,7 +380,19 @@
       <button id="btnDevicesSnap" class="secondary" type="button">Снимок устройств LAN</button>
       <button id="btnClearLogs" class="danger" type="button">Очистить логи</button>
     </div>
-    <div class="hint">Activity-лог пишет действия аддона и IP устройств при политиках / start / firewall.</div>
+    <div id="logMeta" class="hint">Выберите тип лога и нажмите «Показать логи».</div>
+    <div id="logBox" class="logbox">(логи ещё не загружены)</div>
+  </div>
+
+  <div class="panel" id="tab-diag">
+    <h2>Диагностика</h2>
+    <div class="row">
+      <button id="btnDiag" type="button">Снять diag dump</button>
+      <button id="btnTestCfg" class="secondary" type="button">Тест xray.json</button>
+      <button id="btnConnSocks" class="secondary" type="button">IP через SOCKS</button>
+      <button id="btnConnDirect" class="secondary" type="button">IP напрямую</button>
+    </div>
+    <div class="hint">Логи и backup — на вкладке <b>Backup / Логи</b>. Здесь — снимок состояния и проверка выхода в интернет.</div>
     <div id="diagBox" class="logbox">(пусто)</div>
   </div>
 
