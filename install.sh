@@ -17,7 +17,7 @@ ADDON_DIR="/jffs/addons/${ADDON_TAG}"
 SCRIPT_DST="/jffs/scripts/${ADDON_TAG}"
 
 SS_STEP=0
-SS_STEPS=6
+SS_STEPS=7
 OPKG=""
 
 # Absolute PATH for Merlin SSH / curl|sh (login profile may not be sourced)
@@ -323,7 +323,14 @@ extract_and_place() {
 run_addon_install() {
   step_begin "Настройка аддона (хуки, UI, Xray)"
   info "запуск: ${C_DIM}$SCRIPT_DST install${C_RESET}"
-  sh "$SCRIPT_DST" install || die "Шаг install аддона завершился с ошибкой"
+  ss_export_path
+  # Show real error lines from addon install (previously swallowed)
+  if ! sh "$SCRIPT_DST" install; then
+    ss_blank
+    warn "Повтор с видимым логом:"
+    sh "$SCRIPT_DST" install 2>&1 | tail -40 >&2 || true
+    die "Шаг install аддона завершился с ошибкой. Вручную: PATH=/opt/bin:\$PATH $SCRIPT_DST install"
+  fi
   ok "хуки Merlin, UI и cron установлены"
 }
 
