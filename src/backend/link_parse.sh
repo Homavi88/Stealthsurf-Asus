@@ -250,14 +250,17 @@ ss_parse_link_to_outbound() {
   vless://*) ss_parse_vless "$link" ;;
   trojan://*) ss_parse_trojan "$link" ;;
   ss://*) ss_parse_shadowsocks "$link" ;;
+  http://* | socks5://* | socks://*)
+    ss_parse_http_socks_subconfig "$link" "proxy"
+    ;;
   hy2://* | hysteria2://* | hysteria://*)
-    ss_error "Hysteria2 is planned after MVP (needs hysteria client, not only Xray)"
+    # Caller should use protocols.sh for hysteria runtime; provide socks bridge hint
+    ss_error "Hysteria2 links need hysteria runtime (ss_apply_protocol_config)"
     return 1
     ;;
   *)
-    # WireGuard INI blob from StealthSurf
     if printf '%s' "$link" | grep -q '\[Interface\]'; then
-      ss_error "WireGuard/AWG apply is planned after MVP"
+      ss_error "WireGuard/AWG blobs need wg/awg runtime (ss_apply_protocol_config)"
       return 1
     fi
     ss_error "Unsupported connection_url scheme"
@@ -266,32 +269,81 @@ ss_parse_link_to_outbound() {
   esac
 }
 
+ss_build_inbounds_json() {
+  local mode
+  mode=$(ss_fw_detect_mode 2>/dev/null || echo "${SS_MODE:-proxy}")
+  jq -nc \
+    --argjson socks "${SS_SOCKS_PORT:-10808}" \
+    --argjson http "${SS_HTTP_PORT:-10809}" \
+    --argjson tproxy "${SS_TPROXY_PORT:-10810}" \
+    --argjson redirect "${SS_REDIRECT_PORT:-10811}" \
+    --argjson dns "${SS_DNS_PORT:-5353}" \
+    --arg mode "$mode" \
+    --arg dns_mode "${SS_DNS_MODE:-OFF}" '
+    [
+      {
+        tag: "socks-in",
+        listen: "0.0.0.0",
+        port: $socks,
+        protocol: "socks",
+        settings: { udp: true },
+        sniffing: { enabled: true, destOverride: ["http","tls","quic"] }
+      },
+      {
+        tag: "http-in",
+        listen: "0.0.0.0",
+        port: $http,
+        protocol: "http",
+        sniffing: { enabled: true, destOverride: ["http","tls"] }
+      }
+    ]
+    + (if $mode == "tproxy" then [{
+        tag: "tproxy-in",
+        listen: "0.0.0.0",
+        port: $tproxy,
+        protocol: "dokodemo-door",
+        settings: { network: "tcp,udp", followRedirect: true },
+        sniffing: { enabled: true, destOverride: ["http","tls","quic"], routeOnly: true },
+        streamSettings: { sockopt: { tproxy: "tproxy" } }
+      }] elif $mode == "redirect" then [{
+        tag: "redirect-in",
+        listen: "0.0.0.0",
+        port: $redirect,
+        protocol: "dokodemo-door",
+        settings: { network: "tcp", followRedirect: true },
+        sniffing: { enabled: true, destOverride: ["http","tls"], routeOnly: true }
+      }] else [] end)
+    + (if $dns_mode == "REDIRECT" then [{
+        tag: "dns-in",
+        listen: "0.0.0.0",
+        port: $dns,
+        protocol: "dokodemo-door",
+        settings: { address: "1.1.1.1", port: 53, network: "tcp,udp" }
+      }] else [] end)
+  '
+}
+
 ss_build_xray_config() {
+  # Legacy single-outbound builder (still used by apply <id> convenience)
   local outbound_json="$1"
   local socks_port="${SS_SOCKS_PORT:-10808}"
   local http_port="${SS_HTTP_PORT:-10809}"
+  local inbounds default_tag
+
+  # Tag as proxy for simple routing
+  outbound_json=$(printf '%s' "$outbound_json" | jq '.tag = (if .tag == null or .tag == "" then "proxy" else .tag end)')
+  default_tag=$(printf '%s' "$outbound_json" | jq -r '.tag')
+  inbounds=$(ss_build_inbounds_json)
 
   jq -nc \
     --argjson outbound "$outbound_json" \
-    --argjson socks "$socks_port" \
-    --argjson http "$http_port" '
+    --argjson inbounds "$inbounds" \
+    --arg def "$default_tag" \
+    --arg access "$XRAY_ACCESS_LOG" \
+    --arg error "$XRAY_ERROR_LOG" '
     {
-      log: { loglevel: "warning" },
-      inbounds: [
-        {
-          tag: "socks-in",
-          listen: "0.0.0.0",
-          port: $socks,
-          protocol: "socks",
-          settings: { udp: true }
-        },
-        {
-          tag: "http-in",
-          listen: "0.0.0.0",
-          port: $http,
-          protocol: "http"
-        }
-      ],
+      log: { loglevel: "warning", access: $access, error: $error },
+      inbounds: $inbounds,
       outbounds: [
         $outbound,
         { tag: "direct", protocol: "freedom" },
@@ -300,8 +352,53 @@ ss_build_xray_config() {
       routing: {
         domainStrategy: "AsIs",
         rules: [
-          { type: "field", outboundTag: "direct", ip: ["geoip:private"] }
+          { type: "field", outboundTag: "direct", ip: ["geoip:private"] },
+          { type: "field", outboundTag: $def, network: "tcp,udp" }
         ]
+      }
+    }'
+}
+
+ss_build_xray_config_multi() {
+  # Full multi-outbound + routing from catalog/rules
+  local outbounds inbounds rules default_tag bridges
+  ss_collect_endpoints
+  ss_routing_validate || return 1
+
+  outbounds=$(ss_build_multi_outbounds) || return 1
+  # Merge hysteria/wg socks bridges
+  for bridges in "$ADDON_DATA_DIR"/bridge-ss-*.json; do
+    [ -f "$bridges" ] || continue
+    outbounds=$(printf '%s' "$outbounds" | jq --slurpfile b "$bridges" '. + $b')
+  done
+
+  inbounds=$(ss_build_inbounds_json)
+  rules=$(ss_build_routing_rules_json)
+  default_tag="${SS_DEFAULT_OUTBOUND:-direct}"
+  if [ -f "$SS_OUTBOUNDS_FILE" ]; then
+    default_tag=$(jq -r '.default // "direct"' "$SS_OUTBOUNDS_FILE")
+  fi
+
+  # Ensure default exists in outbounds; else fall back to first ss-* or direct
+  if ! printf '%s' "$outbounds" | jq -e --arg t "$default_tag" 'any(.[]; .tag == $t)' >/dev/null 2>&1; then
+    default_tag=$(printf '%s' "$outbounds" | jq -r '[.[] | select(.tag|startswith("ss-"))][0].tag // "direct"')
+  fi
+
+  jq -nc \
+    --argjson outbounds "$outbounds" \
+    --argjson inbounds "$inbounds" \
+    --argjson rules "$rules" \
+    --arg def "$default_tag" \
+    --arg access "$XRAY_ACCESS_LOG" \
+    --arg error "$XRAY_ERROR_LOG" \
+    --arg strategy "$(jq -r '.domainStrategy // "AsIs"' "$SS_ROUTING_FILE" 2>/dev/null || echo AsIs)" '
+    {
+      log: { loglevel: "warning", access: $access, error: $error },
+      inbounds: $inbounds,
+      outbounds: $outbounds,
+      routing: {
+        domainStrategy: $strategy,
+        rules: ($rules + [{ type: "field", outboundTag: $def, network: "tcp,udp" }])
       }
     }'
 }

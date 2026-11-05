@@ -87,19 +87,25 @@ install_entware_deps() {
     fi
   done
 
-  # Optional Xray from Entware if package exists
+  # Xray: prefer Entware package, else download from GitHub Releases by arch
   if ! command -v xray >/dev/null 2>&1 && [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
-    for cand in xray xray-core v2ray; do
+    for cand in xray xray-core; do
       if opkg install "$cand" >/dev/null 2>&1; then
-        log "  installed optional dataplane: $cand"
+        log "  installed dataplane: $cand"
         break
       fi
     done
-    if ! command -v xray >/dev/null 2>&1 && [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
-      log "  WARN: xray binary not found. Dataplane start will wait until xray is installed under /opt/sbin/xray or /opt/bin/xray"
-    fi
   else
     log "  xray already present"
+  fi
+
+  if ! command -v xray >/dev/null 2>&1 && [ ! -x /opt/sbin/xray ] && [ ! -x /opt/bin/xray ]; then
+    log "  Xray not in opkg — will download during addon install (stealthsurf install-xray)"
+  fi
+
+  # unzip needed for Xray zip from GitHub
+  if ! command -v unzip >/dev/null 2>&1; then
+    opkg install unzip >/dev/null 2>&1 || log "  WARN: unzip missing — GitHub Xray download may fail"
   fi
 
   command -v curl >/dev/null 2>&1 || die "curl is required but not available after dependency install"

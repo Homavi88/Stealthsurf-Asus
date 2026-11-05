@@ -6,7 +6,6 @@ ss_get_webui_page() {
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     page="user$i.asp"
     if [ -f "/www/user/$page" ] || [ -L "/www/user/$page" ]; then
-      # occupied — skip unless it is ours
       if [ -L "/www/user/$page" ] && [ "$(readlink "/www/user/$page" 2>/dev/null)" = "$ADDON_JFFS_ADN_DIR/index.asp" ]; then
         ADDON_USER_PAGE="$page"
         return 0
@@ -39,7 +38,6 @@ ss_mount_ui() {
     cp /www/require/modules/menuTree.js /tmp/menuTree.js
   fi
 
-  # remove previous entry then insert under VPN menu
   grep -v 'tabName: "StealthSurf"' /tmp/menuTree.js >/tmp/menuTree.ss.$$ 2>/dev/null || cp /tmp/menuTree.js /tmp/menuTree.ss.$$
   mv /tmp/menuTree.ss.$$ /tmp/menuTree.js
 
@@ -55,8 +53,21 @@ ss_mount_ui() {
   ln -sf "$ADDON_JFFS_ADN_DIR/app.js" "$ADDON_WEB_DIR/app.js"
   ln -sf "$SS_CACHE_CONFIGS" "$ADDON_WEB_DIR/configs.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/locations.json" 2>/dev/null || true
+  ln -sf "$SS_CACHE_SUBSCRIPTIONS" "$ADDON_WEB_DIR/subscriptions.json" 2>/dev/null || true
+  ln -sf "$SS_CACHE_KEYS" "$ADDON_WEB_DIR/api_keys.json" 2>/dev/null || true
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
+  ln -sf "$SS_OUTBOUNDS_FILE" "$ADDON_WEB_DIR/outbounds.json" 2>/dev/null || true
+  ln -sf "$SS_ROUTING_FILE" "$ADDON_WEB_DIR/routing.json" 2>/dev/null || true
+  ln -sf "$SS_POLICIES_FILE" "$ADDON_WEB_DIR/policies.json" 2>/dev/null || true
+  ln -sf "$SS_DIAG_FILE" "$ADDON_WEB_DIR/diag.json" 2>/dev/null || true
+  ln -sf "$ADDON_LOGS_DIR/addon.log" "$ADDON_WEB_DIR/addon.log" 2>/dev/null || true
+  ln -sf "$XRAY_ACCESS_LOG" "$ADDON_WEB_DIR/xray-access.log" 2>/dev/null || true
+  ln -sf "$XRAY_ERROR_LOG" "$ADDON_WEB_DIR/xray-error.log" 2>/dev/null || true
   ln -sf "$SS_UI_RESPONSE" "$ADDON_WEB_DIR/stealthsurf-response.json" 2>/dev/null || : >"$SS_UI_RESPONSE"
+
+  # Helper CGI-like drop for payload (writable by httpd via tmp)
+  : >/tmp/stealthsurf_payload.json
+  chmod 666 /tmp/stealthsurf_payload.json 2>/dev/null || true
 
   ss_ok "Mounted UI as $ADDON_USER_PAGE"
 }
@@ -66,7 +77,6 @@ ss_unmount_ui() {
   if [ -n "$ADDON_USER_PAGE" ] && [ "$ADDON_USER_PAGE" != "none" ]; then
     rm -f "/www/user/$ADDON_USER_PAGE" "/www/user/${ADDON_USER_PAGE%.asp}.title"
   fi
-  # also clean any dangling titles pointing to us
   for f in /www/user/user*.asp; do
     [ -L "$f" ] || continue
     case "$(readlink "$f" 2>/dev/null)" in
