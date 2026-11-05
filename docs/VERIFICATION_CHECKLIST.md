@@ -6,7 +6,7 @@
 
 - [ ] `curl -fsSL …/install.sh | sh` завершается без ошибки (Entware обязателен)
 - [ ] В WebUI есть вкладка **VPN → StealthSurf** после re-login
-- [ ] `ssurf v` / `stealthsurf version` → `1.0.8`
+- [ ] `ssurf v` / `stealthsurf version` → `1.0.9`
 - [ ] `which xray` или `/opt/sbin/xray` существует (`stealthsurf install-xray` при необходимости)
 - [ ] После reboot: UI снова смонтирован, при наличии конфига — автостарт
 - [ ] Параллельный `start`/`stop` не гоняет гонки (`flock`)

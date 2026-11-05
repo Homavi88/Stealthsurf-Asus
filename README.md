@@ -2,7 +2,7 @@
 
 Аддон для роутеров на **Asuswrt-Merlin**: StealthSurf — провайдер VPN; transparent proxy, каталог конфигов и routing — на роутере через API-ключ(и) `stlth_…`.
 
-**Актуальный релиз:** [v1.0.8](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest)
+**Актуальный релиз:** [v1.0.9](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest)
 
 ## Установка на роутер
 
@@ -61,6 +61,7 @@ LAN / Wi‑Fi ──► iptables REDIRECT|TPROXY ──► Xray (dokodemo-door)
 - [docs/PROTOCOLS.md](./docs/PROTOCOLS.md) — протоколы и sync сайт→роутер
 - [docs/TPROXY_VS_REDIRECT.md](./docs/TPROXY_VS_REDIRECT.md)
 - [docs/POLICIES.md](./docs/POLICIES.md) · [docs/ROUTING.md](./docs/ROUTING.md)
+- [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md) — backup и логи в WebUI
 - [docs/FAQ.md](./docs/FAQ.md) · [docs/VERIFICATION_CHECKLIST.md](./docs/VERIFICATION_CHECKLIST.md)
 - [docs/ROUTER_MATRIX.md](./docs/ROUTER_MATRIX.md) — заполнить после теста на железе
 - [ROADMAP.md](./ROADMAP.md)

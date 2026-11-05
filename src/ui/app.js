@@ -48,6 +48,8 @@ function triggerService(action, payload, opts) {
     if (action === "update" || action === "upgrade") wait = 40;
     else if (action === "checkupdate") wait = 15;
     else if (action === "installxray" || action === "sync") wait = 20;
+    else if (action === "backup" || action === "restore") wait = 15;
+    else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
     else wait = 10;
   }
 
@@ -83,6 +85,12 @@ function triggerService(action, payload, opts) {
     start: "Запуск…",
     stop: "Остановка…",
     restart: "Рестарт…",
+    backup: "Создание backup…",
+    backuplist: "Обновление списка backup…",
+    restore: "Восстановление из backup…",
+    logs: "Чтение логов…",
+    devicesnapshot: "Снимок устройств LAN…",
+    clearlogs: "Очистка логов…",
   };
   setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
@@ -503,11 +511,25 @@ async function refreshAll() {
       // backups list embedded in backup/backuplist responses
       if (data && Array.isArray(data.backups)) {
         renderBackups(data.backups);
+        if (data.path) setBackupStatus("Создан: " + data.path, "ok");
       } else if (Array.isArray(data) && /backups/i.test(response.message)) {
         renderBackups(data);
+        setBackupStatus("Список обновлён (" + data.length + ")", "ok");
+      }
+      if (/backup ok/i.test(response.message) && data && data.path) {
+        setBackupStatus("Backup готов: " + data.path, "ok");
+        loadBackups();
+      }
+      if (/^restored$/i.test(response.message)) {
+        setBackupStatus("Восстановлено из " + ((data && data.path) || "архива"), "ok");
+        setTimeout(() => refreshAll(), 1200);
       }
       if (data && data.text && /logs|devices/i.test(response.message)) {
-        $("diagBox").textContent = data.text;
+        showLogText(data.text, data.kind || $("logKind").value);
+      }
+      if (/logs cleared/i.test(response.message)) {
+        showLogText("(логи очищены)", $("logKind").value);
+        setTimeout(loadLogPreview, 500);
       }
     }
   } catch (e) {
@@ -634,12 +656,15 @@ function bind() {
     triggerService("setdnsmode", { dns_mode: $("dnsModeSelect").value })
   );
   $("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
-  $("btnBackup").addEventListener("click", () =>
-    triggerService("backup", { note: $("backupNote").value.trim() || "manual" })
-  );
+  $("btnBackup").addEventListener("click", () => {
+    setBackupStatus("Создаю backup…", "");
+    triggerService("backup", { note: $("backupNote").value.trim() || "manual" });
+    setTimeout(loadBackups, 9000);
+  });
   $("btnBackupList").addEventListener("click", () => {
+    setBackupStatus("Обновляю список…", "");
     triggerService("backuplist", {});
-    setTimeout(loadBackups, 8500);
+    setTimeout(loadBackups, 9000);
   });
 
   $("btnDiag").addEventListener("click", () => triggerService("diag", {}));
@@ -649,15 +674,51 @@ function bind() {
     triggerService("connectivity", { via: "direct" })
   );
   $("btnLogs").addEventListener("click", () => {
-    triggerService("logs", { kind: $("logKind").value, lines: "200" });
-    setTimeout(loadLogPreview, 8500);
+    const kind = $("logKind").value;
+    setLogMeta("Загрузка «" + kind + "»…");
+    triggerService("logs", { kind: kind, lines: "200" });
+    setTimeout(loadLogPreview, 9000);
   });
+  $("logKind").addEventListener("change", () => loadLogPreview());
   $("btnDevicesSnap").addEventListener("click", () => {
+    $("logKind").value = "devices";
+    setLogMeta("Снимок LAN устройств…");
     triggerService("devicesnapshot", {});
-    setTimeout(loadLogPreview, 8500);
+    setTimeout(loadLogPreview, 9000);
   });
-  $("btnClearLogs").addEventListener("click", () =>
-    triggerService("clearlogs", { kind: "all" })
+  $("btnClearLogs").addEventListener("click", () => {
+    if (!confirm("Очистить все логи аддона (activity/errors/devices/addon)?")) return;
+    triggerService("clearlogs", { kind: "all" });
+  });
+}
+
+function setBackupStatus(text, cls) {
+  const el = $("backupStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
+  if (cls === "ok") setMsg(text, "ok");
+  if (cls === "err") setMsg(text, "err");
+}
+
+function setLogMeta(text) {
+  const el = $("logMeta");
+  if (el) el.textContent = text || "";
+}
+
+function showLogText(text, kind) {
+  const box = $("logBox");
+  if (!box) return;
+  const body = (text || "").trim() || "(пусто)";
+  box.textContent = body;
+  const lines = body === "(пусто)" ? 0 : body.split("\n").length;
+  setLogMeta(
+    "Показано: " +
+      (kind || $("logKind").value) +
+      " · строк: " +
+      lines +
+      " · " +
+      new Date().toLocaleTimeString()
   );
 }
 
@@ -665,26 +726,38 @@ function renderBackups(list) {
   const tbody = $("backupsTable");
   if (!tbody) return;
   tbody.innerHTML = "";
-  (list || []).forEach((b) => {
+  const rows = list || [];
+  if (!rows.length) {
+    setBackupStatus("Backup пока нет — нажмите «Создать backup».", "");
+    return;
+  }
+  setBackupStatus("Найдено backup: " + rows.length, "");
+  rows.forEach((b) => {
     const tr = document.createElement("tr");
     const when = b.created_at
       ? new Date(Number(b.created_at) * 1000).toLocaleString()
       : b.stamp || "—";
     tr.innerHTML =
-      "<td>" +
+      "<td style=\"word-break:break-all\">" +
       (b.file || "—") +
       "</td><td>" +
       when +
       "</td><td>" +
       (b.note || "—") +
+      "</td><td>" +
+      (b.version || "—") +
       "</td><td></td>";
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "small secondary";
     btn.textContent = "Restore";
-    btn.addEventListener("click", () =>
-      triggerService("restore", { path: b.file || b.path })
-    );
+    btn.addEventListener("click", () => {
+      const file = b.file || b.path;
+      if (!confirm("Восстановить настройки из\n" + file + "?\n\nТекущий конфиг будет сохранён в auto-backup, VPN остановится."))
+        return;
+      setBackupStatus("Restore: " + file + "…", "");
+      triggerService("restore", { path: file });
+    });
     tr.lastChild.appendChild(btn);
     tbody.appendChild(tr);
   });
@@ -700,13 +773,15 @@ async function loadBackups() {
     if (response && response.data) {
       if (Array.isArray(response.data)) renderBackups(response.data);
       if (response.data.backups) renderBackups(response.data.backups);
-      if (response.data.path) setMsg("Backup: " + response.data.path, "ok");
+      if (response.data.path && /backup/i.test(response.message || "")) {
+        setBackupStatus("Последний backup: " + response.data.path, "ok");
+      }
     }
   } catch (_) {}
 }
 
 async function loadLogPreview() {
-  const kind = $("logKind").value;
+  const kind = $("logKind") ? $("logKind").value : "activity";
   const map = {
     activity: "/activity.log",
     errors: "/errors.log",
@@ -717,8 +792,13 @@ async function loadLogPreview() {
   };
   try {
     const response = await fetchJson(EXT + "/stealthsurf-response.json");
-    if (response && response.data && response.data.text) {
-      $("diagBox").textContent = response.data.text;
+    if (
+      response &&
+      response.data &&
+      response.data.text &&
+      /logs|devices/i.test(response.message || "")
+    ) {
+      showLogText(response.data.text, response.data.kind || kind);
       return;
     }
   } catch (_) {}
@@ -728,9 +808,9 @@ async function loadLogPreview() {
     });
     const text = await res.text();
     const lines = text.trim().split("\n");
-    $("diagBox").textContent = lines.slice(-200).join("\n") || "(пусто)";
+    showLogText(lines.slice(-200).join("\n") || "(пусто)", kind);
   } catch (e) {
-    $("diagBox").textContent = String(e);
+    showLogText(String(e), kind);
   }
 }
 

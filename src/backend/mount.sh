@@ -66,7 +66,14 @@ ss_mount_ui() {
   ln -sf "$ADDON_LOGS_DIR/devices.log" "$ADDON_WEB_DIR/devices.log" 2>/dev/null || true
   ln -sf "$XRAY_ACCESS_LOG" "$ADDON_WEB_DIR/xray-access.log" 2>/dev/null || true
   ln -sf "$XRAY_ERROR_LOG" "$ADDON_WEB_DIR/xray-error.log" 2>/dev/null || true
+  mkdir -p "$ADDON_BACKUP_DIR" 2>/dev/null || true
+  [ -f "$ADDON_BACKUP_DIR/index.json" ] || echo '[]' >"$ADDON_BACKUP_DIR/index.json"
   ln -sf "$ADDON_BACKUP_DIR/index.json" "$ADDON_WEB_DIR/backups.json" 2>/dev/null || true
+  # Ensure log files exist so /ext/stealthsurf/*.log is readable in UI
+  mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null || true
+  for _lf in addon.log activity.log errors.log devices.log; do
+    [ -f "$ADDON_LOGS_DIR/$_lf" ] || : >"$ADDON_LOGS_DIR/$_lf"
+  done
   if type ss_version_local >/dev/null 2>&1; then
     ss_version_local >/dev/null 2>&1 || true
   fi
