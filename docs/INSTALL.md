@@ -10,11 +10,13 @@
 
 ## One-liner (рекомендуется)
 
-По SSH на роутере:
+По SSH на роутере (цветной баннер + шаги в терминале):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
+
+Без цвета: `NO_COLOR=1 curl -fsSL …/install.sh | sh`
 
 Установщик:
 
