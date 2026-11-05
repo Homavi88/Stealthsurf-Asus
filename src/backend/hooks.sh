@@ -4,7 +4,10 @@ ss_service_event_line() {
   printf '%s\n' '# StealthSurf UI hook' \
     'if [ "$1" = "start" ] && echo "$2" | grep -q "^stealthsurf_"; then' \
     '  action="${2#stealthsurf_}"' \
-    '  nvram get amng_custom 2>/dev/null > /tmp/stealthsurf_payload.json' \
+    '  # Prefer payload file written by WebUI helper; fallback to amng_custom' \
+    '  if [ ! -f /tmp/stealthsurf_payload.json ]; then' \
+    '    nvram get amng_custom 2>/dev/null > /tmp/stealthsurf_payload.json' \
+    '  fi' \
     '  /jffs/scripts/stealthsurf service_event "$action" >/dev/null 2>&1 &' \
     'fi'
 }
@@ -31,4 +34,21 @@ ss_remove_service_event_hook() {
     skip {next}
     {print}
   ' "$f" >"$f.tmp" && mv "$f.tmp" "$f"
+}
+
+ss_autostart() {
+  # Called from services-start after mount_ui
+  [ "${SS_AUTO_START:-1}" = "1" ] || return 0
+  if [ -f "$XRAY_CONFIG_FILE" ]; then
+    ss_info "Autostart: starting dataplane"
+    ss_start || ss_warn "Autostart failed"
+  fi
+}
+
+ss_firewall_restore_hook() {
+  ss_restore_firewall
+}
+
+ss_dnsmasq_configure_hook() {
+  ss_dnsmasq_configure "$1"
 }

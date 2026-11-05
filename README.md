@@ -1,101 +1,99 @@
 # StealthSurf UI for Asuswrt-Merlin
 
-Аддон для роутеров на **Asuswrt-Merlin**: StealthSurf — провайдер VPN, а весь интерфейс и перенастройка живут на роутере через ваш API-ключ `stlth_…`.
+Аддон для роутеров на **Asuswrt-Merlin**: StealthSurf — провайдер VPN, а весь интерфейс, transparent proxy, каталог конфигов и routing живут на роутере через API-ключ(и) `stlth_…`.
 
 ## Как это устроено
 
 ```text
-Браузер (LAN) → VPN → StealthSurf (WebUI на роутере)
-                         │
-                         │  Bearer stlth_…
-                         ▼
-                   api.stealthsurf.net
-                         │  connection_url
-                         ▼
-              Xray (Entware) + маршрутизация
+LAN / Wi‑Fi ──► iptables REDIRECT|TPROXY ──► Xray (dokodemo-door)
+                                              │
+                   outbounds: ss-<id> × N  ◄───┤  routing rules
+                                              │  (domain → ss-101, …)
+                                              ▼
+                                      StealthSurf nodes
+                                              ▲
+                         Bearer stlth_… ──────┘
+                         api.stealthsurf.net
 ```
 
-- API-ключ хранится только на роутере (`/opt/etc/stealthsurf.conf`).
-- Список конфигов, смена локации/протокола и Apply выполняются из UI/CLI.
-- Dataplane MVP: протоколы на базе Xray (`vless`, `trojan`, `shadowsocks-2022`).
-
-Паттерн установки и вкладки VPN взят как образец из [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui); код аддона — самостоятельный.
+- API-ключ(и) хранятся только на роутере (`/opt/etc/stealthsurf.conf` + `api_keys.json`).
+- Sync забирает **все** конфиги и custom-subscriptions аккаунта(ов).
+- Несколько outbounds `ss-<id>` + правила «домен/geosite → конкретный VPN».
+- Dataplane: Xray (VLESS/Trojan/SS) + опционально Hysteria2 / WireGuard / AmneziaWG.
 
 ## Требования
 
 - Asuswrt-Merlin `384.15+` / `3006.102.1+`
 - JFFS custom scripts включены
-- **Entware уже установлен** через `amtm` (установщик аддона Entware **не** ставит — только проверяет)
+- **Entware уже установлен** через `amtm`
 
 ## Установка одной командой
-
-На роутере по SSH (Entware должен быть уже установлен):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
-Альтернатива без curl:
-
-```sh
-wget -qO- https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
-```
-
-Что делает установщик:
-
-1. Проверяет `/jffs` и что Entware есть (`/opt` + `opkg`); если Entware нет — **останавливается** с понятной ошибкой  
-2. Ставит зависимости через `opkg` (`curl`, `jq`, `ca-certificates`, …)  
-3. Скачивает пакет аддона с GitHub (`packaged/` или Releases)  
-4. Раскладывает файлы в `/jffs/addons/stealthsurf` и `/jffs/scripts/stealthsurf`  
-5. Запускает `stealthsurf install` (UI-вкладка, хуки)
+Установщик: проверяет Entware → `opkg` deps → пакет из **GitHub Releases** (fallback `packaged/`) → хуки → автоскачивание Xray при необходимости.
 
 После установки: выйти из WebUI и зайти снова → **VPN → StealthSurf**.
 
-Удаление:
+Удаление: `stealthsurf uninstall` (чистит iptables/ip rule).
 
-```sh
-stealthsurf uninstall
-```
+## Быстрый старт
 
-## Быстрый старт в UI
+1. API-ключ(и) → **Синхронизировать**
+2. Включить нужные конфиги как outbounds, выбрать **default**
+3. Режим **redirect** (или **tproxy**)
+4. Опционально: routing / политики MAC
+5. **Старт** — клиенты LAN без системного прокси идут через StealthSurf
 
-1. Вставьте API-ключ из консоли StealthSurf (Profile → API Keys).
-2. **Проверить ключ** → **Синхронизировать конфиги**.
-3. Выберите конфиг → при необходимости смените локацию/протокол → **Применить**.
-4. **Старт**.
-
-## CLI
+## CLI (основные)
 
 ```sh
 stealthsurf version
-stealthsurf set-key 'stlth_........_........................'
-stealthsurf sync                 # GET /configs → кэш на роутере
+stealthsurf set-key 'stlth_…'          # или add-key для нескольких
+stealthsurf sync
 stealthsurf list
-stealthsurf apply <config_id>    # connection_url → xray.json + restart
-stealthsurf update-settings <config_id> '{"location_id":5,"protocol":"vless"}'
+stealthsurf apply <config_id>          # sole outbound + start
+stealthsurf enable <id> | disable <id>
+stealthsurf set-default ss-205
+stealthsurf preset ru-direct 205
+stealthsurf set-mode redirect|tproxy|proxy
+stealthsurf set-dns-mode OFF|BYPASS|REDIRECT
 stealthsurf start|stop|restart|status
+stealthsurf diag | test-config | connectivity
+stealthsurf backup [note] | backups | restore <file>
+stealthsurf logs activity|errors|devices
+stealthsurf devices                    # снимок LAN IP/MAC в лог
+stealthsurf update                     # с GitHub Releases
 stealthsurf uninstall
 ```
+
+Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).
+
+Полный список: `stealthsurf` без аргументов.
 
 ## Сборка из исходников
 
 ```sh
-npm install
-npm run build
-# артефакты в dist/: stealthsurf, index.asp, app.js
+npm install   # не обязателен — сборка на чистом Node
+npm run build # dist/
+npm run pack  # packaged/asuswrt-merlin-stealthsurf.tar.gz
 ```
 
-## MVP / дальше
+CI (`.github/workflows/release.yml`) собирает артефакт на PR/push и публикует Release на тег `v*`.
 
-| MVP | Позже |
-| --- | --- |
-| API-ключ, sync, apply | Hysteria2, WireGuard / AWG |
-| Смена protocol/location | Сборные подписки |
-| Xray start/stop | Split-tunnel по клиентам |
-| Вкладка VPN | Локальный REST для HA / AI |
+## Документация
+
+- [docs/INSTALL.md](./docs/INSTALL.md)
+- [docs/TPROXY_VS_REDIRECT.md](./docs/TPROXY_VS_REDIRECT.md)
+- [docs/POLICIES.md](./docs/POLICIES.md)
+- [docs/ROUTING.md](./docs/ROUTING.md)
+- [docs/FAQ.md](./docs/FAQ.md)
+- [docs/ROUTER_MATRIX.md](./docs/ROUTER_MATRIX.md)
+- [ROADMAP.md](./ROADMAP.md)
 
 ## Документация провайдера
 
 - [docs.stealthsurf.net](https://docs.stealthsurf.net)
 - [API](https://docs.stealthsurf.net/api)
-- [Методы configs](https://docs.stealthsurf.net/api/methods/configs)
