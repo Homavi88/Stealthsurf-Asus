@@ -388,6 +388,30 @@ function renderClients(clients) {
   });
 }
 
+function parseXraySettingsFlags(raw) {
+  const flags = {
+    use_xhttp: false,
+    use_grpc: false,
+    use_warp: false,
+    use_salamander: false,
+    disable_reality: false,
+  };
+  if (!raw) return flags;
+  let obj = raw;
+  if (typeof raw === "string") {
+    try {
+      obj = JSON.parse(raw);
+    } catch (_) {
+      return flags;
+    }
+  }
+  if (!obj || typeof obj !== "object") return flags;
+  ["use_xhttp", "use_grpc", "use_warp", "use_salamander", "disable_reality"].forEach((k) => {
+    if (obj[k] != null) flags[k] = !!obj[k];
+  });
+  return flags;
+}
+
 function onConfigChange() {
   const opt = $("configSelect").selectedOptions[0];
   if (!opt) return;
@@ -398,10 +422,20 @@ function onConfigChange() {
       p.value = opt.dataset.protocol;
     }
   }
+  const cfg = (configsCache || []).find((c) => c && String(c.id) === String(opt.value));
+  const flags = parseXraySettingsFlags(cfg && cfg.xray_config);
+  $("optUseXhttp").checked = flags.use_xhttp;
+  $("optUseGrpc").checked = flags.use_grpc;
+  $("optUseWarp").checked = flags.use_warp;
+  $("optUseSalamander").checked = flags.use_salamander;
+  $("optDisableReality").checked = flags.disable_reality;
   const info = protocolsCache[opt.dataset.protocol];
-  $("protoHint").textContent = info
+  const runtime = info
     ? "runtime: " + info.runtime + (info.status ? " · " + info.status : "")
     : "";
+  $("protoHint").textContent =
+    (runtime ? runtime + ". " : "") +
+    "Смена на сайте → «Синхронизировать» (или autosync */15) подтянет connection_url и пересоберёт включённые outbound.";
 }
 
 async function refreshAll() {
@@ -533,6 +567,11 @@ function bind() {
       settings: {
         location_id: Number($("locationSelect").value),
         protocol: $("protocolSelect").value,
+        use_xhttp: !!$("optUseXhttp").checked,
+        use_grpc: !!$("optUseGrpc").checked,
+        use_warp: !!$("optUseWarp").checked,
+        use_salamander: !!$("optUseSalamander").checked,
+        disable_reality: !!$("optDisableReality").checked,
       },
     })
   );

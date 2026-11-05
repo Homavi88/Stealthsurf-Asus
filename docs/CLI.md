@@ -52,9 +52,16 @@ stealthsurf set-mode redirect
 stealthsurf start
 stealthsurf status
 
+# после смены location/protocol/XHTTP на сайте:
+stealthsurf sync
+# или с роутера:
+stealthsurf update-settings 101 '{"location_id":3,"protocol":"vless","use_xhttp":true}'
+
 stealthsurf check-update
 stealthsurf update
 
 stealthsurf stop
 stealthsurf uninstall
 ```
+
+`sync` / autosync: тянут каталог API и **пересобирают dataplane**, только если изменились включённые конфиги. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).

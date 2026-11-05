@@ -90,12 +90,14 @@ ss_service_event() {
     ss_json_response true "key removed" "$(cat "$SS_CACHE_KEYS")"
     ;;
   sync)
-    if ss_api_sync_all >/dev/null; then
+    # Pull from StealthSurf API and rebuild dataplane if enabled configs changed
+    if ss_sync_from_provider >/dev/null; then
       ss_json_response true "synced" "$(jq -nc \
         --slurpfile configs "$SS_CACHE_CONFIGS" \
         --slurpfile locations "$SS_CACHE_LOCATIONS" \
         --slurpfile subs "$SS_CACHE_SUBSCRIPTIONS" \
-        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // [])}')"
+        --slurpfile state "$SS_STATE_FILE" \
+        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {})}')"
     else
       ss_json_response false "sync failed" null
       return 1
@@ -230,10 +232,7 @@ ss_service_event() {
       return 1
     fi
     if ss_api_update_settings "$id" "$body" >/dev/null; then
-      # Re-apply if this outbound is enabled
-      if echo " $SS_ENABLED_OUTBOUNDS " | grep -q " $id "; then
-        ss_rebuild_and_restart || true
-      fi
+      # ss_api_update_settings already syncs + rebuilds when this id is enabled
       ss_json_response true "settings updated" "$(cat "$SS_CACHE_CONFIGS")"
     else
       ss_json_response false "settings update failed" null

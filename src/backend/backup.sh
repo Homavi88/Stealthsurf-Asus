@@ -309,7 +309,7 @@ ss_update_self() {
 
 ss_install_cron() {
   local sync_line watch_line backup_line
-  sync_line="*/30 * * * * /jffs/scripts/$ADDON_TAG autosync >/dev/null 2>&1"
+  sync_line="*/15 * * * * /jffs/scripts/$ADDON_TAG autosync >/dev/null 2>&1"
   watch_line="*/5 * * * * /jffs/scripts/$ADDON_TAG watchdog >/dev/null 2>&1"
   backup_line="0 3 * * * /jffs/scripts/$ADDON_TAG backup nightly >/dev/null 2>&1"
 
@@ -317,7 +317,7 @@ ss_install_cron() {
     cru d stealthsurf_sync 2>/dev/null || true
     cru d stealthsurf_watch 2>/dev/null || true
     cru d stealthsurf_backup 2>/dev/null || true
-    cru a stealthsurf_sync "*/30 * * * * /jffs/scripts/$ADDON_TAG autosync"
+    cru a stealthsurf_sync "*/15 * * * * /jffs/scripts/$ADDON_TAG autosync"
     cru a stealthsurf_watch "*/5 * * * * /jffs/scripts/$ADDON_TAG watchdog"
     cru a stealthsurf_backup "0 3 * * * /jffs/scripts/$ADDON_TAG backup nightly"
     cru d stealthsurf_ver 2>/dev/null || true

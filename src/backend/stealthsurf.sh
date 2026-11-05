@@ -48,11 +48,14 @@ $ADDON_TITLE $ADDON_VERSION — управление аддоном на роу�
   add-key <key> [label] Добавить ключ
   remove-key <key>      Удалить ключ
   verify                Проверить ключ
-  sync                  Синхронизировать configs/locations/subs
+  sync                  Синхронизировать API и применить изменения
+                        включённых конфигов (rebuild при смене URL/settings)
   list                  Список конфигов
   apply <id> [sole=1]   Применить конфиг как outbound
   enable <id> | disable <id> | set-default <ss-id|direct|block>
   update-settings <id> '<json>'
+                        PATCH settings (location_id+protocol обязательны;
+                        опционально use_xhttp/use_grpc/use_warp/…)
 
 ── Routing / политики / режим ──────────────────────────────
   set-routing '<rules-json>' [default] [preset]
@@ -165,13 +168,11 @@ verify)
   ss_api_verify_key || exit 1
   ;;
 sync)
-  ss_api_sync_all || exit 1
+  ss_sync_from_provider || exit 1
   ;;
 autosync)
-  ss_api_sync_all >/dev/null 2>&1 || true
-  if ss_xray_running; then
-    ss_rebuild_and_restart >/dev/null 2>&1 || true
-  fi
+  # Periodic pull from StealthSurf; rebuild only when enabled configs actually changed
+  ss_sync_from_provider >/dev/null 2>&1 || true
   ;;
 list)
   [ -f "$SS_CACHE_CONFIGS" ] || ss_api_sync_configs >/dev/null || exit 1

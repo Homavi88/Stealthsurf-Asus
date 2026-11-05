@@ -227,11 +227,18 @@
             <select id="protocolSelect"></select>
           </div>
         </div>
+        <div class="row" style="margin-top:8px; flex-wrap:wrap; gap:12px">
+          <label><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
+          <label><input type="checkbox" id="optUseGrpc"> use_grpc</label>
+          <label><input type="checkbox" id="optUseWarp"> use_warp</label>
+          <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
+          <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
+        </div>
         <div class="row">
           <button id="btnUpdateSettings" class="secondary" type="button">PATCH на StealthSurf</button>
           <button id="btnApplySole" type="button">Apply как единственный</button>
         </div>
-        <div id="protoHint" class="hint"></div>
+        <div id="protoHint" class="hint">После смены на сайте нажмите «Синхронизировать» — включённые outbound пересоберутся автоматически.</div>
       </div>
       <div>
         <h2>Сборные подписки</h2>

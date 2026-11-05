@@ -44,14 +44,16 @@
 ## 4. Протоколы и продукт
 
 - [ ] VLESS / Trojan / Shadowsocks-2022: Apply + start OK
-- [ ] PATCH location/protocol в UI → новый URL / xray_config → rebuild без SSH
+- [ ] PATCH location/protocol (+ use_xhttp/use_grpc/…) в UI → новый `connection_url` → rebuild без SSH
+- [ ] Смена настроек **только на сайте** → UI Sync / `stealthsurf sync` → fingerprint меняется → Xray пересобран
+- [ ] Повторный sync без изменений у провайдера → **без** лишнего rebuild
 - [ ] `stealthsurf protocols` — openflux/wg/hy2/awg статусы соответствуют железу
-- [ ] Apply openflux с `xray_config` → outbound без ручного URI
+- [ ] Apply openflux с proxy в `xray_config` → outbound без ручного URI; WARP-only wrapper → fallback на URI
 - [ ] Apply wg INI → Xray wireguard outbound в multi-outbound
 - [ ] Apply hysteria2 → локальный SOCKS bridge + tag `ss-<id>`
 - [ ] Hysteria2 / WG / AWG: если бинарь есть — поднимаются; если нет — понятный статус «нужен бинарь / в разработке»
 - [ ] OpenFlux: при наличии proxy в `xray_config` — apply OK; без него — понятная ошибка (не silent)
-- [ ] Autosync (cron) обновляет кэш; watchdog поднимает упавший Xray
+- [ ] Autosync (cron `*/15`) обновляет кэш; rebuild только при изменении включённых; watchdog поднимает упавший Xray
 - [ ] Rate-limit 429 даёт понятное сообщение
 
 ## 5. Полировка / backup / логи

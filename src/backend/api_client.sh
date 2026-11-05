@@ -205,6 +205,77 @@ ss_api_sync_locations() {
   printf '%s' "$resp"
 }
 
+ss_enabled_configs_fingerprint() {
+  # Hash of provider fields that affect dataplane for enabled (or active) configs.
+  # Used to detect site-side changes (protocol/location/URL/xray/awg) after sync.
+  local ids="${SS_ENABLED_OUTBOUNDS:-}"
+  [ -n "$ids" ] || ids="${SS_ACTIVE_CONFIG_ID:-}"
+  [ -f "$SS_CACHE_CONFIGS" ] || {
+    echo "none"
+    return 0
+  }
+  if [ -z "$ids" ]; then
+    echo "none"
+    return 0
+  fi
+  jq -c --arg ids "$ids" '
+    ($ids | split(" ") | map(select(length > 0) | (tonumber? // .))) as $want |
+    [ .[]
+      | select(. != null)
+      | . as $c
+      | select(($want | index($c.id)) != null)
+      | {id: $c.id, protocol: $c.protocol, location_id: $c.location_id, server_id: $c.server_id,
+         connection_url: $c.connection_url, xray_config: $c.xray_config, awg_config: $c.awg_config,
+         title: $c.title, is_online: $c.is_online}
+    ] | sort_by(.id)
+  ' "$SS_CACHE_CONFIGS" | {
+    if command -v md5sum >/dev/null 2>&1; then md5sum
+    elif command -v md5 >/dev/null 2>&1; then md5
+    else cksum
+    fi
+  } | awk '{print $1}'
+}
+
+ss_apply_provider_changes() {
+  # After a successful API sync: rebuild router dataplane if enabled configs changed.
+  # Fingerprint file is updated only after a successful apply path so a failed rebuild
+  # is retried on the next sync.
+  local prev new fpfile
+  ss_ensure_dirs
+  fpfile="$ADDON_DATA_DIR/enabled-configs.fp"
+  prev=$(cat "$fpfile" 2>/dev/null || echo "")
+  new=$(ss_enabled_configs_fingerprint)
+
+  if [ -z "$SS_ENABLED_OUTBOUNDS" ] && [ -z "$SS_ACTIVE_CONFIG_ID" ]; then
+    printf '%s\n' "$new" >"$fpfile"
+    ss_info "Sync OK — нет включённых outbound (только каталог обновлён)"
+    ss_activity "sync.catalog_only" "fp=$new"
+    return 0
+  fi
+
+  if [ -n "$prev" ] && [ "$prev" = "$new" ]; then
+    ss_info "Sync OK — настройки включённых конфигов не изменились"
+    ss_activity "sync.unchanged" "fp=$new"
+    return 0
+  fi
+
+  ss_info "Изменения у провайдера обнаружены — пересобираю Xray/outbound…"
+  ss_activity "sync.changed" "prev=${prev:-none} new=$new"
+  # Rebuild whenever we already have a dataplane or user marked desired-running
+  if ss_xray_running || { type ss_desired_is_set >/dev/null 2>&1 && ss_desired_is_set; } || [ -f "$XRAY_CONFIG_FILE" ]; then
+    ss_rebuild_and_restart || {
+      ss_warn "Sync скачал новые URL, но rebuild не удался — нажмите Apply/Restart"
+      return 1
+    }
+    printf '%s\n' "$new" >"$fpfile"
+    ss_ok "Dataplane обновлён под новые connection_url / settings"
+  else
+    printf '%s\n' "$new" >"$fpfile"
+    ss_info "Новые URL в кэше; запустите start/apply чтобы применить на роутере"
+  fi
+  return 0
+}
+
 ss_api_sync_all() {
   ss_activity "sync.start" "keys=$(ss_all_api_keys | wc -l | tr -d ' ')"
   if ! ss_api_sync_configs >/dev/null; then
@@ -217,6 +288,12 @@ ss_api_sync_all() {
   ss_ok "Full sync complete"
 }
 
+ss_sync_from_provider() {
+  # Pull catalog from StealthSurf API and apply changes to enabled outbounds
+  ss_api_sync_all || return 1
+  ss_apply_provider_changes
+}
+
 ss_api_update_settings() {
   local config_id="$1"
   local body="$2"
@@ -225,9 +302,15 @@ ss_api_update_settings() {
     ss_error "usage: update-settings <config_id> '<json body>'"
     return 1
   }
+  # Official API requires location_id + protocol; optional: use_xhttp, use_grpc, use_warp,
+  # use_salamander, disable_reality, dns_preset, server_id, …
   resp=$(ss_api PATCH "/configs/${config_id}/settings" "$body") || return 1
   ss_ok "Updated settings for config $config_id"
-  ss_api_sync_configs >/dev/null
+  ss_api_sync_configs >/dev/null || return 1
+  # If this config is enabled, refresh dataplane with new connection_url from API
+  if echo " ${SS_ENABLED_OUTBOUNDS} ${SS_ACTIVE_CONFIG_ID} " | grep -q " ${config_id} "; then
+    ss_apply_provider_changes || true
+  fi
   printf '%s' "$resp"
 }
 
