@@ -1,57 +1,101 @@
 # Установка StealthSurf UI (Asuswrt-Merlin)
 
+Версия пакета: **v1.0.8** (GitHub Releases).
+
 ## Требования
 
 - Asuswrt-Merlin `384.15+` / `3006.102.1+`
-- JFFS custom scripts = Yes
-- Entware уже установлен через `amtm`
+- **Administration → System → Enable JFFS custom scripts and configs = Yes** (и reboot при первом включении)
+- **Entware уже установлен** через `amtm` (должен существовать `/opt` и `opkg`)
 
-## One-liner
+## One-liner (рекомендуется)
+
+По SSH на роутере:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
-Установщик предпочитает пакет из **GitHub Releases**, затем fallback на `packaged/` в репозитории.
+Установщик:
 
-## После установки
+1. Проверяет JFFS + Entware  
+2. Ставит зависимости через `opkg` (`curl`, `jq`, `ca-certificates`, `unzip`, …)  
+3. Качает `asuswrt-merlin-stealthsurf.tar.gz` из **GitHub Releases** (`latest`), fallback — `packaged/` в репозитории  
+4. Кладёт скрипт в `/jffs/scripts/stealthsurf`, UI в `/jffs/addons/stealthsurf`  
+5. Вешает хуки Merlin, cron autosync/watchdog, symlink’и `stealthsurf` и **`ssurf`**  
+6. При необходимости скачивает Xray  
 
-1. Выйти из WebUI и зайти снова → **VPN → StealthSurf**
-2. Вставить API-ключ → Синхронизировать
-3. Включить нужные конфиги как outbounds, выбрать default
-4. Режим: `redirect` (или `tproxy` если есть `xt_TPROXY`)
-5. Старт
+## Где открыть в WebUI
 
-## CLI
+1. Выйти из админки роутера и зайти снова  
+2. Меню: **VPN → StealthSurf**  
+3. Прямой URL (если других user-аддонов нет): `http://<IP-роутера>/user1.asp`  
+   (иначе `user2.asp`…`user20.asp` — первый свободный слот)  
+4. JSON/логи UI: `http://<IP-роутера>/ext/stealthsurf/…`
 
-Полный список: [CLI.md](./CLI.md) или `stealthsurf help`.
+## Пути на роутере
+
+| Что | Путь |
+| --- | --- |
+| CLI | `/jffs/scripts/stealthsurf`, `/opt/bin/ssurf`, `/opt/bin/stealthsurf` |
+| UI (файлы) | `/jffs/addons/stealthsurf/` |
+| Web | `/www/user/stealthsurf/` |
+| Данные / кэш | `/opt/share/stealthsurf/` |
+| Конфиг аддона | `/opt/etc/stealthsurf.conf` |
+| Xray config | `/opt/etc/xray/stealthsurf.json` |
+
+## Быстрый старт после установки
 
 ```sh
-ssurf key 'stlth_…'          # короткое CLI: ssurf (или stealthsurf)
-ssurf sy                     # sync
-ssurf ap <config_id>         # apply
+ssurf key 'stlth_…'     # API-ключ с сайта StealthSurf
+ssurf sy                # sync каталога
+ssurf ls                # список конфигов
+ssurf ap <id>           # apply как sole outbound
 ssurf mode redirect
-ssurf up                     # start
-ssurf dn                     # stop
-ssurf re                     # restart
-ssurf st                     # status
-ssurf cu                     # check-update
-ssurf upd                    # update если новее
-ssurf upd -f                 # force latest
-ssurf d                      # diag
-ssurf m                      # интерактивное меню
-ssurf h                      # справка по коротким командам
+ssurf up                # старт
+ssurf st                # статус
 ```
 
-## Обновление из WebUI
+В WebUI: ключ → **Синхронизировать** → enable outbounds / default → режим **redirect** → **Старт**.
 
-VPN → StealthSurf → **Проверить версию** / баннер **Установить обновление** (или вкладка «Режим / DNS»).
+Проверка: телефон в Wi‑Fi **без** системного VPN → внешний IP = IP ноды StealthSurf.
 
-## Удаление (полное)
+Справка CLI: `ssurf h` · меню: `ssurf m` · подробно: [CLI.md](./CLI.md).
+
+## Бинарники протоколов
+
+| Runtime | Как появляется |
+| --- | --- |
+| **Xray** (VLESS/Trojan/SS/OpenFlux/WG/HTTP/SOCKS) | `ssurf xray` / авто при install |
+| **Hysteria2** | автоскачивание при Apply hy2-конфига |
+| **AmneziaWG** | вручную на роутере (`awg-quick`) — ядро, не zip |
+
+Geodata (routing): `ssurf geo`.
+
+## Обновление
 
 ```sh
-stealthsurf uninstall
-# или: stealthsurf remove | stealthsurf purge
+ssurf cu          # check-update
+ssurf upd         # поставить, если новее
+ssurf upd -f      # всегда latest с GitHub
 ```
 
-Очищает iptables/ip rule, UI, хуки, cron, данные и скрипт аддона.
+В UI: **Проверить версию** / баннер обновления.
+
+## Удаление
+
+```sh
+ssurf un
+# или: stealthsurf uninstall | remove | purge
+```
+
+Чистит iptables/ip rule, хуки, cron, UI, данные. Бинарь Xray в `/opt` не трогается (может быть общим).
+
+## Smoke после reboot
+
+1. UI снова в **VPN → StealthSurf**  
+2. При желаемом автостарте VPN поднимается сам  
+3. `ssurf st` → `running: true` (если был desired)  
+4. `ssurf dn` → интернет напрямую  
+
+Чеклист: [VERIFICATION_CHECKLIST.md](./VERIFICATION_CHECKLIST.md).
