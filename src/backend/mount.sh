@@ -67,6 +67,10 @@ ss_mount_ui() {
   ln -sf "$XRAY_ACCESS_LOG" "$ADDON_WEB_DIR/xray-access.log" 2>/dev/null || true
   ln -sf "$XRAY_ERROR_LOG" "$ADDON_WEB_DIR/xray-error.log" 2>/dev/null || true
   ln -sf "$ADDON_BACKUP_DIR/index.json" "$ADDON_WEB_DIR/backups.json" 2>/dev/null || true
+  if type ss_version_local >/dev/null 2>&1; then
+    ss_version_local >/dev/null 2>&1 || true
+  fi
+  ln -sf "$SS_VERSION_FILE" "$ADDON_WEB_DIR/version.json" 2>/dev/null || true
   ln -sf "$SS_UI_RESPONSE" "$ADDON_WEB_DIR/stealthsurf-response.json" 2>/dev/null || : >"$SS_UI_RESPONSE"
 
   # Helper CGI-like drop for payload (writable by httpd via tmp)

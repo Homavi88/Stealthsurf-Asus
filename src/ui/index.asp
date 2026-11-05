@@ -81,6 +81,12 @@
   .pill.on { background: rgba(61,214,140,.15); color: var(--ok); }
   .pill.off { background: rgba(240,113,120,.15); color: var(--bad); }
   .pill.warn { background: rgba(230,192,123,.15); color: var(--warn); }
+  .pill.update {
+    background: rgba(230,192,123,.2);
+    color: var(--warn);
+    border: 1px solid rgba(230,192,123,.45);
+    font-weight: 700;
+  }
   #msg { min-height: 18px; font-size: 13px; color: var(--muted); margin-top: 8px; white-space: pre-wrap; }
   #msg.err { color: var(--bad); }
   #msg.ok { color: var(--ok); }
@@ -93,11 +99,64 @@
     padding: 10px; font-family: ui-monospace, monospace; font-size: 11px;
     max-height: 280px; overflow: auto; white-space: pre-wrap;
   }
+  .header-row {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px;
+    align-items: flex-start; margin-bottom: 12px;
+  }
+  .controls-bar {
+    display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    padding: 10px 12px; background: #121920; border: 1px solid var(--border);
+    border-radius: 8px; margin-bottom: 10px;
+  }
+  .controls-bar .label {
+    font-size: 12px; color: var(--muted); margin-right: 4px; text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  button.success { background: #2f9e6b; }
+  button.warn { background: #b8892d; color: #111; }
+  #updateBanner {
+    display: none; margin: 0 0 12px; padding: 10px 12px;
+    border-radius: 8px; border: 1px solid rgba(230,192,123,.5);
+    background: rgba(230,192,123,.12); color: var(--warn); font-size: 13px;
+  }
+  #updateBanner.show { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+  #updateBanner strong { color: #f0d78c; }
 </style>
 </head>
 <body>
-  <h1>StealthSurf</h1>
-  <div class="sub">VPN-провайдер StealthSurf · каталог конфигов, transparent proxy, routing и политики на роутере</div>
+  <div class="header-row">
+    <div>
+      <h1>StealthSurf</h1>
+      <div class="sub">VPN-провайдер StealthSurf · каталог конфигов, transparent proxy, routing и политики на роутере</div>
+    </div>
+    <div class="row" style="margin:0; justify-content:flex-end">
+      <span id="installedVer" class="pill">версия: —</span>
+      <span id="latestVer" class="pill">GitHub: —</span>
+      <span id="updatePill" class="pill" style="display:none">есть обновление</span>
+    </div>
+  </div>
+
+  <div id="updateBanner">
+    <div>
+      Доступна новая версия: <strong id="bannerLatest">—</strong>
+      (установлена <span id="bannerInstalled">—</span>)
+    </div>
+    <div class="row" style="margin:0">
+      <button id="btnBannerUpdate" class="warn" type="button">Установить обновление</button>
+    </div>
+  </div>
+
+  <div class="controls-bar">
+    <span class="label">Аддон</span>
+    <button id="btnStart" class="success" type="button">Старт</button>
+    <button id="btnStop" class="danger" type="button">Стоп</button>
+    <button id="btnRestart" type="button">Рестарт</button>
+    <span style="width:1px; height:22px; background:var(--border); margin:0 4px"></span>
+    <button id="btnSync" type="button">Синхронизировать</button>
+    <button id="btnRefresh" class="secondary" type="button">Обновить UI</button>
+    <button id="btnCheckUpdate" class="secondary" type="button">Проверить версию</button>
+    <button id="btnUpdate" class="warn" type="button" style="display:none">Установить с GitHub</button>
+  </div>
 
   <div class="panel active" id="statusBar" style="display:block">
     <div class="row">
@@ -106,13 +165,6 @@
       <span id="modePill" class="pill">mode: —</span>
       <span id="ports" class="pill">ports: —</span>
       <span id="defaultPill" class="pill">default: —</span>
-    </div>
-    <div class="row">
-      <button id="btnStart" type="button">Старт</button>
-      <button id="btnStop" class="secondary" type="button">Стоп</button>
-      <button id="btnRestart" class="secondary" type="button">Рестарт</button>
-      <button id="btnSync" type="button">Синхронизировать</button>
-      <button id="btnRefresh" class="secondary" type="button">Обновить</button>
     </div>
   </div>
 
@@ -264,9 +316,16 @@
         <div class="row"><button id="btnSetDns" type="button">Применить DNS</button></div>
       </div>
     </div>
+    <h2 style="margin-top:16px">Версия аддона</h2>
+    <div class="row">
+      <span id="verDetail" class="pill">—</span>
+      <button id="btnCheckUpdate2" class="secondary" type="button">Проверить на GitHub</button>
+      <button id="btnForceUpdate" class="warn" type="button">Установить latest с GitHub</button>
+    </div>
+    <div class="hint">Автопроверка при открытии UI и каждые 12 часов (cron). Подсветка, если latest &gt; установленной.</div>
+
     <div class="row" style="margin-top:12px">
       <button id="btnInstallXray" class="secondary" type="button">Установить / найти Xray</button>
-      <button id="btnUpdate" class="secondary" type="button">Update с GitHub Releases</button>
     </div>
 
     <h2 style="margin-top:16px">Backup конфигураций</h2>

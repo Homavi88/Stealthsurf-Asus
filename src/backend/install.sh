@@ -103,6 +103,8 @@ ss_install() {
   ss_install_cron
   ss_mount_ui
   ss_write_state
+  ss_version_local >/dev/null 2>&1 || true
+  ss_version_check >/dev/null 2>&1 || true
   ss_ok "$ADDON_TITLE $ADDON_VERSION installed. Open VPN → StealthSurf after re-login."
 }
 

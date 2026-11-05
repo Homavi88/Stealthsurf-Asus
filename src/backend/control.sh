@@ -43,6 +43,10 @@ ss_write_state() {
       version: $version
     }' >"$SS_STATE_FILE"
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
+  # Keep version.json installed field in sync
+  if type ss_version_local >/dev/null 2>&1; then
+    ss_version_local >/dev/null 2>&1 || true
+  fi
 }
 
 ss_apply_config_id() {
