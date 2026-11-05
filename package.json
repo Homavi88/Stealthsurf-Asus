@@ -1,0 +1,11 @@
+{
+  "name": "asuswrt-merlin-stealthsurf",
+  "version": "0.1.0",
+  "private": true,
+  "description": "StealthSurf VPN control panel for Asuswrt-Merlin routers",
+  "type": "module",
+  "scripts": {
+    "build": "node ./tools/build.mjs",
+    "pack": "npm run build && sh ./tools/pack.sh"
+  }
+}
