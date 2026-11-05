@@ -24,20 +24,32 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 ## CLI
 
+Полный список: [CLI.md](./CLI.md) или `stealthsurf help`.
+
 ```sh
 stealthsurf set-key 'stlth_…'
 stealthsurf sync
 stealthsurf apply <config_id>
 stealthsurf set-mode redirect
 stealthsurf start
+stealthsurf stop
+stealthsurf restart
 stealthsurf status
+stealthsurf check-update    # проверка GitHub
+stealthsurf update          # установка, если есть новее
+stealthsurf update --force  # всегда latest
 stealthsurf diag
 ```
 
-## Удаление
+## Обновление из WebUI
+
+VPN → StealthSurf → **Проверить версию** / баннер **Установить обновление** (или вкладка «Режим / DNS»).
+
+## Удаление (полное)
 
 ```sh
 stealthsurf uninstall
+# или: stealthsurf remove | stealthsurf purge
 ```
 
-Очищает iptables/ip rule, UI, хуки и файлы аддона.
+Очищает iptables/ip rule, UI, хуки, cron, данные и скрипт аддона.

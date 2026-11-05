@@ -163,23 +163,42 @@ ss_install() {
 }
 
 ss_uninstall() {
-  ss_stop 2>/dev/null
-  ss_desired_clear 2>/dev/null
-  ss_cleanup_firewall 2>/dev/null
-  ss_dnsmasq_cleanup 2>/dev/null
-  ss_unmount_ui 2>/dev/null
-  ss_remove_service_event_hook 2>/dev/null
-  ss_remove_hook_scripts 2>/dev/null
-  ss_remove_cron 2>/dev/null
+  # Full removal from the router: stop dataplane, strip hooks/cron/UI/files.
+  ss_info "Full uninstall of $ADDON_TITLE…"
+  ss_activity "uninstall.start" ""
+  if type ss_stop_all_runtimes >/dev/null 2>&1; then
+    ss_stop_all_runtimes 2>/dev/null || true
+  fi
+  ss_stop 2>/dev/null || true
+  ss_desired_clear 2>/dev/null || true
+  ss_cleanup_firewall 2>/dev/null || true
+  ss_dnsmasq_cleanup 2>/dev/null || true
+  ss_unmount_ui 2>/dev/null || true
+  ss_remove_service_event_hook 2>/dev/null || true
+  ss_remove_hook_scripts 2>/dev/null || true
+  ss_remove_cron 2>/dev/null || true
 
+  # Symlinks and addon-owned paths
   rm -f "/opt/bin/$ADDON_TAG"
+  rm -f "/opt/sbin/$ADDON_TAG" 2>/dev/null
   rm -rf "$ADDON_JFFS_ADN_DIR" "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR"
+  rm -rf "$ADDON_BACKUP_DIR" 2>/dev/null
   rm -f "$XRAY_CONFIG_FILE" "$XRAY_PIDFILE"
   rm -f "$SS_CONF_FILE"
   rm -f "$ADDON_SCRIPT"
   rm -f /opt/etc/stealthsurf-hysteria.yaml* 2>/dev/null
   rm -rf /opt/etc/stealthsurf-wg 2>/dev/null
   rm -f "$SS_DESIRED_STATE_FILE" "$SS_STARTUP_LOCK" 2>/dev/null
+  rm -f /tmp/stealthsurf_payload.json /tmp/stealthsurf-service-event.log 2>/dev/null
+  rm -f /tmp/stealthsurf.desired /tmp/stealthsurf.lock 2>/dev/null
+  rm -f /tmp/stealthsurf-xray-test.log 2>/dev/null
+  # Hysteria binary downloaded by the addon (leave shared Xray untouched)
+  rm -f /opt/sbin/hysteria /opt/bin/hysteria 2>/dev/null
 
-  ss_ok "Uninstalled $ADDON_TITLE (iptables cleaned)"
+  # Menu entry leftovers under www user
+  rm -rf "/www/user/$ADDON_TAG" 2>/dev/null
+
+  ss_activity "uninstall.done" "full"
+  ss_ok "Fully uninstalled $ADDON_TITLE (hooks, cron, UI, data, iptables cleaned)"
+  ss_info "Xray binary under /opt was left in place (may be shared). Remove manually if unused."
 }

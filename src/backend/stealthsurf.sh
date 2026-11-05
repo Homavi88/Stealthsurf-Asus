@@ -21,13 +21,96 @@ import ./hooks.sh
 import ./install.sh
 import ./service_event.sh
 
+ss_cli_help() {
+  cat <<EOF
+$ADDON_TITLE $ADDON_VERSION — управление аддоном на роутере
+
+Использование: $0 <команда> [аргументы]
+       или:    stealthsurf <команда>   (symlink /opt/bin/stealthsurf)
+
+── Жизненный цикл ──────────────────────────────────────────
+  start                 Запустить VPN (Xray + firewall)
+  stop                  Остановить VPN и снять правила
+  restart               Рестарт без полной остановки side-runtime
+  status                JSON-статус (running, mode, ports…)
+  install               Установить/переустановить хуки, UI, deps
+  uninstall | remove | purge
+                        ПОЛНОЕ удаление с роутера (хуки, cron, UI, данные)
+  version               Показать установленную версию
+  check-update | version-check
+                        Проверить GitHub Releases (пишет version.json)
+  update | upgrade      Проверить и установить новую версию, если есть
+  update --force | force-update
+                        Принудительно скачать и поставить latest с GitHub
+
+── API / каталог ───────────────────────────────────────────
+  set-key <stlth_…>     Сохранить основной API-ключ
+  add-key <key> [label] Добавить ключ
+  remove-key <key>      Удалить ключ
+  verify                Проверить ключ
+  sync                  Синхронизировать configs/locations/subs
+  list                  Список конфигов
+  apply <id> [sole=1]   Применить конфиг как outbound
+  enable <id> | disable <id> | set-default <ss-id|direct|block>
+  update-settings <id> '<json>'
+
+── Routing / политики / режим ──────────────────────────────
+  set-routing '<rules-json>' [default] [preset]
+  preset <all-vpn|ru-direct|streaming-split|block-ads> <default_id> [alt_id]
+  set-policies '<json>' | clients
+  set-mode <proxy|redirect|tproxy>
+  set-dns-mode <OFF|BYPASS|REDIRECT>
+  rebuild
+
+── Диагностика ─────────────────────────────────────────────
+  diag | test-config | connectivity [url] [socks|direct]
+  protocols
+  logs [activity|addon|errors|devices|…] [lines]
+  devices | backup [note] | backups | restore <file>
+  install-xray | geodata
+
+Примеры:
+  stealthsurf start
+  stealthsurf stop
+  stealthsurf restart
+  stealthsurf check-update
+  stealthsurf update
+  stealthsurf update --force
+  stealthsurf uninstall
+EOF
+}
+
 case "$1" in
+"" | help | -h | --help)
+  ss_cli_help
+  exit 0
+  ;;
 version)
   echo "$ADDON_TITLE $ADDON_VERSION"
   ss_version_local >/dev/null 2>&1 || true
+  if [ -f "$SS_VERSION_FILE" ]; then
+    jq -r '"installed=\(.installed) latest=\(.latest // "-") update=\(.update_available)"' "$SS_VERSION_FILE" 2>/dev/null || true
+  fi
   ;;
-check-update | version-check)
+check-update | version-check | checkupdate)
   ss_version_check || exit 1
+  ;;
+update | upgrade)
+  # update [--force|force|1]
+  force=0
+  case "${2:-}" in
+  --force | -f | force | 1) force=1 ;;
+  esac
+  if [ "$force" = "1" ]; then
+    ss_version_check >/dev/null 2>&1 || true
+    ss_update_self || exit 1
+  else
+    ss_version_update_if_available 0 || exit 1
+  fi
+  ;;
+force-update | update-force)
+  ss_version_check >/dev/null 2>&1 || true
+  ss_update_self || exit 1
   ;;
 update-if-newer)
   ss_version_update_if_available "${2:-0}" || exit 1
@@ -35,7 +118,7 @@ update-if-newer)
 install)
   ss_install || exit 1
   ;;
-uninstall)
+uninstall | remove | purge)
   ss_uninstall
   ;;
 mount_ui)
@@ -82,7 +165,6 @@ sync)
   ;;
 autosync)
   ss_api_sync_all >/dev/null 2>&1 || true
-  # After sync, rebuild if running so PATCH'd URLs take effect
   if ss_xray_running; then
     ss_rebuild_and_restart >/dev/null 2>&1 || true
   fi
@@ -104,11 +186,9 @@ set-default)
   ss_set_default_outbound "$2" && ss_rebuild_and_restart || exit 1
   ;;
 set-outbounds)
-  # set-outbounds '[101,205]' 'ss-205'
   ss_set_enabled_outbounds "$2" "$3" && ss_rebuild_and_restart || exit 1
   ;;
 set-routing)
-  # set-routing '<rules-json>' [default] [preset]
   ss_routing_set_rules "$2" "$3" "$4" && ss_rebuild_and_restart || exit 1
   ;;
 preset)
@@ -179,9 +259,6 @@ backups)
 restore)
   ss_restore "$2" || exit 1
   ;;
-update)
-  ss_update_self || exit 1
-  ;;
 install-xray)
   ss_ensure_xray || exit 1
   ;;
@@ -195,38 +272,8 @@ service_event)
   ss_service_event "$2" "$3" || exit 1
   ;;
 *)
-  cat <<EOF
-Usage: $0 <command>
-
-Lifecycle:
-  install | uninstall | update | version | check-update | update-if-newer
-  start | stop | restart | status | watchdog | autostart | startup | wan-up
-  mount_ui | unmount_ui | firewall-restore
-
-API / catalog:
-  set-key <stlth_...> | add-key <key> [label] | remove-key <key> | verify
-  sync | autosync | list
-  apply <config_id> [sole=1]
-  enable <id> | disable <id> | set-default <ss-id|direct|block>
-  set-outbounds '<json-array>' [default]
-  update-settings <id> '<json>'
-
-Routing / policies / mode:
-  set-routing '<rules-json>' [default] [preset]
-  preset <all-vpn|ru-direct|streaming-split|block-ads> <default_id> [alt_id]
-  set-policies '<json>' | clients
-  set-mode <proxy|redirect|tproxy>
-  set-dns-mode <OFF|BYPASS|REDIRECT>
-  rebuild
-
-Dataplane helpers:
-  install-xray | geodata | protocols
-  diag | test-config | connectivity [url] [socks|direct]
-  logs [activity|addon|errors|devices|access|xray-error] [lines]
-  clear-logs [all|addon|activity|errors|devices]
-  devices                          # snapshot LAN IP/MAC into devices.log
-  backup [note] | backups | restore <archive.tar.gz|filename>
-EOF
+  echo "Unknown command: $1" >&2
+  echo "Run: $0 help" >&2
   exit 1
   ;;
 esac

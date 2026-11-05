@@ -396,11 +396,16 @@ ss_build_xray_config_multi() {
   ss_routing_validate || return 1
 
   outbounds=$(ss_build_multi_outbounds) || return 1
-  # Merge hysteria/wg socks bridges
+  # Merge hysteria SOCKS bridges only if tag not already present (ss_outbound_from_entry
+  # already embeds the bridge outbound — avoid duplicate tags that break Xray)
   for bridges in "$ADDON_DATA_DIR"/bridge-ss-*.json; do
     [ -f "$bridges" ] || continue
-    outbounds=$(printf '%s' "$outbounds" | jq --slurpfile b "$bridges" '. + $b')
+    outbounds=$(printf '%s' "$outbounds" | jq --slurpfile b "$bridges" '
+      ($b[0].tag // "") as $t |
+      if ($t == "") or any(.[]; .tag == $t) then . else . + $b end
+    ') || return 1
   done
+  outbounds=$(printf '%s' "$outbounds" | jq 'unique_by(.tag)') || return 1
 
   inbounds=$(ss_build_inbounds_json)
   rules=$(ss_build_routing_rules_json)

@@ -43,10 +43,21 @@ ss_wg_ini_field() {
     BEGIN{ins=0}
     /^\[/{ins=0}
     $0=="["sec"]"{ins=1; next}
-    ins && $1==key {
-      sub(/^[^=]*=[ \t]*/,"");
-      gsub(/\r/,"");
-      print; exit
+    ins {
+      # Allow "Key = value" with optional spaces; match key before first =
+      line=$0
+      gsub(/\r/,"",line)
+      if (match(line, /^[ \t]*[^=]+[ \t]*=/)) {
+        k=line
+        sub(/[ \t]*=.*/, "", k)
+        gsub(/^[ \t]+|[ \t]+$/, "", k)
+        if (k==key) {
+          sub(/^[^=]*=[ \t]*/, "", line)
+          gsub(/[ \t]+$/, "", line)
+          print line
+          exit
+        }
+      }
     }
   '
 }
@@ -74,6 +85,9 @@ ss_wg_ini_to_xray_outbound() {
   [ -n "$addr" ] || addr="10.0.0.2/32"
   [ -n "$allowed" ] || allowed="0.0.0.0/0, ::/0"
   [ -n "$mtu" ] || mtu="1280"
+  # Strip non-digits from MTU so --arg + tonumber never breaks jq
+  mtu=$(printf '%s' "$mtu" | tr -cd '0-9')
+  [ -n "$mtu" ] || mtu="1280"
 
   jq -nc \
     --arg tag "${tag:-wg}" \
@@ -83,7 +97,7 @@ ss_wg_ini_to_xray_outbound() {
     --arg endpoint "$endpoint" \
     --arg allowedIPs "$allowed" \
     --arg psk "${psk:-}" \
-    --argjson mtu "${mtu}" \
+    --arg mtu "$mtu" \
     --arg keepalive "${keepalive:-25}" '
     {
       tag: $tag,
@@ -92,7 +106,7 @@ ss_wg_ini_to_xray_outbound() {
         {
           secretKey: $secretKey,
           address: [$address],
-          mtu: $mtu,
+          mtu: (try ($mtu|tonumber) catch 1280),
           peers: [
             {
               publicKey: $publicKey,

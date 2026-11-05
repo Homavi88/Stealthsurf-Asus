@@ -148,13 +148,23 @@ ss_rebuild_xray_config() {
   return 0
 }
 
+ss_soft_restart_inner() {
+  # Kill our Xray + re-apply firewall/start without rebuilding config or side runtimes
+  ss_activity "rebuild.soft_restart" ""
+  ss_cleanup_firewall 2>/dev/null || true
+  ss_kill_our_xray
+  ss_start_inner
+}
+
 ss_rebuild_and_restart() {
+  # Rebuild once, then soft-restart Xray (do not call ss_restart — it rebuilds again
+  # and would re-start Hysteria/AWG a second time during apply/enable).
   ss_rebuild_xray_config || return 1
   if ! command -v xray >/dev/null 2>&1 && [ ! -x "$XRAY_BIN" ]; then
     ss_warn "xray binary not found — config written to $XRAY_CONFIG_FILE"
     return 0
   fi
-  ss_restart
+  ss_with_lock lifecycle ss_soft_restart_inner
 }
 
 ss_start_inner() {

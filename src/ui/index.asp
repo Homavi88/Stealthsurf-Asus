@@ -322,7 +322,12 @@
       <button id="btnCheckUpdate2" class="secondary" type="button">Проверить на GitHub</button>
       <button id="btnForceUpdate" class="warn" type="button">Установить latest с GitHub</button>
     </div>
-    <div class="hint">Автопроверка при открытии UI и каждые 12 часов (cron). Подсветка, если latest &gt; установленной.</div>
+    <div class="hint">
+      Проверка и установка идут через UI (кнопки выше и в шапке) или CLI:
+      <code>stealthsurf check-update</code> / <code>stealthsurf update</code>.
+      Автопроверка при открытии UI (если старше 6 ч) и каждые 12 часов (cron).
+      При наличии новой версии — баннер и подсветка «есть обновление».
+    </div>
 
     <div class="row" style="margin-top:12px">
       <button id="btnInstallXray" class="secondary" type="button">Установить / найти Xray</button>

@@ -252,28 +252,59 @@ ss_restore() {
 
 ss_update_self() {
   local tmp="/tmp/asuswrt-merlin-stealthsurf.tar.gz"
+  local url=""
+  local new_ver=""
   ss_backup_auto "pre-update" || true
-  ss_info "Downloading latest release…"
-  ss_activity "update.start" "from=$ADDON_RELEASE_TGZ"
-  if ! curl -fsSL -o "$tmp" "$ADDON_RELEASE_TGZ"; then
-    ss_error "Could not download release tarball"
-    ss_activity "update.fail" "download failed"
-    return 1
+
+  # Resolve download URL from last check (or refresh)
+  url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
+  if [ -z "$url" ] || [ "$url" = "null" ]; then
+    url="$ADDON_RELEASE_TGZ"
+  fi
+  # If version.json is stale, refresh so we pick the release asset URL
+  if [ ! -f "$SS_VERSION_FILE" ] || ! jq -e '.download_url' "$SS_VERSION_FILE" >/dev/null 2>&1; then
+    ss_version_check >/dev/null 2>&1 || true
+    url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
+  fi
+
+  ss_info "Downloading release from $url …"
+  ss_activity "update.start" "from=$url"
+  if ! curl -fsSL -L -o "$tmp" "$url"; then
+    # Fallback to canonical latest/download URL
+    ss_warn "Primary download failed, trying $ADDON_RELEASE_TGZ"
+    if ! curl -fsSL -L -o "$tmp" "$ADDON_RELEASE_TGZ"; then
+      ss_error "Could not download release tarball"
+      ss_activity "update.fail" "download failed"
+      return 1
+    fi
   fi
   rm -rf "$ADDON_JFFS_ADN_DIR"
   mkdir -p /jffs/addons /jffs/scripts
-  tar -xzf "$tmp" -C /jffs/addons
+  if ! tar -xzf "$tmp" -C /jffs/addons; then
+    ss_error "Failed to extract release archive"
+    ss_activity "update.fail" "extract failed"
+    return 1
+  fi
   [ -f "$ADDON_JFFS_ADN_DIR/stealthsurf" ] || {
-    ss_error "Invalid release archive layout"
+    ss_error "Invalid release archive layout (missing stealthsurf script)"
+    ss_activity "update.fail" "bad archive"
     return 1
   }
   mv -f "$ADDON_JFFS_ADN_DIR/stealthsurf" "$ADDON_SCRIPT"
   chmod 0755 "$ADDON_SCRIPT"
+  # UI assets live next to the script under /jffs/addons/stealthsurf/
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
-  sh "$ADDON_SCRIPT" install || true
+  # Re-run install with NEW script (hooks, deps, mount UI, version.json)
+  if ! sh "$ADDON_SCRIPT" install; then
+    ss_warn "Post-update install reported errors — check logs"
+  fi
   rm -f "$tmp"
-  ss_activity "update.done" "ok"
-  ss_ok "Updated addon from GitHub Releases — re-login to WebUI"
+  # Refresh version after install (new ADDON_VERSION is inside new script; this shell still has old)
+  sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
+  sh "$ADDON_SCRIPT" check-update >/dev/null 2>&1 || true
+  new_ver=$(jq -r '.installed // empty' "$SS_VERSION_FILE" 2>/dev/null)
+  ss_activity "update.done" "installed=${new_ver:-ok}"
+  ss_ok "Updated addon from GitHub Releases (now ${new_ver:-unknown}) — refresh WebUI / re-login"
 }
 
 ss_install_cron() {

@@ -29,11 +29,20 @@ ss_set_enabled_outbounds() {
 
 ss_enable_outbound() {
   local id="$1"
+  [ -n "$id" ] || {
+    ss_error "enable: config id required"
+    return 1
+  }
+  # Accept numeric or numeric-string ids
+  if ! printf '%s' "$id" | grep -Eq '^[0-9]+$'; then
+    ss_error "enable: invalid config id '$id'"
+    return 1
+  fi
   ss_load_outbounds_meta
   jq --argjson id "$id" '
     .enabled = ((.enabled // []) + [$id] | unique) |
     if (.default // "") == "" then .default = ("ss-" + ($id|tostring)) else . end
-  ' "$SS_OUTBOUNDS_FILE" >"$SS_OUTBOUNDS_FILE.tmp" && mv "$SS_OUTBOUNDS_FILE.tmp" "$SS_OUTBOUNDS_FILE"
+  ' "$SS_OUTBOUNDS_FILE" >"$SS_OUTBOUNDS_FILE.tmp" && mv "$SS_OUTBOUNDS_FILE.tmp" "$SS_OUTBOUNDS_FILE" || return 1
   SS_ENABLED_OUTBOUNDS=$(jq -r '.enabled | map(tostring) | join(" ")' "$SS_OUTBOUNDS_FILE")
   SS_DEFAULT_OUTBOUND=$(jq -r '.default' "$SS_OUTBOUNDS_FILE")
   ss_save_conf
@@ -41,13 +50,21 @@ ss_enable_outbound() {
 
 ss_disable_outbound() {
   local id="$1"
+  [ -n "$id" ] || {
+    ss_error "disable: config id required"
+    return 1
+  }
+  if ! printf '%s' "$id" | grep -Eq '^[0-9]+$'; then
+    ss_error "disable: invalid config id '$id'"
+    return 1
+  fi
   ss_load_outbounds_meta
   jq --argjson id "$id" '
     .enabled = ((.enabled // []) | map(select(. != $id))) |
     if (.default == ("ss-" + ($id|tostring))) then
       .default = (if (.enabled|length)>0 then ("ss-" + (.enabled[0]|tostring)) else "direct" end)
     else . end
-  ' "$SS_OUTBOUNDS_FILE" >"$SS_OUTBOUNDS_FILE.tmp" && mv "$SS_OUTBOUNDS_FILE.tmp" "$SS_OUTBOUNDS_FILE"
+  ' "$SS_OUTBOUNDS_FILE" >"$SS_OUTBOUNDS_FILE.tmp" && mv "$SS_OUTBOUNDS_FILE.tmp" "$SS_OUTBOUNDS_FILE" || return 1
   SS_ENABLED_OUTBOUNDS=$(jq -r '.enabled | map(tostring) | join(" ")' "$SS_OUTBOUNDS_FILE")
   SS_DEFAULT_OUTBOUND=$(jq -r '.default' "$SS_OUTBOUNDS_FILE")
   ss_save_conf
