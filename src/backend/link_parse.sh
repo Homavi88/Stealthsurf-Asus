@@ -170,8 +170,19 @@ ss_parse_trojan() {
     ;;
   *) hostport="$rest" ;;
   esac
-  host="${hostport%:*}"
-  port="${hostport##*:}"
+  case "$hostport" in
+  *:*)
+    host="${hostport%:*}"
+    port="${hostport##*:}"
+    ;;
+  *)
+    host="$hostport"
+    port="443"
+    ;;
+  esac
+  case "$port" in
+  '' | *[!0-9]*) port="443" ;;
+  esac
   sni=$(ss_get_query_param "$qs" sni 2>/dev/null || echo "$host")
   type=$(ss_get_query_param "$qs" type 2>/dev/null || echo tcp)
   security=$(ss_get_query_param "$qs" security 2>/dev/null || echo tls)
@@ -251,8 +262,19 @@ ss_parse_shadowsocks() {
     ;;
   esac
 
-  host="${hostport%:*}"
-  port="${hostport##*:}"
+  case "$hostport" in
+  *:*)
+    host="${hostport%:*}"
+    port="${hostport##*:}"
+    ;;
+  *)
+    host="$hostport"
+    port="443"
+    ;;
+  esac
+  case "$port" in
+  '' | *[!0-9]*) port="443" ;;
+  esac
 
   jq -nc \
     --arg tag "${name:-stealthsurf}" \

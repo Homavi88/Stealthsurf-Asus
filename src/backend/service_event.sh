@@ -264,9 +264,13 @@ ss_service_event() {
     fi
     ;;
   connectivity)
-    local via
+    local via result
     via=$(printf '%s' "$payload" | jq -r '.via // "socks"')
-    ss_json_response true "connectivity" "$(ss_connectivity_check "" "$via")"
+    if result=$(ss_connectivity_check "" "$via"); then
+      ss_json_response true "connectivity" "$result"
+    else
+      ss_json_response false "connectivity failed" "$(jq -nc --arg via "$via" '{ok:false, via:$via}')"
+    fi
     ;;
   logs)
     local kind lines
@@ -318,11 +322,12 @@ ss_service_event() {
         ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       fi
     else
-      if ss_version_update_if_available 0; then
-        ss_json_response true "update finished" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
-      else
-        ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
-      fi
+      ss_version_update_if_available 0
+      case $? in
+      0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      2) ss_json_response true "already up to date" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      *) ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      esac
     fi
     ;;
   uninstall | remove | purge)

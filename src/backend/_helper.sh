@@ -128,13 +128,15 @@ ss_require_key() {
 ss_all_api_keys() {
   # Print unique API keys (primary + extras), one per line
   local k
-  [ -n "$SS_API_KEY" ] && printf '%s\n' "$SS_API_KEY"
-  for k in $SS_API_KEYS; do
-    [ -n "$k" ] && printf '%s\n' "$k"
-  done
-  if [ -f "$SS_CACHE_KEYS" ]; then
-    jq -r '.[] | .key // empty' "$SS_CACHE_KEYS" 2>/dev/null
-  fi | awk 'NF && !seen[$0]++'
+  {
+    [ -n "$SS_API_KEY" ] && printf '%s\n' "$SS_API_KEY"
+    for k in $SS_API_KEYS; do
+      [ -n "$k" ] && printf '%s\n' "$k"
+    done
+    if [ -f "$SS_CACHE_KEYS" ]; then
+      jq -r '.[] | .key // empty' "$SS_CACHE_KEYS" 2>/dev/null
+    fi
+  } | awk 'NF && !seen[$0]++'
 }
 
 ss_urldecode() {

@@ -148,14 +148,15 @@ ss_version_download_url() {
 }
 
 ss_version_update_if_available() {
-  # Install from GitHub only if newer (or force=1)
+  # Install from GitHub only if newer (or force=1).
+  # Exit 2 = already up to date (no download); 0 = installed; 1 = failure.
   local force="${1:-0}"
   local info
   info=$(ss_version_check) || true
   if [ "$force" != "1" ] && ! printf '%s' "$info" | jq -e '.update_available == true' >/dev/null 2>&1; then
     ss_info "No newer release to install (installed=$ADDON_VERSION)"
     printf '%s\n' "$info"
-    return 0
+    return 2
   fi
   ss_update_self
 }

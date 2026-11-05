@@ -167,14 +167,23 @@ ss_rebuild_and_restart() {
   ss_with_lock lifecycle ss_soft_restart_inner
 }
 
+ss_needs_side_runtimes() {
+  # True if any enabled outbound uses hysteria/awg (must be rematerialized after stop/reboot)
+  local id entry runtime
+  [ -n "$SS_ENABLED_OUTBOUNDS" ] || return 1
+  for id in $SS_ENABLED_OUTBOUNDS; do
+    entry=$(ss_cache_get_config "$id" 2>/dev/null) || continue
+    runtime=$(ss_protocol_runtime "$(printf '%s' "$entry" | jq -r '.protocol // "vless"')")
+    case "$runtime" in
+    hysteria | awg) return 0 ;;
+    esac
+  done
+  return 1
+}
+
 ss_start_inner() {
   ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
   ss_desired_mark 2>/dev/null || true
-  if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-    ss_error "No local Xray config. Run: stealthsurf apply <config_id> or rebuild"
-    ss_activity "start.fail" "no xray config"
-    return 1
-  fi
   ss_ensure_xray || {
     ss_error "xray not installed"
     ss_activity "start.fail" "xray missing"
@@ -182,6 +191,24 @@ ss_start_inner() {
   }
   [ -x "$XRAY_BIN" ] || XRAY_BIN=$(command -v xray)
   ss_prepare_runtime 2>/dev/null || ss_sysctl_dataplane 2>/dev/null || true
+
+  # After stop/reboot Hy2/AWG bridges are gone — rebuild outbounds before launching Xray
+  if [ -n "$SS_ENABLED_OUTBOUNDS" ] || [ -n "$SS_ACTIVE_CONFIG_ID" ]; then
+    if ss_needs_side_runtimes || [ ! -f "$XRAY_CONFIG_FILE" ]; then
+      ss_info "Rematerializing outbounds/side runtimes before start…"
+      ss_rebuild_xray_config || {
+        ss_error "Failed to rebuild Xray config for start"
+        ss_activity "start.fail" "rebuild failed"
+        return 1
+      }
+    fi
+  fi
+
+  if [ ! -f "$XRAY_CONFIG_FILE" ]; then
+    ss_error "No local Xray config. Run: stealthsurf apply <config_id> or rebuild"
+    ss_activity "start.fail" "no xray config"
+    return 1
+  fi
 
   if ss_xray_running; then
     ss_info "Already running (pid $(cat "$XRAY_PIDFILE"))"
@@ -253,6 +280,10 @@ ss_stop_inner() {
   ss_desired_clear 2>/dev/null || true
   ss_cleanup_firewall 2>/dev/null
   ss_dnsmasq_cleanup 2>/dev/null
+  # Reload dnsmasq so REDIRECT/BYPASS settings don't stay poisoned after stop
+  if [ "${SS_DNS_MODE:-OFF}" != "OFF" ]; then
+    ss_dnsmasq_restart 2>/dev/null || true
+  fi
   ss_stop_all_runtimes 2>/dev/null
   ss_kill_our_xray
   # Do NOT killall xray — other addons may use it

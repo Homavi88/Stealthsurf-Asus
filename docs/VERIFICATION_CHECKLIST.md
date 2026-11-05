@@ -50,7 +50,7 @@
 - [ ] Apply wg INI → Xray wireguard outbound в multi-outbound
 - [ ] Apply hysteria2 → локальный SOCKS bridge + tag `ss-<id>`
 - [ ] Hysteria2 / WG / AWG: если бинарь есть — поднимаются; если нет — понятный статус «нужен бинарь / в разработке»
-- [ ] OpenFlux в UI помечен как in development, тихий apply не проходит
+- [ ] OpenFlux: при наличии proxy в `xray_config` — apply OK; без него — понятная ошибка (не silent)
 - [ ] Autosync (cron) обновляет кэш; watchdog поднимает упавший Xray
 - [ ] Rate-limit 429 даёт понятное сообщение
 

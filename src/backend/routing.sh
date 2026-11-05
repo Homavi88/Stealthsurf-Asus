@@ -341,7 +341,15 @@ ss_build_routing_rules_json() {
     [
       {type:"field", outboundTag:"direct", ip:["geoip:private"]},
       (($ep[0] // []) | map(select(.address != null and .address != "")) | unique_by(.address) |
-        if length > 0 then {type:"field", outboundTag:"direct", domain: (map(.address) | map("full:"+.)), ip: map(.address)} else empty end),
+        if length > 0 then
+          (
+            (map(select(.address | test("^[0-9.]+$|^[0-9a-fA-F:]+$"))) | map(.address)) as $ips |
+            (map(select(.address | test("^[0-9.]+$|^[0-9a-fA-F:]+$") | not)) | map("full:"+(.address))) as $domains |
+            {type:"field", outboundTag:"direct"}
+            + (if ($domains|length)>0 then {domain:$domains} else {} end)
+            + (if ($ips|length)>0 then {ip:$ips} else {} end)
+          )
+        else empty end),
       ((($rt[0].rules // []) | sort_by(.priority // 9999))[] | rule_from(.))
     ]
   '

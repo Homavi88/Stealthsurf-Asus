@@ -1,7 +1,8 @@
 #!/bin/sh
 
 ss_service_event_block() {
-  # Always refresh amng_custom → payload so UI actions (checkupdate/update/…) see fresh JSON
+  # Always refresh amng_custom → payload so UI actions (checkupdate/update/…) see fresh JSON.
+  # Run in foreground so Merlin action_wait covers real work (UI refresh won't race).
   cat <<'EOF'
 # StealthSurf UI hook begin
 if [ "$1" = "start" ] && echo "$2" | grep -q "^stealthsurf_"; then
@@ -12,7 +13,7 @@ if [ "$1" = "start" ] && echo "$2" | grep -q "^stealthsurf_"; then
   else
     echo '{}' > /tmp/stealthsurf_payload.json
   fi
-  /jffs/scripts/stealthsurf service_event "$action" >/tmp/stealthsurf-service-event.log 2>&1 &
+  /jffs/scripts/stealthsurf service_event "$action" >/tmp/stealthsurf-service-event.log 2>&1
 fi
 # StealthSurf UI hook end
 EOF
@@ -38,12 +39,11 @@ ss_install_service_event_hook() {
 ss_remove_service_event_hook() {
   local f="/jffs/scripts/service-event"
   [ -f "$f" ] || return 0
+  # Only clear skip on explicit end marker (not on inner `fi`)
   awk '
     /StealthSurf UI hook begin/ {skip=1; next}
-    /StealthSurf UI hook$/ {skip=1; next}
+    /# StealthSurf UI hook$/ {skip=1; next}
     skip && /StealthSurf UI hook end/ {skip=0; next}
-    skip && /stealthsurf service_event/ {next}
-    skip && /^fi$/ {skip=0; next}
     skip {next}
     {print}
   ' "$f" >"$f.tmp" && mv "$f.tmp" "$f"

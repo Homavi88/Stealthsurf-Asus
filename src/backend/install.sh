@@ -173,6 +173,7 @@ ss_uninstall() {
   ss_desired_clear 2>/dev/null || true
   ss_cleanup_firewall 2>/dev/null || true
   ss_dnsmasq_cleanup 2>/dev/null || true
+  ss_dnsmasq_restart 2>/dev/null || true
   ss_unmount_ui 2>/dev/null || true
   ss_remove_service_event_hook 2>/dev/null || true
   ss_remove_hook_scripts 2>/dev/null || true

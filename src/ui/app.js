@@ -62,7 +62,15 @@ function triggerService(action, payload, opts) {
   }
 
   const blob = JSON.stringify(data);
-  $("ss_payload_field").value = blob.slice(0, 2048);
+  // Merlin amng_custom is size-limited; reject oversized payloads instead of truncating JSON
+  if (blob.length > 3500) {
+    setMsg(
+      "Payload слишком большой (" + blob.length + " байт). Упростите routing/policies или правьте через CLI.",
+      "err"
+    );
+    return;
+  }
+  $("ss_payload_field").value = blob;
 
   form.action_script.value = "stealthsurf_" + action;
   form.action_mode.value = "apply";
@@ -427,20 +435,45 @@ async function refreshAll() {
     renderPolicies(policies);
     if (response && response.message) {
       setMsg(response.message, response.status ? "ok" : "err");
-      if (response.data && response.data.protocols) {
-        protocolsCache = response.data.protocols;
+      const data = response.data;
+      if (data && data.protocols) {
+        protocolsCache = data.protocols;
         renderProtocolSelect();
         renderConfigs(cfgList);
       }
-      if (response.data && (response.data.installed || response.data.update_available != null)) {
-        renderVersion(response.data);
+      if (data && (data.installed || data.update_available != null)) {
+        renderVersion(data);
       }
-      if (response.message && /version checked|update finished|updated/i.test(response.message)) {
-        // Prefer version payload from the action response
-        if (response.data && response.data.installed) renderVersion(response.data);
+      if (/version checked|updated|already up to date/i.test(response.message)) {
+        if (data && data.installed) renderVersion(data);
         fetchJson(EXT + "/version.json")
           .then((v) => renderVersion(v))
           .catch(() => {});
+      }
+      if (/^updated$/i.test(response.message)) {
+        setTimeout(() => location.reload(), 1500);
+      }
+      // clients → array
+      if (Array.isArray(data) && /clients/i.test(response.message)) {
+        renderClients(data);
+      }
+      // diag dump
+      if (data && (data.firewall || data.xray || data.protocols) && /diag/i.test(response.message)) {
+        $("diagBox").textContent = JSON.stringify(data, null, 2);
+      }
+      // connectivity
+      if (data && (data.ip != null || data.via != null) && /connectivity/i.test(response.message)) {
+        $("diagBox").textContent =
+          "IP: " + (data.ip || "—") + "\nvia: " + (data.via || "—") + "\nok: " + String(!!data.ok);
+      }
+      // backups list embedded in backup/backuplist responses
+      if (data && Array.isArray(data.backups)) {
+        renderBackups(data.backups);
+      } else if (Array.isArray(data) && /backups/i.test(response.message)) {
+        renderBackups(data);
+      }
+      if (data && data.text && /logs|devices/i.test(response.message)) {
+        $("diagBox").textContent = data.text;
       }
     }
   } catch (e) {

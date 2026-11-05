@@ -336,14 +336,15 @@ ss_start_wg_iface() {
   ss_parse_wg_ini "$blob" "$conf"
 
   if [ "$runtime" = "awg" ]; then
-    if ! ss_protocol_supported_on_router amnezia-wg-2; then
-      ss_error "AmneziaWG (awg) not installed — install awg/awg-quick on the router"
+    if ! command -v awg-quick >/dev/null 2>&1 && ! command -v awg >/dev/null 2>&1; then
+      ss_error "AmneziaWG (awg-quick) not installed on this router"
       return 1
     fi
     bin=$(command -v awg-quick 2>/dev/null || echo awg-quick)
   else
-    if ! ss_protocol_supported_on_router wg; then
-      ss_error "WireGuard (wg) not available on this router"
+    # Iface fallback needs wg-quick specifically (Xray wireguard outbound is preferred elsewhere)
+    if ! command -v wg-quick >/dev/null 2>&1 && ! command -v wg >/dev/null 2>&1; then
+      ss_error "WireGuard wg-quick not available for iface fallback"
       return 1
     fi
     bin=$(command -v wg-quick 2>/dev/null || echo wg-quick)
@@ -403,8 +404,19 @@ ss_parse_http_socks_subconfig() {
     ;;
   *) hostport="$rest" ;;
   esac
-  host="${hostport%:*}"
-  port="${hostport##*:}"
+  case "$hostport" in
+  *:*)
+    host="${hostport%:*}"
+    port="${hostport##*:}"
+    ;;
+  *)
+    host="$hostport"
+    port="1080"
+    ;;
+  esac
+  case "$port" in
+  '' | *[!0-9]*) port="1080" ;;
+  esac
 
   jq -nc \
     --arg tag "$tag" \
@@ -456,13 +468,17 @@ ss_outbound_from_entry() {
   fi
 
   case "$runtime" in
-  xray | openflux)
-    # openflux without usable xray_config: try connection_url schemes
-    if [ "$runtime" = "openflux" ] && [ -z "$xray_cfg" ]; then
-      ss_warn "openflux id=$id: no xray_config — trying connection_url"
+  xray)
+    # openflux maps to xray runtime; require xray_config or a parseable share link
+    if [ "$proto" = "openflux" ] && { [ -z "$xray_cfg" ] || [ "$xray_cfg" = "null" ]; }; then
+      ss_warn "openflux id=$id: no usable proxy in xray_config — trying connection_url"
     fi
     [ -n "$link" ] || {
-      ss_error "Config $id has empty connection_url and no xray_config"
+      if [ "$proto" = "openflux" ]; then
+        ss_error "OpenFlux config $id needs xray_config with a proxy outbound (or connection_url)"
+      else
+        ss_error "Config $id has empty connection_url and no xray_config"
+      fi
       return 1
     }
     case "$link" in

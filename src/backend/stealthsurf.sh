@@ -105,7 +105,9 @@ update | upgrade)
     ss_version_check >/dev/null 2>&1 || true
     ss_update_self || exit 1
   else
-    ss_version_update_if_available 0 || exit 1
+    ss_version_update_if_available 0
+    rc=$?
+    [ "$rc" = "0" ] || [ "$rc" = "2" ] || exit 1
   fi
   ;;
 force-update | update-force)
@@ -113,7 +115,9 @@ force-update | update-force)
   ss_update_self || exit 1
   ;;
 update-if-newer)
-  ss_version_update_if_available "${2:-0}" || exit 1
+  ss_version_update_if_available "${2:-0}"
+  rc=$?
+  [ "$rc" = "0" ] || [ "$rc" = "2" ] || exit 1
   ;;
 install)
   ss_install || exit 1
