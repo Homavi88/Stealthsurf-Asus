@@ -23,264 +23,319 @@ import ./service_event.sh
 
 ss_cli_help() {
   cat <<EOF
-$ADDON_TITLE $ADDON_VERSION — управление аддоном на роутере
+$ADDON_TITLE $ADDON_VERSION — CLI
 
-Использование: $0 <команда> [аргументы]
-       или:    stealthsurf <команда>   (symlink /opt/bin/stealthsurf)
+Вызов:  ssurf <к> …    или    stealthsurf <к> …
+Справка: ssurf h       Меню: ssurf m
 
-── Жизненный цикл ──────────────────────────────────────────
-  start                 Запустить VPN (Xray + firewall)
-  stop                  Остановить VPN и снять правила
-  restart               Рестарт без полной остановки side-runtime
-  status                JSON-статус (running, mode, ports…)
-  install               Установить/переустановить хуки, UI, deps
-  uninstall | remove | purge
-                        ПОЛНОЕ удаление с роутера (хуки, cron, UI, данные)
-  version               Показать установленную версию
-  check-update | version-check
-                        Проверить GitHub Releases (пишет version.json)
-  update | upgrade      Проверить и установить новую версию, если есть
-  update --force | force-update
-                        Принудительно скачать и поставить latest с GitHub
+── Коротко (запоминайте эти) ───────────────────────────────
+  up|on          start          dn|off         stop
+  re|rs          restart        st             status
+  sy             sync           ls|l           list
+  ap|a <id>      apply          en <id>        enable
+  dis <id>       disable        def <tag>      set-default
+  key <stlth_>   set-key        mode <m>       set-mode
+  dns <m>        set-dns-mode   rb             rebuild
+  v|ver          version        cu|chk         check-update
+  upd [ -f ]     update         uf             force-update
+  d|dg           diag           p|proto        protocols
+  log [src] [n]  logs           bak [note]     backup
+  baks           backups        cl             clients
+  dev            devices        conn [url]     connectivity
+  xray           install-xray   geo            geodata
+  un|rm          uninstall      h|?            help
+  m|menu         интерактивное меню
 
-── API / каталог ───────────────────────────────────────────
-  set-key <stlth_…>     Сохранить основной API-ключ
-  add-key <key> [label] Добавить ключ
-  remove-key <key>      Удалить ключ
-  verify                Проверить ключ
-  sync                  Синхронизировать API и применить изменения
-                        включённых конфигов (rebuild при смене URL/settings)
-  list                  Список конфигов
-  apply <id> [sole=1]   Применить конфиг как outbound
-  enable <id> | disable <id> | set-default <ss-id|direct|block>
-  update-settings <id> '<json>'
-                        PATCH settings (location_id+protocol обязательны;
-                        опционально use_xhttp/use_grpc/use_warp/…)
-
-── Routing / политики / режим ──────────────────────────────
-  set-routing '<rules-json>' [default] [preset]
-  preset <all-vpn|ru-direct|streaming-split|block-ads> <default_id> [alt_id]
-  set-policies '<json>' | clients
-  set-mode <proxy|redirect|tproxy>
-  set-dns-mode <OFF|BYPASS|REDIRECT>
-  rebuild
-
-── Диагностика ─────────────────────────────────────────────
-  diag | test-config | connectivity [url] [socks|direct]
-  protocols
-  logs [activity|addon|errors|devices|…] [lines]
-  devices | backup [note] | backups | restore <file>
-  install-xray | geodata
+── Полные имена (как раньше) ───────────────────────────────
+  start stop restart status install uninstall version
+  check-update update force-update set-key add-key remove-key
+  verify sync list apply enable disable set-default
+  update-settings set-routing preset set-policies clients
+  set-mode set-dns-mode rebuild diag test-config connectivity
+  protocols logs devices backup backups restore
+  install-xray geodata
 
 Примеры:
-  stealthsurf start
-  stealthsurf stop
-  stealthsurf restart
-  stealthsurf check-update
-  stealthsurf update
-  stealthsurf update --force
-  stealthsurf uninstall
+  ssurf up
+  ssurf sy && ssurf ls
+  ssurf ap 101 && ssurf mode redirect && ssurf up
+  ssurf st
+  ssurf cu && ssurf upd
+  ssurf m
 EOF
 }
 
-case "$1" in
-"" | help | -h | --help)
-  ss_cli_help
-  exit 0
-  ;;
-version)
-  echo "$ADDON_TITLE $ADDON_VERSION"
-  ss_version_local >/dev/null 2>&1 || true
-  if [ -f "$SS_VERSION_FILE" ]; then
-    jq -r '"installed=\(.installed) latest=\(.latest // "-") update=\(.update_available)"' "$SS_VERSION_FILE" 2>/dev/null || true
-  fi
-  ;;
-check-update | version-check | checkupdate)
-  ss_version_check || exit 1
-  ;;
-update | upgrade)
-  # update [--force|force|1]
-  force=0
-  case "${2:-}" in
-  --force | -f | force | 1) force=1 ;;
-  esac
-  if [ "$force" = "1" ]; then
-    ss_version_check >/dev/null 2>&1 || true
-    ss_update_self || exit 1
-  else
-    ss_version_update_if_available 0
-    rc=$?
-    [ "$rc" = "0" ] || [ "$rc" = "2" ] || exit 1
-  fi
-  ;;
-force-update | update-force)
-  ss_version_check >/dev/null 2>&1 || true
-  ss_update_self || exit 1
-  ;;
-update-if-newer)
-  ss_version_update_if_available "${2:-0}"
-  rc=$?
-  [ "$rc" = "0" ] || [ "$rc" = "2" ] || exit 1
-  ;;
-install)
-  ss_install || exit 1
-  ;;
-uninstall | remove | purge)
-  ss_uninstall
-  ;;
-mount_ui)
-  ss_mount_ui || exit 1
-  ;;
-unmount_ui)
-  ss_unmount_ui
-  ;;
-autostart)
-  ss_autostart || exit 1
-  ;;
-startup)
-  ss_startup "$2" || exit 1
-  ;;
-wan-up)
-  ss_wan_up_hook || exit 1
-  ;;
-firewall-restore)
-  ss_firewall_restore_hook || exit 1
-  ;;
-dnsmasq-configure)
-  ss_dnsmasq_configure_hook "$2" || exit 1
-  ;;
-set-key)
-  SS_API_KEY="$2"
-  [ -n "$SS_API_KEY" ] || {
-    echo "usage: $0 set-key <stlth_...>"
-    exit 1
-  }
-  ss_save_conf
-  ss_api_verify_key || exit 1
-  ;;
-add-key)
-  ss_api_add_key "$2" "$3" || exit 1
-  ;;
-remove-key)
-  ss_api_keys_store_remove "$2" || exit 1
-  ;;
-verify)
-  ss_api_verify_key || exit 1
-  ;;
-sync)
-  ss_sync_from_provider || exit 1
-  ;;
-autosync)
-  # Periodic pull from StealthSurf; rebuild only when enabled configs actually changed
-  ss_sync_from_provider >/dev/null 2>&1 || true
-  ;;
-list)
-  [ -f "$SS_CACHE_CONFIGS" ] || ss_api_sync_configs >/dev/null || exit 1
-  jq -r '.[] | select(. != null) | "\(.id)\t\(.protocol)\t\(.title // "-")\t\(.location_id)\texp=\(.expires_at)\tonline=\(.is_online)"' "$SS_CACHE_CONFIGS"
-  ;;
-apply)
-  ss_apply_config_id "$2" "${3:-1}" || exit 1
-  ;;
-enable)
-  ss_enable_outbound "$2" && ss_rebuild_and_restart || exit 1
-  ;;
-disable)
-  ss_disable_outbound "$2" && ss_rebuild_and_restart || exit 1
-  ;;
-set-default)
-  ss_set_default_outbound "$2" && ss_rebuild_and_restart || exit 1
-  ;;
-set-outbounds)
-  ss_set_enabled_outbounds "$2" "$3" && ss_rebuild_and_restart || exit 1
-  ;;
-set-routing)
-  ss_routing_set_rules "$2" "$3" "$4" && ss_rebuild_and_restart || exit 1
-  ;;
-preset)
-  ss_routing_apply_preset "$2" "$3" "$4" && ss_rebuild_and_restart || exit 1
-  ;;
-set-policies)
-  ss_policies_set "$2" || exit 1
-  if ss_xray_running; then
-    ss_cleanup_firewall
-    ss_configure_firewall
-  fi
-  ;;
-clients)
-  ss_clientlist_json
-  ;;
-set-mode)
-  ss_set_mode "$2" || exit 1
-  ;;
-set-dns-mode)
-  ss_set_dns_mode "$2" || exit 1
-  ;;
-update-settings)
-  ss_api_update_settings "$2" "$3" || exit 1
-  ;;
-rebuild)
-  ss_rebuild_and_restart || exit 1
-  ;;
-start)
-  ss_start || exit 1
-  ;;
-stop)
-  ss_stop || exit 1
-  ;;
-restart)
-  ss_restart || exit 1
-  ;;
-status)
-  ss_status
-  ;;
-watchdog)
-  ss_watchdog_tick || exit 1
-  ;;
-diag)
-  ss_diag_dump
-  ;;
-test-config)
-  ss_test_xray_config || exit 1
-  ;;
-connectivity)
-  ss_connectivity_check "$2" "${3:-socks}"
-  ;;
-logs)
-  ss_tail_logs "${2:-activity}" "${3:-100}"
-  ;;
-clear-logs)
-  ss_logs_clear "${2:-all}" || exit 1
-  ;;
-devices)
-  ss_log_devices_snapshot
-  ss_tail_logs devices 100
-  ;;
-backup)
-  ss_backup "${2:-manual}" || exit 1
-  ;;
-backups)
-  ss_backup_list
-  ;;
-restore)
-  ss_restore "$2" || exit 1
-  ;;
-install-xray)
-  ss_ensure_xray || exit 1
-  ;;
-geodata)
-  ss_geodata_update || exit 1
-  ;;
-protocols)
-  ss_protocol_status_matrix
-  ;;
-service_event)
-  ss_service_event "$2" "$3" || exit 1
-  ;;
-*)
-  echo "Unknown command: $1" >&2
-  echo "Run: $0 help" >&2
-  exit 1
-  ;;
-esac
+ss_cli_menu() {
+  # Interactive short menu — no need to remember every alias
+  cat <<EOF
 
+$ADDON_TITLE — меню
+  1) up      старт VPN
+  2) dn      стоп VPN
+  3) re      рестарт
+  4) st      статус
+  5) sy      sync с сайта
+  6) ls      список конфигов
+  7) d       diag
+  8) p       protocols
+  9) cu      check-update
+  a) ap      apply <id>
+  e) en      enable <id>
+  x) un      uninstall
+  h) help
+  q) выход
+EOF
+  printf 'Выбор: '
+  read -r choice || return 0
+  case "$choice" in
+  1 | up | on) set -- up ;;
+  2 | dn | off) set -- dn ;;
+  3 | re | rs) set -- re ;;
+  4 | st) set -- st ;;
+  5 | sy) set -- sy ;;
+  6 | ls | l) set -- ls ;;
+  7 | d | dg) set -- d ;;
+  8 | p | proto) set -- p ;;
+  9 | cu | chk) set -- cu ;;
+  a | ap | A)
+    printf 'config id: '
+    read -r cid || return 0
+    set -- ap "$cid"
+    ;;
+  e | en | E)
+    printf 'config id: '
+    read -r cid || return 0
+    set -- en "$cid"
+    ;;
+  x | un | rm)
+    printf 'Точно удалить аддон? [y/N]: '
+    read -r yn || return 0
+    case "$yn" in
+    y | Y | yes | YES) set -- un ;;
+    *)
+      echo "Отмена"
+      return 0
+      ;;
+    esac
+    ;;
+  h | help | \?) set -- h ;;
+  q | Q | "")
+    echo "Выход"
+    return 0
+    ;;
+  *)
+    echo "Неизвестный пункт: $choice"
+    return 1
+    ;;
+  esac
+  # Re-enter dispatcher with chosen short command
+  ss_cli_dispatch "$@"
+}
+
+ss_cli_dispatch() {
+  case "$1" in
+  "" | help | -h | --help | h | \?)
+    ss_cli_help
+    return 0
+    ;;
+  m | menu)
+    ss_cli_menu
+    return $?
+    ;;
+  version | v | ver)
+    echo "$ADDON_TITLE $ADDON_VERSION"
+    ss_version_local >/dev/null 2>&1 || true
+    if [ -f "$SS_VERSION_FILE" ]; then
+      jq -r '"installed=\(.installed) latest=\(.latest // "-") update=\(.update_available)"' "$SS_VERSION_FILE" 2>/dev/null || true
+    fi
+    ;;
+  check-update | version-check | checkupdate | cu | chk)
+    ss_version_check || return 1
+    ;;
+  update | upgrade | upd)
+    force=0
+    case "${2:-}" in
+    --force | -f | force | 1) force=1 ;;
+    esac
+    if [ "$force" = "1" ]; then
+      ss_version_check >/dev/null 2>&1 || true
+      ss_update_self || return 1
+    else
+      ss_version_update_if_available 0
+      rc=$?
+      [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+    fi
+    ;;
+  force-update | update-force | uf)
+    ss_version_check >/dev/null 2>&1 || true
+    ss_update_self || return 1
+    ;;
+  update-if-newer)
+    ss_version_update_if_available "${2:-0}"
+    rc=$?
+    [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+    ;;
+  install)
+    ss_install || return 1
+    ;;
+  uninstall | remove | purge | un | rm)
+    ss_uninstall
+    ;;
+  mount_ui)
+    ss_mount_ui || return 1
+    ;;
+  unmount_ui)
+    ss_unmount_ui
+    ;;
+  autostart)
+    ss_autostart || return 1
+    ;;
+  startup)
+    ss_startup "$2" || return 1
+    ;;
+  wan-up)
+    ss_wan_up_hook || return 1
+    ;;
+  firewall-restore)
+    ss_firewall_restore_hook || return 1
+    ;;
+  dnsmasq-configure)
+    ss_dnsmasq_configure_hook "$2" || return 1
+    ;;
+  set-key | key | sk)
+    SS_API_KEY="$2"
+    [ -n "$SS_API_KEY" ] || {
+      echo "usage: ssurf key <stlth_...>"
+      return 1
+    }
+    ss_save_conf
+    ss_api_verify_key || return 1
+    ;;
+  add-key)
+    ss_api_add_key "$2" "$3" || return 1
+    ;;
+  remove-key)
+    ss_api_keys_store_remove "$2" || return 1
+    ;;
+  verify)
+    ss_api_verify_key || return 1
+    ;;
+  sync | sy)
+    ss_sync_from_provider || return 1
+    ;;
+  autosync)
+    ss_sync_from_provider >/dev/null 2>&1 || true
+    ;;
+  list | ls | l)
+    [ -f "$SS_CACHE_CONFIGS" ] || ss_api_sync_configs >/dev/null || return 1
+    jq -r '.[] | select(. != null) | "\(.id)\t\(.protocol)\t\(.title // "-")\t\(.location_id)\texp=\(.expires_at)\tonline=\(.is_online)"' "$SS_CACHE_CONFIGS"
+    ;;
+  apply | ap | a)
+    ss_apply_config_id "$2" "${3:-1}" || return 1
+    ;;
+  enable | en)
+    ss_enable_outbound "$2" && ss_rebuild_and_restart || return 1
+    ;;
+  disable | dis)
+    ss_disable_outbound "$2" && ss_rebuild_and_restart || return 1
+    ;;
+  set-default | def)
+    ss_set_default_outbound "$2" && ss_rebuild_and_restart || return 1
+    ;;
+  set-outbounds)
+    ss_set_enabled_outbounds "$2" "$3" && ss_rebuild_and_restart || return 1
+    ;;
+  set-routing)
+    ss_routing_set_rules "$2" "$3" "$4" && ss_rebuild_and_restart || return 1
+    ;;
+  preset)
+    ss_routing_apply_preset "$2" "$3" "$4" && ss_rebuild_and_restart || return 1
+    ;;
+  set-policies)
+    ss_policies_set "$2" || return 1
+    if ss_xray_running; then
+      ss_cleanup_firewall
+      ss_configure_firewall
+    fi
+    ;;
+  clients | cl)
+    ss_clientlist_json
+    ;;
+  set-mode | mode | sm)
+    ss_set_mode "$2" || return 1
+    ;;
+  set-dns-mode | dns | sdns)
+    ss_set_dns_mode "$2" || return 1
+    ;;
+  update-settings | us)
+    ss_api_update_settings "$2" "$3" || return 1
+    ;;
+  rebuild | rb)
+    ss_rebuild_and_restart || return 1
+    ;;
+  start | up | on)
+    ss_start || return 1
+    ;;
+  stop | dn | off)
+    ss_stop || return 1
+    ;;
+  restart | re | rs)
+    ss_restart || return 1
+    ;;
+  status | st)
+    ss_status
+    ;;
+  watchdog)
+    ss_watchdog_tick || return 1
+    ;;
+  diag | d | dg)
+    ss_diag_dump
+    ;;
+  test-config | tc)
+    ss_test_xray_config || return 1
+    ;;
+  connectivity | conn)
+    ss_connectivity_check "$2" "${3:-socks}"
+    ;;
+  logs | log)
+    ss_tail_logs "${2:-activity}" "${3:-100}"
+    ;;
+  clear-logs)
+    ss_logs_clear "${2:-all}" || return 1
+    ;;
+  devices | dev)
+    ss_log_devices_snapshot
+    ss_tail_logs devices 100
+    ;;
+  backup | bak)
+    ss_backup "${2:-manual}" || return 1
+    ;;
+  backups | baks)
+    ss_backup_list
+    ;;
+  restore)
+    ss_restore "$2" || return 1
+    ;;
+  install-xray | xray)
+    ss_ensure_xray || return 1
+    ;;
+  geodata | geo)
+    ss_geodata_update || return 1
+    ;;
+  protocols | p | proto)
+    ss_protocol_status_matrix
+    ;;
+  service_event)
+    ss_service_event "$2" "$3" || return 1
+    ;;
+  *)
+    echo "Unknown command: $1" >&2
+    echo "Run: ssurf h   or   ssurf m" >&2
+    return 1
+    ;;
+  esac
+  return 0
+}
+
+ss_cli_dispatch "$@" || exit $?
 exit 0

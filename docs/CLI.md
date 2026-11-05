@@ -1,67 +1,67 @@
 # CLI StealthSurf на роутере
 
-После установки доступны:
+После установки:
 
 ```sh
-/jffs/scripts/stealthsurf <команда>
-# или
-stealthsurf <команда>          # symlink → /opt/bin/stealthsurf
+ssurf <команда>                 # короткое имя (рекомендуется)
+stealthsurf <команда>           # полное имя
+/jffs/scripts/stealthsurf …
 ```
 
-Справка: `stealthsurf help`
+Справка: `ssurf h` · Меню: `ssurf m`
 
-## Управление сервисом
+## Короткие команды
 
-| Команда | Действие |
-| --- | --- |
-| `stealthsurf start` | Запуск Xray + firewall |
-| `stealthsurf stop` | Остановка, снятие iptables/ip rule |
-| `stealthsurf restart` | Рестарт VPN |
-| `stealthsurf status` | JSON-статус |
+| Коротко | Полное | Действие |
+| --- | --- | --- |
+| `up` / `on` | `start` | Запуск VPN |
+| `dn` / `off` | `stop` | Остановка |
+| `re` / `rs` | `restart` | Рестарт |
+| `st` | `status` | JSON-статус |
+| `sy` | `sync` | Sync с сайта + rebuild при изменениях |
+| `ls` / `l` | `list` | Список конфигов |
+| `ap` / `a` \<id\> | `apply` | Apply конфиг |
+| `en` \<id\> | `enable` | Включить outbound |
+| `dis` \<id\> | `disable` | Выключить outbound |
+| `def` \<tag\> | `set-default` | Default outbound |
+| `key` \<stlth_\> | `set-key` | API-ключ |
+| `mode` \<m\> | `set-mode` | proxy / redirect / tproxy |
+| `dns` \<m\> | `set-dns-mode` | OFF / BYPASS / REDIRECT |
+| `rb` | `rebuild` | Пересобрать dataplane |
+| `v` / `ver` | `version` | Версия |
+| `cu` / `chk` | `check-update` | Проверить GitHub |
+| `upd` [`-f`] | `update` | Обновить (с `-f` — force) |
+| `uf` | `force-update` | Всегда latest |
+| `d` / `dg` | `diag` | Диагностика |
+| `p` / `proto` | `protocols` | Матрица протоколов |
+| `log` | `logs` | Логи |
+| `bak` | `backup` | Бэкап |
+| `cl` | `clients` | Клиенты LAN |
+| `dev` | `devices` | Устройства |
+| `conn` | `connectivity` | Проверка связи |
+| `xray` | `install-xray` | Поставить Xray |
+| `geo` | `geodata` | Обновить geoip/geosite |
+| `un` | `uninstall` | Полное удаление |
+| `m` | `menu` | Интерактивное меню |
 
-## Обновление версии
-
-| Команда | Действие |
-| --- | --- |
-| `stealthsurf version` | Установленная версия (+ latest из кэша) |
-| `stealthsurf check-update` | Запрос к GitHub Releases → `version.json` |
-| `stealthsurf update` | Если есть новее — скачать и установить |
-| `stealthsurf update --force` | Всегда поставить latest с GitHub |
-| `stealthsurf force-update` | То же, что `--force` |
-
-То же в WebUI: **Проверить версию** / **Установить с GitHub** (шапка и вкладка «Режим / DNS»).
-
-## Полное удаление с роутера
-
-```sh
-stealthsurf uninstall
-# алиасы:
-stealthsurf remove
-stealthsurf purge
-```
-
-Удаляет: stop + firewall, хуки (`services-start`, `post-mount`, `nat-start`, `firewall-start`, `wan-start`, `dnsmasq.postconf`, `service-event`), cron, UI, `/jffs/scripts/stealthsurf`, `/jffs/addons/stealthsurf`, данные в `/opt/share/stealthsurf`, conf, hysteria-конфиги аддона. Бинарь Xray в `/opt` не трогается (может использоваться другими аддонами).
+Полные имена (`start`, `check-update`, …) по-прежнему работают.
 
 ## Быстрый сценарий
 
 ```sh
-stealthsurf set-key 'stlth_…'
-stealthsurf sync
-stealthsurf apply 101
-stealthsurf set-mode redirect
-stealthsurf start
-stealthsurf status
+ssurf key 'stlth_…'
+ssurf sy
+ssurf ap 101
+ssurf mode redirect
+ssurf up
+ssurf st
 
-# после смены location/protocol/XHTTP на сайте:
-stealthsurf sync
-# или с роутера:
-stealthsurf update-settings 101 '{"location_id":3,"protocol":"vless","use_xhttp":true}'
+# после смены настроек на сайте:
+ssurf sy
 
-stealthsurf check-update
-stealthsurf update
-
-stealthsurf stop
-stealthsurf uninstall
+ssurf cu && ssurf upd
+ssurf dn
+ssurf un
 ```
 
-`sync` / autosync: тянут каталог API и **пересобирают dataplane**, только если изменились включённые конфиги. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).
+`sy` / autosync: тянут каталог API и пересобирают dataplane только при изменении включённых конфигов. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).
