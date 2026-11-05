@@ -1,16 +1,43 @@
 #!/bin/sh
 
+ss_resolve_nvram() {
+  if [ -x /bin/nvram ]; then
+    echo /bin/nvram
+  elif [ -x /sbin/nvram ]; then
+    echo /sbin/nvram
+  elif [ -x /usr/sbin/nvram ]; then
+    echo /usr/sbin/nvram
+  else
+    echo ""
+  fi
+}
+
+ss_resolve_opkg() {
+  # Prefer absolute paths — busybox `command -v` is unreliable under curl|sh on some Merlin builds
+  if [ -x /opt/bin/opkg ]; then
+    echo /opt/bin/opkg
+  elif [ -x /opt/sbin/opkg ]; then
+    echo /opt/sbin/opkg
+  elif [ -x /opt/usr/bin/opkg ]; then
+    echo /opt/usr/bin/opkg
+  else
+    echo ""
+  fi
+}
+
 ss_check_jffs_ready() {
+  local nv
   if [ ! -d /jffs ]; then
     ss_error "/jffs not found — Asuswrt-Merlin with JFFS required"
     return 1
   fi
-  if command -v nvram >/dev/null 2>&1; then
-    if [ "$(nvram get jffs2_on 2>/dev/null)" = "0" ]; then
+  nv=$(ss_resolve_nvram)
+  if [ -n "$nv" ]; then
+    if [ "$("$nv" get jffs2_on 2>/dev/null)" = "0" ]; then
       ss_error "JFFS partition disabled (nvram jffs2_on=0). Enable under Administration → System"
       return 1
     fi
-    if [ "$(nvram get jffs2_scripts 2>/dev/null)" = "0" ]; then
+    if [ "$("$nv" get jffs2_scripts 2>/dev/null)" = "0" ]; then
       ss_error "JFFS custom scripts DISABLED. Enable: Administration → System → Enable JFFS custom scripts = Yes, then reboot"
       return 1
     fi
@@ -19,22 +46,36 @@ ss_check_jffs_ready() {
 }
 
 ss_require_entware() {
-  if [ ! -d /opt ] || { [ ! -x /opt/bin/opkg ] && [ ! -x /opt/sbin/opkg ]; }; then
-    ss_error "Entware is not installed. Install Entware via amtm first, then re-run: stealthsurf install"
+  local opkg
+  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
+  if [ -f /opt/etc/profile ]; then
+    # shellcheck disable=SC1091
+    . /opt/etc/profile 2>/dev/null || true
+    export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
+  fi
+  opkg=$(ss_resolve_opkg)
+  if [ -z "$opkg" ]; then
+    ss_error "Entware/opkg not found (/opt/bin/opkg). Install Entware via amtm, then: stealthsurf install"
     return 1
   fi
-  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
+  SS_OPKG="$opkg"
   return 0
 }
 
 ss_install_opkg() {
   local pkg="$1"
   local critical="${2:-0}"
-  if opkg list-installed 2>/dev/null | grep -q "^${pkg} "; then
+  local opkg="${SS_OPKG:-}"
+  [ -n "$opkg" ] || opkg=$(ss_resolve_opkg)
+  [ -n "$opkg" ] || {
+    ss_error "opkg missing"
+    return 1
+  }
+  if "$opkg" list-installed 2>/dev/null | grep -q "^${pkg} "; then
     return 0
   fi
   ss_info "Installing $pkg…"
-  if opkg install "$pkg" >/dev/null 2>&1; then
+  if "$opkg" install "$pkg" >/dev/null 2>&1; then
     ss_ok "Installed $pkg"
     return 0
   fi
@@ -48,11 +89,8 @@ ss_install_opkg() {
 
 ss_install_deps() {
   ss_require_entware || return 1
-  if ! command -v opkg >/dev/null 2>&1; then
-    ss_error "opkg not found in PATH"
-    return 1
-  fi
-  opkg update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
+  ss_info "Using opkg: ${SS_OPKG}"
+  "$SS_OPKG" update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
 
   # Critical — same baseline as xrayui dataplane
   ss_install_opkg curl 1 || return 1
