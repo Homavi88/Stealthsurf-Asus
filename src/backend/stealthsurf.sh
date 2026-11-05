@@ -6,6 +6,7 @@ import ./api_client.sh
 import ./link_parse.sh
 import ./routing.sh
 import ./policies.sh
+import ./logging.sh
 import ./firewall.sh
 import ./dnsmasq.sh
 import ./protocols.sh
@@ -145,10 +146,20 @@ connectivity)
   ss_connectivity_check "$2" "${3:-socks}"
   ;;
 logs)
-  ss_tail_logs "${2:-addon}" "${3:-100}"
+  ss_tail_logs "${2:-activity}" "${3:-100}"
+  ;;
+clear-logs)
+  ss_logs_clear "${2:-all}" || exit 1
+  ;;
+devices)
+  ss_log_devices_snapshot
+  ss_tail_logs devices 100
   ;;
 backup)
-  ss_backup
+  ss_backup "${2:-manual}" || exit 1
+  ;;
+backups)
+  ss_backup_list
   ;;
 restore)
   ss_restore "$2" || exit 1
@@ -196,8 +207,10 @@ Routing / policies / mode:
 Dataplane helpers:
   install-xray | geodata | protocols
   diag | test-config | connectivity [url] [socks|direct]
-  logs [addon|access|error] [lines]
-  backup | restore <archive.tar.gz>
+  logs [activity|addon|errors|devices|access|xray-error] [lines]
+  clear-logs [all|addon|activity|errors|devices]
+  devices                          # snapshot LAN IP/MAC into devices.log
+  backup [note] | backups | restore <archive.tar.gz|filename>
 EOF
   exit 1
   ;;

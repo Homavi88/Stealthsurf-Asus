@@ -266,25 +266,44 @@
     </div>
     <div class="row" style="margin-top:12px">
       <button id="btnInstallXray" class="secondary" type="button">Установить / найти Xray</button>
-      <button id="btnBackup" class="secondary" type="button">Backup настроек</button>
       <button id="btnUpdate" class="secondary" type="button">Update с GitHub Releases</button>
     </div>
+
+    <h2 style="margin-top:16px">Backup конфигураций</h2>
+    <div class="hint">Сохраняет conf, routing, outbounds, policies (с IP устройств), configs, xray.json. Ночной backup в 03:00. Авто-backup перед apply / restore / сменой режима.</div>
+    <div class="row">
+      <input id="backupNote" placeholder="заметка (опц.)" style="max-width:200px">
+      <button id="btnBackup" type="button">Создать backup</button>
+      <button id="btnBackupList" class="secondary" type="button">Обновить список</button>
+    </div>
+    <table>
+      <thead><tr><th>Файл</th><th>Когда</th><th>Заметка</th><th></th></tr></thead>
+      <tbody id="backupsTable"></tbody>
+    </table>
   </div>
 
   <div class="panel" id="tab-diag">
-    <h2>Диагностика</h2>
+    <h2>Диагностика и логи</h2>
     <div class="row">
       <button id="btnDiag" type="button">Снять diag dump</button>
       <button id="btnTestCfg" class="secondary" type="button">Тест xray.json</button>
       <button id="btnConnSocks" class="secondary" type="button">IP через SOCKS</button>
       <button id="btnConnDirect" class="secondary" type="button">IP напрямую</button>
-      <select id="logKind" style="max-width:120px">
-        <option value="addon">addon</option>
-        <option value="access">access</option>
-        <option value="error">error</option>
-      </select>
-      <button id="btnLogs" class="secondary" type="button">Логи</button>
     </div>
+    <div class="row">
+      <select id="logKind" style="max-width:160px">
+        <option value="activity">activity (действия)</option>
+        <option value="errors">errors</option>
+        <option value="devices">devices (IP/MAC)</option>
+        <option value="addon">addon</option>
+        <option value="access">xray access</option>
+        <option value="xray-error">xray error</option>
+      </select>
+      <button id="btnLogs" type="button">Показать логи</button>
+      <button id="btnDevicesSnap" class="secondary" type="button">Снимок устройств LAN</button>
+      <button id="btnClearLogs" class="danger" type="button">Очистить логи</button>
+    </div>
+    <div class="hint">Activity-лог пишет действия аддона и IP устройств при политиках / start / firewall.</div>
     <div id="diagBox" class="logbox">(пусто)</div>
   </div>
 

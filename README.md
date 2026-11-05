@@ -62,10 +62,14 @@ stealthsurf set-mode redirect|tproxy|proxy
 stealthsurf set-dns-mode OFF|BYPASS|REDIRECT
 stealthsurf start|stop|restart|status
 stealthsurf diag | test-config | connectivity
-stealthsurf backup | restore <file>
+stealthsurf backup [note] | backups | restore <file>
+stealthsurf logs activity|errors|devices
+stealthsurf devices                    # снимок LAN IP/MAC в лог
 stealthsurf update                     # с GitHub Releases
 stealthsurf uninstall
 ```
+
+Backup и логи: [docs/BACKUP_AND_LOGS.md](./docs/BACKUP_AND_LOGS.md).
 
 Полный список: `stealthsurf` без аргументов.
 

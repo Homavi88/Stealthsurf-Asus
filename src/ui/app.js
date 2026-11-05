@@ -455,8 +455,14 @@ function bind() {
     triggerService("setdnsmode", { dns_mode: $("dnsModeSelect").value })
   );
   $("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
-  $("btnBackup").addEventListener("click", () => triggerService("backup", {}));
   $("btnUpdate").addEventListener("click", () => triggerService("update", {}));
+  $("btnBackup").addEventListener("click", () =>
+    triggerService("backup", { note: $("backupNote").value.trim() || "manual" })
+  );
+  $("btnBackupList").addEventListener("click", () => {
+    triggerService("backuplist", {});
+    setTimeout(loadBackups, 8500);
+  });
 
   $("btnDiag").addEventListener("click", () => triggerService("diag", {}));
   $("btnTestCfg").addEventListener("click", () => triggerService("testconfig", {}));
@@ -464,27 +470,93 @@ function bind() {
   $("btnConnDirect").addEventListener("click", () =>
     triggerService("connectivity", { via: "direct" })
   );
-  $("btnLogs").addEventListener("click", () =>
-    triggerService("logs", { kind: $("logKind").value, lines: "150" })
+  $("btnLogs").addEventListener("click", () => {
+    triggerService("logs", { kind: $("logKind").value, lines: "200" });
+    setTimeout(loadLogPreview, 8500);
+  });
+  $("btnDevicesSnap").addEventListener("click", () => {
+    triggerService("devicesnapshot", {});
+    setTimeout(loadLogPreview, 8500);
+  });
+  $("btnClearLogs").addEventListener("click", () =>
+    triggerService("clearlogs", { kind: "all" })
   );
+}
 
-  // After diag/logs/connectivity, show response data
-  const origRefresh = refreshAll;
-  window.__ssShowResponseData = async () => {
-    try {
-      const response = await fetchJson(EXT + "/stealthsurf-response.json");
-      if (response && response.data) {
-        if (response.data.protocols) protocolsCache = response.data.protocols;
-        if (response.data.text) $("diagBox").textContent = response.data.text;
-        else if (response.data.ip) $("diagBox").textContent = JSON.stringify(response.data, null, 2);
-        else if (response.data.version || response.data.firewall)
-          $("diagBox").textContent = JSON.stringify(response.data, null, 2);
-        else if (Array.isArray(response.data) || response.data.mac)
-          renderClients(Array.isArray(response.data) ? response.data : []);
-      }
-    } catch (_) {}
+function renderBackups(list) {
+  const tbody = $("backupsTable");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  (list || []).forEach((b) => {
+    const tr = document.createElement("tr");
+    const when = b.created_at
+      ? new Date(Number(b.created_at) * 1000).toLocaleString()
+      : b.stamp || "—";
+    tr.innerHTML =
+      "<td>" +
+      (b.file || "—") +
+      "</td><td>" +
+      when +
+      "</td><td>" +
+      (b.note || "—") +
+      "</td><td></td>";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "small secondary";
+    btn.textContent = "Restore";
+    btn.addEventListener("click", () =>
+      triggerService("restore", { path: b.file || b.path })
+    );
+    tr.lastChild.appendChild(btn);
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadBackups() {
+  try {
+    const list = await fetchJson(EXT + "/backups.json").catch(() => []);
+    if (Array.isArray(list)) renderBackups(list);
+  } catch (_) {}
+  try {
+    const response = await fetchJson(EXT + "/stealthsurf-response.json");
+    if (response && response.data) {
+      if (Array.isArray(response.data)) renderBackups(response.data);
+      if (response.data.backups) renderBackups(response.data.backups);
+      if (response.data.path) setMsg("Backup: " + response.data.path, "ok");
+    }
+  } catch (_) {}
+}
+
+async function loadLogPreview() {
+  const kind = $("logKind").value;
+  const map = {
+    activity: "/activity.log",
+    errors: "/errors.log",
+    devices: "/devices.log",
+    addon: "/addon.log",
+    access: "/xray-access.log",
+    "xray-error": "/xray-error.log",
   };
+  try {
+    const response = await fetchJson(EXT + "/stealthsurf-response.json");
+    if (response && response.data && response.data.text) {
+      $("diagBox").textContent = response.data.text;
+      return;
+    }
+  } catch (_) {}
+  try {
+    const res = await fetch(EXT + (map[kind] || "/activity.log") + "?_=" + Date.now(), {
+      cache: "no-store",
+    });
+    const text = await res.text();
+    const lines = text.trim().split("\n");
+    $("diagBox").textContent = lines.slice(-200).join("\n") || "(пусто)";
+  } catch (e) {
+    $("diagBox").textContent = String(e);
+  }
 }
 
 bind();
 refreshAll();
+loadBackups();
+setTimeout(loadLogPreview, 300);

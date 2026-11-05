@@ -206,9 +206,14 @@ ss_api_sync_locations() {
 }
 
 ss_api_sync_all() {
-  ss_api_sync_configs >/dev/null || return 1
+  ss_activity "sync.start" "keys=$(ss_all_api_keys | wc -l | tr -d ' ')"
+  if ! ss_api_sync_configs >/dev/null; then
+    ss_activity "sync.fail" "configs sync failed"
+    return 1
+  fi
   ss_api_sync_locations >/dev/null || true
   ss_api_sync_subscriptions >/dev/null || true
+  ss_activity "sync.done" "configs=$(jq 'length' "$SS_CACHE_CONFIGS" 2>/dev/null || echo 0) subs=$(jq 'length' "$SS_CACHE_SUBSCRIPTIONS" 2>/dev/null || echo 0)"
   ss_ok "Full sync complete"
 }
 

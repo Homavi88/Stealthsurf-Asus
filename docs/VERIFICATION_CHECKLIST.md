@@ -50,12 +50,15 @@
 - [ ] Autosync (cron) обновляет кэш; watchdog поднимает упавший Xray
 - [ ] Rate-limit 429 даёт понятное сообщение
 
-## 5. Полировка
+## 5. Полировка / backup / логи
 
 - [ ] `stealthsurf diag` — dump iptables, env, protocols, state
-- [ ] Логи access/error/addon читаются в UI / CLI
-- [ ] `stealthsurf backup` / `restore` сохраняют ключи, routing, policies
-- [ ] Документация в `docs/` открывается и соответствует CLI
+- [ ] `stealthsurf backup` создаёт архив; в `policies.json` внутри есть `ip=` устройств
+- [ ] `stealthsurf backups` / restore из UI и CLI
+- [ ] `stealthsurf logs activity` показывает действия (start/apply/firewall)
+- [ ] `stealthsurf devices` пишет IP/MAC клиентов в `devices.log` и `activity.log`
+- [ ] Ошибки попадают в `logs/errors.log`
+- [ ] Документация: `docs/BACKUP_AND_LOGS.md`
 
 ## Быстрый smoke (минимум «уже пользуюсь»)
 

@@ -55,6 +55,8 @@ ss_apply_config_id() {
     ss_error "usage: apply <config_id>"
     return 1
   }
+  ss_activity "apply.start" "config_id=$config_id sole=$sole"
+  ss_backup_auto "pre-apply" || true
 
   entry=$(ss_cache_get_config "$config_id")
   if [ -z "$entry" ] || [ "$entry" = "null" ]; then
@@ -95,7 +97,11 @@ ss_apply_config_id() {
     ss_apply_protocol_config "$config_id" || return 1
   fi
 
-  ss_rebuild_and_restart || return 1
+  ss_rebuild_and_restart || {
+    ss_activity "apply.fail" "config_id=$config_id proto=$proto"
+    return 1
+  }
+  ss_activity "apply.done" "config_id=$config_id proto=$runtime tag=ss-$config_id"
   ss_ok "Applied config $config_id ($proto) as outbound ss-$config_id"
 }
 
@@ -136,12 +142,15 @@ ss_rebuild_and_restart() {
 }
 
 ss_start_inner() {
+  ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
   if [ ! -f "$XRAY_CONFIG_FILE" ]; then
     ss_error "No local Xray config. Run: stealthsurf apply <config_id> or rebuild"
+    ss_activity "start.fail" "no xray config"
     return 1
   fi
   ss_ensure_xray || {
     ss_error "xray not installed"
+    ss_activity "start.fail" "xray missing"
     return 1
   }
   [ -x "$XRAY_BIN" ] || XRAY_BIN=$(command -v xray)
@@ -149,12 +158,15 @@ ss_start_inner() {
   if ss_xray_running; then
     ss_info "Already running (pid $(cat "$XRAY_PIDFILE"))"
     ss_configure_firewall
+    ss_log_devices_snapshot 2>/dev/null || true
     ss_write_state
+    ss_activity "start.already" "pid=$(cat "$XRAY_PIDFILE")"
     return 0
   fi
 
   if ! "$XRAY_BIN" run -test -c "$XRAY_CONFIG_FILE" >/tmp/stealthsurf-xray-test.log 2>&1; then
     ss_error "Xray config test failed — see /tmp/stealthsurf-xray-test.log"
+    ss_activity "start.fail" "config test failed"
     return 1
   fi
 
@@ -170,23 +182,28 @@ ss_start_inner() {
       ss_dnsmasq_restart
       ;;
     esac
+    ss_log_devices_snapshot 2>/dev/null || true
     ss_ok "Xray started (pid $(cat "$XRAY_PIDFILE")), mode=$(ss_fw_detect_mode)"
+    ss_activity "start.done" "pid=$(cat "$XRAY_PIDFILE") mode=$(ss_fw_detect_mode)"
     ss_write_state
     return 0
   fi
   ss_error "Xray failed to stay up"
+  ss_activity "start.fail" "process died"
   rm -f "$XRAY_PIDFILE"
   ss_write_state
   return 1
 }
 
 ss_stop_inner() {
+  local pid=""
+  [ -f "$XRAY_PIDFILE" ] && pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
+  ss_activity "stop.begin" "pid=${pid:-none}"
   ss_cleanup_firewall 2>/dev/null
   ss_dnsmasq_cleanup 2>/dev/null
   ss_stop_all_runtimes 2>/dev/null
 
   if [ -f "$XRAY_PIDFILE" ]; then
-    local pid
     pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
     if [ -n "$pid" ]; then
       kill "$pid" 2>/dev/null
@@ -199,6 +216,7 @@ ss_stop_inner() {
   fi
   # Do NOT killall xray — other addons may use it
   ss_ok "Stopped (firewall cleaned, our PID only)"
+  ss_activity "stop.done" "firewall cleaned"
   ss_write_state
 }
 
@@ -237,6 +255,8 @@ ss_set_mode() {
     return 1
     ;;
   esac
+  ss_backup_auto "pre-set-mode" || true
+  ss_activity "mode.set" "from=${SS_MODE} to=${mode}"
   SS_MODE="$mode"
   SS_PROXY_MODE="$mode"
   ss_save_conf

@@ -71,15 +71,7 @@ ss_connectivity_check() {
   jq -nc --arg ip "$out" --arg via "${via:-direct}" '{ip:$ip, via:$via, ok:true}'
 }
 
-ss_tail_logs() {
-  local kind="${1:-addon}"
-  local lines="${2:-100}"
-  case "$kind" in
-  access) tail -n "$lines" "$XRAY_ACCESS_LOG" 2>/dev/null || echo "(no access log)" ;;
-  error) tail -n "$lines" "$XRAY_ERROR_LOG" 2>/dev/null || echo "(no error log)" ;;
-  *) tail -n "$lines" "$ADDON_LOGS_DIR/addon.log" 2>/dev/null || echo "(no addon log)" ;;
-  esac
-}
+# ss_tail_logs provided by logging.sh (addon|activity|errors|devices|access|xray-error)
 
 ss_watchdog_tick() {
   # If watchdog enabled and xray should be running, restart on death; optional failover tag

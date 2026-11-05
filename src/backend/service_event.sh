@@ -243,20 +243,37 @@ ss_service_event() {
     ;;
   logs)
     local kind lines
-    kind=$(printf '%s' "$payload" | jq -r '.kind // "addon"')
-    lines=$(printf '%s' "$payload" | jq -r '.lines // "100"')
-    ss_json_response true "logs" "$(jq -nc --arg t "$(ss_tail_logs "$kind" "$lines")" '{text:$t}')"
+    kind=$(printf '%s' "$payload" | jq -r '.kind // "activity"')
+    lines=$(printf '%s' "$payload" | jq -r '.lines // "150"')
+    ss_json_response true "logs" "$(jq -nc --arg t "$(ss_tail_logs "$kind" "$lines")" --arg kind "$kind" '{text:$t, kind:$kind}')"
+    ;;
+  clearlogs)
+    local kind
+    kind=$(printf '%s' "$payload" | jq -r '.kind // "all"')
+    ss_logs_clear "$kind" && ss_json_response true "logs cleared" null || ss_json_response false "clear failed" null
+    ;;
+  devicesnapshot)
+    ss_log_devices_snapshot
+    ss_json_response true "devices logged" "$(jq -nc --arg t "$(ss_tail_logs devices 80)" '{text:$t}')"
     ;;
   backup)
-    local path
-    path=$(ss_backup)
-    ss_json_response true "backup" "$(jq -nc --arg p "$path" '{path:$p}')"
+    local note path
+    note=$(printf '%s' "$payload" | jq -r '.note // "manual"')
+    path=$(ss_backup "$note")
+    if [ -n "$path" ] && [ -f "$path" ]; then
+      ss_json_response true "backup ok" "$(jq -nc --arg p "$path" --argjson list "$(ss_backup_list)" '{path:$p, backups:$list}')"
+    else
+      ss_json_response false "backup failed" null
+    fi
+    ;;
+  backuplist)
+    ss_json_response true "backups" "$(ss_backup_list)"
     ;;
   restore)
     local path
-    path=$(printf '%s' "$payload" | jq -r '.path // empty')
+    path=$(printf '%s' "$payload" | jq -r '.path // .file // empty')
     if ss_restore "$path"; then
-      ss_json_response true "restored" null
+      ss_json_response true "restored" "$(jq -nc --arg p "$path" '{path:$p}')"
     else
       ss_json_response false "restore failed" null
     fi

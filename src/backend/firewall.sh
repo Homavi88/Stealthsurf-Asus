@@ -190,6 +190,7 @@ ss_configure_firewall_redirect() {
   local port="$SS_REDIRECT_PORT"
   local policy_info has_rules has_catchall
 
+  ss_activity "firewall.redirect" "port=$port chain=$chain"
   ss_fw_ensure_chain nat "$chain"
   ss_fw_exclude_private nat "$chain"
   ss_fw_exclude_endpoints nat "$chain"
@@ -219,6 +220,7 @@ ss_configure_firewall_redirect() {
 
   ss_fw_link_chain nat PREROUTING "$chain"
   ss_fw_tcpmss_clamp
+  ss_log_policy_rules 2>/dev/null || true
   ss_ok "Firewall REDIRECT configured (port $port)"
 }
 
@@ -230,6 +232,7 @@ ss_configure_firewall_tproxy() {
   local table="$SS_TPROXY_TABLE"
   local policy_info has_rules has_catchall
 
+  ss_activity "firewall.tproxy" "port=$port mark=$mark table=$table"
   # Policy routing
   ip rule del fwmark "$mark" lookup "$table" 2>/dev/null || true
   ip rule add fwmark "$mark" lookup "$table" 2>/dev/null || true
@@ -265,6 +268,7 @@ ss_configure_firewall_tproxy() {
 
   ss_fw_link_chain mangle PREROUTING "$chain"
   ss_fw_tcpmss_clamp
+  ss_log_policy_rules 2>/dev/null || true
   ss_ok "Firewall TPROXY configured (port $port, mark $mark, table $table)"
 }
 
@@ -287,6 +291,7 @@ ss_configure_firewall() {
 
 ss_cleanup_firewall() {
   local chain="$SS_FW_CHAIN"
+  ss_activity "firewall.cleanup" "chain=$chain"
   ss_fw_unlink_chain nat PREROUTING "$chain"
   ss_fw_unlink_chain mangle PREROUTING "$chain"
   ss_fw_ipt nat -F "$chain" 2>/dev/null

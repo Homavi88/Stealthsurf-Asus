@@ -67,7 +67,10 @@ ss_policies_set() {
     ss_error "policies payload must be a JSON object"
     return 1
   fi
+  ss_backup_auto "pre-policies" || true
   printf '%s' "$json" | jq '.' >"$SS_POLICIES_FILE"
+  ss_log_policy_rules 2>/dev/null || true
+  ss_log_devices_snapshot 2>/dev/null || true
   ss_ok "Policies saved ($(jq '.rules|length' "$SS_POLICIES_FILE") rules)"
 }
 

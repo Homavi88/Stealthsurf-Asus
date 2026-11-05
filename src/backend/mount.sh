@@ -61,8 +61,12 @@ ss_mount_ui() {
   ln -sf "$SS_POLICIES_FILE" "$ADDON_WEB_DIR/policies.json" 2>/dev/null || true
   ln -sf "$SS_DIAG_FILE" "$ADDON_WEB_DIR/diag.json" 2>/dev/null || true
   ln -sf "$ADDON_LOGS_DIR/addon.log" "$ADDON_WEB_DIR/addon.log" 2>/dev/null || true
+  ln -sf "$ADDON_LOGS_DIR/activity.log" "$ADDON_WEB_DIR/activity.log" 2>/dev/null || true
+  ln -sf "$ADDON_LOGS_DIR/errors.log" "$ADDON_WEB_DIR/errors.log" 2>/dev/null || true
+  ln -sf "$ADDON_LOGS_DIR/devices.log" "$ADDON_WEB_DIR/devices.log" 2>/dev/null || true
   ln -sf "$XRAY_ACCESS_LOG" "$ADDON_WEB_DIR/xray-access.log" 2>/dev/null || true
   ln -sf "$XRAY_ERROR_LOG" "$ADDON_WEB_DIR/xray-error.log" 2>/dev/null || true
+  ln -sf "$ADDON_BACKUP_DIR/index.json" "$ADDON_WEB_DIR/backups.json" 2>/dev/null || true
   ln -sf "$SS_UI_RESPONSE" "$ADDON_WEB_DIR/stealthsurf-response.json" 2>/dev/null || : >"$SS_UI_RESPONSE"
 
   # Helper CGI-like drop for payload (writable by httpd via tmp)
