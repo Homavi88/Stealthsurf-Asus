@@ -16,15 +16,37 @@ HYSTERIA_RELEASE_API="https://api.github.com/repos/apernet/hysteria/releases/lat
 # ---------- Xray JSON from API (preferred over share-link parse) ----------
 
 ss_outbound_from_xray_config() {
-  # Extract first non-freedom/blackhole outbound from API xray_config JSON string
+  # Extract first usable proxy outbound from API xray_config JSON string.
+  # StealthSurf often returns a *settings wrapper* with nested `.xray_config` that may
+  # only contain freedom/blackhole and optional Cloudflare WARP (wireguard tag=warp).
+  # WARP is not the StealthSurf node — skip it so caller falls back to connection_url.
   local xray_json="$1"
   local tag="$2"
   local parsed
-  # xray_config may itself be a JSON string (escaped) or raw object
   parsed=$(printf '%s' "$xray_json" | jq -c '
-    (if type == "string" then (fromjson? // .) else . end) as $root |
-    ($root.outbounds // $root.outbound // (if $root.protocol then [$root] else [] end)) as $obs |
-    ($obs | map(select(.protocol != "freedom" and .protocol != "blackhole" and .protocol != "dns")) | first) // empty
+    def decode:
+      if type == "string" then (fromjson? // .) else . end;
+    def is_proxy($o):
+      ($o.protocol // "") as $p |
+      ($o.tag // "") as $t |
+      ($p != "freedom" and $p != "blackhole" and $p != "dns")
+      and ($t != "warp")
+      and ($t != "direct")
+      and ($t != "block")
+      # WARP helper outbound — ignore; WG nodes use connection_url INI instead
+      and ($p != "wireguard");
+    def pick_obs($doc):
+      ($doc.outbounds // $doc.outbound // (if $doc.protocol then [$doc] else [] end))
+      | if type == "array" then . elif . == null then [] else [.] end
+      | map(select(is_proxy(.)));
+    decode as $root |
+    # 1) wrapper with nested xray_config (string or object)
+    (if $root.xray_config != null then
+        pick_obs(($root.xray_config | decode))
+      else [] end) as $nested |
+    # 2) root itself as Xray document / outbound
+    (pick_obs($root)) as $direct |
+    (($nested + $direct) | first) // empty
   ' 2>/dev/null)
   [ -n "$parsed" ] && [ "$parsed" != "null" ] || return 1
   if [ -n "$tag" ]; then
