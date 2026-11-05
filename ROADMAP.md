@@ -8,11 +8,37 @@
 
 ---
 
+## Продуктовая идея (целевой UX)
+
+Идея пользователя — **правильная** и должна стать ядром аддона:
+
+1. В аддон на роутере вводятся **API-ключ(и)** StealthSurf (учётки / ключи провайдера).
+2. Аддон по API забирает **все** VPN-конфигурации и связанные подписки аккаунта(ов): список, `connection_url`, протокол, локация, статус.
+3. В WebUI роутера появляется **каталог всех подключений** провайдера — не один «активный» туннель, а полный набор конфигов с аккаунта.
+4. Пользователь на роутере:
+   - включает нужные конфиги как рабочие outbounds;
+   - для **каждого** VPN-конфига (или поверх них) задаёт правила: какие **домены / geosite / IP / CIDR** идут через это подключение;
+   - остальной трафик — default outbound (один из конфигов) или `direct` / `block`.
+
+Технически это классическая схема Xray: **много outbounds** (по одному на StealthSurf config id) + **routing rules** (`domain:…` → `outboundTag = ss-config-101`).  
+Сейчас в коде есть только sync списка и apply **одного** конфига — multi-outbound и «домены → конкретный VPN» ещё **не реализованы** (см. фазу 3.0 и DoD ниже).
+
+Пример целевого сценария:
+
+| Правило | Куда |
+| --- | --- |
+| `geosite:category-ads` | block |
+| `domain:netflix.com`, `geosite:netflix` | конфиг «US-1» (StealthSurf id=101) |
+| `domain:ru`, `geoip:ru`, private | direct |
+| всё остальное | конфиг «NL-2» (StealthSurf id=205) |
+
+---
+
 ## Текущее состояние
 
 Уже есть:
 
-- клиент StealthSurf API (API-ключ, sync конфигов, смена location/protocol);
+- клиент StealthSurf API (один API-ключ, sync конфигов, смена location/protocol);
 - сборка `connection_url` → outbound Xray (VLESS / Trojan / Shadowsocks);
 - локальные inbound SOCKS (`10808`) и HTTP (`10809`);
 - CLI start/stop/status и черновой WebUI.
@@ -22,7 +48,10 @@
 - перехвата LAN-трафика (transparent proxy);
 - iptables / ip rule / TPROXY;
 - политик Bypass/Redirect по MAC и портам;
-- routing по доменам, CIDR, geoip/geosite;
+- **каталога всех конфигов/подписок как одновременно доступных outbounds**;
+- **правил «домен / список → конкретный VPN-конфиг StealthSurf»** (сейчас routing в roadmap описан лишь как proxy|direct|block на один туннель);
+- нескольких API-ключей / учёток и единый каталог с них;
+- routing по доменам, CIDR, geoip/geosite (в полном виде);
 - DNS hijack + dnsmasq/ipset;
 - восстановления правил после reboot / WAN up;
 - надёжной поставки Xray-бинаря и Release-установки;
@@ -42,7 +71,9 @@
 | После reboot | UI смонтирован, Xray и firewall-правила поднимаются сами |
 | Клиент в LAN без прокси в ОС | внешний IP = IP ноды StealthSurf |
 | Bypass по MAC | выбранное устройство идёт напрямую, остальные через VPN |
-| Правило domain/CIDR | часть трафика direct, часть proxy (или block) |
+| API-ключ(и) в аддоне | Sync показывает **все** конфиги/подписки аккаунта(ов) StealthSurf |
+| Правила на конфиг | Домен/geosite/IP можно привязать к **конкретному** VPN-конфигу (не только «в VPN / мимо») |
+| Default + split | Есть default outbound и набор split-правил без ручного JSON |
 | Stop / uninstall | iptables и ip rule очищены, интернет жив |
 | Смена сервера/протокола в UI | PATCH в StealthSurf API → новый `connection_url` → apply без ручного SSH |
 | Любой протокол аккаунта StealthSurf | Можно выбрать в UI и поднять на роутере (VLESS/Trojan/SS/Hysteria2/WG/AWG/OpenFlux и subconfig HTTP/SOCKS5) |
@@ -122,28 +153,55 @@
 
 ---
 
-## Фаза 3 — Правила адресов и доменов
+## Фаза 3 — Каталог конфигов StealthSurf + правила «домен → VPN»
 
-**Приоритет: P1**
+**Приоритет: P1 (ядро продуктовой идеи)**
 
-Два слоя (как в xrayui Routing):
+### 3.0 Каталог подключений с API (control plane)
 
-### 3.1 Routing внутри Xray
+- [ ] Ввод и хранение **одного или нескольких** API-ключей StealthSurf на роутере
+- [ ] Sync по каждому ключу:
+  - [ ] `GET /configs` — все VPN-конфигурации
+  - [ ] `GET /profile/custom-subscriptions` (+ items) — сборные подписки, если есть
+  - [ ] кэш на роутере: id, title, protocol, location, expires, online, `connection_url`
+- [ ] UI «Мои подключения»: таблица всех конфигов с аккаунта(ов), фильтр, статус sync
+- [ ] Включение конфига в dataplane: «использовать как outbound» (можно несколько сразу)
+- [ ] Выбор **default** outbound (куда идёт трафик без спец. правила)
+- [ ] Per-config действия в UI: сменить location/protocol через API, обновить URL, вкл/выкл outbound
+- [ ] После sync/PATCH — пересобрать локальный Xray (или multi-runtime) config без ручного SSH
 
-- [ ] Правила `domain` / `geosite` / `geoip` / `ip` / `cidr` → `proxy` | `direct` | `block`
+### 3.1 Routing: домены и адреса → конкретный VPN-конфиг
+
+Два слоя (как в xrayui Routing), но цель — не только `proxy|direct|block`, а **привязка к StealthSurf config id**:
+
+- [ ] Каждый включённый StealthSurf config → отдельный outbound с стабильным tag (`ss-<config_id>`)
+- [ ] Правила пользователя в UI:
+  - [ ] matcher: `domain` / `full` / `keyword` / `regexp` / `geosite` / `geoip` / `ip` / `cidr`
+  - [ ] action outbound: `ss-<id>` | `direct` | `block` (и позже balancer)
+  - [ ] порядок правил (priority), как в Xray routing
+- [ ] UI: для выбранного VPN-конфига — список «его» доменов/групп; общий экран всех правил
+- [ ] Генерация `routing.rules` в Xray JSON из этих правил + anti-loop для всех endpoint’ов активных нод
 - [ ] Загрузка/обновление `geoip.dat` / `geosite.dat`
-- [ ] Пресеты под StealthSurf:
-  - [ ] весь трафик через VPN
-  - [ ] RU / private → direct, остальное → VPN
-  - [ ] только выбранные сайты/сервисы через VPN
+- [ ] Пресеты:
+  - [ ] весь трафик через один выбранный конфиг
+  - [ ] RU / private → direct, остальное → default VPN
+  - [ ] стриминг (geosite) → конфиг страны A; остальное → конфиг B
   - [ ] block ads / malware (опционально)
+- [ ] Валидация: нельзя сослаться на выключенный/удалённый config id
 
 ### 3.2 DNS + ipset (ускорение и разгрузка CPU)
 
 - [ ] Перехват DNS LAN (udp/tcp 53) при необходимости
-- [ ] Интеграция с dnsmasq: `ipset=` для доменов
+- [ ] Интеграция с dnsmasq: `ipset=` для доменов (в т.ч. per-outbound наборы, где возможно)
 - [ ] Режимы DNS bypass: `OFF` | `BYPASS` | `REDIRECT` (как в xrayui General Options)
 - [ ] Сохранение/восстановление learned ipset
+
+### 3.3 Критерий фазы
+
+- [ ] После ввода API-ключа в UI видны все конфиги аккаунта без ручного импорта ссылок
+- [ ] Можно одновременно держать ≥2 StealthSurf outbounds
+- [ ] Правило «`domain:example.com` → конфиг #101» реально уводит только этот трафик в #101
+- [ ] Остальной трафик идёт в default outbound или direct по настройке
 
 ---
 
@@ -151,8 +209,8 @@
 
 **Приоритет: P2**
 
-- [ ] Авто-sync `connection_url` по cron и после `PATCH /configs/:id/settings`
-- [ ] Отображение server stats / online / expires в UI
+- [ ] Авто-sync всех ключей/конфигов по cron и после `PATCH /configs/:id/settings`
+- [ ] Отображение server stats / online / expires в UI (по каждому конфигу)
 - [ ] Обработка rate-limit и ошибок API с понятными сообщениями
 - [ ] **Полная поддержка всех протоколов StealthSurf** (как у провайдера в API / docs; UI и dataplane должны уметь выбрать, применить и поднять каждый):
   - [ ] `vless`
@@ -167,8 +225,11 @@
   - [ ] HTTP / SOCKS5 subconfig (доп. прокси конфигурации, где отдаёт StealthSurf)
   - [ ] Единый Apply: парсинг `connection_url` / конфига протокола → нужный runtime (Xray / hysteria / awg / wg) + firewall
   - [ ] В UI: только реально поддерживаемые на роутере протоколы активны; остальные — понятный статус «в разработке», без «тихого» apply
-- [ ] Сборные подписки StealthSurf (`custom-subscriptions`) — опционально
-- [ ] Watchdog / failover при падении ноды
+  - [ ] Multi-protocol: разные конфиги в каталоге могут работать на разных runtime одновременно (где это позволяет роутер)
+- [ ] Сборные подписки StealthSurf (`custom-subscriptions`) в каталоге наравне с `/configs`
+- [ ] Watchdog / failover: если outbound `ss-<id>` упал — fallback на другой конфиг / direct
+
+---
 
 ---
 
@@ -191,16 +252,18 @@
 Фаза 0 (платформа)
     → Фаза 1 (REDIRECT, затем TPROXY)
         → Фаза 2 (политики MAC)
-            → Фаза 3 (routing + DNS/ipset)
-                → Фаза 4 (StealthSurf UX / протоколы)
-                    → Фаза 5 (полировка)
+            → Фаза 3.0–3.1 (каталог API-конфигов + домен → ss-<id>)
+                → Фаза 3.2 (DNS/ipset)
+                    → Фаза 4 (все протоколы / multi-runtime)
+                        → Фаза 5 (полировка)
 ```
 
 Минимальный путь к «уже пользуюсь каждый день»:
 
 1. Фаза 0  
-2. Фаза 1 (хотя бы REDIRECT)  
-3. Простейший bypass «весь LAN в VPN» + исключение 1–2 MAC  
+2. Фаза 1 (хотя бы REDIRECT) + один StealthSurf config как default  
+3. Фаза 3.0–3.1: каталог с API + хотя бы split «домены → конфиг A / остальное → конфиг B»  
+4. Политики MAC (фаза 2) по необходимости  
 
 Остальное можно наращивать итерациями.
 
@@ -214,9 +277,10 @@
 | Transparent rules | `firewall.sh`, `tun.sh` | новый `src/backend/firewall.sh` (+ опционально `tun.sh`) |
 | DNS / ipset | `dnsmasq.sh` | новый `src/backend/dnsmasq.sh` |
 | Политики клиентов | Bypass/Redirect UI + firewall client rules | UI + хранение policy JSON + iptables |
-| Routing/geo | routing UI + geodata | генератор routing в Xray JSON + geodata update |
+| Routing/geo | routing UI + geodata | генератор routing: matcher → `ss-<config_id>` / direct / block |
+| Несколько outbound | outbounds + tags | каждый StealthSurf config = outbound tag |
 | Хуки Merlin | `install.sh`, `mount.sh`, cron | доработать `install.sh` / `hooks.sh` |
-| Провайдер VPN | (подписки URL) | уже есть через StealthSurf API — сохранить как control plane |
+| Провайдер VPN | (подписки URL) | StealthSurf API keys → полный каталог configs/subscriptions |
 
 Код xrayui **не копируем целиком**: берём паттерны Merlin/dataplane, StealthSurf-specific UX и API оставляем своими.
 
