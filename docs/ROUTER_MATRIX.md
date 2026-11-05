@@ -1,6 +1,8 @@
 # Матрица моделей роутеров
 
-Проверка на реальном железе. Отмечайте результаты после smoke-теста.
+Проверка на реальном железе после установки **v1.0.8+**. Отмечайте результаты после smoke-теста ([VERIFICATION_CHECKLIST.md](./VERIFICATION_CHECKLIST.md)).
+
+Установка: `curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh`
 
 | Модель | Merlin | Entware | REDIRECT | TPROXY | Заметки |
 | --- | --- | --- | --- | --- | --- |

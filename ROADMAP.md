@@ -1,7 +1,8 @@
 # Roadmap: до полноценной работы на роутере
 
-> **Статус: реализовано в v1.0.0.** Все фазы 0–5 отмечены выполненными.  
-> Практическая проверка на железе: [docs/VERIFICATION_CHECKLIST.md](./docs/VERIFICATION_CHECKLIST.md).
+> **Статус: реализовано в v1.0.8** (код + GitHub Release). Все фазы 0–5 выполнены.  
+> Установка: [docs/INSTALL.md](./docs/INSTALL.md) · one-liner в [README.md](./README.md).  
+> Осталось только **smoke на вашем роутере**: [docs/VERIFICATION_CHECKLIST.md](./docs/VERIFICATION_CHECKLIST.md) и отметить модель в [docs/ROUTER_MATRIX.md](./docs/ROUTER_MATRIX.md).
 
 Документ описывает целевую архитектуру аддона **StealthSurf UI for Asuswrt-Merlin**: трафик LAN через VPN StealthSurf, политики устройств и правила по адресам/доменам.
 
@@ -37,7 +38,7 @@
 
 ---
 
-## Текущее состояние (v1.0.0)
+## Текущее состояние (v1.0.8)
 
 Реализовано:
 
@@ -45,7 +46,8 @@
 - каталог конфигов → несколько outbounds `ss-<id>` + default + routing domain/geosite/geoip/ip → outbound;
 - transparent proxy: REDIRECT и TPROXY, firewall `STEALTHSURF`, anti-loop, DNS modes;
 - политики Bypass/Redirect по MAC/портам;
-- multi-runtime: Xray + Hysteria2 / WG / AWG (при наличии бинарей; OpenFlux — «в разработке»);
+- multi-runtime: Xray + Hysteria2 / WG / AWG (при наличии бинарей); OpenFlux через proxy в `xray_config`;
+- короткий CLI `ssurf` + sync fingerprint (сайт → rebuild на роутере);
 - хуки Merlin (services-start, service-event, nat-start, firewall-start, dnsmasq.postconf), flock, PID без killall;
 - автоскачивание Xray, geodata, cron autosync/watchdog, diag/logs/backup/update, CI Releases;
 - WebUI: ключи, каталог, routing, политики, режим/DNS, диагностика.

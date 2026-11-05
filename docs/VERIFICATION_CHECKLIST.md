@@ -6,7 +6,7 @@
 
 - [ ] `curl -fsSL …/install.sh | sh` завершается без ошибки (Entware обязателен)
 - [ ] В WebUI есть вкладка **VPN → StealthSurf** после re-login
-- [ ] `stealthsurf version` → `1.0.0`
+- [ ] `ssurf v` / `stealthsurf version` → `1.0.8`
 - [ ] `which xray` или `/opt/sbin/xray` существует (`stealthsurf install-xray` при необходимости)
 - [ ] После reboot: UI снова смонтирован, при наличии конфига — автостарт
 - [ ] Параллельный `start`/`stop` не гоняет гонки (`flock`)
@@ -69,11 +69,13 @@
 ## Быстрый smoke (минимум «уже пользуюсь»)
 
 ```sh
-stealthsurf set-key 'stlth_…'
-stealthsurf sync
-stealthsurf apply <id>
-stealthsurf set-mode redirect
-stealthsurf start
+ssurf key 'stlth_…'
+ssurf sy
+ssurf ap <id>
+ssurf mode redirect
+ssurf up
 # телефон в Wi‑Fi → проверить IP
-stealthsurf stop
+ssurf dn
 ```
+
+После успешного smoke отметьте модель в [ROUTER_MATRIX.md](./ROUTER_MATRIX.md).
