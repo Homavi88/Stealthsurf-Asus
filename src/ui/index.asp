@@ -226,6 +226,43 @@ function initial() {
     font-size: 12px;
     margin-left: auto;
   }
+  .ss-suggest-wrap { position: relative; display: inline-block; vertical-align: middle; }
+  .ss-suggest-box {
+    display: none;
+    position: absolute;
+    z-index: 40;
+    left: 0;
+    right: 0;
+    top: 100%;
+    max-height: 180px;
+    overflow: auto;
+    background: #2f3a3e;
+    border: 1px solid #fc0;
+    margin-top: 2px;
+  }
+  .ss-suggest-box.show { display: block; }
+  .ss-suggest-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 5px 8px;
+    border: 0;
+    background: transparent;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .ss-suggest-item:hover,
+  .ss-suggest-item.active {
+    background: #4d595d;
+    color: #fc0;
+  }
+  .ss-suggest-empty {
+    padding: 6px 8px;
+    color: #9ab;
+    font-size: 11px;
+  }
+  #ruleMatcher { width: 260px; }
   #conflictBanner {
     display: none;
     margin: 8px 0 12px;
@@ -502,7 +539,7 @@ function initial() {
                   <!-- Routing -->
                   <div class="ss-panel" id="tab-routing">
                     <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Правила: домен / geo → outbound</td></tr></thead>
+                      <thead><tr><td colspan="2">Правила: домен / geo → VPN из каталога</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Пресет</th>
@@ -519,17 +556,63 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Правила JSON</th>
+                          <th>Новое правило</th>
+                          <td>
+                            <div style="margin-bottom:6px">
+                              <select id="ruleType" class="input_15_table" title="тип matcher">
+                                <option value="domain">domain (поддомены)</option>
+                                <option value="full">full (точный хост)</option>
+                                <option value="keyword">keyword</option>
+                                <option value="geosite">geosite ( Loyalsoldier )</option>
+                                <option value="geoip">geoip</option>
+                                <option value="ip">ip / cidr</option>
+                                <option value="regexp">regexp</option>
+                              </select>
+                              <select id="ruleOutbound" class="input_25_table" style="margin-left:6px" title="куда слать"></select>
+                            </div>
+                            <div style="margin-bottom:6px">
+                              <span class="ss-suggest-wrap">
+                                <input id="ruleMatcher" class="input_32_table" type="text" autocomplete="off" placeholder="домен или geosite/geoip…" spellcheck="false">
+                                <div id="ruleSuggestBox" class="ss-suggest-box" role="listbox"></div>
+                              </span>
+                              <input id="ruleName" class="input_15_table" type="text" placeholder="имя (опц.)" style="margin-left:6px" maxlength="40">
+                              <input id="rulePriority" class="input_15_table" type="number" placeholder="prio" style="width:70px;margin-left:6px" min="1" max="9999">
+                            </div>
+                            <div id="ruleSuggestHint" class="ss-hint">
+                              Начните вводить домен — подсказки из списка популярных сайтов. Для geosite/geoip — категории из репозитория geodata.
+                            </div>
+                            <div class="ss-row-buttons" style="margin-top:6px">
+                              <input id="btnAddRule" class="button_gen button_gen_small" type="button" value="Добавить в список">
+                              <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing + Apply">
+                              <input id="btnGeodata" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite">
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <th>Текущие правила</th>
+                          <td>
+                            <table class="ss-data-table">
+                              <thead>
+                                <tr>
+                                  <th>#</th><th>Имя</th><th>Тип</th><th>Matcher</th><th>Outbound</th><th>Prio</th><th></th>
+                                </tr>
+                              </thead>
+                              <tbody id="rulesTable"></tbody>
+                            </table>
+                            <div class="ss-hint" style="margin-top:6px">
+                              Outbound <code>ss-&lt;id&gt;</code> — VPN из API-ключа (включите конфиг на вкладке «Мои подключения»).
+                              Geosite/geoip берутся из файлов после «Обновить geoip/geosite».
+                            </div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <th>JSON (дополнительно)</th>
                           <td>
                             <textarea id="routingJson" spellcheck="false"></textarea>
                             <div class="ss-hint">
-                              Типы: <code>domain</code>, <code>full</code>, <code>keyword</code>, <code>regexp</code>,
+                              Редактируйте вручную при необходимости. Типы:
+                              <code>domain</code>, <code>full</code>, <code>keyword</code>, <code>regexp</code>,
                               <code>geosite</code>, <code>geoip</code>, <code>ip</code>, <code>cidr</code>.
-                              Поле <code>outbound</code>: <code>ss-101</code> / <code>direct</code> / <code>block</code>.
-                            </div>
-                            <div class="ss-row-buttons" style="margin-top:6px">
-                              <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing + Apply">
-                              <input id="btnGeodata" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite">
                             </div>
                           </td>
                         </tr>
@@ -728,6 +811,7 @@ function initial() {
 </form>
 
 <div id="footer"></div>
+<script type="text/javascript" src="/ext/stealthsurf/routing-suggest.js"></script>
 <script type="text/javascript" src="/ext/stealthsurf/app.js"></script>
 </body>
 </html>

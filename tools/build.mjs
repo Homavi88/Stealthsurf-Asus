@@ -32,6 +32,7 @@ const merged = inlineShellImports(join(root, "src", "backend", "stealthsurf.sh")
 fs.writeFileSync(join(dist, "stealthsurf"), merged, { mode: 0o755 });
 fs.copyFileSync(join(root, "src", "ui", "index.asp"), join(dist, "index.asp"));
 fs.copyFileSync(join(root, "src", "ui", "app.js"), join(dist, "app.js"));
+fs.copyFileSync(join(root, "src", "ui", "routing-suggest.js"), join(dist, "routing-suggest.js"));
 
-console.log("Built dist/stealthsurf, dist/index.asp, dist/app.js");
+console.log("Built dist/stealthsurf, dist/index.asp, dist/app.js, dist/routing-suggest.js");
 console.log(`Shell size: ${merged.length} bytes`);

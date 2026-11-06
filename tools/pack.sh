@@ -12,7 +12,7 @@ node "$ROOT/tools/build.mjs"
 
 rm -rf "$STAGE"
 mkdir -p "$STAGE/stealthsurf" "$PACKAGED"
-cp "$DIST/stealthsurf" "$DIST/index.asp" "$DIST/app.js" "$STAGE/stealthsurf/"
+cp "$DIST/stealthsurf" "$DIST/index.asp" "$DIST/app.js" "$DIST/routing-suggest.js" "$STAGE/stealthsurf/"
 chmod 0755 "$STAGE/stealthsurf/stealthsurf"
 tar -czf "$OUT" -C "$STAGE" stealthsurf
 # Keep a copy at repo root for local testing (gitignored via *.tar.gz — packaged/ is tracked)
