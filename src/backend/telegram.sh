@@ -56,15 +56,111 @@ ss_telegram_chat_allowed() {
   return 1
 }
 
+ss_telegram_resolve_token() {
+  # Prefer explicit arg; treat UI mask / empty as "use saved"
+  local incoming="${1:-}"
+  ss_telegram_defaults
+  case "$incoming" in
+  "" | "********" | "***" | "__keep__" | "••••••••")
+    printf '%s' "${SS_TG_BOT_TOKEN:-}"
+    ;;
+  *)
+    printf '%s' "$incoming"
+    ;;
+  esac
+}
+
 ss_telegram_api() {
   # ss_telegram_api <method> [curl form args...]
+  # Optional env SS_TG_API_TOKEN overrides saved bot token for one call (tests).
   local method="$1"
+  local token
   shift
   ss_telegram_defaults
-  [ -n "$SS_TG_BOT_TOKEN" ] || return 1
+  token="${SS_TG_API_TOKEN:-$SS_TG_BOT_TOKEN}"
+  [ -n "$token" ] || return 1
   curl -sS --connect-timeout 8 --max-time 40 \
     "$@" \
-    "${SS_TG_API_BASE}/bot${SS_TG_BOT_TOKEN}/${method}" 2>/dev/null
+    "${SS_TG_API_BASE}/bot${token}/${method}" 2>/dev/null
+}
+
+ss_telegram_test_connection() {
+  # Probe Bot API getMe (+ optional getChat for first whitelist id).
+  # Args: [bot_token] [chat_ids]
+  # Prints JSON: {ok, username, bot_id, first_name, chat_ok, chat_id, error, latency_ms}
+  local token chat_ids json ok username bot_id first_name err chat_json chat_ok chat_id t0 t1 ms
+  token=$(ss_telegram_resolve_token "${1:-}")
+  chat_ids=$(ss_telegram_normalize_chat_ids "${2:-$SS_TG_CHAT_IDS}")
+  if [ -z "$token" ]; then
+    jq -nc '{ok:false, error:"bot_token missing", username:null, bot_id:null, chat_ok:false, chat_id:null, latency_ms:null}'
+    return 1
+  fi
+
+  t0=$(date +%s 2>/dev/null || echo 0)
+  SS_TG_API_TOKEN="$token"
+  export SS_TG_API_TOKEN
+  json=$(ss_telegram_api getMe -G --max-time 15)
+  unset SS_TG_API_TOKEN
+  t1=$(date +%s 2>/dev/null || echo 0)
+  ms=$(( (t1 - t0) * 1000 ))
+  [ "$ms" -ge 0 ] 2>/dev/null || ms=null
+
+  if [ -z "$json" ]; then
+    jq -nc --argjson ms "${ms:-null}" \
+      '{ok:false, error:"no response from api.telegram.org (network / DNS / firewall)", username:null, bot_id:null, chat_ok:false, chat_id:null, latency_ms:$ms}'
+    return 1
+  fi
+
+  ok=$(printf '%s' "$json" | jq -r '.ok // false' 2>/dev/null || echo false)
+  if [ "$ok" != "true" ]; then
+    err=$(printf '%s' "$json" | jq -r '.description // .error_code // "unauthorized or invalid token"' 2>/dev/null || echo "invalid token")
+    jq -nc --arg err "$err" --argjson ms "${ms:-null}" \
+      '{ok:false, error:$err, username:null, bot_id:null, chat_ok:false, chat_id:null, latency_ms:$ms}'
+    return 1
+  fi
+
+  username=$(printf '%s' "$json" | jq -r '.result.username // empty' 2>/dev/null || true)
+  bot_id=$(printf '%s' "$json" | jq -r '.result.id // empty' 2>/dev/null || true)
+  first_name=$(printf '%s' "$json" | jq -r '.result.first_name // empty' 2>/dev/null || true)
+
+  chat_ok=false
+  chat_id=""
+  err=""
+  # Optional: verify first whitelist chat is reachable (bot can see it)
+  if [ -n "$chat_ids" ]; then
+    chat_id=$(printf '%s' "$chat_ids" | awk '{print $1}')
+    if [ -n "$chat_id" ]; then
+      SS_TG_API_TOKEN="$token"
+      export SS_TG_API_TOKEN
+      chat_json=$(ss_telegram_api getChat -G --data-urlencode "chat_id=${chat_id}" --max-time 12)
+      unset SS_TG_API_TOKEN
+      if printf '%s' "$chat_json" | jq -e '.ok == true' >/dev/null 2>&1; then
+        chat_ok=true
+      else
+        err=$(printf '%s' "$chat_json" | jq -r '.description // "chat not reachable (напишите боту /start)"' 2>/dev/null || echo "chat not reachable")
+      fi
+    fi
+  fi
+
+  jq -nc \
+    --arg user "$username" \
+    --arg bid "$bot_id" \
+    --arg name "$first_name" \
+    --arg cid "$chat_id" \
+    --arg err "$err" \
+    --argjson chat_ok "$chat_ok" \
+    --argjson ms "${ms:-null}" \
+    '{
+      ok: true,
+      username: (if $user=="" then null else $user end),
+      bot_id: (if $bid=="" then null else ($bid|tonumber? // $bid) end),
+      first_name: (if $name=="" then null else $name end),
+      chat_ok: $chat_ok,
+      chat_id: (if $cid=="" then null else $cid end),
+      error: (if $err=="" then null else $err end),
+      latency_ms: $ms
+    }'
+  return 0
 }
 
 ss_telegram_send() {

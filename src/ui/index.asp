@@ -855,6 +855,13 @@ function initial() {
                               <input id="setTgChatIds" class="input_32_table" type="text" maxlength="256" placeholder="123456789, 987654321">
                             </div>
                           </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <span class="row-buttons">
+                              <input id="btnTgTest" class="button_gen button_gen_small" type="button" value="Проверить соединение"
+                                data-ss-hint="Сразу вызывает Telegram Bot API (getMe). Можно проверить токен из поля выше ещё до сохранения; если поле пустое — используется уже сохранённый токен.">
+                            </span>
+                            <span id="setTgTestStatus" class="ss-hint" style="margin-left:8px"></span>
+                          </div>
                           <div id="setTgHint" class="ss-hint">Команды: /on /off /restart /update /list /rules /ruleadd … · /help</div>
                         </div>
                         <div class="ss-modal-section">

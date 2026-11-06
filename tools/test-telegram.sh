@@ -191,9 +191,63 @@ SENT=""
 ss_telegram_process_updates_json '{"ok":true,"result":[{"update_id":7,"message":{"chat":{"id":888},"text":"/whoami"}}]}'
 assert_has "$SENT" "888" "whoami without whitelist"
 
+# --- test connection (mocked curl via ss_telegram_api) ---
+ss_telegram_api() {
+  local method="$1"
+  case "$method" in
+  getMe)
+    if [ "${SS_TG_API_TOKEN:-$SS_TG_BOT_TOKEN}" = "good:TOKEN" ] || [ "${SS_TG_API_TOKEN:-$SS_TG_BOT_TOKEN}" = "111:TEST" ]; then
+      echo '{"ok":true,"result":{"id":42,"is_bot":true,"first_name":"Surf","username":"stealthsurf_bot"}}'
+    else
+      echo '{"ok":false,"error_code":401,"description":"Unauthorized"}'
+    fi
+    ;;
+  getChat)
+    echo '{"ok":true,"result":{"id":777,"type":"private"}}'
+    ;;
+  *) echo '{"ok":false}' ;;
+  esac
+}
+
+probe=$(ss_telegram_test_connection "good:TOKEN" "777")
+assert_eq "$(printf '%s' "$probe" | jq -r '.ok')" "true" "test connection ok"
+assert_eq "$(printf '%s' "$probe" | jq -r '.username')" "stealthsurf_bot" "test username"
+assert_eq "$(printf '%s' "$probe" | jq -r '.chat_ok')" "true" "test chat ok"
+
+set +e
+probe=$(ss_telegram_test_connection "bad:TOKEN" "")
+prc=$?
+set -e
+assert_eq "$prc" "1" "test bad token rc"
+assert_eq "$(printf '%s' "$probe" | jq -r '.ok')" "false" "test bad token ok=false"
+assert_has "$(printf '%s' "$probe" | jq -r '.error')" "Unauthorized" "test bad token error"
+
+set +e
+probe=$(ss_telegram_test_connection "" "")
+prc=$?
+set -e
+# saved token 111:TEST still set — resolve uses it
+assert_eq "$(printf '%s' "$probe" | jq -r '.ok')" "true" "test uses saved token"
+
+SS_TG_BOT_TOKEN=""
+set +e
+probe=$(ss_telegram_test_connection "********" "")
+prc=$?
+set -e
+assert_eq "$prc" "1" "test mask without saved fails"
+assert_has "$(printf '%s' "$probe" | jq -r '.error')" "bot_token missing" "test missing token"
+
 # --- UI markers ---
 grep -q 'setTgEnabled' "$ROOT/src/ui/index.asp" && echo "OK  ASP telegram block" || {
   echo "FAIL ASP telegram block"
+  fail=$((fail + 1))
+}
+grep -q 'btnTgTest' "$ROOT/src/ui/index.asp" && echo "OK  ASP telegram test button" || {
+  echo "FAIL ASP telegram test button"
+  fail=$((fail + 1))
+}
+grep -q 'testTelegramFromModal' "$ROOT/src/ui/app.js" && echo "OK  UI telegram test handler" || {
+  echo "FAIL UI telegram test handler"
   fail=$((fail + 1))
 }
 grep -q 'telegram:' "$ROOT/src/ui/app.js" && echo "OK  UI telegram payload" || {
@@ -202,6 +256,10 @@ grep -q 'telegram:' "$ROOT/src/ui/app.js" && echo "OK  UI telegram payload" || {
 }
 grep -q 'import ./telegram.sh' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  telegram import" || {
   echo "FAIL telegram import"
+  fail=$((fail + 1))
+}
+grep -q 'testtelegram' "$ROOT/src/backend/service_event.sh" && echo "OK  service testtelegram" || {
+  echo "FAIL service testtelegram"
   fail=$((fail + 1))
 }
 

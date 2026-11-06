@@ -49,6 +49,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   xray           install-xray   geo            geodata
   cfg            settings       setcfg '<json>' set-settings
   tg             telegram       tg-start/stop  бот on/off
+  tg-test        telegram-test  проверка API токена
   un --yes       uninstall      doctor         восстановить UI/CLI
   h|?            help           m|menu         интерактивное меню
 
@@ -61,6 +62,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   protocols logs devices backup backups restore
   install-xray geodata settings set-settings
   telegram telegram-start telegram-stop telegram-tick telegram-daemon
+  telegram-test [token]
 
 Примеры:
   ssurf up
@@ -404,6 +406,10 @@ ss_cli_dispatch() {
     ;;
   telegram-tick | tg-tick)
     ss_telegram_tick || return 1
+    ;;
+  telegram-test | tg-test | test-telegram)
+    # ssurf tg-test [token] — prints JSON from getMe probe
+    ss_telegram_test_connection "${2:-}" "${3:-}" || return 1
     ;;
   telegram-daemon | tg-daemon)
     ss_telegram_daemon_loop

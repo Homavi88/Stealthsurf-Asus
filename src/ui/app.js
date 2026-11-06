@@ -447,6 +447,9 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
+    testtelegram: "Проверка Telegram Bot API…",
+    telegramtest: "Проверка Telegram Bot API…",
+    tgtest: "Проверка Telegram Bot API…",
     applypending: "Применение настроек…",
     batch: "Применение настроек…",
   };
@@ -2213,6 +2216,9 @@ async function refreshAll() {
         setSettingsStatus("Сохранено");
         if (/settings saved/i.test(response.message)) setMsg("Настройки сохранены", "ok");
       }
+      if (/telegram ok|telegram failed/i.test(response.message)) {
+        applyTelegramTestResult(response.status, data, response.message);
+      }
       if (data && Array.isArray(data.keys) && (/balances|balance/i.test(response.message) || data.total_balance != null)) {
         renderBalances(data);
         balanceRefreshPending = false;
@@ -2695,6 +2701,9 @@ function bind() {
       triggerService("geodata", {});
     });
   }
+  if (byId("btnTgTest")) {
+    byId("btnTgTest").addEventListener("click", () => testTelegramFromModal());
+  }
   if (byId("settingsModal")) {
     byId("settingsModal").addEventListener("click", (ev) => {
       if (ev.target === byId("settingsModal")) closeSettingsModal();
@@ -2705,6 +2714,54 @@ function bind() {
 function setSettingsStatus(text) {
   const el = byId("settingsStatus");
   if (el) el.textContent = text || "";
+}
+
+function setTgTestStatus(text, cls) {
+  const el = byId("setTgTestStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "ss-hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
+}
+
+function applyTelegramTestResult(ok, data, message) {
+  const d = data && typeof data === "object" ? data : {};
+  if (ok && d.ok !== false) {
+    let msg = "OK";
+    if (d.username) msg += " @" + d.username;
+    else if (d.first_name) msg += " " + d.first_name;
+    if (d.bot_id != null) msg += " (id " + d.bot_id + ")";
+    if (d.latency_ms != null) msg += " · " + d.latency_ms + " мс";
+    if (d.chat_id) {
+      msg += d.chat_ok ? " · chat " + d.chat_id + " доступен" : " · chat " + d.chat_id + " недоступен";
+      if (!d.chat_ok && d.error) msg += " (" + d.error + ")";
+    }
+    setTgTestStatus(msg, "ok");
+    setSettingsStatus("Telegram: соединение есть");
+    setMsg("Telegram Bot API: соединение OK" + (d.username ? " (@" + d.username + ")" : ""), "ok");
+    return;
+  }
+  const err = (d && d.error) || message || "нет ответа";
+  setTgTestStatus("Ошибка: " + err, "err");
+  setSettingsStatus("Telegram: нет соединения");
+  setMsg("Telegram: " + err, "err");
+}
+
+function testTelegramFromModal() {
+  const tokEl = byId("setTgBotToken");
+  const raw = tokEl ? tokEl.value.trim() : "";
+  const placeholderSet = tokEl && /сохранён/.test(tokEl.placeholder || "");
+  if (!raw && !placeholderSet) {
+    setTgTestStatus("Укажите Bot Token или сначала сохраните его", "err");
+    setMsg("Нет Bot Token для проверки", "err");
+    return;
+  }
+  const payload = {
+    bot_token: raw && raw !== "********" ? raw : "********",
+    chat_ids: (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "",
+  };
+  setTgTestStatus("Проверяю api.telegram.org…", "");
+  setSettingsStatus("Проверка Telegram…");
+  triggerService("testtelegram", payload, { wait: 15 });
 }
 
 function syncRebootCronVisibility() {

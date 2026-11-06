@@ -522,6 +522,24 @@ ss_service_event() {
       return 1
     fi
     ;;
+  testtelegram | telegramtest | tgtest)
+    # Probe Bot API getMe (and optional getChat). Payload: {bot_token?, chat_ids?}
+    local tg_token tg_chats tg_result
+    if ! type ss_telegram_test_connection >/dev/null 2>&1; then
+      ss_json_response false "telegram module missing" null
+      return 1
+    fi
+    tg_token=$(printf '%s' "$payload" | jq -r '.bot_token // .telegram.bot_token // empty' 2>/dev/null || true)
+    tg_chats=$(printf '%s' "$payload" | jq -r '.chat_ids // .telegram.chat_ids // empty' 2>/dev/null || true)
+    tg_result=$(ss_telegram_test_connection "$tg_token" "$tg_chats" 2>/dev/null) || true
+    [ -n "$tg_result" ] || tg_result='{"ok":false,"error":"test failed"}'
+    if printf '%s' "$tg_result" | jq -e '.ok == true' >/dev/null 2>&1; then
+      ss_json_response true "telegram ok" "$tg_result"
+    else
+      ss_json_response false "telegram failed" "$tg_result"
+      return 1
+    fi
+    ;;
   applypending | batch)
     # One Merlin apply for many WebUI config edits (deferred pending queue).
     local ops n i act op_payload failed=0 done_n=0 skip_n=0
@@ -547,7 +565,7 @@ ss_service_event() {
       act=$(printf '%s' "$ops" | jq -r --argjson i "$i" '.[$i].action // empty')
       op_payload=$(printf '%s' "$ops" | jq -c --argjson i "$i" '.[$i].payload // {}')
       case "$act" in
-      "" | applypending | batch | uninstall | remove | purge | update | upgrade | installversion | switchversion | rollback | start | stop | restart | rebuild | sync | backup | restore | geodata | installxray | diag | logs | clearlogs | connectivity | testconfig | devicesnapshot | backuplist | clients | checkupdate | listversions | versions | balances | refreshbalances | balance | getsettings | settings | status | doctor | heal | fix)
+      "" | applypending | batch | uninstall | remove | purge | update | upgrade | installversion | switchversion | rollback | start | stop | restart | rebuild | sync | backup | restore | geodata | installxray | diag | logs | clearlogs | connectivity | testconfig | devicesnapshot | backuplist | clients | checkupdate | listversions | versions | balances | refreshbalances | balance | getsettings | settings | status | doctor | heal | fix | testtelegram | telegramtest | tgtest)
         ss_warn "applypending: skip non-config action '$act'"
         skip_n=$((skip_n + 1))
         ;;
