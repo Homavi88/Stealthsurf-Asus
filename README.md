@@ -16,6 +16,24 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 (URL обычно `http://192.168.1.1/user1.asp`). Страница использует нативную оболочку Merlin
 (меню, `FormTitle` / `FormTable`, `button_gen`) — как у XrayUI.
 
+## Скриншоты WebUI
+
+Превью страницы **VPN → StealthSurf** (нативная оболочка Merlin). Снято с локального UI-preview; на живом роутере выглядит так же.
+
+| Статус / ключи | Каталог подключений |
+| --- | --- |
+| ![Статус running](./docs/screenshots/01-status-running.png) | ![Каталог](./docs/screenshots/02-catalog.png) |
+
+| Routing | Режим / DNS |
+| --- | --- |
+| ![Routing](./docs/screenshots/03-routing.png) | ![Режим DNS](./docs/screenshots/04-mode-dns.png) |
+
+Конфликт с XrayUI (старт заблокирован):
+
+![XrayUI conflict](./docs/screenshots/05-xrayui-conflict.png)
+
+Переснять: `node tools/capture-ui-screenshots.mjs`
+
 ## Быстрые команды CLI
 
 Короткий CLI: **`ssurf`** (полное имя `stealthsurf` тоже работает).  

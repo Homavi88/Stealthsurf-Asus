@@ -6,3 +6,6 @@ dist/
 .env
 *.log
 .pack-stage/
+package-lock.json
+tools/ui-preview/index.html
+tools/ui-preview/ext/
