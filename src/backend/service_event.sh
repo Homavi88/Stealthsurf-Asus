@@ -79,7 +79,13 @@ ss_service_event() {
   local action="$1"
   local arg="$2"
   local payload
-  payload=$(ss_read_payload)
+  # Optional 3rd arg: explicit payload (used by applypending nested ops).
+  # Otherwise read Merlin custom_settings / tmp payload as usual.
+  if [ "$#" -ge 3 ]; then
+    payload="$3"
+  else
+    payload=$(ss_read_payload)
+  fi
 
   case "$action" in
   init)
@@ -513,6 +519,62 @@ ss_service_event() {
       ss_json_response true "settings saved" "$applied"
     else
       ss_json_response false "settings failed" null
+      return 1
+    fi
+    ;;
+  applypending | batch)
+    # One Merlin apply for many WebUI config edits (deferred pending queue).
+    local ops n i act op_payload failed=0 done_n=0 skip_n=0
+    if [ "${SS_BATCH_SILENT:-0}" = "1" ]; then
+      ss_json_response false "nested applypending refused" null
+      return 1
+    fi
+    ops=$(printf '%s' "$payload" | jq -c '.ops // .changes // []' 2>/dev/null || echo '[]')
+    n=$(printf '%s' "$ops" | jq 'length' 2>/dev/null || echo 0)
+    if [ -z "$n" ] || [ "$n" -eq 0 ]; then
+      ss_json_response false "no pending changes" null
+      return 1
+    fi
+    ss_activity "ui.applypending" "ops=$n"
+    SS_DEFER_REBUILD=1
+    export SS_DEFER_REBUILD
+    SS_NEED_REBUILD=0
+    export SS_NEED_REBUILD
+    SS_BATCH_SILENT=1
+    export SS_BATCH_SILENT
+    i=0
+    while [ "$i" -lt "$n" ]; do
+      act=$(printf '%s' "$ops" | jq -r --argjson i "$i" '.[$i].action // empty')
+      op_payload=$(printf '%s' "$ops" | jq -c --argjson i "$i" '.[$i].payload // {}')
+      case "$act" in
+      "" | applypending | batch | uninstall | remove | purge | update | upgrade | installversion | switchversion | rollback | start | stop | restart | rebuild | sync | backup | restore | geodata | installxray | diag | logs | clearlogs | connectivity | testconfig | devicesnapshot | backuplist | clients | checkupdate | listversions | versions | balances | refreshbalances | balance | getsettings | settings | status | doctor | heal | fix)
+        ss_warn "applypending: skip non-config action '$act'"
+        skip_n=$((skip_n + 1))
+        ;;
+      *)
+        if ss_service_event "$act" "" "$op_payload"; then
+          done_n=$((done_n + 1))
+        else
+          failed=1
+          ss_warn "applypending: op failed action=$act"
+          break
+        fi
+        ;;
+      esac
+      i=$((i + 1))
+    done
+    unset SS_BATCH_SILENT
+    unset SS_DEFER_REBUILD
+    if [ "${SS_NEED_REBUILD:-0}" = "1" ]; then
+      if ! ss_rebuild_and_restart; then
+        failed=1
+      fi
+    fi
+    unset SS_NEED_REBUILD
+    if [ "$failed" -eq 0 ]; then
+      ss_json_response true "applied $done_n changes" "$(jq -nc --argjson n "$done_n" --argjson skip "$skip_n" '{applied:$n, skipped:$skip}')"
+    else
+      ss_json_response false "applypending failed after $done_n ok" "$(jq -nc --argjson n "$done_n" --argjson skip "$skip_n" '{applied:$n, skipped:$skip}')"
       return 1
     fi
     ;;

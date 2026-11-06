@@ -1,6 +1,6 @@
 # Установка StealthSurf UI (Asuswrt-Merlin)
 
-Версия пакета: **v1.0.31** (GitHub Releases).
+Версия пакета: **v1.0.32** (GitHub Releases).
 
 ## Требования
 

@@ -181,6 +181,11 @@ ss_json_response() {
   case "$status" in
   true | 1 | ok | OK) status_json="true" ;;
   esac
+  # Nested ops inside applypending must not overwrite the final UI response file.
+  if [ "${SS_BATCH_SILENT:-0}" = "1" ]; then
+    [ "$status_json" = "true" ]
+    return $?
+  fi
   ss_ensure_dirs
   mkdir -p "$ADDON_WEB_DIR" 2>/dev/null
   jq -nc \
