@@ -241,6 +241,31 @@ function initial() {
   .ss-modal-card.ss-settings-card {
     width: min(640px, 96vw);
   }
+  .ss-modal-card.ss-versions-card {
+    width: min(620px, 96vw);
+  }
+  .ss-version-select-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 0 0 10px;
+  }
+  .ss-version-select-row select {
+    flex: 1 1 220px;
+    min-width: 180px;
+    max-width: 100%;
+  }
+  .ss-version-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    font-size: 11px;
+    border: 1px solid #6b8fa3;
+    color: #cfd8dc;
+  }
+  .ss-version-badge.newer { border-color: #8bc34a; color: #8bc34a; }
+  .ss-version-badge.older { border-color: #ff9800; color: #ff9800; }
+  .ss-version-badge.same { border-color: #fc0; color: #fc0; }
   .ss-settings-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -474,6 +499,41 @@ function initial() {
                     </div>
                   </div>
 
+                  <div id="versionsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="versionsTitle">
+                    <div class="ss-modal-card ss-versions-card">
+                      <div class="ss-modal-head" id="versionsTitle">Версии аддона</div>
+                      <p class="ss-modal-summary">
+                        Выберите свежую или более старую версию. Ниже — изменения выбранного релиза.
+                        Сейчас установлена <b id="versionsInstalled">—</b>.
+                      </p>
+                      <div class="ss-version-select-row">
+                        <select id="versionSelect" class="input_25_table">
+                          <option value="">Загрузка списка с GitHub…</option>
+                        </select>
+                        <span id="versionDirection" class="ss-version-badge">—</span>
+                      </div>
+                      <p class="ss-modal-summary" id="versionPickSummary">Выберите версию в списке.</p>
+                      <div class="ss-modal-section" id="verFeatBox" style="display:none">
+                        <h4>Новое</h4>
+                        <ul id="verFeatures"></ul>
+                      </div>
+                      <div class="ss-modal-section" id="verFixBox" style="display:none">
+                        <h4>Исправления</h4>
+                        <ul id="verFixes"></ul>
+                      </div>
+                      <div class="ss-modal-section" id="verOtherBox" style="display:none">
+                        <h4>Ещё изменения</h4>
+                        <ul id="verOther"></ul>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnVersionInstall" class="button_gen button_gen_small" type="button" value="Установить выбранную" disabled>
+                        <input id="btnVersionsRefresh" class="button_gen button_gen_small" type="button" value="Обновить список">
+                        <input id="btnVersionsClose" class="button_gen button_gen_small" type="button" value="Закрыть">
+                        <a id="versionGhLink" class="ss-modal-link" href="#" target="_blank" rel="noopener" style="display:none">Релиз на GitHub</a>
+                      </div>
+                    </div>
+                  </div>
+
                   <div id="settingsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
                     <div class="ss-modal-card ss-settings-card">
                       <div class="ss-modal-head" id="settingsTitle">Настройки StealthSurf</div>
@@ -630,6 +690,7 @@ function initial() {
                           <span class="row-buttons">
                             <input id="btnCheckUpdate" class="button_gen button_gen_small" type="button" value="check">
                             <input id="btnUpdate" class="button_gen button_gen_small" type="button" value="install" style="display:none">
+                            <input id="btnVersions" class="button_gen button_gen_small" type="button" value="versions / rollback">
                           </span>
                         </td>
                       </tr>
@@ -894,13 +955,15 @@ function initial() {
                         <tr>
                           <th>Версия аддона</th>
                           <td>
-                            <span id="verDetail" class="label label-muted">—</span>
+                            <span id="verDetailAdvanced" class="label label-muted">—</span>
                             <span class="row-buttons" style="margin-left:6px">
                               <input id="btnCheckUpdate2" class="button_gen button_gen_small" type="button" value="Проверить на GitHub">
                               <input id="btnForceUpdate" class="button_gen button_gen_small" type="button" value="Установить latest с GitHub">
+                              <input id="btnVersions2" class="button_gen button_gen_small" type="button" value="Выбрать версию / откат">
                             </span>
                             <div class="ss-hint">
-                              CLI: <code>stealthsurf check-update</code> / <code>stealthsurf update</code>.
+                              CLI: <code>ssurf cu</code> / <code>ssurf upd</code> / <code>ssurf lv</code> / <code>ssurf iv v1.0.16</code>.
+                              В окне версий видно changelog выбранного релиза перед установкой или откатом.
                               Автопроверка при открытии UI (если старше 6 ч) и каждые 12 часов (cron).
                             </div>
                           </td>

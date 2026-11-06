@@ -9,12 +9,15 @@ export ADDON_VERSION=1.0.8
 export ADDON_REPO=Homavi88/Stealthsurf-Asus
 export ADDON_RELEASE_TGZ="https://github.com/${ADDON_REPO}/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz"
 export ADDON_RELEASE_API="https://api.github.com/repos/${ADDON_REPO}/releases/latest"
+export ADDON_RELEASES_API="https://api.github.com/repos/${ADDON_REPO}/releases"
+export ADDON_RELEASE_ASSET="asuswrt-merlin-stealthsurf.tar.gz"
 export ADDON_SHARE_DIR="$TMP"
 export ADDON_WEB_DIR="$TMP/web"
 export ADDON_TMP_DIR="$TMP/tmp"
 export ADDON_LOGS_DIR="$TMP/logs"
 export ADDON_DATA_DIR="$TMP/data"
 export SS_VERSION_FILE="$TMP/version.json"
+export SS_VERSIONS_FILE="$TMP/versions.json"
 mkdir -p "$ADDON_WEB_DIR" "$ADDON_TMP_DIR" "$ADDON_LOGS_DIR" "$ADDON_DATA_DIR"
 
 ss_ensure_dirs() { mkdir -p "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR" "$ADDON_TMP_DIR"; }
@@ -76,6 +79,62 @@ grep -q 'openUpdateModal' "$ROOT/src/ui/app.js" && echo "OK  UI changelog modal"
 }
 grep -q 'updateModal' "$ROOT/src/ui/index.asp" && echo "OK  ASP update modal" || {
   echo "FAIL ASP update modal"
+  fail=$((fail + 1))
+}
+
+# Tag normalize + release entry from fixture
+assert_eq "$(ss_version_tag_normalize 1.0.16)" "v1.0.16" "tag normalize bare"
+assert_eq "$(ss_version_tag_normalize v1.0.16)" "v1.0.16" "tag normalize v-prefix"
+
+cat >"$TMP/fake-release.json" <<'EOF'
+{
+  "tag_name": "v1.0.16",
+  "name": "Release v1.0.16",
+  "html_url": "https://example/rel/v1.0.16",
+  "published_at": "2026-11-06T00:00:00Z",
+  "body": "## Whats Changed\n* Fix firewall blackhole by @a in #14\n* Add routing rule builder by @a in #20\n",
+  "assets": [
+    {"name": "asuswrt-merlin-stealthsurf.tar.gz", "browser_download_url": "https://example/dl/v1.0.16.tgz"}
+  ]
+}
+EOF
+entry=$(ss_version_release_entry "$TMP/fake-release.json" "1.0.20")
+assert_eq "$(printf '%s' "$entry" | jq -r '.direction')" "older" "release entry older=rollback"
+assert_eq "$(printf '%s' "$entry" | jq -r '.download_url')" "https://example/dl/v1.0.16.tgz" "release entry download_url"
+assert_eq "$(printf '%s' "$entry" | jq -r '.changelog.fixes|length')" "1" "release entry changelog fixes"
+feat_entry=$(printf '%s' "$entry" | jq -r '.changelog.features|length')
+[ "$feat_entry" -ge 1 ] && echo "OK  release entry changelog features" || {
+  echo "FAIL release entry changelog features (got $feat_entry)"
+  fail=$((fail + 1))
+}
+
+# Cached fetch_tag prefers versions.json
+jq -nc --argjson rel "$entry" '{installed:"1.0.20",releases:[$rel]}' >"$SS_VERSIONS_FILE"
+cached=$(ss_version_fetch_tag v1.0.16)
+assert_eq "$(printf '%s' "$cached" | jq -r '.tag')" "v1.0.16" "fetch_tag from cache"
+
+grep -q 'versionsModal' "$ROOT/src/ui/index.asp" && echo "OK  ASP versions modal" || {
+  echo "FAIL ASP versions modal"
+  fail=$((fail + 1))
+}
+grep -q 'installSelectedVersion' "$ROOT/src/ui/app.js" && echo "OK  UI installSelectedVersion" || {
+  echo "FAIL UI installSelectedVersion"
+  fail=$((fail + 1))
+}
+grep -q 'ss_version_install_tag' "$ROOT/src/backend/version.sh" && echo "OK  install_tag helper" || {
+  echo "FAIL install_tag helper"
+  fail=$((fail + 1))
+}
+grep -q 'listversions' "$ROOT/src/backend/service_event.sh" && echo "OK  service listversions" || {
+  echo "FAIL service listversions"
+  fail=$((fail + 1))
+}
+grep -q 'install-version | switch-version | rollback' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  CLI install-version" || {
+  echo "FAIL CLI install-version"
+  fail=$((fail + 1))
+}
+grep -q 'pinned download failed' "$ROOT/src/backend/backup.sh" && echo "OK  pinned URL no latest fallback" || {
+  echo "FAIL pinned URL no latest fallback"
   fail=$((fail + 1))
 }
 

@@ -39,6 +39,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   dns <m>        set-dns-mode   rb             rebuild
   v|ver          version        cu|chk         check-update
   upd [ -f ]     update         uf             force-update
+  lv             list-versions  iv <tag>       install-version / rollback
   d|dg           diag           p|proto        protocols
   log [src] [n]  logs           bak [note]     backup
   baks           backups        cl             clients
@@ -50,9 +51,9 @@ $ADDON_TITLE $ADDON_VERSION — CLI
 
 ── Полные имена (как раньше) ───────────────────────────────
   start stop restart status install uninstall version
-  check-update update force-update set-key add-key remove-key
-  verify sync list apply enable disable set-default
-  update-settings set-routing preset set-policies clients
+  check-update update force-update list-versions install-version
+  set-key add-key remove-key verify sync list apply enable disable
+  set-default update-settings set-routing preset set-policies clients
   set-mode set-dns-mode rebuild diag test-config connectivity
   protocols logs devices backup backups restore
   install-xray geodata settings set-settings
@@ -63,6 +64,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   ssurf ap 101 && ssurf mode redirect && ssurf up
   ssurf st
   ssurf cu && ssurf upd
+  ssurf lv && ssurf iv v1.0.16   # список релизов + откат на выбранную
   ssurf m
 EOF
 }
@@ -175,6 +177,38 @@ ss_cli_dispatch() {
   update-if-newer)
     ss_version_update_if_available "${2:-0}"
     rc=$?
+    [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+    ;;
+  list-versions | versions | lv)
+    ss_version_list || return 1
+    if [ -f "$SS_VERSIONS_FILE" ]; then
+      jq -r '
+        "installed=\(.installed)",
+        (.releases[]? | "  \(.tag)\t\(.direction)\t\(.changelog.headline // "")")
+      ' "$SS_VERSIONS_FILE" 2>/dev/null || cat "$SS_VERSIONS_FILE"
+    fi
+    ;;
+  install-version | switch-version | rollback | roll | iv)
+    tag="${2:-}"
+    force_tag=0
+    case "${3:-}" in
+    --force | -f | force | 1) force_tag=1 ;;
+    esac
+    case "${2:-}" in
+    --force | -f | force | 1)
+      force_tag=1
+      tag="${3:-}"
+      ;;
+    esac
+    [ -n "$tag" ] || {
+      echo "usage: ssurf iv <tag>   e.g. ssurf iv v1.0.16"
+      return 1
+    }
+    SS_FORCE_TAG="$force_tag"
+    export SS_FORCE_TAG
+    ss_version_install_tag "$tag"
+    rc=$?
+    unset SS_FORCE_TAG
     [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
     ;;
   install)

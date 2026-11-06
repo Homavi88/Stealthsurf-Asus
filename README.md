@@ -99,6 +99,7 @@ ssurf up && ssurf st
 | `ssurf sy` · `ls` · `ap <id>` | sync · список · apply |
 | `ssurf mode` · `dns` · `rb` | dataplane · DNS · rebuild |
 | `ssurf bak` · `cu` · `upd` | backup · check-update · update |
+| `ssurf lv` · `iv v1.0.16` | list versions · install / rollback |
 | `ssurf doctor` · `un --yes` | восстановление · удаление |
 | `ssurf h` · `ssurf m` | справка · меню |
 

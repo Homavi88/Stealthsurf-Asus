@@ -69,6 +69,33 @@ ss_service_event() {
       ss_json_response false "version check failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
     fi
     ;;
+  listversions | versions)
+    if ss_version_list >/dev/null; then
+      ss_json_response true "versions listed" "$(ss_jq_file_or "$SS_VERSIONS_FILE" '{}')"
+    else
+      ss_json_response false "versions list failed" "$(ss_jq_file_or "$SS_VERSIONS_FILE" '{}')"
+    fi
+    ;;
+  installversion | switchversion | rollback)
+    # Install a chosen GitHub release tag (upgrade or rollback). Payload: {tag:"v1.0.16"}
+    local tag force_tag
+    tag=$(printf '%s' "$payload" | jq -r '.tag // .version // empty')
+    force_tag=$(printf '%s' "$payload" | jq -r '.force // "0"')
+    if [ -z "$tag" ]; then
+      ss_json_response false "tag missing" null
+      return 1
+    fi
+    ss_activity "ui.installversion" "tag=$tag force=$force_tag"
+    SS_FORCE_TAG="$force_tag"
+    export SS_FORCE_TAG
+    ss_version_install_tag "$tag"
+    case $? in
+    0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+    2) ss_json_response true "already on version" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+    *) ss_json_response false "install version failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+    esac
+    unset SS_FORCE_TAG
+    ;;
   setkey)
     SS_API_KEY=$(printf '%s' "$payload" | jq -r '.api_key // empty')
     if [ -z "$SS_API_KEY" ]; then
@@ -343,11 +370,22 @@ ss_service_event() {
     fi
     ;;
   update | upgrade)
-    # force=1 → always reinstall latest; otherwise only when update_available
-    local force
+    # force=1 → always reinstall latest; tag=… → install that release; else only when newer
+    local force tag
     force=$(printf '%s' "$payload" | jq -r '.force // "0"')
-    ss_activity "ui.update" "force=$force"
-    if [ "$force" = "1" ] || [ "$force" = "true" ]; then
+    tag=$(printf '%s' "$payload" | jq -r '.tag // empty')
+    ss_activity "ui.update" "force=$force tag=${tag:-}"
+    if [ -n "$tag" ]; then
+      SS_FORCE_TAG="$force"
+      export SS_FORCE_TAG
+      ss_version_install_tag "$tag"
+      case $? in
+      0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      2) ss_json_response true "already on version" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      *) ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
+      esac
+      unset SS_FORCE_TAG
+    elif [ "$force" = "1" ] || [ "$force" = "true" ]; then
       ss_version_check >/dev/null 2>&1 || true
       if ss_update_self; then
         ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"

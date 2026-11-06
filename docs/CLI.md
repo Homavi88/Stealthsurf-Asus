@@ -32,6 +32,8 @@ stealthsurf <команда>           # полное имя
 | `cu` / `chk` | `check-update` | Проверить GitHub |
 | `upd` [`-f`] | `update` | Обновить (с `-f` — force) |
 | `uf` | `force-update` | Всегда latest |
+| `lv` | `list-versions` | Список релизов + changelog |
+| `iv` \<tag\> | `install-version` | Установить / откатить на tag |
 | `d` / `dg` | `diag` | Диагностика |
 | `p` / `proto` | `protocols` | Матрица протоколов |
 | `log` | `logs` | Логи |
@@ -61,6 +63,8 @@ ssurf st
 ssurf sy
 
 ssurf cu && ssurf upd
+ssurf lv                 # список релизов
+ssurf iv v1.0.16         # откат на выбранную версию
 ssurf dn
 ssurf doctor          # если пропал UI/CLI
 ssurf un --yes        # полное удаление
