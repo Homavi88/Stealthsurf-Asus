@@ -30,6 +30,7 @@ jobs:
           sh tools/test-xrayui-detect.sh
           sh tools/test-routing-suggest.sh
           sh tools/test-settings.sh
+          sh tools/test-telegram.sh
           sh tools/test-merlin-chrome.sh
           sh tools/test-service-event-hook.sh
 
