@@ -1,0 +1,150 @@
+/* Minimal Asuswrt-Merlin chrome stub for local UI screenshots */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #1f2a2e;
+  color: #fff;
+  font-family: "Segoe UI", Tahoma, Arial, sans-serif;
+  font-size: 12px;
+}
+.bg { background: #1f2a2e; min-height: 100vh; }
+#TopBanner {
+  height: 54px;
+  background: linear-gradient(180deg, #2f3c40 0%, #1c2629 100%);
+  border-bottom: 2px solid #fc0;
+  display: flex;
+  align-items: center;
+  padding: 0 18px;
+  color: #fc0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+#TopBanner small { color: #9ab; font-weight: 400; margin-left: 12px; font-size: 12px; }
+#Loading.popup_bg { display: none; }
+table.content { width: 100%; max-width: 1180px; margin: 0 auto; }
+#mainMenu {
+  width: 190px;
+  background: #2b3539;
+  border: 1px solid #4a585e;
+  min-height: 640px;
+  padding: 8px 0;
+}
+#mainMenu .mm {
+  display: block;
+  padding: 8px 14px;
+  color: #cfd8dc;
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+#mainMenu .mm:hover { background: #354247; color: #fff; }
+#mainMenu .mm.active {
+  background: #222;
+  color: #fc0;
+  border-left-color: #fc0;
+  font-weight: 700;
+}
+#subMenu { margin-top: 8px; padding: 0 10px; color: #8a969b; font-size: 11px; }
+#tabMenu.submenuBlock {
+  margin: 8px 0 4px;
+  color: #fc0;
+  font-size: 13px;
+  font-weight: 700;
+}
+.FormTitle {
+  background: #4d595d;
+  border: 1px solid #6b8fa3;
+  width: 760px;
+}
+.formfonttitle {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 4px 0 6px 4px;
+}
+.formfontdesc {
+  color: #cfd8dc;
+  margin: 0 4px 8px;
+  line-height: 1.45;
+}
+.splitLine {
+  height: 1px;
+  background: #6b757b;
+  margin: 8px 0;
+}
+.FormTable {
+  width: 100%;
+  border-collapse: collapse;
+  background: #4d595d;
+  border: 1px solid #6b757b;
+  margin-bottom: 12px;
+}
+.FormTable thead td {
+  background: #2f3a3e;
+  color: #fc0;
+  font-weight: 700;
+  padding: 6px 8px;
+}
+.FormTable th {
+  width: 30%;
+  background: #2f3a3e;
+  color: #fff;
+  text-align: left;
+  vertical-align: top;
+  padding: 8px;
+  border: 1px solid #6b757b;
+  font-weight: 600;
+}
+.FormTable td {
+  padding: 8px;
+  border: 1px solid #6b757b;
+  color: #fff;
+  vertical-align: top;
+}
+.button_gen, .button_gen_small {
+  background: linear-gradient(180deg, #5a6a70, #3d484c);
+  border: 1px solid #7a8a90;
+  color: #fff;
+  padding: 4px 10px;
+  margin: 2px 3px 2px 0;
+  cursor: pointer;
+  border-radius: 3px;
+  font-size: 12px;
+}
+.button_gen:hover { border-color: #fc0; color: #fc0; }
+.input_32_table, .input_25_table, .input_15_table, select.input_15_table, select.input_25_table, select.input_32_table {
+  background: #2f3a3e;
+  border: 1px solid #6b757b;
+  color: #fff;
+  padding: 4px 6px;
+  border-radius: 2px;
+}
+.label {
+  display: inline-block;
+  padding: 2px 7px;
+  margin: 1px 3px 1px 0;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.label-success { background: #1f6b3a; color: #b8ffcf; }
+.label-error { background: #6b1f1f; color: #ffb3b3; }
+.label-warning { background: #6b5a1f; color: #ffe08a; }
+.label-muted { background: #3a4549; color: #cfd8dc; font-weight: 500; }
+#footer {
+  text-align: center;
+  color: #7a878c;
+  padding: 16px;
+  font-size: 11px;
+}
+.preview-badge {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  background: rgba(0,0,0,0.55);
+  color: #fc0;
+  border: 1px solid #fc0;
+  padding: 4px 8px;
+  font-size: 11px;
+  z-index: 999;
+}
