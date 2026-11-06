@@ -84,7 +84,7 @@ ss_progress_step "Validating archive" >>"$out" 2>>"$err"
 ss_progress_step "Extracting and installing files" >>"$out" 2>>"$err"
 ss_progress_step "Remounting UI / rewriting hooks" >>"$out" 2>>"$err"
 ss_progress_step "Refreshing version.json" >>"$out" 2>>"$err"
-ss_progress_end "done — now 1.0.29" >>"$out" 2>>"$err"
+ss_progress_end "done — now 1.0.30" >>"$out" 2>>"$err"
 
 if [ -s "$out" ]; then
   bad "progress leaked to stdout: $(cat "$out")"
@@ -96,7 +96,7 @@ grep -q '======== StealthSurf update ========' "$err" && ok "banner on stderr" |
 grep -q '\[1/7\].*Backup before update' "$err" && ok "step1 stderr" || bad "step1 stderr"
 grep -q '\[3/7\].*Downloading release' "$err" && ok "step3 stderr" || bad "step3 stderr"
 grep -q '\[7/7\].*Refreshing version.json' "$err" && ok "step7 stderr" || bad "step7 stderr"
-grep -q '======== done — now 1.0.29 ========' "$err" && ok "end banner stderr" || bad "end banner"
+grep -q '======== done — now 1.0.30 ========' "$err" && ok "end banner stderr" || bad "end banner"
 
 # SS_PROGRESS=0 must silence console
 SS_PROGRESS=0
