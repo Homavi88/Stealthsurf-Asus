@@ -2217,7 +2217,7 @@ function ensureMerlinChrome() {
 }
 
 function initHelpHints() {
-  // Plain-language tips on [data-ss-hint] — XrayUI-style help marks for everyone
+  // Asuswrt-Merlin style: hover the label → overlib tip (no click), like stock hintstyle.
   let tip = byId("ssHelpTip");
   if (!tip) {
     tip = document.createElement("div");
@@ -2226,70 +2226,95 @@ function initHelpHints() {
     document.body.appendChild(tip);
   }
   let hideTimer = null;
+  let showTimer = null;
+  const useOverlib = typeof window.overlib === "function";
+
   const placeTip = (anchor) => {
     const r = anchor.getBoundingClientRect();
     const pad = 8;
     tip.classList.add("show");
-    let left = r.left;
-    let top = r.bottom + 8;
+    let left = r.right + 10;
+    let top = r.top;
     const tw = tip.offsetWidth || 280;
     const th = tip.offsetHeight || 80;
-    if (left + tw > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - tw - pad);
-    if (top + th > window.innerHeight - pad) top = Math.max(pad, r.top - th - 8);
+    if (left + tw > window.innerWidth - pad) left = Math.max(pad, r.left - tw - 10);
+    if (top + th > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - th - pad);
+    if (top < pad) top = pad;
     tip.style.left = left + "px";
     tip.style.top = top + "px";
   };
-  const showTip = (anchor, text) => {
+
+  const showFallback = (anchor, text) => {
     clearTimeout(hideTimer);
     tip.textContent = text;
     placeTip(anchor);
   };
-  const hideTip = (delay) => {
+
+  const hideFallback = () => {
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => tip.classList.remove("show"), delay || 0);
+    tip.classList.remove("show");
   };
+
+  const hideHint = () => {
+    clearTimeout(showTimer);
+    showTimer = null;
+    if (useOverlib && typeof window.nd === "function") {
+      try {
+        window.nd();
+      } catch (_) {}
+    }
+    hideFallback();
+  };
+
+  const showHint = (anchor, text) => {
+    clearTimeout(hideTimer);
+    clearTimeout(showTimer);
+    // Merlin-like delay before showing
+    showTimer = setTimeout(() => {
+      if (useOverlib) {
+        try {
+          // Stock Merlin / XrayUI: hover opens overlib, mouseout closes via nd()
+          if (typeof window.WIDTH !== "undefined") {
+            window.overlib(text, OFFSETX, 8, RIGHT, DELAY, 0, WIDTH, 380);
+          } else {
+            window.overlib(text);
+          }
+          hideFallback();
+          return;
+        } catch (_) {
+          /* fall through to CSS tip */
+        }
+      }
+      showFallback(anchor, text);
+    }, 350);
+  };
+
   document.querySelectorAll("[data-ss-hint]").forEach((el) => {
     if (el.dataset.ssHelpBound) return;
     el.dataset.ssHelpBound = "1";
     const text = (el.getAttribute("data-ss-hint") || "").trim();
     if (!text) return;
-    let mark = null;
-    for (let i = 0; i < el.children.length; i++) {
-      if (el.children[i].classList && el.children[i].classList.contains("ss-help")) {
-        mark = el.children[i];
-        break;
-      }
-    }
-    if (!mark) {
-      mark = document.createElement("span");
-      mark.className = "ss-help";
-      mark.setAttribute("tabindex", "0");
-      mark.setAttribute("role", "button");
-      mark.setAttribute("aria-label", "Подсказка");
-      mark.textContent = "?";
-      el.appendChild(mark);
-    }
-    const open = (ev) => {
-      if (ev) {
-        ev.preventDefault();
-        ev.stopPropagation();
-      }
-      showTip(mark, text);
-    };
-    mark.addEventListener("mouseenter", open);
-    mark.addEventListener("focus", open);
-    mark.addEventListener("mouseleave", () => hideTip(120));
-    mark.addEventListener("blur", () => hideTip(120));
-    mark.addEventListener("click", open);
+
+    // Drop previous "?" click targets — tip opens on hover of the whole item
+    Array.from(el.querySelectorAll(".ss-help")).forEach((n) => n.parentNode.removeChild(n));
+
+    el.classList.add("ss-hintstyle");
+    el.setAttribute("title", ""); // avoid native browser tooltip doubling
+    el.addEventListener("mouseover", (ev) => {
+      // Don't retrigger when moving between children
+      if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+      showHint(el, text);
+    });
+    el.addEventListener("mouseout", (ev) => {
+      if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+      hideHint();
+    });
   });
-  document.addEventListener("click", (ev) => {
-    if (ev.target && ev.target.closest && ev.target.closest(".ss-help")) return;
-    hideTip(0);
-  });
+
   document.addEventListener(
     "scroll",
     () => {
-      if (tip.classList.contains("show")) tip.classList.remove("show");
+      hideHint();
     },
     true
   );

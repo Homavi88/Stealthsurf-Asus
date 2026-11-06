@@ -454,32 +454,31 @@ function initial() {
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
   /* Do NOT override .content width — Merlin uses 998px + middown_bg (same as XrayUI). */
 
-  .ss-help {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 15px;
-    height: 15px;
-    margin-left: 5px;
-    border: 1px solid #fc0;
-    border-radius: 50%;
-    color: #fc0;
-    font-size: 10px;
-    font-weight: bold;
-    line-height: 1;
-    cursor: help;
-    vertical-align: middle;
-    user-select: none;
+  /* Merlin-like hintstyle: hover label → tip (overlib / fallback), no click */
+  .ss-hintstyle {
+    cursor: help !important;
+    border-bottom: 1px dashed #fc0;
   }
-  .ss-help:hover, .ss-help:focus {
-    background: rgba(255, 204, 0, 0.18);
-    outline: none;
+  th.ss-hintstyle,
+  h4.ss-hintstyle,
+  thead td.ss-hintstyle {
+    border-bottom-color: transparent;
+  }
+  th.ss-hintstyle {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: #fc0;
+    text-underline-offset: 2px;
+  }
+  label.ss-hintstyle,
+  span.ss-hintstyle {
+    border-bottom: 1px dashed #fc0;
   }
   #ssHelpTip {
     display: none;
     position: fixed;
     z-index: 11000;
-    max-width: min(360px, 92vw);
+    max-width: min(380px, 92vw);
     padding: 10px 12px;
     background: #2f3a3e;
     border: 1px solid #fc0;
@@ -490,7 +489,6 @@ function initial() {
     pointer-events: none;
   }
   #ssHelpTip.show { display: block; }
-  #ssHelpTip b { color: #fc0; }
 
   .ss-proxy-tag {
     display: inline-block;

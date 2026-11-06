@@ -69,8 +69,11 @@ check "ss-proxy-row render" "$JS" 'ss-proxy-row'
 check "openSsModal helper" "$JS" 'function openSsModal'
 check "modal th shrink-wrap" "$ASP" 'ss-modal-card \.FormTable th'
 check "plain-language hints present" "$ASP" 'data-ss-hint='
+check "Merlin hintstyle css" "$ASP" 'ss-hintstyle'
 check "help tip host" "$ASP" 'id="ssHelpTip"'
 check "initHelpHints in app.js" "$JS" 'function initHelpHints'
+check "hover uses overlib when present" "$JS" 'window.overlib'
+check "hover closes with nd" "$JS" 'window.nd'
 check_not "no catalog manage button" "$ASP" 'id="btnManageCatalog"'
 
 # Enough hints for Configuration + settings + modals
