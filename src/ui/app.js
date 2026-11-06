@@ -46,7 +46,12 @@ async function fetchJson(url) {
 }
 
 function buildAmngCustom(payload) {
-  // Namespace under .stealthsurf so we do not wipe other Merlin addons' amng_custom keys.
+  // Merlin write_custom_settings() only stores FLAT string values in
+  // /jffs/addons/custom_settings.txt (json_object_get_string). Nested objects
+  // like {stealthsurf:{api_key:...}} become null/empty — setkey never saw the key.
+  // Also: httpd never nvram_set("amng_custom"), so nvram get is always empty.
+  // Mirror XrayUI: store the action JSON as a string under stealthsurf_payload
+  // (chunked if needed), and merge other addons' existing custom_settings keys.
   let base = {};
   try {
     if (typeof custom_settings === "object" && custom_settings) {
@@ -55,11 +60,31 @@ function buildAmngCustom(payload) {
   } catch (_) {
     base = {};
   }
-  base.stealthsurf = payload || {};
+  Object.keys(base).forEach((k) => {
+    if (k === "stealthsurf" || k === "stealthsurf_payload" || /^stealthsurf_payload\d+$/.test(k)) {
+      delete base[k];
+    }
+  });
+  const raw = JSON.stringify(payload || {});
+  // Merlin value line buffer ~3040; keep chunks safely under that
+  const CHUNK = 2800;
+  if (raw.length <= CHUNK) {
+    base.stealthsurf_payload = raw;
+  } else {
+    let i = 0;
+    for (let off = 0; off < raw.length; off += CHUNK) {
+      base["stealthsurf_payload" + i] = raw.slice(off, off + CHUNK);
+      i += 1;
+    }
+  }
   let blob = JSON.stringify(base);
-  // Merlin amng_custom is size-limited; fall back to namespaced-only payload
-  if (blob.length > 3500) {
-    blob = JSON.stringify({ stealthsurf: payload || {} });
+  // Whole custom_settings.txt repo is ~8KB; if merge is too big, send payload-only
+  if (blob.length > 7500) {
+    const slim = {};
+    Object.keys(base).forEach((k) => {
+      if (k === "stealthsurf_payload" || /^stealthsurf_payload\d+$/.test(k)) slim[k] = base[k];
+    });
+    blob = JSON.stringify(slim);
   }
   return blob;
 }
@@ -94,7 +119,8 @@ function triggerService(action, payload, opts) {
   }
 
   const blob = buildAmngCustom(data);
-  if (blob.length > 3500) {
+  // Merlin custom_settings.txt whole-file limit ~8KB
+  if (blob.length > 7800) {
     setMsg(
       "Payload слишком большой (" + blob.length + " байт). Упростите routing/policies или правьте через CLI.",
       "err"
