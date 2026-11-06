@@ -1,6 +1,6 @@
 # Установка StealthSurf UI (Asuswrt-Merlin)
 
-Версия пакета: **v1.0.9** (GitHub Releases).
+Версия пакета: **v1.0.11** (GitHub Releases).
 
 ## Требования
 
@@ -34,6 +34,9 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 3. Прямой URL (если других user-аддонов нет): `http://<IP-роутера>/user1.asp`  
    (иначе `user2.asp`…`user20.asp` — первый свободный слот)  
 4. JSON/логи UI: `http://<IP-роутера>/ext/stealthsurf/…`
+
+Страница использует нативную оболочку Asuswrt-Merlin (боковое меню, вкладки VPN,
+`FormTitle` / `FormTable`, кнопки `button_gen`) — тот же подход, что у XrayUI.
 
 ## Пути на роутере
 

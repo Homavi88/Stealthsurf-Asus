@@ -2,7 +2,7 @@
 
 Аддон для роутеров на **Asuswrt-Merlin**: StealthSurf — провайдер VPN; transparent proxy, каталог конфигов и routing — на роутере через API-ключ(и) `stlth_…`.
 
-**Актуальный релиз:** [v1.0.9](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest)
+**Актуальный релиз:** [v1.0.11](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest)
 
 ## Установка на роутер
 
@@ -13,7 +13,8 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 ```
 
 После установки: выйти из WebUI → зайти снова → **VPN → StealthSurf**  
-(URL обычно `http://192.168.1.1/user1.asp`).
+(URL обычно `http://192.168.1.1/user1.asp`). Страница использует нативную оболочку Merlin
+(меню, `FormTitle` / `FormTable`, `button_gen`) — как у XrayUI.
 
 Короткий CLI: **`ssurf`** (полное имя `stealthsurf` тоже работает).
 
