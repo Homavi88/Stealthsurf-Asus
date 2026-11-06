@@ -188,6 +188,46 @@ function initial() {
     padding: 14px 16px 12px;
     box-shadow: 0 8px 28px rgba(0,0,0,0.45);
   }
+  .ss-modal-card.ss-settings-card {
+    width: min(640px, 96vw);
+  }
+  .ss-settings-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .ss-settings-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    align-items: center;
+  }
+  .ss-settings-row label.ss-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #fff;
+    cursor: pointer;
+  }
+  .ss-settings-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1 1 220px;
+    min-width: 180px;
+  }
+  .ss-settings-field > span {
+    font-size: 12px;
+    color: #fc0;
+  }
+  .ss-settings-field input[type="text"],
+  .ss-settings-field input[type="number"],
+  .ss-settings-field select {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
   .ss-modal-head {
     font-size: 16px;
     font-weight: 700;
@@ -384,6 +424,97 @@ function initial() {
                     </div>
                   </div>
 
+                  <div id="settingsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+                    <div class="ss-modal-card ss-settings-card">
+                      <div class="ss-modal-head" id="settingsTitle">Настройки StealthSurf</div>
+                      <p class="ss-modal-summary">Автозапуск, плановая перезагрузка, backup и обновление geoip/geosite.</p>
+                      <div class="ss-settings-grid">
+                        <div class="ss-modal-section">
+                          <h4>Запуск</h4>
+                          <div class="ss-settings-row">
+                            <label class="ss-check"><input id="setAutoStart" type="checkbox"> Автостарт после перезагрузки роутера</label>
+                            <label class="ss-check"><input id="setWatchdog" type="checkbox"> Watchdog (авто-рестарт при падении)</label>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <div class="ss-settings-field">
+                              <span>Задержка автостарта (сек)</span>
+                              <input id="setStartupDelay" class="input_15_table" type="number" min="0" max="120" value="8">
+                            </div>
+                          </div>
+                        </div>
+                        <div class="ss-modal-section">
+                          <h4>Перезагрузка по плану</h4>
+                          <div class="ss-settings-row">
+                            <div class="ss-settings-field">
+                              <span>Периодичность</span>
+                              <select id="setRebootSchedule" class="input_25_table">
+                                <option value="off">Выкл</option>
+                                <option value="daily">Ежедневно в 04:15</option>
+                                <option value="weekly">Еженедельно (вс 04:15)</option>
+                                <option value="monthly">Ежемесячно (1-е, 04:15)</option>
+                                <option value="custom">Свой cron</option>
+                              </select>
+                            </div>
+                            <div class="ss-settings-field" id="setRebootCronWrap" style="display:none">
+                              <span>Cron (min hour dom mon dow)</span>
+                              <input id="setRebootCron" class="input_32_table" type="text" placeholder="15 4 * * 0" maxlength="64">
+                            </div>
+                          </div>
+                          <div class="ss-hint">Перезагружает весь роутер (`/sbin/reboot`). Используйте осторожно.</div>
+                        </div>
+                        <div class="ss-modal-section">
+                          <h4>Резервное копирование</h4>
+                          <div class="ss-settings-row">
+                            <label class="ss-check"><input id="setAutoBackup" type="checkbox"> Ночной backup в 03:00</label>
+                            <div class="ss-settings-field" style="flex:0 1 140px">
+                              <span>Хранить копий</span>
+                              <input id="setBackupKeep" class="input_15_table" type="number" min="1" max="50" value="10">
+                            </div>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <input id="setBackupNote" class="input_25_table" type="text" placeholder="заметка (опц.)" maxlength="64">
+                            <span class="ss-row-buttons">
+                              <input id="btnSettingsBackup" class="button_gen button_gen_small" type="button" value="Создать backup">
+                              <input id="btnSettingsBackupList" class="button_gen button_gen_small" type="button" value="Список backup">
+                            </span>
+                          </div>
+                          <div id="settingsBackupHint" class="ss-hint">Файлы: /opt/share/stealthsurf/backups/</div>
+                        </div>
+                        <div class="ss-modal-section">
+                          <h4>GeoIP / GeoSite</h4>
+                          <div class="ss-settings-row">
+                            <label class="ss-check"><input id="setGeodataAuto" type="checkbox"> Автообновление geoip.dat и geosite.dat</label>
+                            <div class="ss-settings-field" style="flex:0 1 180px">
+                              <span>Периодичность</span>
+                              <select id="setGeodataSchedule" class="input_25_table">
+                                <option value="daily">Ежедневно</option>
+                                <option value="every3d">Каждые 3 дня</option>
+                                <option value="weekly">Еженедельно</option>
+                                <option value="monthly">Ежемесячно</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <div class="ss-settings-field" style="flex:1 1 100%">
+                              <span>Адрес загрузки (без имени файла)</span>
+                              <input id="setGeodataBase" class="input_32_table" type="text" maxlength="256"
+                                placeholder="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download">
+                            </div>
+                          </div>
+                          <div class="ss-hint">Скачиваются <code>geoip.dat</code> и <code>geosite.dat</code> с указанного URL.</div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <input id="btnSettingsGeodataNow" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite сейчас">
+                          </div>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnSettingsSave" class="button_gen button_gen_small" type="button" value="Сохранить">
+                        <input id="btnSettingsClose" class="button_gen button_gen_small" type="button" value="Закрыть">
+                        <span id="settingsStatus" class="ss-hint" style="margin-left:auto"></span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div id="conflictBanner">
                     <b>Конфликт с XrayUI</b> — <span id="conflictText">XrayUI сейчас работает. Запуск StealthSurf заблокирован.</span>
                     <div style="margin-top:6px">
@@ -421,6 +552,7 @@ function initial() {
                             <input id="btnRestart" class="button_gen button_gen_small" type="button" value="Рестарт">
                             <input id="btnSync" class="button_gen button_gen_small" type="button" value="Синхронизировать">
                             <input id="btnRefresh" class="button_gen button_gen_small" type="button" value="Обновить UI">
+                            <input id="btnSettings" class="button_gen button_gen_small" type="button" value="Настройки">
                             <input id="btnCheckUpdate" class="button_gen button_gen_small" type="button" value="Проверить версию">
                             <input id="btnUpdate" class="button_gen button_gen_small" type="button" value="Установить с GitHub" style="display:none">
                           </span>

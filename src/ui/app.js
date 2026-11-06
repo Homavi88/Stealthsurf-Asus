@@ -117,6 +117,9 @@ function triggerService(action, payload, opts) {
     logs: "Чтение логов…",
     devicesnapshot: "Снимок устройств LAN…",
     clearlogs: "Очистка логов…",
+    setsettings: "Сохранение настроек…",
+    getsettings: "Загрузка настроек…",
+    geodata: "Обновление geoip/geosite…",
   };
   setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
@@ -916,6 +919,11 @@ async function refreshAll() {
         setBackupStatus("Backup готов: " + data.path, "ok");
         loadBackups();
       }
+      if (/settings saved|settings$/i.test(response.message) && data && typeof data === "object") {
+        fillSettingsForm(data);
+        setSettingsStatus("Сохранено");
+        if (/settings saved/i.test(response.message)) setMsg("Настройки сохранены", "ok");
+      }
       if (/^restored$/i.test(response.message)) {
         setBackupStatus("Восстановлено из " + ((data && data.path) || "архива"), "ok");
         setTimeout(() => refreshAll(), 1200);
@@ -1189,6 +1197,147 @@ function bind() {
     if (!confirm("Очистить все логи аддона (activity/errors/devices/addon)?")) return;
     triggerService("clearlogs", { kind: "all" });
   });
+
+  if ($("btnSettings")) {
+    $("btnSettings").addEventListener("click", () => openSettingsModal());
+  }
+  if ($("btnSettingsClose")) {
+    $("btnSettingsClose").addEventListener("click", () => closeSettingsModal());
+  }
+  if ($("btnSettingsSave")) {
+    $("btnSettingsSave").addEventListener("click", () => saveSettingsFromModal());
+  }
+  if ($("setRebootSchedule")) {
+    $("setRebootSchedule").addEventListener("change", () => syncRebootCronVisibility());
+  }
+  if ($("btnSettingsBackup")) {
+    $("btnSettingsBackup").addEventListener("click", () => {
+      const note = ($("setBackupNote") && $("setBackupNote").value.trim()) || "manual";
+      setSettingsStatus("Создаю backup…");
+      triggerService("backup", { note: note });
+      setTimeout(loadBackups, 9000);
+    });
+  }
+  if ($("btnSettingsBackupList")) {
+    $("btnSettingsBackupList").addEventListener("click", () => {
+      setSettingsStatus("Обновляю список backup…");
+      triggerService("backuplist", {});
+      setTimeout(() => {
+        loadBackups();
+        setSettingsStatus("Список backup обновлён");
+      }, 9000);
+    });
+  }
+  if ($("btnSettingsGeodataNow")) {
+    $("btnSettingsGeodataNow").addEventListener("click", () => {
+      setSettingsStatus("Обновляю geoip/geosite…");
+      triggerService("geodata", {});
+    });
+  }
+  if ($("settingsModal")) {
+    $("settingsModal").addEventListener("click", (ev) => {
+      if (ev.target === $("settingsModal")) closeSettingsModal();
+    });
+  }
+}
+
+function setSettingsStatus(text) {
+  const el = $("settingsStatus");
+  if (el) el.textContent = text || "";
+}
+
+function syncRebootCronVisibility() {
+  const wrap = $("setRebootCronWrap");
+  const sel = $("setRebootSchedule");
+  if (!wrap || !sel) return;
+  wrap.style.display = sel.value === "custom" ? "" : "none";
+}
+
+function fillSettingsForm(s) {
+  const data = s || {};
+  if ($("setAutoStart")) $("setAutoStart").checked = !!data.auto_start;
+  if ($("setWatchdog")) $("setWatchdog").checked = data.watchdog !== false;
+  if ($("setAutoBackup")) $("setAutoBackup").checked = data.auto_backup !== false;
+  if ($("setStartupDelay")) $("setStartupDelay").value = data.startup_delay != null ? data.startup_delay : 8;
+  if ($("setBackupKeep")) $("setBackupKeep").value = data.backup_keep != null ? data.backup_keep : 10;
+  if ($("setRebootSchedule")) $("setRebootSchedule").value = data.reboot_schedule || "off";
+  if ($("setRebootCron")) $("setRebootCron").value = data.reboot_cron || "";
+  if ($("setGeodataAuto")) $("setGeodataAuto").checked = !!data.geodata_auto;
+  if ($("setGeodataSchedule")) $("setGeodataSchedule").value = data.geodata_schedule || "weekly";
+  if ($("setGeodataBase")) {
+    $("setGeodataBase").value =
+      data.geodata_base ||
+      "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
+  }
+  syncRebootCronVisibility();
+}
+
+function collectSettingsPayload() {
+  return {
+    auto_start: !!( $("setAutoStart") && $("setAutoStart").checked ),
+    watchdog: !!( $("setWatchdog") && $("setWatchdog").checked ),
+    auto_backup: !!( $("setAutoBackup") && $("setAutoBackup").checked ),
+    startup_delay: Number(($("setStartupDelay") && $("setStartupDelay").value) || 8),
+    backup_keep: Number(($("setBackupKeep") && $("setBackupKeep").value) || 10),
+    reboot_schedule: ($("setRebootSchedule") && $("setRebootSchedule").value) || "off",
+    reboot_cron: ($("setRebootCron") && $("setRebootCron").value.trim()) || "",
+    geodata_auto: !!( $("setGeodataAuto") && $("setGeodataAuto").checked ),
+    geodata_schedule: ($("setGeodataSchedule") && $("setGeodataSchedule").value) || "weekly",
+    geodata_base: ($("setGeodataBase") && $("setGeodataBase").value.trim()) || "",
+  };
+}
+
+async function openSettingsModal() {
+  const modal = $("settingsModal");
+  if (!modal) return;
+  setSettingsStatus("Загрузка…");
+  fillSettingsForm({
+    auto_start: true,
+    watchdog: true,
+    auto_backup: true,
+    startup_delay: 8,
+    backup_keep: 10,
+    reboot_schedule: "off",
+    geodata_auto: false,
+    geodata_schedule: "weekly",
+    geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
+  });
+  modal.classList.add("show");
+  try {
+    const s = await fetchJson(EXT + "/settings.json");
+    if (s && typeof s === "object") {
+      fillSettingsForm(s);
+      setSettingsStatus("");
+    } else {
+      setSettingsStatus("Используются значения по умолчанию");
+    }
+  } catch (_) {
+    setSettingsStatus("settings.json пока нет — сохраните, чтобы создать");
+  }
+}
+
+function closeSettingsModal() {
+  const modal = $("settingsModal");
+  if (modal) modal.classList.remove("show");
+}
+
+function saveSettingsFromModal() {
+  const payload = collectSettingsPayload();
+  if (payload.reboot_schedule === "custom") {
+    const parts = (payload.reboot_cron || "").trim().split(/\s+/);
+    if (parts.length < 5) {
+      setSettingsStatus("Для своего cron нужно 5 полей");
+      setMsg("Неверный reboot cron: нужно 5 полей", "err");
+      return;
+    }
+  }
+  if (payload.geodata_base && !/^https?:\/\//i.test(payload.geodata_base)) {
+    setSettingsStatus("URL geoip/geosite должен начинаться с http(s)://");
+    setMsg("Неверный адрес geodata", "err");
+    return;
+  }
+  setSettingsStatus("Сохраняю…");
+  triggerService("setsettings", payload, { wait: 12 });
 }
 
 function setBackupStatus(text, cls) {

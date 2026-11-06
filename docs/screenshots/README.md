@@ -10,6 +10,7 @@ PNG-превью WebUI для README GitHub.
 | `07-routing-suggest.png` | Автоподсказки доменов |
 | `04-mode-dns.png` | Режим / DNS |
 | `05-xrayui-conflict.png` | Конфликт с XrayUI |
+| `08-settings-modal.png` | Модалка Настройки (автостарт, reboot, backup, geodata) |
 
 Примеры в mock routing: ads→block, ru/private→direct, youtube/telegram/openai→ss-101, netflix→ss-205.
 

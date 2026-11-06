@@ -55,8 +55,16 @@ SS_AUTO_BACKUP='${SS_AUTO_BACKUP:-1}'
 SS_BACKUP_KEEP='${SS_BACKUP_KEEP:-10}'
 SS_LOG_MAX_BYTES='${SS_LOG_MAX_BYTES:-1048576}'
 SS_STARTUP_DELAY='${SS_STARTUP_DELAY:-8}'
+SS_REBOOT_SCHEDULE='${SS_REBOOT_SCHEDULE:-off}'
+SS_REBOOT_CRON='${SS_REBOOT_CRON:-}'
+SS_GEODATA_AUTO='${SS_GEODATA_AUTO:-0}'
+SS_GEODATA_SCHEDULE='${SS_GEODATA_SCHEDULE:-weekly}'
+SS_GEODATA_BASE='${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}'
 EOF
   chmod 600 "$SS_CONF_FILE"
+  if type ss_settings_publish >/dev/null 2>&1; then
+    ss_settings_publish 2>/dev/null || true
+  fi
 }
 
 ss_with_lock() {

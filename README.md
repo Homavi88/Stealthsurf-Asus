@@ -42,6 +42,10 @@ YouTube / Telegram / Netflix → VPN из API (`ss-101`, `ss-205`), ads → bloc
 
 ![XrayUI conflict](./docs/screenshots/05-xrayui-conflict.png)
 
+Модалка **Настройки** (автостарт, reboot по плану, backup, geoip/geosite URL):
+
+![Настройки](./docs/screenshots/08-settings-modal.png)
+
 Переснять: `node tools/capture-ui-screenshots.mjs`
 
 ## Быстрые команды CLI

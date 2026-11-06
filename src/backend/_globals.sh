@@ -8,11 +8,16 @@ unset LD_LIBRARY_PATH
 ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
-ADDON_VERSION="1.0.18"
+ADDON_VERSION="1.0.19"
 SS_STARTUP_DELAY="8"
 SS_BACKUP_KEEP="10"
 SS_AUTO_BACKUP="1"
 SS_LOG_MAX_BYTES="1048576"
+SS_REBOOT_SCHEDULE="off"
+SS_REBOOT_CRON=""
+SS_GEODATA_AUTO="0"
+SS_GEODATA_SCHEDULE="weekly"
+SS_GEODATA_BASE="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download"
 
 ADDON_WEB_DIR="/www/user/$ADDON_TAG"
 ADDON_SCRIPT="/jffs/scripts/$ADDON_TAG"
@@ -100,8 +105,13 @@ ADDON_REPO="Homavi88/Stealthsurf-Asus"
 ADDON_RELEASE_TGZ="https://github.com/${ADDON_REPO}/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz"
 ADDON_RELEASE_API="https://api.github.com/repos/${ADDON_REPO}/releases/latest"
 SS_VERSION_FILE="$ADDON_SHARE_DIR/version.json"
+SS_SETTINGS_FILE="$ADDON_SHARE_DIR/settings.json"
 
 if [ -f "$SS_CONF_FILE" ]; then
   # shellcheck disable=SC1090
   . "$SS_CONF_FILE"
+fi
+# conf may override download base for geoip/geosite
+if [ -n "${SS_GEODATA_BASE:-}" ]; then
+  GEODATA_BASE="$SS_GEODATA_BASE"
 fi

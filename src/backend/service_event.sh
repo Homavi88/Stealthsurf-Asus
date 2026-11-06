@@ -366,6 +366,21 @@ ss_service_event() {
   geodata)
     ss_geodata_update && ss_json_response true "geodata updated" null || ss_json_response false "geodata failed" null
     ;;
+  getsettings | settings)
+    if type ss_settings_publish >/dev/null 2>&1; then
+      ss_settings_publish 2>/dev/null || true
+    fi
+    ss_json_response true "settings" "$(ss_settings_json)"
+    ;;
+  setsettings)
+    local applied
+    if applied=$(ss_settings_apply "$payload"); then
+      ss_json_response true "settings saved" "$applied"
+    else
+      ss_json_response false "settings failed" null
+      return 1
+    fi
+    ;;
   installxray)
     ss_ensure_xray && ss_json_response true "xray ready" null || ss_json_response false "xray install failed" null
     ;;

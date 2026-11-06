@@ -13,6 +13,7 @@ import ./protocols.sh
 import ./xray_bin.sh
 import ./diag.sh
 import ./backup.sh
+import ./settings.sh
 import ./version.sh
 import ./startup.sh
 import ./control.sh
@@ -43,6 +44,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   baks           backups        cl             clients
   dev            devices        conn [url]     connectivity
   xray           install-xray   geo            geodata
+  cfg            settings       setcfg '<json>' set-settings
   un --yes       uninstall      doctor         восстановить UI/CLI
   h|?            help           m|menu         интерактивное меню
 
@@ -53,7 +55,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   update-settings set-routing preset set-policies clients
   set-mode set-dns-mode rebuild diag test-config connectivity
   protocols logs devices backup backups restore
-  install-xray geodata
+  install-xray geodata settings set-settings
 
 Примеры:
   ssurf up
@@ -333,6 +335,13 @@ ss_cli_dispatch() {
     ;;
   geodata | geo)
     ss_geodata_update || return 1
+    ;;
+  settings | cfg | get-settings)
+    ss_settings_publish 2>/dev/null || true
+    ss_settings_json
+    ;;
+  set-settings | setcfg)
+    ss_settings_apply "${2:-{}}" || return 1
     ;;
   protocols | p | proto)
     ss_protocol_status_matrix

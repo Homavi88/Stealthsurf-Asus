@@ -371,9 +371,14 @@ ss_install_cron() {
     cru d stealthsurf_backup 2>/dev/null || true
     cru a stealthsurf_sync "*/15 * * * * /jffs/scripts/$ADDON_TAG autosync"
     cru a stealthsurf_watch "*/10 * * * * /jffs/scripts/$ADDON_TAG watchdog"
-    cru a stealthsurf_backup "0 3 * * * /jffs/scripts/$ADDON_TAG backup nightly"
+    if [ "${SS_AUTO_BACKUP:-1}" = "1" ]; then
+      cru a stealthsurf_backup "0 3 * * * /jffs/scripts/$ADDON_TAG backup nightly"
+    fi
     cru d stealthsurf_ver 2>/dev/null || true
     cru a stealthsurf_ver "15 */12 * * * /jffs/scripts/$ADDON_TAG check-update"
+    if type ss_settings_install_extra_cron >/dev/null 2>&1; then
+      ss_settings_install_extra_cron 2>/dev/null || true
+    fi
     ss_ok "Cron jobs installed via cru (sync/watchdog/backup/version-check)"
     return 0
   fi
@@ -384,8 +389,13 @@ ss_install_cron() {
     touch "$cronf"
     grep -q "$ADDON_TAG autosync" "$cronf" 2>/dev/null || echo "$sync_line" >>"$cronf"
     grep -q "$ADDON_TAG watchdog" "$cronf" 2>/dev/null || echo "$watch_line" >>"$cronf"
-    grep -q "$ADDON_TAG backup" "$cronf" 2>/dev/null || echo "$backup_line" >>"$cronf"
+    if [ "${SS_AUTO_BACKUP:-1}" = "1" ]; then
+      grep -q "$ADDON_TAG backup" "$cronf" 2>/dev/null || echo "$backup_line" >>"$cronf"
+    fi
     grep -q "$ADDON_TAG check-update" "$cronf" 2>/dev/null || echo "$ver_line" >>"$cronf"
+    if type ss_settings_install_extra_cron >/dev/null 2>&1; then
+      ss_settings_install_extra_cron 2>/dev/null || true
+    fi
     ss_ok "Cron lines appended to $cronf"
   else
     ss_warn "No cru/crontab — schedule autosync/backup manually"
@@ -398,5 +408,7 @@ ss_remove_cron() {
     cru d stealthsurf_watch 2>/dev/null || true
     cru d stealthsurf_backup 2>/dev/null || true
     cru d stealthsurf_ver 2>/dev/null || true
+    cru d stealthsurf_reboot 2>/dev/null || true
+    cru d stealthsurf_geodata 2>/dev/null || true
   fi
 }
