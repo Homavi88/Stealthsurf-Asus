@@ -20,6 +20,26 @@ JFFS custom scripts должны быть включены.
 
 `stealthsurf stop` и `uninstall` чистят цепочки `STEALTHSURF` и `ip rule`. Если интернет пропал — перезапустите firewall роутера (`service restart_firewall`) или reboot.
 
+## После установки / старта пропал интернет
+
+Частые причины (исправлено в **v1.0.14**):
+
+1. Режим **redirect/tproxy** без живого Xray — LAN уходит в «чёрную дыру»
+2. Entware `iptables` перехватывал системный iptables Merlin
+3. Совпадение TPROXY mark/table с **xrayui** (`0x10000` / `77`) — теперь у нас `0x20000` / `78`
+4. Не хватало исключений DHCP / LOCAL / DNAT
+
+Срочно вернуть интернет:
+
+```sh
+ssurf mode proxy
+ssurf dn          # stop + cleanup firewall
+# или
+ssurf doctor
+```
+
+Прозрачный режим включайте только после успешного sync/apply: `ssurf mode redirect` → `ssurf up`.
+
 ## Нет левого меню / шапки Asus на странице StealthSurf
 
 С v1.0.13 страница копируется в `userN.asp` (не symlink), вызывается `show_menu()` с корректным `current_page`, подключается `menu_style.css`.

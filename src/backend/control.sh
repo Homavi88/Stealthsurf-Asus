@@ -233,7 +233,14 @@ ss_start_inner() {
   # Give Xray time to bind dokodemo ports before firewall hijack
   sleep 3
   if ss_xray_running; then
-    ss_configure_firewall
+    if ! ss_configure_firewall; then
+      case "$(ss_fw_detect_mode)" in
+      proxy) ;;
+      *)
+        ss_warn "Transparent firewall not applied — LAN stays direct (safe). Fix config/mode then restart."
+        ;;
+      esac
+    fi
     case "$SS_DNS_MODE" in
     OFF) ;;
     *)
@@ -249,6 +256,7 @@ ss_start_inner() {
   fi
   ss_error "Xray failed to stay up"
   ss_activity "start.fail" "process died"
+  ss_cleanup_firewall 2>/dev/null || true
   rm -f "$XRAY_PIDFILE"
   ss_write_state
   return 1

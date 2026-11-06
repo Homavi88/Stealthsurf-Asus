@@ -80,19 +80,35 @@ ss_watchdog_tick() {
   # Respect intentional stop (xrayui desired-state pattern)
   if type ss_desired_is_set >/dev/null 2>&1; then
     if ! ss_desired_is_set; then
+      # Ensure no leftover hijack rules after intentional stop
+      if ss_firewall_is_configured 2>/dev/null; then
+        ss_warn "Watchdog: undesired firewall rules present — cleaning"
+        ss_cleanup_firewall 2>/dev/null || true
+      fi
       return 0
     fi
   fi
   if ss_xray_running; then
-    if ! ss_firewall_is_configured 2>/dev/null; then
-      ss_warn "Watchdog: firewall rules missing while running — restoring"
-      ss_configure_firewall 2>/dev/null || true
-    fi
+    case "$(ss_fw_detect_mode 2>/dev/null || echo proxy)" in
+    proxy) ;;
+    *)
+      if ! ss_firewall_is_configured 2>/dev/null; then
+        ss_warn "Watchdog: firewall rules missing while running — restoring"
+        ss_configure_firewall 2>/dev/null || true
+      fi
+      ;;
+    esac
     return 0
+  fi
+  # Xray dead but desired — drop hijack first so LAN keeps internet, then restart
+  if ss_firewall_is_configured 2>/dev/null; then
+    ss_warn "Watchdog: Xray down with transparent rules — cleaning to restore internet"
+    ss_cleanup_firewall 2>/dev/null || true
   fi
   ss_warn "Watchdog: Xray not running but desired — restarting"
   ss_activity "watchdog.restart" "desired=1"
   ss_start || {
+    ss_cleanup_firewall 2>/dev/null || true
     if [ -n "$SS_FALLBACK_OUTBOUND" ] && [ "$SS_FALLBACK_OUTBOUND" != "direct" ]; then
       ss_warn "Watchdog: start failed (fallback=$SS_FALLBACK_OUTBOUND)"
     fi

@@ -192,6 +192,66 @@ ss_router_ip() {
   nvram get lan_ipaddr 2>/dev/null || ip -4 addr show br0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1
 }
 
+ss_resolve_system_iptables() {
+  # Prefer firmware/busybox iptables over Entware — Entware in PATH breaks Merlin NAT.
+  local bin
+  for bin in /usr/sbin/iptables /sbin/iptables /bin/iptables; do
+    if [ -x "$bin" ]; then
+      printf '%s\n' "$bin"
+      return 0
+    fi
+  done
+  # Last resort: whatever is on PATH (may be Entware)
+  if command -v iptables >/dev/null 2>&1; then
+    command -v iptables
+    return 0
+  fi
+  return 1
+}
+
+ss_resolve_system_ip6tables() {
+  local bin
+  for bin in /usr/sbin/ip6tables /sbin/ip6tables /bin/ip6tables; do
+    if [ -x "$bin" ]; then
+      printf '%s\n' "$bin"
+      return 0
+    fi
+  done
+  command -v ip6tables 2>/dev/null || return 1
+}
+
+ss_iptables_init() {
+  # Cache absolute paths once per process
+  if [ -z "$SS_IPTABLES" ]; then
+    SS_IPTABLES=$(ss_resolve_system_iptables) || SS_IPTABLES="iptables"
+  fi
+  if [ -z "$SS_IP6TABLES" ]; then
+    SS_IP6TABLES=$(ss_resolve_system_ip6tables 2>/dev/null) || SS_IP6TABLES="ip6tables"
+  fi
+}
+
+ss_dokodemo_listening() {
+  # True if transparent inbound port is accepting connections (avoid blackhole LAN)
+  local mode port
+  mode=$(ss_fw_detect_mode 2>/dev/null || echo proxy)
+  case "$mode" in
+  tproxy) port="${SS_TPROXY_PORT:-10810}" ;;
+  redirect) port="${SS_REDIRECT_PORT:-10811}" ;;
+  *) return 0 ;; # proxy mode needs no hijack port
+  esac
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -lntu 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
+  fi
+  if [ -r /proc/net/tcp ]; then
+    # hex port
+    local hex
+    hex=$(printf '%04X' "$port")
+    grep -qiE ":${hex}[[:space:]]" /proc/net/tcp /proc/net/tcp6 2>/dev/null && return 0
+  fi
+  # Fallback: assume OK if our xray pid is alive (port check unavailable)
+  ss_xray_running 2>/dev/null
+}
+
 ss_protocol_runtime() {
   # Map StealthSurf protocol → runtime: xray|hysteria|wg|awg|unsupported
   # openflux and wg prefer Xray (xray_config / wireguard outbound); awg needs awg-quick.
