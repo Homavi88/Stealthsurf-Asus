@@ -38,6 +38,26 @@ ss_get_webui_page() {
   return 1
 }
 
+# Insert VPN → StealthSurf into bind-mounted menuTree.js.
+# BusyBox sed has no `\s`; use awk so 3004/3006 both match `{url: "NULL", tabName: "__INHERIT__"}`.
+ss_menutree_inject_tab() {
+  local page="$1"
+  local src="$2"
+  local dest="$3"
+  [ -n "$page" ] && [ -f "$src" ] || return 1
+  awk -v page="$page" '
+    /tabName: "StealthSurf"/ { next }
+    /index: "menu_VPN"/ { in_vpn = 1 }
+    in_vpn && /index:/ && $0 !~ /index: "menu_VPN"/ { in_vpn = 0 }
+    in_vpn && /url:[[:space:]]*"NULL",[[:space:]]*tabName:[[:space:]]*"__INHERIT__"/ && !injected {
+      print "        { url: \"" page "\", tabName: \"StealthSurf\" },"
+      injected = 1
+    }
+    { print }
+  ' "$src" >"$dest" || return 1
+  grep -q 'tabName: "StealthSurf"' "$dest"
+}
+
 ss_mount_ui() {
   nvram get rc_support 2>/dev/null | grep -q am_addons || {
     ss_error "Firmware does not support am_addons"
@@ -62,15 +82,21 @@ ss_mount_ui() {
 
   if [ ! -f /tmp/menuTree.js ]; then
     cp /www/require/modules/menuTree.js /tmp/menuTree.js
+    mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js 2>/dev/null || true
   fi
 
   grep -v 'tabName: "StealthSurf"' /tmp/menuTree.js >/tmp/menuTree.ss.$$ 2>/dev/null || cp /tmp/menuTree.js /tmp/menuTree.ss.$$
+  if [ ! -s /tmp/menuTree.ss.$$ ]; then
+    cp /tmp/menuTree.js /tmp/menuTree.ss.$$
+  fi
   mv /tmp/menuTree.ss.$$ /tmp/menuTree.js
 
-  sed '/index: "menu_VPN"/,/index:/ {
- /url:\s*"NULL",\s*tabName:\s*"__INHERIT__"/ i\
-\ \ \ \ \ \ \ \ { url: "'"$ADDON_USER_PAGE"'", tabName: "StealthSurf" },
-}' /tmp/menuTree.js >/tmp/menuTree.ss.$$ && mv /tmp/menuTree.ss.$$ /tmp/menuTree.js
+  if ss_menutree_inject_tab "$ADDON_USER_PAGE" /tmp/menuTree.js /tmp/menuTree.ss.$$; then
+    mv /tmp/menuTree.ss.$$ /tmp/menuTree.js
+  else
+    rm -f /tmp/menuTree.ss.$$
+    ss_warn "Could not insert VPN → StealthSurf into menuTree.js (page still at /www/user/$ADDON_USER_PAGE)"
+  fi
 
   umount /www/require/modules/menuTree.js 2>/dev/null
   mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js

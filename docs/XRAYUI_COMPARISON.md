@@ -45,7 +45,7 @@
 | Паттерн xrayui | StealthSurf |
 | --- | --- |
 | `index_style.css` / `form_style.css` | подключены в `index.asp` |
-| `state.js` / `general.js` / `popup.js` + `show_menu()` | есть (`initial()`) |
+| `state.js` / `general.js` / `popup.js` + `show_menu()` | есть (`initial()`; не перезаписываем jQuery `$`) |
 | `#TopBanner`, `#Loading`, `#mainMenu`, `#subMenu`, `#tabMenu` | есть |
 | `FormTitle` + `FormTable` + `button_gen` | есть |
 | `label-success` / `label-error` | есть |

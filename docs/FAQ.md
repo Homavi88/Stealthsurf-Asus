@@ -122,7 +122,7 @@ Mark/table у нас отдельные (`0x20000`/`78` vs `0x10000`/`77`), но
 
 ## Нет левого меню / шапки Asus на странице StealthSurf
 
-С v1.0.13 страница копируется в `userN.asp` (не symlink), вызывается `show_menu()` с корректным `current_page`, подключается `menu_style.css`.
+С v1.0.22 `app.js` больше не перезаписывает jQuery `$` — из‑за этого Merlin `show_menu()` падал в `$.inArray` и **не рисовал левое меню** (шапка TopBanner при этом могла быть). Вкладка **VPN → StealthSurf** вставляется в `menuTree.js` через awk (BusyBox без `\s`).
 
 После обновления:
 

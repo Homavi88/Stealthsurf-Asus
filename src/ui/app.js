@@ -1,6 +1,10 @@
 const EXT = "/ext/stealthsurf";
 
-const $ = (id) => document.getElementById(id);
+// Do not bind a global `$`. Merlin show_menu() needs jQuery `$` (inArray, #tabMenu)
+// before it paints #mainMenu. Shadowing `$` leaves the left router menu empty.
+function byId(id) {
+  return document.getElementById(id);
+}
 
 const PROTO_OPTIONS = [
   "vless",
@@ -28,7 +32,7 @@ let versionsCache = { installed: "—", releases: [] };
 let selectedRelease = null;
 
 function setMsg(text, kind) {
-  const el = $("msg");
+  const el = byId("msg");
   el.textContent = text || "";
   el.className = "ss-msg" + (kind ? " " + kind : "");
 }
@@ -83,7 +87,7 @@ function triggerService(action, payload, opts) {
     sessionStorage.setItem("ss_payload", JSON.stringify(data));
   } catch (_) {}
 
-  const form = document.form || $("ruleForm");
+  const form = document.form || byId("ruleForm");
   if (!form) {
     setMsg("Форма действия не найдена", "err");
     return;
@@ -97,7 +101,7 @@ function triggerService(action, payload, opts) {
     );
     return;
   }
-  $("ss_payload_field").value = blob;
+  byId("ss_payload_field").value = blob;
 
   const page = (location.pathname || "").replace(/^\//, "") || "user1.asp";
   if (form.current_page) form.current_page.value = page;
@@ -136,7 +140,7 @@ function triggerService(action, payload, opts) {
 
 function switchTab(name) {
   // XrayUI-style: all sections stacked; ?tab= just scrolls into view
-  const panel = $("tab-" + name) || document.getElementById("sec-" + name);
+  const panel = byId("tab-" + name) || document.getElementById("sec-" + name);
   if (panel && typeof panel.scrollIntoView === "function") {
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -173,16 +177,16 @@ function xrayuiInfo(state) {
 
 function renderConflict(state) {
   const info = xrayuiInfo(state);
-  const banner = $("conflictBanner");
-  const conflictPill = $("conflictPill");
-  const xrayuiPill = $("xrayuiPill");
-  const btnStart = $("btnStart");
-  const btnRestart = $("btnRestart");
+  const banner = byId("conflictBanner");
+  const conflictPill = byId("conflictPill");
+  const xrayuiPill = byId("xrayuiPill");
+  const btnStart = byId("btnStart");
+  const btnRestart = byId("btnRestart");
 
   if (banner) {
     if (info.running) {
       banner.classList.add("show");
-      if ($("conflictText") && info.message) $("conflictText").textContent = info.message;
+      if (byId("conflictText") && info.message) byId("conflictText").textContent = info.message;
     } else {
       banner.classList.remove("show");
     }
@@ -216,36 +220,36 @@ function renderState(state) {
   if (!state) return;
   stateCache = state;
   const running = !!state.running;
-  const pill = $("runState");
+  const pill = byId("runState");
   pill.textContent = running ? "StealthSurf is running" : "StealthSurf is stopped";
   pill.className = labelClass(running ? "on" : "off");
   // XrayUI pattern: start XOR restart+stop
-  if ($("btnStart")) $("btnStart").style.display = running ? "none" : "inline-block";
-  if ($("btnRestart")) $("btnRestart").style.display = running ? "inline-block" : "none";
-  if ($("btnStop")) $("btnStop").style.display = running ? "inline-block" : "none";
-  $("activeCfg").textContent = "active: " + (state.active_config_id ?? "—");
-  $("modePill").textContent = "mode: " + (state.proxy_mode || state.mode || "—");
-  $("ports").textContent =
+  if (byId("btnStart")) byId("btnStart").style.display = running ? "none" : "inline-block";
+  if (byId("btnRestart")) byId("btnRestart").style.display = running ? "inline-block" : "none";
+  if (byId("btnStop")) byId("btnStop").style.display = running ? "inline-block" : "none";
+  byId("activeCfg").textContent = "active: " + (state.active_config_id ?? "—");
+  byId("modePill").textContent = "mode: " + (state.proxy_mode || state.mode || "—");
+  byId("ports").textContent =
     "socks :" +
     (state.socks_port || "—") +
     " / http :" +
     (state.http_port || "—") +
     " / tp :" +
     (state.tproxy_port || state.redirect_port || "—");
-  $("defaultPill").textContent = "default: " + (state.default_outbound || "—");
-  if (state.mode && $("modeSelect")) $("modeSelect").value = state.mode;
-  if (state.dns_mode && $("dnsModeSelect")) $("dnsModeSelect").value = state.dns_mode;
+  byId("defaultPill").textContent = "default: " + (state.default_outbound || "—");
+  if (state.mode && byId("modeSelect")) byId("modeSelect").value = state.mode;
+  if (state.dns_mode && byId("dnsModeSelect")) byId("dnsModeSelect").value = state.dns_mode;
   if (state.version) {
-    if ($("installedVer")) $("installedVer").textContent = "v" + state.version;
-    if ($("titleVer")) $("titleVer").textContent = "v" + state.version;
-    if ($("footerVer")) $("footerVer").textContent = "v" + state.version;
+    if (byId("installedVer")) byId("installedVer").textContent = "v" + state.version;
+    if (byId("titleVer")) byId("titleVer").textContent = "v" + state.version;
+    if (byId("footerVer")) byId("footerVer").textContent = "v" + state.version;
   }
   renderConflict(state);
 }
 
 function fillModalList(ulId, boxId, items) {
-  const ul = $(ulId);
-  const box = $(boxId);
+  const ul = byId(ulId);
+  const box = byId(boxId);
   if (!ul || !box) return;
   ul.innerHTML = "";
   const list = Array.isArray(items) ? items.filter(Boolean) : [];
@@ -267,16 +271,16 @@ function changelogKey(info) {
 
 function openUpdateModal(info, opts) {
   const data = info || versionCache || {};
-  const modal = $("updateModal");
+  const modal = byId("updateModal");
   if (!modal) return;
   const options = opts || {};
   const cl = data.changelog || {};
   const latest = data.latest || data.tag || "—";
   const installed = data.installed || "—";
 
-  if ($("modalLatest")) $("modalLatest").textContent = latest;
-  if ($("modalSummary")) {
-    $("modalSummary").textContent =
+  if (byId("modalLatest")) byId("modalLatest").textContent = latest;
+  if (byId("modalSummary")) {
+    byId("modalSummary").textContent =
       cl.summary ||
       cl.headline ||
       ("Сейчас установлена " + installed + ". На GitHub есть " + latest + ".");
@@ -285,7 +289,7 @@ function openUpdateModal(info, opts) {
   fillModalList("modalFixes", "modalFixBox", cl.fixes);
   fillModalList("modalOther", "modalOtherBox", cl.other);
 
-  const link = $("modalGhLink");
+  const link = byId("modalGhLink");
   if (link) {
     if (data.release_url) {
       link.href = data.release_url;
@@ -308,7 +312,7 @@ function openUpdateModal(info, opts) {
 }
 
 function closeUpdateModal() {
-  const modal = $("updateModal");
+  const modal = byId("updateModal");
   if (modal) modal.classList.remove("show");
 }
 
@@ -326,10 +330,10 @@ function findReleaseByTag(tag) {
 
 function renderSelectedRelease(rel) {
   selectedRelease = rel || null;
-  const badge = $("versionDirection");
-  const summary = $("versionPickSummary");
-  const btn = $("btnVersionInstall");
-  const link = $("versionGhLink");
+  const badge = byId("versionDirection");
+  const summary = byId("versionPickSummary");
+  const btn = byId("btnVersionInstall");
+  const link = byId("versionGhLink");
   if (!rel) {
     if (badge) {
       badge.textContent = "—";
@@ -379,11 +383,11 @@ function renderSelectedRelease(rel) {
 }
 
 function fillVersionsSelect(data) {
-  const sel = $("versionSelect");
+  const sel = byId("versionSelect");
   if (!sel) return;
   const releases = (data && data.releases) || [];
   const installed = (data && data.installed) || (versionCache && versionCache.installed) || "—";
-  if ($("versionsInstalled")) $("versionsInstalled").textContent = installed !== "—" ? "v" + installed : "—";
+  if (byId("versionsInstalled")) byId("versionsInstalled").textContent = installed !== "—" ? "v" + installed : "—";
   sel.innerHTML = "";
   if (!releases.length) {
     const o = document.createElement("option");
@@ -427,14 +431,14 @@ function applyVersionsData(data) {
       update_available: top ? top.direction === "newer" : !!versionCache.update_available,
       error: data.error || versionCache.error || null,
     };
-    if ($("installedVer") && data.installed) $("installedVer").textContent = "v" + data.installed;
-    if ($("versionsInstalled")) $("versionsInstalled").textContent = "v" + data.installed;
-    if ($("latestVer") && versionCache.latest) $("latestVer").textContent = "GitHub: " + versionCache.latest;
+    if (byId("installedVer") && data.installed) byId("installedVer").textContent = "v" + data.installed;
+    if (byId("versionsInstalled")) byId("versionsInstalled").textContent = "v" + data.installed;
+    if (byId("latestVer") && versionCache.latest) byId("latestVer").textContent = "GitHub: " + versionCache.latest;
   }
 }
 
 function openVersionsModal(data) {
-  const modal = $("versionsModal");
+  const modal = byId("versionsModal");
   if (!modal) return;
   if (data) applyVersionsData(data);
   else fillVersionsSelect(versionsCache);
@@ -442,7 +446,7 @@ function openVersionsModal(data) {
 }
 
 function closeVersionsModal() {
-  const modal = $("versionsModal");
+  const modal = byId("versionsModal");
   if (modal) modal.classList.remove("show");
 }
 
@@ -452,7 +456,7 @@ function requestVersionsList(andOpen) {
 }
 
 function installSelectedVersion() {
-  const rel = selectedRelease || findReleaseByTag($("versionSelect") && $("versionSelect").value);
+  const rel = selectedRelease || findReleaseByTag(byId("versionSelect") && byId("versionSelect").value);
   if (!rel || !rel.tag) {
     setMsg("Сначала выберите версию", "err");
     return;
@@ -483,27 +487,27 @@ function renderVersion(info) {
   const latest = info.latest || null;
   const upd = !!info.update_available;
 
-  if ($("installedVer")) {
-    $("installedVer").textContent = installed && installed !== "—" ? "v" + installed : "—";
-    $("installedVer").style.color = upd ? "#fc0" : "#fc0";
+  if (byId("installedVer")) {
+    byId("installedVer").textContent = installed && installed !== "—" ? "v" + installed : "—";
+    byId("installedVer").style.color = upd ? "#fc0" : "#fc0";
   }
-  if ($("latestVer")) {
-    $("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
+  if (byId("latestVer")) {
+    byId("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
   }
-  if ($("titleVer") && installed && installed !== "—") $("titleVer").textContent = "v" + installed;
-  if ($("footerVer") && installed && installed !== "—") $("footerVer").textContent = "v" + installed;
-  if ($("versionsInstalled") && installed && installed !== "—") $("versionsInstalled").textContent = "v" + installed;
+  if (byId("titleVer") && installed && installed !== "—") byId("titleVer").textContent = "v" + installed;
+  if (byId("footerVer") && installed && installed !== "—") byId("footerVer").textContent = "v" + installed;
+  if (byId("versionsInstalled") && installed && installed !== "—") byId("versionsInstalled").textContent = "v" + installed;
 
-  const pill = $("updatePill");
-  const banner = $("updateBanner");
-  const btnUpdate = $("btnUpdate");
+  const pill = byId("updatePill");
+  const banner = byId("updateBanner");
+  const btnUpdate = byId("btnUpdate");
   if (upd) {
     pill.style.display = "inline-block";
     pill.className = labelClass("warn");
     pill.textContent = "есть обновление " + latest;
     banner.classList.add("show");
-    $("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
-    $("bannerInstalled").textContent = installed;
+    byId("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
+    byId("bannerInstalled").textContent = installed;
     btnUpdate.style.display = "inline-block";
     maybeAutoOpenChangelog(info);
   } else {
@@ -520,12 +524,12 @@ function renderVersion(info) {
   else if (latest) t += " · актуально";
   if (upd && info.changelog && info.changelog.headline) t += " · " + info.changelog.headline;
   const cls = labelClass(upd ? "warn" : latest ? "on" : "muted");
-  const detail = $("verDetail");
+  const detail = byId("verDetail");
   if (detail) {
     detail.textContent = t;
     detail.className = cls;
   }
-  const detailAdv = $("verDetailAdvanced");
+  const detailAdv = byId("verDetailAdvanced");
   if (detailAdv) {
     detailAdv.textContent = t;
     detailAdv.className = cls;
@@ -548,7 +552,7 @@ function fillOutboundSelects() {
   const ids = (configsCache || []).filter(Boolean).map((c) => c.id);
   const enabled = enabledSet();
   for (const selId of ["defaultOutbound", "presetDefault", "presetAlt", "ruleOutbound"]) {
-    const sel = $(selId);
+    const sel = byId(selId);
     if (!sel) continue;
     const prev = sel.value;
     sel.innerHTML = "";
@@ -574,12 +578,12 @@ function fillOutboundSelects() {
     });
     if (prev) sel.value = prev;
   }
-  if (outboundsCache.default && $("defaultOutbound")) {
-    $("defaultOutbound").value = outboundsCache.default;
+  if (outboundsCache.default && byId("defaultOutbound")) {
+    byId("defaultOutbound").value = outboundsCache.default;
   }
   // Default rule outbound → current default VPN if enabled
-  if ($("ruleOutbound") && outboundsCache.default && !$("ruleOutbound").value) {
-    $("ruleOutbound").value = outboundsCache.default;
+  if (byId("ruleOutbound") && outboundsCache.default && !byId("ruleOutbound").value) {
+    byId("ruleOutbound").value = outboundsCache.default;
   }
 }
 
@@ -620,16 +624,16 @@ function filterSuggestions(query, items) {
 let suggestActiveIndex = -1;
 
 function hideRuleSuggest() {
-  const box = $("ruleSuggestBox");
+  const box = byId("ruleSuggestBox");
   if (box) box.classList.remove("show");
   suggestActiveIndex = -1;
 }
 
 function showRuleSuggest() {
-  const type = $("ruleType") ? $("ruleType").value : "domain";
-  const input = $("ruleMatcher");
-  const box = $("ruleSuggestBox");
-  const hint = $("ruleSuggestHint");
+  const type = byId("ruleType") ? byId("ruleType").value : "domain";
+  const input = byId("ruleMatcher");
+  const box = byId("ruleSuggestBox");
+  const hint = byId("ruleSuggestHint");
   if (!input || !box) return;
 
   const catalog = suggestCatalog(type);
@@ -685,13 +689,13 @@ function showRuleSuggest() {
 }
 
 function syncRulesJsonFromCache() {
-  if ($("routingJson")) {
-    $("routingJson").value = JSON.stringify(routingCache.rules || [], null, 2);
+  if (byId("routingJson")) {
+    byId("routingJson").value = JSON.stringify(routingCache.rules || [], null, 2);
   }
 }
 
 function renderRulesTable() {
-  const tbody = $("rulesTable");
+  const tbody = byId("rulesTable");
   if (!tbody) return;
   tbody.innerHTML = "";
   const rules = routingCache.rules || [];
@@ -754,9 +758,9 @@ function protoBadge(proto) {
 
 function renderConfigs(configs) {
   configsCache = (configs || []).filter(Boolean);
-  const filter = ($("catalogFilter").value || "").toLowerCase();
-  const tbody = $("configTable");
-  const select = $("configSelect");
+  const filter = (byId("catalogFilter").value || "").toLowerCase();
+  const tbody = byId("configTable");
+  const select = byId("configSelect");
   tbody.innerHTML = "";
   select.innerHTML = "";
   const en = enabledSet();
@@ -812,7 +816,7 @@ function renderConfigs(configs) {
 }
 
 function renderLocations(locations) {
-  const select = $("locationSelect");
+  const select = byId("locationSelect");
   select.innerHTML = "";
   let list = [];
   if (Array.isArray(locations)) list = locations;
@@ -831,7 +835,7 @@ function renderLocations(locations) {
 }
 
 function renderProtocolSelect() {
-  const p = $("protocolSelect");
+  const p = byId("protocolSelect");
   p.innerHTML = "";
   PROTO_OPTIONS.forEach((proto) => {
     const opt = document.createElement("option");
@@ -846,7 +850,7 @@ function renderProtocolSelect() {
 }
 
 function renderKeys(keys) {
-  const tbody = $("keysTable");
+  const tbody = byId("keysTable");
   tbody.innerHTML = "";
   (keys || []).forEach((k) => {
     const tr = document.createElement("tr");
@@ -863,7 +867,7 @@ function renderKeys(keys) {
 }
 
 function renderSubs(subs) {
-  const tbody = $("subsTable");
+  const tbody = byId("subsTable");
   tbody.innerHTML = "";
   (subs || []).filter(Boolean).forEach((s) => {
     const tr = document.createElement("tr");
@@ -888,11 +892,11 @@ function renderRouting(routing) {
 }
 
 function addRoutingRuleFromForm() {
-  const type = ($("ruleType") && $("ruleType").value) || "domain";
-  let matcher = ($("ruleMatcher") && $("ruleMatcher").value.trim()) || "";
-  const outbound = ($("ruleOutbound") && $("ruleOutbound").value) || "direct";
-  const name = ($("ruleName") && $("ruleName").value.trim()) || "";
-  const prioRaw = $("rulePriority") && $("rulePriority").value;
+  const type = (byId("ruleType") && byId("ruleType").value) || "domain";
+  let matcher = (byId("ruleMatcher") && byId("ruleMatcher").value.trim()) || "";
+  const outbound = (byId("ruleOutbound") && byId("ruleOutbound").value) || "direct";
+  const name = (byId("ruleName") && byId("ruleName").value.trim()) || "";
+  const prioRaw = byId("rulePriority") && byId("rulePriority").value;
   const priority = prioRaw ? Number(prioRaw) : (routingCache.rules || []).length + 1;
 
   if (!matcher) {
@@ -916,8 +920,8 @@ function addRoutingRuleFromForm() {
   routingCache.rules = routingCache.rules || [];
   routingCache.rules.push(rule);
   routingCache.rules.sort((a, b) => (a.priority || 9999) - (b.priority || 9999));
-  if ($("ruleMatcher")) $("ruleMatcher").value = "";
-  if ($("ruleName")) $("ruleName").value = "";
+  if (byId("ruleMatcher")) byId("ruleMatcher").value = "";
+  if (byId("ruleName")) byId("ruleName").value = "";
   hideRuleSuggest();
   renderRouting(routingCache);
   setMsg("Правило добавлено в список. Нажмите «Сохранить routing + Apply».", "ok");
@@ -925,8 +929,8 @@ function addRoutingRuleFromForm() {
 
 function renderPolicies(policies) {
   policiesCache = policies || { catchall: true, rules: [] };
-  $("policyCatchall").checked = !!policiesCache.catchall;
-  const tbody = $("policiesTable");
+  byId("policyCatchall").checked = !!policiesCache.catchall;
+  const tbody = byId("policiesTable");
   tbody.innerHTML = "";
   (policiesCache.rules || []).forEach((r, idx) => {
     const tr = document.createElement("tr");
@@ -957,7 +961,7 @@ function renderPolicies(policies) {
 
 function renderClients(clients) {
   clientsCache = clients || [];
-  const sel = $("clientSelect");
+  const sel = byId("clientSelect");
   sel.innerHTML = "";
   clientsCache.forEach((c) => {
     const opt = document.createElement("option");
@@ -993,27 +997,27 @@ function parseXraySettingsFlags(raw) {
 }
 
 function onConfigChange() {
-  const opt = $("configSelect").selectedOptions[0];
+  const opt = byId("configSelect").selectedOptions[0];
   if (!opt) return;
-  if (opt.dataset.locationId) $("locationSelect").value = opt.dataset.locationId;
+  if (opt.dataset.locationId) byId("locationSelect").value = opt.dataset.locationId;
   if (opt.dataset.protocol) {
-    const p = $("protocolSelect");
+    const p = byId("protocolSelect");
     if ([...p.options].some((o) => o.value === opt.dataset.protocol && !o.disabled)) {
       p.value = opt.dataset.protocol;
     }
   }
   const cfg = (configsCache || []).find((c) => c && String(c.id) === String(opt.value));
   const flags = parseXraySettingsFlags(cfg && cfg.xray_config);
-  $("optUseXhttp").checked = flags.use_xhttp;
-  $("optUseGrpc").checked = flags.use_grpc;
-  $("optUseWarp").checked = flags.use_warp;
-  $("optUseSalamander").checked = flags.use_salamander;
-  $("optDisableReality").checked = flags.disable_reality;
+  byId("optUseXhttp").checked = flags.use_xhttp;
+  byId("optUseGrpc").checked = flags.use_grpc;
+  byId("optUseWarp").checked = flags.use_warp;
+  byId("optUseSalamander").checked = flags.use_salamander;
+  byId("optDisableReality").checked = flags.disable_reality;
   const info = protocolsCache[opt.dataset.protocol];
   const runtime = info
     ? "runtime: " + info.runtime + (info.status ? " · " + info.status : "")
     : "";
-  $("protoHint").textContent =
+  byId("protoHint").textContent =
     (runtime ? runtime + ". " : "") +
     "Смена на сайте → «Синхронизировать» (или autosync */15) подтянет connection_url и пересоберёт включённые outbound.";
 }
@@ -1093,11 +1097,11 @@ async function refreshAll() {
       }
       // diag dump
       if (data && (data.firewall || data.xray || data.protocols) && /diag/i.test(response.message)) {
-        $("diagBox").textContent = JSON.stringify(data, null, 2);
+        byId("diagBox").textContent = JSON.stringify(data, null, 2);
       }
       // connectivity
       if (data && (data.ip != null || data.via != null) && /connectivity/i.test(response.message)) {
-        $("diagBox").textContent =
+        byId("diagBox").textContent =
           "IP: " + (data.ip || "—") + "\nvia: " + (data.via || "—") + "\nok: " + String(!!data.ok);
       }
       // backups list embedded in backup/backuplist responses
@@ -1122,10 +1126,10 @@ async function refreshAll() {
         setTimeout(() => refreshAll(), 1200);
       }
       if (data && data.text && /logs|devices/i.test(response.message)) {
-        showLogText(data.text, data.kind || $("logKind").value);
+        showLogText(data.text, data.kind || byId("logKind").value);
       }
       if (/logs cleared/i.test(response.message)) {
-        showLogText("(логи очищены)", $("logKind").value);
+        showLogText("(логи очищены)", byId("logKind").value);
         setTimeout(loadLogPreview, 500);
       }
     }
@@ -1139,20 +1143,20 @@ function bind() {
     t.addEventListener("click", () => switchTab(t.dataset.tab))
   );
 
-  $("configSelect").addEventListener("change", onConfigChange);
-  $("catalogFilter").addEventListener("input", () => renderConfigs(configsCache));
+  byId("configSelect").addEventListener("change", onConfigChange);
+  byId("catalogFilter").addEventListener("input", () => renderConfigs(configsCache));
 
-  $("btnSaveKey").addEventListener("click", () =>
-    triggerService("setkey", { api_key: $("apiKey").value.trim() })
+  byId("btnSaveKey").addEventListener("click", () =>
+    triggerService("setkey", { api_key: byId("apiKey").value.trim() })
   );
-  $("btnAddKey").addEventListener("click", () =>
+  byId("btnAddKey").addEventListener("click", () =>
     triggerService("addkey", {
-      api_key: $("apiKey").value.trim(),
-      label: $("apiKeyLabel").value.trim(),
+      api_key: byId("apiKey").value.trim(),
+      label: byId("apiKeyLabel").value.trim(),
     })
   );
-  $("btnSync").addEventListener("click", () => triggerService("sync", {}));
-  $("btnStart").addEventListener("click", () => {
+  byId("btnSync").addEventListener("click", () => triggerService("sync", {}));
+  byId("btnStart").addEventListener("click", () => {
     const info = xrayuiInfo(stateCache);
     if (info.running) {
       setMsg(info.message || "Сначала остановите XrayUI", "err");
@@ -1161,8 +1165,8 @@ function bind() {
     }
     triggerService("start", {});
   });
-  $("btnStop").addEventListener("click", () => triggerService("stop", {}));
-  $("btnRestart").addEventListener("click", () => {
+  byId("btnStop").addEventListener("click", () => triggerService("stop", {}));
+  byId("btnRestart").addEventListener("click", () => {
     const info = xrayuiInfo(stateCache);
     if (info.running) {
       setMsg(info.message || "Сначала остановите XrayUI", "err");
@@ -1171,19 +1175,19 @@ function bind() {
     }
     triggerService("restart", {});
   });
-  $("btnRefresh").addEventListener("click", () => refreshAll());
-  $("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
-  $("btnUpdate").addEventListener("click", () => {
+  byId("btnRefresh").addEventListener("click", () => refreshAll());
+  byId("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
+  byId("btnUpdate").addEventListener("click", () => {
     openUpdateModal(versionCache, { keepSeen: true });
   });
-  if ($("btnApplyAll")) {
-    $("btnApplyAll").addEventListener("click", () => {
+  if (byId("btnApplyAll")) {
+    byId("btnApplyAll").addEventListener("click", () => {
       // Like XrayUI Apply — rebuild dataplane from current settings
       triggerService("rebuild", {}, { wait: 20 });
     });
   }
-  if ($("btnVersionFooter")) {
-    $("btnVersionFooter").addEventListener("click", (e) => {
+  if (byId("btnVersionFooter")) {
+    byId("btnVersionFooter").addEventListener("click", (e) => {
       e.preventDefault();
       if (versionCache && versionCache.update_available) {
         openUpdateModal(versionCache, { keepSeen: true });
@@ -1192,34 +1196,34 @@ function bind() {
       }
     });
   }
-  if ($("btnBannerUpdate")) {
-    $("btnBannerUpdate").addEventListener("click", () => {
+  if (byId("btnBannerUpdate")) {
+    byId("btnBannerUpdate").addEventListener("click", () => {
       if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
       triggerService("update", { force: "0" });
     });
   }
-  if ($("btnBannerChangelog")) {
-    $("btnBannerChangelog").addEventListener("click", () => openUpdateModal(versionCache, { keepSeen: true }));
+  if (byId("btnBannerChangelog")) {
+    byId("btnBannerChangelog").addEventListener("click", () => openUpdateModal(versionCache, { keepSeen: true }));
   }
-  if ($("btnModalClose")) $("btnModalClose").addEventListener("click", () => closeUpdateModal());
-  if ($("btnModalLater")) $("btnModalLater").addEventListener("click", () => closeUpdateModal());
-  if ($("btnModalUpdate")) {
-    $("btnModalUpdate").addEventListener("click", () => {
+  if (byId("btnModalClose")) byId("btnModalClose").addEventListener("click", () => closeUpdateModal());
+  if (byId("btnModalLater")) byId("btnModalLater").addEventListener("click", () => closeUpdateModal());
+  if (byId("btnModalUpdate")) {
+    byId("btnModalUpdate").addEventListener("click", () => {
       if (!confirm("Установить обновление " + (versionCache.latest || "") + " с GitHub?")) return;
       closeUpdateModal();
       triggerService("update", { force: "0" });
     });
   }
-  if ($("updateModal")) {
-    $("updateModal").addEventListener("click", (e) => {
-      if (e.target === $("updateModal")) closeUpdateModal();
+  if (byId("updateModal")) {
+    byId("updateModal").addEventListener("click", (e) => {
+      if (e.target === byId("updateModal")) closeUpdateModal();
     });
   }
-  if ($("btnCheckUpdate2")) {
-    $("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
+  if (byId("btnCheckUpdate2")) {
+    byId("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
   }
-  if ($("btnForceUpdate")) {
-    $("btnForceUpdate").addEventListener("click", () => {
+  if (byId("btnForceUpdate")) {
+    byId("btnForceUpdate").addEventListener("click", () => {
       if (!confirm("Принудительно скачать и установить latest с GitHub (даже если версия та же)?")) return;
       triggerService("update", { force: "1" });
     });
@@ -1230,84 +1234,84 @@ function bind() {
       requestVersionsList(false);
     }
   };
-  if ($("btnVersions")) $("btnVersions").addEventListener("click", openVersionsUi);
-  if ($("btnVersions2")) $("btnVersions2").addEventListener("click", openVersionsUi);
-  if ($("btnVersionsClose")) $("btnVersionsClose").addEventListener("click", () => closeVersionsModal());
-  if ($("btnVersionsRefresh")) {
-    $("btnVersionsRefresh").addEventListener("click", () => requestVersionsList(false));
+  if (byId("btnVersions")) byId("btnVersions").addEventListener("click", openVersionsUi);
+  if (byId("btnVersions2")) byId("btnVersions2").addEventListener("click", openVersionsUi);
+  if (byId("btnVersionsClose")) byId("btnVersionsClose").addEventListener("click", () => closeVersionsModal());
+  if (byId("btnVersionsRefresh")) {
+    byId("btnVersionsRefresh").addEventListener("click", () => requestVersionsList(false));
   }
-  if ($("btnVersionInstall")) {
-    $("btnVersionInstall").addEventListener("click", () => installSelectedVersion());
+  if (byId("btnVersionInstall")) {
+    byId("btnVersionInstall").addEventListener("click", () => installSelectedVersion());
   }
-  if ($("versionSelect")) {
-    $("versionSelect").addEventListener("change", () => {
-      renderSelectedRelease(findReleaseByTag($("versionSelect").value));
+  if (byId("versionSelect")) {
+    byId("versionSelect").addEventListener("change", () => {
+      renderSelectedRelease(findReleaseByTag(byId("versionSelect").value));
     });
   }
-  if ($("versionsModal")) {
-    $("versionsModal").addEventListener("click", (e) => {
-      if (e.target === $("versionsModal")) closeVersionsModal();
+  if (byId("versionsModal")) {
+    byId("versionsModal").addEventListener("click", (e) => {
+      if (e.target === byId("versionsModal")) closeVersionsModal();
     });
   }
 
-  $("btnApplySole").addEventListener("click", () =>
-    triggerService("apply", { config_id: Number($("configSelect").value), sole: "1" })
+  byId("btnApplySole").addEventListener("click", () =>
+    triggerService("apply", { config_id: Number(byId("configSelect").value), sole: "1" })
   );
-  $("btnUpdateSettings").addEventListener("click", () =>
+  byId("btnUpdateSettings").addEventListener("click", () =>
     triggerService("updatesettings", {
-      config_id: Number($("configSelect").value),
+      config_id: Number(byId("configSelect").value),
       settings: {
-        location_id: Number($("locationSelect").value),
-        protocol: $("protocolSelect").value,
-        use_xhttp: !!$("optUseXhttp").checked,
-        use_grpc: !!$("optUseGrpc").checked,
-        use_warp: !!$("optUseWarp").checked,
-        use_salamander: !!$("optUseSalamander").checked,
-        disable_reality: !!$("optDisableReality").checked,
+        location_id: Number(byId("locationSelect").value),
+        protocol: byId("protocolSelect").value,
+        use_xhttp: !!byId("optUseXhttp").checked,
+        use_grpc: !!byId("optUseGrpc").checked,
+        use_warp: !!byId("optUseWarp").checked,
+        use_salamander: !!byId("optUseSalamander").checked,
+        disable_reality: !!byId("optDisableReality").checked,
       },
     })
   );
-  $("btnSetDefault").addEventListener("click", () =>
-    triggerService("setdefault", { outbound: $("defaultOutbound").value })
+  byId("btnSetDefault").addEventListener("click", () =>
+    triggerService("setdefault", { outbound: byId("defaultOutbound").value })
   );
-  $("btnRebuild").addEventListener("click", () =>
+  byId("btnRebuild").addEventListener("click", () =>
     triggerService("setoutbounds", {
       enabled: outboundsCache.enabled || [],
-      default: outboundsCache.default || $("defaultOutbound").value,
+      default: outboundsCache.default || byId("defaultOutbound").value,
     })
   );
 
-  $("btnPreset").addEventListener("click", () =>
+  byId("btnPreset").addEventListener("click", () =>
     triggerService("preset", {
-      preset: $("presetSelect").value,
-      default_id: Number($("presetDefault").value),
-      alt_id: Number($("presetAlt").value) || undefined,
+      preset: byId("presetSelect").value,
+      default_id: Number(byId("presetDefault").value),
+      alt_id: Number(byId("presetAlt").value) || undefined,
     })
   );
-  if ($("btnAddRule")) {
-    $("btnAddRule").addEventListener("click", () => addRoutingRuleFromForm());
+  if (byId("btnAddRule")) {
+    byId("btnAddRule").addEventListener("click", () => addRoutingRuleFromForm());
   }
-  if ($("ruleType")) {
-    $("ruleType").addEventListener("change", () => {
+  if (byId("ruleType")) {
+    byId("ruleType").addEventListener("change", () => {
       hideRuleSuggest();
-      if ($("ruleMatcher")) $("ruleMatcher").placeholder =
-        $("ruleType").value === "geosite"
+      if (byId("ruleMatcher")) byId("ruleMatcher").placeholder =
+        byId("ruleType").value === "geosite"
           ? "например youtube, category-ru…"
-          : $("ruleType").value === "geoip"
+          : byId("ruleType").value === "geoip"
             ? "например private, ru, cn…"
             : "например youtube.com";
       showRuleSuggest();
     });
   }
-  if ($("ruleMatcher")) {
-    $("ruleMatcher").addEventListener("input", () => {
+  if (byId("ruleMatcher")) {
+    byId("ruleMatcher").addEventListener("input", () => {
       suggestActiveIndex = -1;
       showRuleSuggest();
     });
-    $("ruleMatcher").addEventListener("focus", () => showRuleSuggest());
-    $("ruleMatcher").addEventListener("blur", () => setTimeout(hideRuleSuggest, 180));
-    $("ruleMatcher").addEventListener("keydown", (e) => {
-      const box = $("ruleSuggestBox");
+    byId("ruleMatcher").addEventListener("focus", () => showRuleSuggest());
+    byId("ruleMatcher").addEventListener("blur", () => setTimeout(hideRuleSuggest, 180));
+    byId("ruleMatcher").addEventListener("keydown", (e) => {
+      const box = byId("ruleSuggestBox");
       if (!box || !box.classList.contains("show")) {
         if (e.key === "Enter") {
           e.preventDefault();
@@ -1327,7 +1331,7 @@ function bind() {
       } else if (e.key === "Enter") {
         e.preventDefault();
         if (suggestActiveIndex >= 0 && items[suggestActiveIndex]) {
-          $("ruleMatcher").value = items[suggestActiveIndex].dataset.value;
+          byId("ruleMatcher").value = items[suggestActiveIndex].dataset.value;
           hideRuleSuggest();
         } else {
           addRoutingRuleFromForm();
@@ -1337,16 +1341,16 @@ function bind() {
       }
     });
   }
-  $("btnSaveRouting").addEventListener("click", () => {
+  byId("btnSaveRouting").addEventListener("click", () => {
     let rules;
     try {
       // Prefer live table cache; fall back to textarea if user edited JSON
-      if ($("routingJson") && document.activeElement === $("routingJson")) {
-        rules = JSON.parse($("routingJson").value || "[]");
+      if (byId("routingJson") && document.activeElement === byId("routingJson")) {
+        rules = JSON.parse(byId("routingJson").value || "[]");
         routingCache.rules = rules;
       } else {
         try {
-          const fromJson = JSON.parse($("routingJson").value || "[]");
+          const fromJson = JSON.parse(byId("routingJson").value || "[]");
           // Keep textarea in sync if user edited it without table
           if (JSON.stringify(fromJson) !== JSON.stringify(routingCache.rules || [])) {
             routingCache.rules = fromJson;
@@ -1365,95 +1369,95 @@ function bind() {
     }
     triggerService("setrouting", {
       rules,
-      default_outbound: $("defaultOutbound").value,
+      default_outbound: byId("defaultOutbound").value,
     });
   });
-  $("btnGeodata").addEventListener("click", () => triggerService("geodata", {}));
+  byId("btnGeodata").addEventListener("click", () => triggerService("geodata", {}));
 
-  $("btnLoadClients").addEventListener("click", () => triggerService("clients", {}));
-  $("btnAddPolicy").addEventListener("click", () => {
-    const mac = $("clientSelect").value;
+  byId("btnLoadClients").addEventListener("click", () => triggerService("clients", {}));
+  byId("btnAddPolicy").addEventListener("click", () => {
+    const mac = byId("clientSelect").value;
     if (!mac) return;
-    const name = $("clientSelect").selectedOptions[0]?.dataset.name || "";
+    const name = byId("clientSelect").selectedOptions[0]?.dataset.name || "";
     policiesCache.rules = policiesCache.rules || [];
     policiesCache.rules.push({
-      mode: $("policyMode").value,
+      mode: byId("policyMode").value,
       mac,
       name,
-      ports: $("policyPorts").value.trim() || undefined,
-      proto: $("policyProto").value,
+      ports: byId("policyPorts").value.trim() || undefined,
+      proto: byId("policyProto").value,
     });
     renderPolicies(policiesCache);
   });
-  $("btnSavePolicies").addEventListener("click", () => {
-    policiesCache.catchall = $("policyCatchall").checked;
+  byId("btnSavePolicies").addEventListener("click", () => {
+    policiesCache.catchall = byId("policyCatchall").checked;
     triggerService("setpolicies", policiesCache);
   });
 
-  $("btnSetMode").addEventListener("click", () =>
-    triggerService("setmode", { mode: $("modeSelect").value })
+  byId("btnSetMode").addEventListener("click", () =>
+    triggerService("setmode", { mode: byId("modeSelect").value })
   );
-  $("btnSetDns").addEventListener("click", () =>
-    triggerService("setdnsmode", { dns_mode: $("dnsModeSelect").value })
+  byId("btnSetDns").addEventListener("click", () =>
+    triggerService("setdnsmode", { dns_mode: byId("dnsModeSelect").value })
   );
-  $("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
-  $("btnBackup").addEventListener("click", () => {
+  byId("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
+  byId("btnBackup").addEventListener("click", () => {
     setBackupStatus("Создаю backup…", "");
-    triggerService("backup", { note: $("backupNote").value.trim() || "manual" });
+    triggerService("backup", { note: byId("backupNote").value.trim() || "manual" });
     setTimeout(loadBackups, 9000);
   });
-  $("btnBackupList").addEventListener("click", () => {
+  byId("btnBackupList").addEventListener("click", () => {
     setBackupStatus("Обновляю список…", "");
     triggerService("backuplist", {});
     setTimeout(loadBackups, 9000);
   });
 
-  $("btnDiag").addEventListener("click", () => triggerService("diag", {}));
-  $("btnTestCfg").addEventListener("click", () => triggerService("testconfig", {}));
-  $("btnConnSocks").addEventListener("click", () => triggerService("connectivity", { via: "socks" }));
-  $("btnConnDirect").addEventListener("click", () =>
+  byId("btnDiag").addEventListener("click", () => triggerService("diag", {}));
+  byId("btnTestCfg").addEventListener("click", () => triggerService("testconfig", {}));
+  byId("btnConnSocks").addEventListener("click", () => triggerService("connectivity", { via: "socks" }));
+  byId("btnConnDirect").addEventListener("click", () =>
     triggerService("connectivity", { via: "direct" })
   );
-  $("btnLogs").addEventListener("click", () => {
-    const kind = $("logKind").value;
+  byId("btnLogs").addEventListener("click", () => {
+    const kind = byId("logKind").value;
     setLogMeta("Загрузка «" + kind + "»…");
     triggerService("logs", { kind: kind, lines: "200" });
     setTimeout(loadLogPreview, 9000);
   });
-  $("logKind").addEventListener("change", () => loadLogPreview());
-  $("btnDevicesSnap").addEventListener("click", () => {
-    $("logKind").value = "devices";
+  byId("logKind").addEventListener("change", () => loadLogPreview());
+  byId("btnDevicesSnap").addEventListener("click", () => {
+    byId("logKind").value = "devices";
     setLogMeta("Снимок LAN устройств…");
     triggerService("devicesnapshot", {});
     setTimeout(loadLogPreview, 9000);
   });
-  $("btnClearLogs").addEventListener("click", () => {
+  byId("btnClearLogs").addEventListener("click", () => {
     if (!confirm("Очистить все логи аддона (activity/errors/devices/addon)?")) return;
     triggerService("clearlogs", { kind: "all" });
   });
 
-  if ($("btnSettings")) {
-    $("btnSettings").addEventListener("click", () => openSettingsModal());
+  if (byId("btnSettings")) {
+    byId("btnSettings").addEventListener("click", () => openSettingsModal());
   }
-  if ($("btnSettingsClose")) {
-    $("btnSettingsClose").addEventListener("click", () => closeSettingsModal());
+  if (byId("btnSettingsClose")) {
+    byId("btnSettingsClose").addEventListener("click", () => closeSettingsModal());
   }
-  if ($("btnSettingsSave")) {
-    $("btnSettingsSave").addEventListener("click", () => saveSettingsFromModal());
+  if (byId("btnSettingsSave")) {
+    byId("btnSettingsSave").addEventListener("click", () => saveSettingsFromModal());
   }
-  if ($("setRebootSchedule")) {
-    $("setRebootSchedule").addEventListener("change", () => syncRebootCronVisibility());
+  if (byId("setRebootSchedule")) {
+    byId("setRebootSchedule").addEventListener("change", () => syncRebootCronVisibility());
   }
-  if ($("btnSettingsBackup")) {
-    $("btnSettingsBackup").addEventListener("click", () => {
-      const note = ($("setBackupNote") && $("setBackupNote").value.trim()) || "manual";
+  if (byId("btnSettingsBackup")) {
+    byId("btnSettingsBackup").addEventListener("click", () => {
+      const note = (byId("setBackupNote") && byId("setBackupNote").value.trim()) || "manual";
       setSettingsStatus("Создаю backup…");
       triggerService("backup", { note: note });
       setTimeout(loadBackups, 9000);
     });
   }
-  if ($("btnSettingsBackupList")) {
-    $("btnSettingsBackupList").addEventListener("click", () => {
+  if (byId("btnSettingsBackupList")) {
+    byId("btnSettingsBackupList").addEventListener("click", () => {
       setSettingsStatus("Обновляю список backup…");
       triggerService("backuplist", {});
       setTimeout(() => {
@@ -1462,44 +1466,44 @@ function bind() {
       }, 9000);
     });
   }
-  if ($("btnSettingsGeodataNow")) {
-    $("btnSettingsGeodataNow").addEventListener("click", () => {
+  if (byId("btnSettingsGeodataNow")) {
+    byId("btnSettingsGeodataNow").addEventListener("click", () => {
       setSettingsStatus("Обновляю geoip/geosite…");
       triggerService("geodata", {});
     });
   }
-  if ($("settingsModal")) {
-    $("settingsModal").addEventListener("click", (ev) => {
-      if (ev.target === $("settingsModal")) closeSettingsModal();
+  if (byId("settingsModal")) {
+    byId("settingsModal").addEventListener("click", (ev) => {
+      if (ev.target === byId("settingsModal")) closeSettingsModal();
     });
   }
 }
 
 function setSettingsStatus(text) {
-  const el = $("settingsStatus");
+  const el = byId("settingsStatus");
   if (el) el.textContent = text || "";
 }
 
 function syncRebootCronVisibility() {
-  const wrap = $("setRebootCronWrap");
-  const sel = $("setRebootSchedule");
+  const wrap = byId("setRebootCronWrap");
+  const sel = byId("setRebootSchedule");
   if (!wrap || !sel) return;
   wrap.style.display = sel.value === "custom" ? "" : "none";
 }
 
 function fillSettingsForm(s) {
   const data = s || {};
-  if ($("setAutoStart")) $("setAutoStart").checked = !!data.auto_start;
-  if ($("setWatchdog")) $("setWatchdog").checked = data.watchdog !== false;
-  if ($("setAutoBackup")) $("setAutoBackup").checked = data.auto_backup !== false;
-  if ($("setStartupDelay")) $("setStartupDelay").value = data.startup_delay != null ? data.startup_delay : 8;
-  if ($("setBackupKeep")) $("setBackupKeep").value = data.backup_keep != null ? data.backup_keep : 10;
-  if ($("setRebootSchedule")) $("setRebootSchedule").value = data.reboot_schedule || "off";
-  if ($("setRebootCron")) $("setRebootCron").value = data.reboot_cron || "";
-  if ($("setGeodataAuto")) $("setGeodataAuto").checked = !!data.geodata_auto;
-  if ($("setGeodataSchedule")) $("setGeodataSchedule").value = data.geodata_schedule || "weekly";
-  if ($("setGeodataBase")) {
-    $("setGeodataBase").value =
+  if (byId("setAutoStart")) byId("setAutoStart").checked = !!data.auto_start;
+  if (byId("setWatchdog")) byId("setWatchdog").checked = data.watchdog !== false;
+  if (byId("setAutoBackup")) byId("setAutoBackup").checked = data.auto_backup !== false;
+  if (byId("setStartupDelay")) byId("setStartupDelay").value = data.startup_delay != null ? data.startup_delay : 8;
+  if (byId("setBackupKeep")) byId("setBackupKeep").value = data.backup_keep != null ? data.backup_keep : 10;
+  if (byId("setRebootSchedule")) byId("setRebootSchedule").value = data.reboot_schedule || "off";
+  if (byId("setRebootCron")) byId("setRebootCron").value = data.reboot_cron || "";
+  if (byId("setGeodataAuto")) byId("setGeodataAuto").checked = !!data.geodata_auto;
+  if (byId("setGeodataSchedule")) byId("setGeodataSchedule").value = data.geodata_schedule || "weekly";
+  if (byId("setGeodataBase")) {
+    byId("setGeodataBase").value =
       data.geodata_base ||
       "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
   }
@@ -1508,21 +1512,21 @@ function fillSettingsForm(s) {
 
 function collectSettingsPayload() {
   return {
-    auto_start: !!( $("setAutoStart") && $("setAutoStart").checked ),
-    watchdog: !!( $("setWatchdog") && $("setWatchdog").checked ),
-    auto_backup: !!( $("setAutoBackup") && $("setAutoBackup").checked ),
-    startup_delay: Number(($("setStartupDelay") && $("setStartupDelay").value) || 8),
-    backup_keep: Number(($("setBackupKeep") && $("setBackupKeep").value) || 10),
-    reboot_schedule: ($("setRebootSchedule") && $("setRebootSchedule").value) || "off",
-    reboot_cron: ($("setRebootCron") && $("setRebootCron").value.trim()) || "",
-    geodata_auto: !!( $("setGeodataAuto") && $("setGeodataAuto").checked ),
-    geodata_schedule: ($("setGeodataSchedule") && $("setGeodataSchedule").value) || "weekly",
-    geodata_base: ($("setGeodataBase") && $("setGeodataBase").value.trim()) || "",
+    auto_start: !!( byId("setAutoStart") && byId("setAutoStart").checked ),
+    watchdog: !!( byId("setWatchdog") && byId("setWatchdog").checked ),
+    auto_backup: !!( byId("setAutoBackup") && byId("setAutoBackup").checked ),
+    startup_delay: Number((byId("setStartupDelay") && byId("setStartupDelay").value) || 8),
+    backup_keep: Number((byId("setBackupKeep") && byId("setBackupKeep").value) || 10),
+    reboot_schedule: (byId("setRebootSchedule") && byId("setRebootSchedule").value) || "off",
+    reboot_cron: (byId("setRebootCron") && byId("setRebootCron").value.trim()) || "",
+    geodata_auto: !!( byId("setGeodataAuto") && byId("setGeodataAuto").checked ),
+    geodata_schedule: (byId("setGeodataSchedule") && byId("setGeodataSchedule").value) || "weekly",
+    geodata_base: (byId("setGeodataBase") && byId("setGeodataBase").value.trim()) || "",
   };
 }
 
 async function openSettingsModal() {
-  const modal = $("settingsModal");
+  const modal = byId("settingsModal");
   if (!modal) return;
   setSettingsStatus("Загрузка…");
   fillSettingsForm({
@@ -1551,7 +1555,7 @@ async function openSettingsModal() {
 }
 
 function closeSettingsModal() {
-  const modal = $("settingsModal");
+  const modal = byId("settingsModal");
   if (modal) modal.classList.remove("show");
 }
 
@@ -1575,7 +1579,7 @@ function saveSettingsFromModal() {
 }
 
 function setBackupStatus(text, cls) {
-  const el = $("backupStatus");
+  const el = byId("backupStatus");
   if (!el) return;
   el.textContent = text || "";
   el.className = "ss-hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
@@ -1584,19 +1588,19 @@ function setBackupStatus(text, cls) {
 }
 
 function setLogMeta(text) {
-  const el = $("logMeta");
+  const el = byId("logMeta");
   if (el) el.textContent = text || "";
 }
 
 function showLogText(text, kind) {
-  const box = $("logBox");
+  const box = byId("logBox");
   if (!box) return;
   const body = (text || "").trim() || "(пусто)";
   box.textContent = body;
   const lines = body === "(пусто)" ? 0 : body.split("\n").length;
   setLogMeta(
     "Показано: " +
-      (kind || $("logKind").value) +
+      (kind || byId("logKind").value) +
       " · строк: " +
       lines +
       " · " +
@@ -1605,7 +1609,7 @@ function showLogText(text, kind) {
 }
 
 function renderBackups(list) {
-  const tbody = $("backupsTable");
+  const tbody = byId("backupsTable");
   if (!tbody) return;
   tbody.innerHTML = "";
   const rows = list || [];
@@ -1663,7 +1667,7 @@ async function loadBackups() {
 }
 
 async function loadLogPreview() {
-  const kind = $("logKind") ? $("logKind").value : "activity";
+  const kind = byId("logKind") ? byId("logKind").value : "activity";
   const map = {
     activity: "/activity.log",
     errors: "/errors.log",
