@@ -164,7 +164,7 @@ elif grep -q 'checkUpdateFromGithub({ quiet: true, skipAutoModal: true })' "$ROO
 else
   echo "FAIL no auto checkupdate submit"
   fail=$((fail + 1))
-}
+fi
 grep -q 'force-update | update-force | uf' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  force-update" || {
   echo "FAIL force-update"
   fail=$((fail + 1))
