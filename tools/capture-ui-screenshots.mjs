@@ -106,6 +106,7 @@ writeJson("routing.json", mock.routing);
 writeJson("policies.json", mock.policies);
 writeJson("version.json", mock.version);
 writeJson("protocols.json", mock.protocols);
+writeJson("settings.json", mock.settings);
 writeJson("stealthsurf-response.json", mock.response);
 writeJson("backups.json", []);
 fs.copyFileSync(path.join(PREVIEW, "merlin-stub.css"), path.join(PREVIEW, "merlin-stub.css"));
@@ -192,6 +193,14 @@ const shots = [
   },
   { file: "04-mode-dns.png", path: "/?tab=general", wait: 1000, state: "running", height: 1000 },
   { file: "05-xrayui-conflict.png", path: "/?tab=keys", wait: 1100, state: "conflict", height: 1000 },
+  {
+    file: "08-settings-modal.png",
+    path: "/?tab=keys",
+    wait: 900,
+    state: "running",
+    height: 1100,
+    prepare: "settings-modal",
+  },
 ];
 
 async function prepareShot(page, kind) {
@@ -238,6 +247,19 @@ async function prepareShot(page, kind) {
       if (typeof showRuleSuggest === "function") showRuleSuggest();
     });
     await new Promise((r) => setTimeout(r, 400));
+  }
+  if (kind === "settings-modal") {
+    await page.evaluate(async () => {
+      if (typeof openSettingsModal === "function") {
+        await openSettingsModal();
+      } else {
+        const modal = document.getElementById("settingsModal");
+        if (modal) modal.classList.add("show");
+      }
+      const status = document.getElementById("settingsStatus");
+      if (status) status.textContent = "";
+    });
+    await new Promise((r) => setTimeout(r, 500));
   }
 }
 
