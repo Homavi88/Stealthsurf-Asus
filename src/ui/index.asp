@@ -454,13 +454,111 @@ function initial() {
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
   /* Do NOT override .content width — Merlin uses 998px + middown_bg (same as XrayUI). */
 
+  /* Merlin-like hintstyle: hover label → tip (overlib / fallback), no click */
+  .ss-hintstyle {
+    cursor: help !important;
+    border-bottom: 1px dashed #fc0;
+  }
+  th.ss-hintstyle,
+  h4.ss-hintstyle,
+  thead td.ss-hintstyle {
+    border-bottom-color: transparent;
+  }
+  th.ss-hintstyle {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-decoration-color: #fc0;
+    text-underline-offset: 2px;
+  }
+  label.ss-hintstyle,
+  span.ss-hintstyle {
+    border-bottom: 1px dashed #fc0;
+  }
+  #ssHelpTip {
+    display: none;
+    position: fixed;
+    z-index: 11000;
+    max-width: min(380px, 92vw);
+    padding: 10px 12px;
+    background: #2f3a3e;
+    border: 1px solid #fc0;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.45;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+    pointer-events: none;
+  }
+  #ssHelpTip.show { display: block; }
+
+  .ss-proxy-tag {
+    display: inline-block;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin: 2px 4px 2px 0;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #fc0;
+    background: transparent;
+  }
+  .ss-proxy-tag.proto { border-color: #fc0; color: #fc0; }
+  .ss-proxy-tag.runtime { border-color: #8bc34a; color: #8bc34a; background: rgba(139,195,74,0.12); }
+  .ss-proxy-tag.sec { border-color: #b388ff; color: #b388ff; }
+  .ss-proxy-tag.off { border-color: #6b757b; color: #9ab; }
+  .ss-proxy-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    background: #6b757b;
+  }
+  .ss-proxy-dot.on { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+  .ss-proxy-dot.err { background: #f44336; box-shadow: 0 0 4px #f44336; }
+  .ss-proxy-row th {
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .ss-modal-card.ss-wide-card {
-    width: min(920px, 96vw);
+    width: min(980px, 98vw);
   }
   .ss-modal-card .FormTable {
     margin-bottom: 8px;
+    table-layout: auto;
+    width: 100%;
   }
   .ss-modal-card .FormTable thead { display: none; }
+  /* Shrink label column to text; give content column the rest (XrayUI modal feel) */
+  .ss-modal-card .FormTable th,
+  .ss-modal-card .FormTable th[width],
+  .ss-modal-card .FormTable th[width="30%"] {
+    width: 1% !important;
+    max-width: 160px;
+    white-space: nowrap;
+    vertical-align: top;
+    padding-right: 10px;
+  }
+  .ss-modal-card .FormTable td {
+    width: auto;
+    vertical-align: top;
+  }
+  .ss-modal-card .FormTable input.input_25_table,
+  .ss-modal-card .FormTable input.input_32_table,
+  .ss-modal-card .FormTable select.input_25_table,
+  .ss-modal-card .FormTable select.input_32_table {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .ss-modal-card .ss-table-scroll {
+    width: 100%;
+  }
+  .ss-modal-card .ss-data-table {
+    min-width: 100%;
+  }
   .ss-section-menu th { width: 30%; }
   .ss-table-scroll {
     width: 100%;
@@ -650,23 +748,23 @@ function initial() {
                       <p class="ss-modal-summary">Автозапуск, плановая перезагрузка, backup и обновление geoip/geosite.</p>
                       <div class="ss-settings-grid">
                         <div class="ss-modal-section">
-                          <h4>Запуск</h4>
+                          <h4 data-ss-hint="Когда и как StealthSurf стартует на роутере после включения электричества или перезагрузки.">Запуск</h4>
                           <div class="ss-settings-row">
-                            <label class="ss-check"><input id="setAutoStart" type="checkbox"> Автостарт после перезагрузки роутера</label>
-                            <label class="ss-check"><input id="setWatchdog" type="checkbox"> Watchdog (авто-рестарт при падении)</label>
+                            <label class="ss-check" data-ss-hint="Если включено, StealthSurf сам запустится после перезагрузки роутера — вам не нужно заходить в веб-интерфейс и нажимать Start."><input id="setAutoStart" type="checkbox"> Автостарт после перезагрузки роутера</label>
+                            <label class="ss-check" data-ss-hint="Сторож: если защита внезапно остановилась, роутер сам попробует запустить её снова."><input id="setWatchdog" type="checkbox"> Watchdog (авто-рестарт при падении)</label>
                           </div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <div class="ss-settings-field">
-                              <span>Задержка автостарта (сек)</span>
+                              <span data-ss-hint="Пауза после включения роутера, прежде чем запускать StealthSurf. Нужна, чтобы интернет и USB/Entware успели подняться. Обычно 5–15 секунд.">Задержка автостарта (сек)</span>
                               <input id="setStartupDelay" class="input_15_table" type="number" min="0" max="120" value="8">
                             </div>
                           </div>
                         </div>
                         <div class="ss-modal-section">
-                          <h4>Перезагрузка по плану</h4>
+                          <h4 data-ss-hint="Автоматическая полная перезагрузка роутера по расписанию. Нужна редко; если всё стабильно — лучше выключить.">Перезагрузка по плану</h4>
                           <div class="ss-settings-row">
                             <div class="ss-settings-field">
-                              <span>Периодичность</span>
+                              <span data-ss-hint="Как часто перезагружать весь роутер по расписанию. Это полная перезагрузка устройства, не только VPN. Если не нужно — оставьте «Выкл».">Периодичность</span>
                               <select id="setRebootSchedule" class="input_25_table">
                                 <option value="off">Выкл</option>
                                 <option value="daily">Ежедневно в 04:15</option>
@@ -676,18 +774,18 @@ function initial() {
                               </select>
                             </div>
                             <div class="ss-settings-field" id="setRebootCronWrap" style="display:none">
-                              <span>Cron (min hour dom mon dow)</span>
+                              <span data-ss-hint="Свой график в формате cron (для тех, кто знаком). Пять полей: минута час день месяц день_недели. Пример: 15 4 * * 0 — каждое воскресенье в 04:15.">Cron (min hour dom mon dow)</span>
                               <input id="setRebootCron" class="input_32_table" type="text" placeholder="15 4 * * 0" maxlength="64">
                             </div>
                           </div>
                           <div class="ss-hint">Перезагружает весь роутер (`/sbin/reboot`). Используйте осторожно.</div>
                         </div>
                         <div class="ss-modal-section">
-                          <h4>Резервное копирование</h4>
+                          <h4 data-ss-hint="Запасные копии настроек, чтобы можно было откатиться, если что-то сломалось.">Резервное копирование</h4>
                           <div class="ss-settings-row">
-                            <label class="ss-check"><input id="setAutoBackup" type="checkbox"> Ночной backup в 03:00</label>
+                            <label class="ss-check" data-ss-hint="Каждую ночь в 3:00 роутер сохранит копию настроек StealthSurf. Удобно откатиться, если что-то сломается."><input id="setAutoBackup" type="checkbox"> Ночной backup в 03:00</label>
                             <div class="ss-settings-field" style="flex:0 1 140px">
-                              <span>Хранить копий</span>
+                              <span data-ss-hint="Сколько последних ночных копий оставлять. Старые удаляются автоматически, чтобы не забивать память.">Хранить копий</span>
                               <input id="setBackupKeep" class="input_15_table" type="number" min="1" max="50" value="10">
                             </div>
                           </div>
@@ -701,11 +799,11 @@ function initial() {
                           <div id="settingsBackupHint" class="ss-hint">Файлы: /opt/share/stealthsurf/backups/</div>
                         </div>
                         <div class="ss-modal-section">
-                          <h4>GeoIP / GeoSite</h4>
+                          <h4 data-ss-hint="Справочники «какой IP/сайт к какой стране относится». Используются правилами маршрутизации.">GeoIP / GeoSite</h4>
                           <div class="ss-settings-row">
-                            <label class="ss-check"><input id="setGeodataAuto" type="checkbox"> Автообновление geoip.dat и geosite.dat</label>
+                            <label class="ss-check" data-ss-hint="Сами обновлять списки «какие сайты и IP относятся к странам». Нужны для правил вроде «Россия напрямую». Без свежих файлов часть правил может устареть."><input id="setGeodataAuto" type="checkbox"> Автообновление geoip.dat и geosite.dat</label>
                             <div class="ss-settings-field" style="flex:0 1 180px">
-                              <span>Периодичность</span>
+                              <span data-ss-hint="Как часто скачивать свежие списки стран и сайтов. Обычно достаточно раз в неделю.">Периодичность</span>
                               <select id="setGeodataSchedule" class="input_25_table">
                                 <option value="daily">Ежедневно</option>
                                 <option value="every3d">Каждые 3 дня</option>
@@ -716,7 +814,7 @@ function initial() {
                           </div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <div class="ss-settings-field" style="flex:1 1 100%">
-                              <span>Адрес загрузки (без имени файла)</span>
+                              <span data-ss-hint="Откуда скачивать файлы списков. Обычно ссылка на GitHub Loyalsoldier. Меняйте, только если вам дали другой адрес.">Адрес загрузки (без имени файла)</span>
                               <input id="setGeodataBase" class="input_32_table" type="text" maxlength="256"
                                 placeholder="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download">
                             </div>
@@ -754,7 +852,7 @@ function initial() {
                     </thead>
                     <tbody>
                       <tr>
-                        <th width="30%">Connection status</th>
+                        <th width="30%" data-ss-hint="Показывает, работает ли защита прямо сейчас. Start — включить, Stop — выключить, Restart — перезапустить. Refresh просто обновляет картинку на экране, ничего не меняя.">Connection status</th>
                         <td>
                           <span id="runState" class="label label-error">stopped</span>
                           <span id="conflictPill" class="label label-error" style="display:none">XrayUI конфликт</span>
@@ -776,7 +874,7 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th>Sync с сайта</th>
+                        <th data-ss-hint="Скачивает с сайта StealthSurf ваши актуальные серверы и настройки по API-ключу. Нажимайте после изменений в личном кабинете на сайте.">Sync с сайта</th>
                         <td>
                           <span class="ss-meta-inline">Подтянуть конфиги / ключи с api.stealthsurf.net</span>
                           <span class="row-buttons">
@@ -785,16 +883,34 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th>General options</th>
+                        <th data-ss-hint="Это «пароль» от вашего аккаунта StealthSurf. Без ключа роутер не сможет скачать ваши серверы. Manage открывает окно, где ключ можно добавить или удалить.">API keys</th>
                         <td>
-                          <span class="ss-meta-inline">Автостарт, reboot по плану, backup, geoip/geosite</span>
+                          <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th data-ss-hint="Базовые удобства: автозапуск после перезагрузки роутера, плановая перезагрузка, ночные копии настроек и обновление списков стран/сайтов для маршрутизации.">General options</th>
+                        <td>
+                          <span class="ss-meta-inline">Автостарт, reboot по плану, geoip/geosite</span>
                           <span class="row-buttons">
                             <input id="btnSettings" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
                         </td>
                       </tr>
                       <tr>
-                        <th>Update</th>
+                        <th data-ss-hint="Запасная копия настроек «на всякий случай» и журнал того, что происходило (ошибки, действия). Manage открывает окно со списком копий и логов.">Backup / Logs</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
+                          <span class="row-buttons">
+                            <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th data-ss-hint="Проверка новой версии аддона на GitHub. Check — посмотреть, есть ли обновление. Versions / rollback — поставить другую версию или откатиться назад.">Update</th>
                         <td>
                           <span class="ss-meta-inline" id="verDetail">—</span>
                           <span class="row-buttons">
@@ -807,32 +923,33 @@ function initial() {
                     </tbody>
                   </table>
 
-                  <!-- Section menu: open each block in a modal (XrayUI-style) -->
-                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable ss-section-menu" id="sec-menu">
+                  <!-- Outbounds: XrayUI-style compact list; edit opens modal -->
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-outbounds">
                     <thead>
-                      <tr><td colspan="2">Управление</td></tr>
+                      <tr><td colspan="2" data-ss-hint="Список ваших серверов. Зелёная/красная точка — доступен ли сервер. Кнопка e — настройки. + включить сервер в работу, x — выключить.">Outbounds / catalog <span class="ss-menu-summary" id="sumCatalog" style="float:right;font-weight:normal"></span></td></tr>
+                    </thead>
+                    <tbody id="outboundListBody">
+                      <tr>
+                        <th width="30%" data-ss-hint="Поиск по списку серверов. Default — сервер «по умолчанию», через который идёт обычный интернет. «Пересобрать Xray» заново собирает рабочую конфигурацию на роутере.">Фильтр / default</th>
+                        <td>
+                          <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
+                          <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
+                          <span class="row-buttons" style="margin-left:6px">
+                            <input id="btnSetDefault" class="button_gen button_gen_small" type="button" value="Назначить default">
+                            <input id="btnRebuild" class="button_gen button_gen_small" type="button" value="Пересобрать Xray">
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-routing">
+                    <thead>
+                      <tr><td colspan="2">Routing</td></tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <th>API keys</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
-                          <span class="row-buttons">
-                            <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Outbounds / catalog</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumCatalog">конфигов: —</span>
-                          <span class="row-buttons">
-                            <input id="btnManageCatalog" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Routing</th>
+                        <th width="30%" data-ss-hint="Правила решают, какой сайт или приложение идёт через VPN, а какой — напрямую. Manage открывает редактор: готовые пресеты и свои правила.">Правила</th>
                         <td>
                           <span class="ss-menu-summary" id="sumRouting">правил: —</span>
                           <span class="row-buttons">
@@ -840,8 +957,16 @@ function initial() {
                           </span>
                         </td>
                       </tr>
+                    </tbody>
+                  </table>
+
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable ss-section-menu" id="sec-menu">
+                    <thead>
+                      <tr><td colspan="2">Advanced</td></tr>
+                    </thead>
+                    <tbody>
                       <tr>
-                        <th>Clients / MAC policies</th>
+                        <th data-ss-hint="Исключения для отдельных устройств дома (по Wi‑Fi/кабелю). Например, телевизор — мимо VPN, телефон — через VPN. Без правил весь дом идёт в VPN.">Clients / MAC policies</th>
                         <td>
                           <span class="ss-menu-summary" id="sumPolicies">политик: —</span>
                           <span class="row-buttons">
@@ -850,7 +975,7 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th>Mode / DNS</th>
+                        <th data-ss-hint="Как роутер «перехватывает» интернет устройств и как обрабатывает адреса сайтов (DNS). Обычно хватает режима redirect. Меняйте, только если понимаете задачу или по инструкции поддержки.">Mode / DNS</th>
                         <td>
                           <span class="ss-menu-summary" id="sumGeneral">mode: —</span>
                           <span class="row-buttons">
@@ -859,16 +984,7 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th>Backup / Logs</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
-                          <span class="row-buttons">
-                            <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Diagnostics</th>
+                        <th data-ss-hint="Проверочные кнопки: снять снимок состояния, проверить конфиг, узнать ваш IP через VPN и напрямую. Полезно, если «интернет пропал» или что-то не подключается.">Diagnostics</th>
                         <td>
                           <span class="ss-menu-summary" id="sumDiag">тест xray / IP / dump</span>
                           <span class="row-buttons">
@@ -889,7 +1005,7 @@ function initial() {
                       <thead><tr><td colspan="2">API keys</td></tr></thead>
                       <tbody>
                         <tr>
-                          <th width="30%">Добавить ключ</th>
+                          <th width="30%" data-ss-hint="Вставьте ключ из личного кабинета StealthSurf (обычно начинается с stlth_). Метка — просто понятное имя, например «основной». «Сохранить и проверить» проверяет ключ на сервере.">Добавить ключ</th>
                           <td>
                             <input id="apiKey" class="input_32_table" type="password" maxlength="128" placeholder="stlth_........_........................" autocomplete="off">
                             <input id="apiKeyLabel" class="input_15_table" type="text" maxlength="64" placeholder="метка (опц.)" style="margin-left:6px">
@@ -901,7 +1017,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Сохранённые ключи</th>
+                          <th data-ss-hint="Список уже сохранённых ключей. Можно держать несколько (например, семейный и рабочий) — при sync серверы соберутся вместе. Удалить — убрать ключ с роутера.">Сохранённые ключи</th>
                           <td>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Метка</th><th>Ключ (хвост)</th><th></th></tr></thead>
@@ -918,75 +1034,52 @@ function initial() {
                       </div>
                     </div>
                   </div>
-                  <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
+                                    <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
                     <div class="ss-modal-card ss-wide-card">
-                      <div class="ss-modal-head" id="catalogModalTitle">Outbounds / catalog</div>
-                      <p class="ss-modal-summary">Каталог конфигов, default outbound, PATCH location/protocol и сборные подписки.</p>
+                      <div class="ss-modal-head" id="catalogModalTitle">Outbound settings</div>
+                      <p class="ss-modal-summary" id="catalogModalSummary">Смена location / protocol и опции для выбранного конфига.</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-catalog">
-<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Outbounds / catalog</td></tr></thead>
-                      <tbody>
-                        <tr>
-                          <th width="30%">Фильтр / default</th>
-                          <td>
-                            <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
-                            <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
-                            <span class="row-buttons" style="margin-left:6px">
-                              <input id="btnSetDefault" class="button_gen button_gen_small" type="button" value="Назначить default">
-                              <input id="btnRebuild" class="button_gen button_gen_small" type="button" value="Пересобрать Xray">
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Конфиги</th>
-                          <td>
-                            <div class="ss-table-scroll"><table class="ss-data-table">
-                              <thead>
-                                <tr>
-                                  <th>ID</th><th>Название</th><th>Протокол</th><th class="ss-col-hide-sm">Локация</th>
-                                  <th class="ss-col-hide-sm">Online</th><th class="ss-col-hide-sm">Expires</th><th>Outbound</th><th></th>
-                                </tr>
-                              </thead>
-                              <tbody id="configTable"></tbody>
-                            </table></div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Смена location / protocol</th>
-                          <td>
-                            <div>
-                              <select id="configSelect" class="input_32_table"></select>
-                            </div>
-                            <div style="margin-top:6px">
-                              <select id="locationSelect" class="input_25_table"></select>
-                              <select id="protocolSelect" class="input_25_table" style="margin-left:6px"></select>
-                            </div>
-                            <div class="ss-opt-row" style="margin-top:8px">
-                              <label><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
-                              <label><input type="checkbox" id="optUseGrpc"> use_grpc</label>
-                              <label><input type="checkbox" id="optUseWarp"> use_warp</label>
-                              <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
-                              <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
-                            </div>
-                            <div class="row-buttons" style="margin-top:8px">
-                              <input id="btnUpdateSettings" class="button_gen button_gen_small" type="button" value="PATCH на StealthSurf">
-                              <input id="btnApplySole" class="button_gen button_gen_small" type="button" value="Apply как единственный">
-                            </div>
-                            <div id="protoHint" class="ss-hint">После смены на сайте нажмите «Синхронизировать».</div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Сборные подписки</th>
-                          <td>
-                            <div class="ss-table-scroll"><table class="ss-data-table">
-                              <thead><tr><th>ID</th><th>Название</th><th>Статус</th></tr></thead>
-                              <tbody id="subsTable"></tbody>
-                            </table></div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                          <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                            <tbody>
+                              <tr>
+                                <th width="30%" data-ss-hint="Какой сервер из каталога сейчас редактируете. Выберите нужный из списка.">Конфиг</th>
+                                <td>
+                                  <select id="configSelect" class="input_32_table"></select>
+                                </td>
+                              </tr>
+                              <tr>
+                                <th data-ss-hint="Страна/город сервера и тип подключения (протокол). Галочки ниже — дополнительные режимы (быстрее/обход блокировок). После смены на сайте нажмите «Синхронизировать» на главной.">Location / protocol</th>
+                                <td>
+                                  <select id="locationSelect" class="input_25_table"></select>
+                                  <select id="protocolSelect" class="input_25_table" style="margin-left:6px"></select>
+                                  <div class="ss-opt-row" style="margin-top:8px">
+                                    <label data-ss-hint="Дополнительный способ передачи данных (XHTTP). Иногда помогает, когда обычный режим режут. Включайте, если так рекомендует сайт или поддержка."><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
+                                    <label data-ss-hint="Транспорт gRPC. Нужен только если ваш сервер/тариф его использует — иначе можно не трогать."><input type="checkbox" id="optUseGrpc"> use_grpc</label>
+                                    <label data-ss-hint="Часть трафика через Cloudflare WARP. Может помочь с доступом к некоторым сайтам, но усложняет схему."><input type="checkbox" id="optUseWarp"> use_warp</label>
+                                    <label data-ss-hint="Доп. маскировка для Hysteria. Имеет смысл только для таких серверов; иначе не включайте."><input type="checkbox" id="optUseSalamander"> use_salamander</label>
+                                    <label data-ss-hint="Отключить Reality (маскировку под обычный HTTPS). Обычно лучше оставить Reality включённым. Отключайте только по инструкции."><input type="checkbox" id="optDisableReality"> disable_reality</label>
+                                  </div>
+                                  <div class="row-buttons" style="margin-top:8px">
+                                    <input id="btnUpdateSettings" class="button_gen button_gen_small" type="button" value="PATCH на StealthSurf">
+                                    <input id="btnApplySole" class="button_gen button_gen_small" type="button" value="Apply как единственный">
+                                  </div>
+                                  <div id="protoHint" class="ss-hint">После смены на сайте нажмите «Синхронизировать».</div>
+                                </td>
+                              </tr>
+                              <tr>
+                                <th data-ss-hint="Готовые наборы серверов с сайта (пакеты). Показывает название и статус: активен или на паузе.">Сборные подписки</th>
+                                <td>
+                                  <div class="ss-table-scroll"><table class="ss-data-table">
+                                    <thead><tr><th>ID</th><th>Название</th><th>Статус</th></tr></thead>
+                                    <tbody id="subsTable"></tbody>
+                                  </table></div>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <!-- keep configTable for legacy tests; hidden -->
+                          <table style="display:none"><tbody id="configTable"></tbody></table>
                         </div>
                       </div>
                       <div class="ss-modal-actions">
@@ -994,7 +1087,7 @@ function initial() {
                       </div>
                     </div>
                   </div>
-                  <div id="routingModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="routingModalTitle">
+<div id="routingModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="routingModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="routingModalTitle">Routing</div>
                       <p class="ss-modal-summary">Пресеты, правила домен/geoip и JSON routing для dataplane.</p>
@@ -1004,7 +1097,7 @@ function initial() {
                       <thead><tr><td colspan="2">Routing</td></tr></thead>
                       <tbody>
                         <tr>
-                          <th width="30%">Пресет</th>
+                          <th width="30%" data-ss-hint="Готовый набор правил одной кнопкой. Например: «весь трафик в VPN» или «Россия напрямую, остальное в VPN». Выберите пресет и нажмите «Применить».">Пресет</th>
                           <td>
                             <select id="presetSelect" class="input_25_table">
                               <option value="all-vpn">весь трафик → default VPN</option>
@@ -1018,7 +1111,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Новое правило</th>
+                          <th data-ss-hint="Своё правило: что искать (сайт, страна, IP) и куда отправлять (в VPN или напрямую). Подсказки появятся, когда начнёте печатать название сайта.">Новое правило</th>
                           <td>
                             <div style="margin-bottom:6px">
                               <select id="ruleType" class="input_15_table" title="тип matcher">
@@ -1051,7 +1144,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Текущие правила</th>
+                          <th data-ss-hint="Список уже действующих правил. Чем меньше номер приоритета — тем раньше правило срабатывает. Можно удалить ненужное.">Текущие правила</th>
                           <td>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead>
@@ -1068,7 +1161,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>JSON (дополнительно)</th>
+                          <th data-ss-hint="Для опытных: правила в текстовом виде. Обычным пользователям достаточно пресетов и формы выше. Ошибка в JSON может сломать маршрутизацию.">JSON (дополнительно)</th>
                           <td>
                             <textarea id="routingJson" spellcheck="false"></textarea>
                             <div class="ss-hint">
@@ -1100,14 +1193,12 @@ function initial() {
                           <th width="30%">Правила</th>
                           <td>
                             <div class="ss-hint">Нет правил → весь LAN в VPN. Есть правила → нужен catch-all redirect, иначе «дыра».</div>
-                            <label style="color:#fff">
-                              <input id="policyCatchall" type="checkbox"> Catch-all redirect для остальных
-                            </label>
+                            <label style="color:#fff" data-ss-hint="Если есть правила для отдельных устройств, включите это: все остальные устройства дома тоже пойдут через VPN. Иначе устройства «без правила» могут уйти в интернет напрямую — получится дыра."><input id="policyCatchall" type="checkbox"> Catch-all redirect для остальных</label>
                             <input id="btnLoadClients" class="button_gen button_gen_small" type="button" value="Загрузить устройства" style="margin-left:8px">
                           </td>
                         </tr>
                         <tr>
-                          <th>Добавить</th>
+                          <th data-ss-hint="Выберите устройство из списка (или загрузите устройства), режим bypass/redirect, при желании ограничьте порты. Затем «Добавить» и «Apply политики».">Добавить</th>
                           <td>
                             <select id="clientSelect" class="input_25_table"></select>
                             <select id="policyMode" class="input_15_table" style="margin-left:6px">
@@ -1126,7 +1217,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Таблица</th>
+                          <th data-ss-hint="Список устройств с особыми правилами. Bypass — устройство ходит в интернет мимо VPN. Redirect — через VPN.">Таблица</th>
                           <td>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Mode</th><th>MAC</th><th>Имя</th><th>Ports</th><th>Proto</th><th></th></tr></thead>
@@ -1153,7 +1244,7 @@ function initial() {
                       <thead><tr><td colspan="2">Mode / DNS</td></tr></thead>
                       <tbody>
                         <tr>
-                          <th width="30%">Dataplane mode</th>
+                          <th width="30%" data-ss-hint="Как роутер направляет трафик устройств. Proxy — только программы сами подключаются к SOCKS/HTTP. Redirect — автоматически для TCP. Tproxy — TCP и UDP (нужна поддержка в прошивке).">Dataplane mode</th>
                           <td>
                             <select id="modeSelect" class="input_32_table">
                               <option value="proxy">proxy (только SOCKS/HTTP, без LAN hijack)</option>
@@ -1164,7 +1255,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>DNS mode</th>
+                          <th data-ss-hint="Как обрабатываются адреса сайтов. OFF — как обычно у роутера. BYPASS — часть запросов мимо VPN. REDIRECT — запросы DNS тоже через защиту. Неверный режим может «сломать» открытие сайтов.">DNS mode</th>
                           <td>
                             <select id="dnsModeSelect" class="input_25_table">
                               <option value="OFF">OFF</option>
@@ -1175,7 +1266,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Версия аддона</th>
+                          <th data-ss-hint="Какая версия StealthSurf стоит сейчас и что есть на GitHub. Можно проверить обновление или выбрать другую версию.">Версия аддона</th>
                           <td>
                             <span id="verDetailAdvanced" class="label label-muted">—</span>
                             <span class="row-buttons" style="margin-left:6px">
@@ -1191,7 +1282,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Xray binary</th>
+                          <th data-ss-hint="Установить или найти программу Xray на роутере — это «движок», который реально гоняет трафик. Без него аддон не сможет работать.">Xray binary</th>
                           <td>
                             <input id="btnInstallXray" class="button_gen button_gen_small" type="button" value="Установить / найти Xray">
                             <div class="ss-hint">Backup и просмотр логов — вкладка <b>Backup / Логи</b>.</div>
@@ -1216,7 +1307,7 @@ function initial() {
                       <thead><tr><td colspan="2">Backup / Logs</td></tr></thead>
                       <tbody>
                         <tr>
-                          <th width="30%">Создать</th>
+                          <th width="30%" data-ss-hint="Сделать снимок текущих настроек (конфиг, правила, ключи). Можно добавить короткую заметку. Ночной backup создаётся сам, если включён в General options.">Создать</th>
                           <td>
                             <div class="ss-hint">
                               В архив: conf, routing, outbounds, policies, configs/keys, xray.json.
@@ -1231,7 +1322,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Список</th>
+                          <th data-ss-hint="Уже сохранённые копии. Отсюда можно восстановить настройки «как было».">Список</th>
                           <td>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Файл</th><th>Когда</th><th>Заметка</th><th>Версия</th><th></th></tr></thead>
@@ -1240,7 +1331,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Логи аддона</th>
+                          <th data-ss-hint="Текстовый журнал: что делал аддон, ошибки, список устройств. Помогает понять, почему что-то не работает. Можно очистить, если лог разросся.">Логи аддона</th>
                           <td>
                             <select id="logKind" class="input_25_table">
                               <option value="activity">activity (действия)</option>
@@ -1278,7 +1369,7 @@ function initial() {
                       <thead><tr><td colspan="2">Diagnostics</td></tr></thead>
                       <tbody>
                         <tr>
-                          <th width="30%">Действия</th>
+                          <th width="30%" data-ss-hint="Быстрые проверки. Diag dump — полный снимок для поддержки. Тест xray.json — конфиг собран правильно ли. IP через SOCKS — видит ли мир вас через VPN. IP напрямую — ваш обычный адрес.">Действия</th>
                           <td>
                             <span class="row-buttons">
                               <input id="btnDiag" class="button_gen button_gen_small" type="button" value="Снять diag dump">
@@ -1290,7 +1381,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th>Результат</th>
+                          <th data-ss-hint="Сюда выводится ответ после нажатия кнопок диагностики.">Результат</th>
                           <td><div id="diagBox" class="ss-logbox">(пусто)</div></td>
                         </tr>
                       </tbody>
@@ -1326,6 +1417,7 @@ function initial() {
 </form>
 
 <div id="footer"></div>
+<div id="ssHelpTip" role="tooltip"></div>
 <script type="text/javascript">
   // Paint TopBanner / left menu while jQuery `$` is still intact (app.js must not shadow it).
   try { initial(); } catch (e) {}

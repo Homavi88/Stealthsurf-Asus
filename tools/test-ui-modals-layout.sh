@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regression: section blocks live in modals (XrayUI-style), not a long stacked page.
+# Regression: Configuration hosts keys/backup; Outbounds is XrayUI-style list; Routing opens modal.
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 ASP="$ROOT/src/ui/index.asp"
@@ -23,57 +23,71 @@ check_not() {
   file=$2
   pattern=$3
   if grep -Eq -- "$pattern" "$file"; then
-    echo "FAIL $label (unexpected match)"
+    echo "FAIL $label (unexpected)"
     fail=1
   else
     echo "OK  $label"
   fi
 }
 
-echo "== UI modal layout =="
+echo "== UI Configuration / Outbounds layout =="
 
-# Compact manage menu on main page
-check "section menu present" "$ASP" 'id="sec-menu"'
-check "manage keys button" "$ASP" 'id="btnManageKeys"'
-check "manage catalog button" "$ASP" 'id="btnManageCatalog"'
-check "manage routing button" "$ASP" 'id="btnManageRouting"'
+check "Configuration block" "$ASP" 'id="sec-config"'
+check "API keys inside Configuration area" "$ASP" 'id="btnManageKeys"'
+check "Backup inside Configuration area" "$ASP" 'id="btnManageBackup"'
+check "Outbounds section on main page" "$ASP" 'id="sec-outbounds"'
+check "outbound list body" "$ASP" 'id="outboundListBody"'
+check "Routing section" "$ASP" 'id="sec-routing"'
+check "Routing manage" "$ASP" 'id="btnManageRouting"'
+check "keys modal" "$ASP" 'id="keysModal"'
+check "catalog/edit modal" "$ASP" 'id="catalogModal"'
+check "routing modal" "$ASP" 'id="routingModal"'
+check "backup modal" "$ASP" 'id="backupModal"'
 
-# Heavy panels inside modals
-for mid in keysModal catalogModal routingModal policiesModal generalModal backupModal diagModal; do
-  check "modal $mid" "$ASP" "id=\"$mid\""
-done
-
-# Config table / editors are under catalogModal (not free-floating after Configuration)
-# Approximate: catalogModal opens before configTable
+# Keys/Backup rows should appear before Advanced menu, inside sec-config
 python3 - <<'PY' || fail=1
 from pathlib import Path
 asp = Path("src/ui/index.asp").read_text()
+i_cfg = asp.find('id="sec-config"')
+i_keys = asp.find('id="btnManageKeys"')
+i_backup = asp.find('id="btnManageBackup"')
+i_out = asp.find('id="sec-outbounds"')
+i_route = asp.find('id="sec-routing"')
 i_menu = asp.find('id="sec-menu"')
-i_cat = asp.find('id="catalogModal"')
-i_cfg = asp.find('id="configTable"')
-i_keys = asp.find('id="keysModal"')
-i_api = asp.find('id="apiKey"')
-assert i_menu > 0 and i_cat > i_menu, "catalog modal should follow section menu"
-assert i_cfg > i_cat, "configTable must live inside/after catalogModal"
-assert i_api > i_keys, "apiKey field must live inside/after keysModal"
-print("OK  panels nested after their modals")
+i_keys_modal = asp.find('id="keysModal"')
+assert i_cfg > 0
+assert i_cfg < i_keys < i_backup < i_out, "keys/backup must be in Configuration before Outbounds"
+assert i_out < i_route < i_menu, "Outbounds then Routing then Advanced"
+assert i_keys_modal > i_menu, "modals after main sections"
+# No separate Управление block title
+assert ">Управление<" not in asp, "old Управление section should be gone"
+print("OK  Configuration → Outbounds → Routing → Advanced order")
 PY
 
-# JS wires manage → openSsModal
+check "openConfigEditModal" "$JS" 'function openConfigEditModal'
+check "ss-proxy-row render" "$JS" 'ss-proxy-row'
 check "openSsModal helper" "$JS" 'function openSsModal'
-check "SS_SECTION_MODALS map" "$JS" 'SS_SECTION_MODALS'
-check "manageMap wiring" "$JS" 'btnManageCatalog'
-check "summaries helper" "$JS" 'function updateSectionSummaries'
-check "short outbound btn" "$JS" 'btn.value = enabled \? "Выкл" : "Вкл"'
+check "modal th shrink-wrap" "$ASP" 'ss-modal-card \.FormTable th'
+check "plain-language hints present" "$ASP" 'data-ss-hint='
+check "Merlin hintstyle css" "$ASP" 'ss-hintstyle'
+check "help tip host" "$ASP" 'id="ssHelpTip"'
+check "initHelpHints in app.js" "$JS" 'function initHelpHints'
+check "hover uses overlib when present" "$JS" 'window.overlib'
+check "hover closes with nd" "$JS" 'window.nd'
+check_not "no catalog manage button" "$ASP" 'id="btnManageCatalog"'
 
-# Mobile helpers
-check "table scroll css" "$ASP" 'ss-table-scroll'
-check "wide modal css" "$ASP" 'ss-wide-card'
-check "hide-sm columns" "$ASP" 'ss-col-hide-sm'
+# Enough hints for Configuration + settings + modals
+hint_n=$(grep -o 'data-ss-hint=' "$ASP" | wc -l | tr -d ' ')
+if [ "$hint_n" -ge 30 ]; then
+  echo "OK  hint count ($hint_n)"
+else
+  echo "FAIL hint count too low ($hint_n)"
+  fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
-  echo "UI modal layout tests FAILED"
+  echo "UI layout tests FAILED"
   exit 1
 fi
-echo "UI modal layout tests passed"
+echo "UI layout tests passed"
 exit 0

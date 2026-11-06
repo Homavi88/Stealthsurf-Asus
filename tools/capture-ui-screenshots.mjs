@@ -165,10 +165,18 @@ const browser = await puppeteer.default.launch({
 });
 
 const shots = [
-  { file: "00-main-menu.png", path: "/", wait: 900, state: "running", height: 1100, scroll: "sec-menu" },
+  { file: "00-main-menu.png", path: "/", wait: 900, state: "running", height: 1200, scroll: "sec-outbounds" },
 
   { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running", height: 1100, scroll: "sec-config" },
-  { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running", height: 1100, scroll: "tab-catalog" },
+  {
+    file: "02-catalog.png",
+    path: "/?tab=catalog",
+    wait: 1000,
+    state: "running",
+    height: 1100,
+    scroll: "sec-outbounds",
+    prepare: "outbound-edit",
+  },
   {
     file: "03-routing.png",
     path: "/?tab=routing",
@@ -210,6 +218,20 @@ const shots = [
 ];
 
 async function prepareShot(page, kind) {
+  if (kind === "outbound-edit") {
+    await page.evaluate(() => {
+      if (typeof openConfigEditModal === "function") {
+        const sel = document.getElementById("configSelect");
+        const id = sel && sel.options[0] ? sel.options[0].value : "101";
+        openConfigEditModal(id);
+      } else {
+        const modal = document.getElementById("catalogModal");
+        if (modal) modal.classList.add("show");
+      }
+    });
+    await new Promise((r) => setTimeout(r, 400));
+    return;
+  }
   if (kind === "routing-examples") {
     await page.evaluate(() => {
       if (typeof switchTab === "function") switchTab("routing");
