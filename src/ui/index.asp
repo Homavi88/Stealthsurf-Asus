@@ -453,6 +453,74 @@ function initial() {
   }
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
   /* Do NOT override .content width — Merlin uses 998px + middown_bg (same as XrayUI). */
+
+  .ss-modal-card.ss-wide-card {
+    width: min(920px, 96vw);
+  }
+  .ss-modal-card .FormTable {
+    margin-bottom: 8px;
+  }
+  .ss-modal-card .FormTable thead { display: none; }
+  .ss-section-menu th { width: 30%; }
+  .ss-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ss-table-scroll .ss-data-table {
+    min-width: 520px;
+  }
+  .ss-data-table .ss-col-hide-sm { }
+  .ss-menu-summary {
+    color: #cfd8dc;
+    font-size: 12px;
+    margin-right: 8px;
+  }
+  .ss-modal-body {
+    max-height: calc(86vh - 70px);
+    overflow: auto;
+  }
+  @media (max-width: 860px) {
+    /* Keep Merlin .content at 998px (middown_bg). Only shrink FormTitle inside. */
+    #FormTitle { width: 100% !important; max-width: 760px; }
+    .FormTable input.input_25_table,
+    .FormTable input.input_32_table,
+    .FormTable input.input_15_table,
+    .FormTable select.input_25_table,
+    .FormTable select.input_32_table,
+    .FormTable select.input_15_table,
+    #ruleMatcher {
+      width: 100% !important;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+    .row-buttons, .ss-row-buttons {
+      float: none;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .ss-data-table .ss-col-hide-sm { display: none; }
+    .ss-table-scroll .ss-data-table { min-width: 420px; }
+    .ss-opt-row label {
+      display: block;
+      margin: 4px 0;
+    }
+    .ss-modal {
+      padding: 8px;
+      align-items: flex-start;
+    }
+    .ss-modal-card,
+    .ss-modal-card.ss-settings-card,
+    .ss-modal-card.ss-versions-card,
+    .ss-modal-card.ss-wide-card {
+      width: 100%;
+      max-height: 94vh;
+      margin-top: 2vh;
+    }
+    .ss-core-ver { float: none; display: block; margin-top: 4px; }
+  }
 </style>
 </head>
 <body onload="initial();" class="bg">
@@ -739,9 +807,85 @@ function initial() {
                     </tbody>
                   </table>
 
-                  <!-- Keys -->
-                  <div class="ss-panel" id="tab-keys">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <!-- Section menu: open each block in a modal (XrayUI-style) -->
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable ss-section-menu" id="sec-menu">
+                    <thead>
+                      <tr><td colspan="2">Управление</td></tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <th>API keys</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Outbounds / catalog</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumCatalog">конфигов: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageCatalog" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Routing</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumRouting">правил: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageRouting" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Clients / MAC policies</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumPolicies">политик: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManagePolicies" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Mode / DNS</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumGeneral">mode: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageGeneral" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Backup / Logs</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
+                          <span class="row-buttons">
+                            <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Diagnostics</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumDiag">тест xray / IP / dump</span>
+                          <span class="row-buttons">
+                            <input id="btnManageDiag" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <div id="keysModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="keysModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="keysModalTitle">API keys</div>
+                      <p class="ss-modal-summary">Добавление и проверка ключей StealthSurf. Несколько ключей собираются в один каталог при sync.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-keys">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">API keys</td></tr></thead>
                       <tbody>
                         <tr>
@@ -759,19 +903,28 @@ function initial() {
                         <tr>
                           <th>Сохранённые ключи</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Метка</th><th>Ключ (хвост)</th><th></th></tr></thead>
                               <tbody id="keysTable"></tbody>
-                            </table>
+                            </table></div>
                           </td>
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_keysModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Catalog -->
-                  <div class="ss-panel" id="tab-catalog" data-sec="catalog">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="catalogModalTitle">Outbounds / catalog</div>
+                      <p class="ss-modal-summary">Каталог конфигов, default outbound, PATCH location/protocol и сборные подписки.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-catalog">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Outbounds / catalog</td></tr></thead>
                       <tbody>
                         <tr>
@@ -788,15 +941,15 @@ function initial() {
                         <tr>
                           <th>Конфиги</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead>
                                 <tr>
-                                  <th>ID</th><th>Название</th><th>Протокол</th><th>Локация</th>
-                                  <th>Online</th><th>Expires</th><th>Outbound</th><th></th>
+                                  <th>ID</th><th>Название</th><th>Протокол</th><th class="ss-col-hide-sm">Локация</th>
+                                  <th class="ss-col-hide-sm">Online</th><th class="ss-col-hide-sm">Expires</th><th>Outbound</th><th></th>
                                 </tr>
                               </thead>
                               <tbody id="configTable"></tbody>
-                            </table>
+                            </table></div>
                           </td>
                         </tr>
                         <tr>
@@ -826,19 +979,28 @@ function initial() {
                         <tr>
                           <th>Сборные подписки</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>ID</th><th>Название</th><th>Статус</th></tr></thead>
                               <tbody id="subsTable"></tbody>
-                            </table>
+                            </table></div>
                           </td>
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_catalogModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Routing -->
-                  <div class="ss-panel" id="tab-routing" data-sec="routing">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="routingModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="routingModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="routingModalTitle">Routing</div>
+                      <p class="ss-modal-summary">Пресеты, правила домен/geoip и JSON routing для dataplane.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-routing">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Routing</td></tr></thead>
                       <tbody>
                         <tr>
@@ -891,14 +1053,14 @@ function initial() {
                         <tr>
                           <th>Текущие правила</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead>
                                 <tr>
                                   <th>#</th><th>Имя</th><th>Тип</th><th>Matcher</th><th>Outbound</th><th>Prio</th><th></th>
                                 </tr>
                               </thead>
                               <tbody id="rulesTable"></tbody>
-                            </table>
+                            </table></div>
                             <div class="ss-hint" style="margin-top:6px">
                               Outbound <code>ss-&lt;id&gt;</code> — VPN из API-ключа (включите конфиг на вкладке «Мои подключения»).
                               Geosite/geoip берутся из файлов после «Обновить geoip/geosite».
@@ -918,11 +1080,20 @@ function initial() {
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_routingModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Policies -->
-                  <div class="ss-panel" id="tab-policies" data-sec="policies">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="policiesModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="policiesModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="policiesModalTitle">Clients / MAC policies</div>
+                      <p class="ss-modal-summary">Bypass / redirect по MAC. Без правил весь LAN идёт в VPN.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-policies">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Clients / MAC policies</td></tr></thead>
                       <tbody>
                         <tr>
@@ -957,19 +1128,28 @@ function initial() {
                         <tr>
                           <th>Таблица</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Mode</th><th>MAC</th><th>Имя</th><th>Ports</th><th>Proto</th><th></th></tr></thead>
                               <tbody id="policiesTable"></tbody>
-                            </table>
+                            </table></div>
                           </td>
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_policiesModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- General -->
-                  <div class="ss-panel" id="tab-general" data-sec="general">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="generalModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="generalModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="generalModalTitle">Mode / DNS</div>
+                      <p class="ss-modal-summary">Dataplane mode, DNS hijack и быстрые действия по версии / Xray binary.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-general">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Mode / DNS</td></tr></thead>
                       <tbody>
                         <tr>
@@ -1019,11 +1199,20 @@ function initial() {
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_generalModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Backup -->
-                  <div class="ss-panel" id="tab-backup" data-sec="backup">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="backupModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="backupModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="backupModalTitle">Backup / Logs</div>
+                      <p class="ss-modal-summary">Резервные копии conf/routing и просмотр логов аддона.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-backup">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Backup / Logs</td></tr></thead>
                       <tbody>
                         <tr>
@@ -1044,10 +1233,10 @@ function initial() {
                         <tr>
                           <th>Список</th>
                           <td>
-                            <table class="ss-data-table">
+                            <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Файл</th><th>Когда</th><th>Заметка</th><th>Версия</th><th></th></tr></thead>
                               <tbody id="backupsTable"></tbody>
-                            </table>
+                            </table></div>
                           </td>
                         </tr>
                         <tr>
@@ -1072,11 +1261,20 @@ function initial() {
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_backupModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
-                  <!-- Diag -->
-                  <div class="ss-panel" id="tab-diag" data-sec="diag">
-                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <div id="diagModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="diagModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="diagModalTitle">Diagnostics</div>
+                      <p class="ss-modal-summary">Diag dump, тест xray.json и проверка IP через SOCKS / напрямую.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-diag">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                       <thead><tr><td colspan="2">Diagnostics</td></tr></thead>
                       <tbody>
                         <tr>
@@ -1097,8 +1295,13 @@ function initial() {
                         </tr>
                       </tbody>
                     </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_diagModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
                   </div>
-
                   <div class="apply_gen">
                     <input id="btnApplyAll" class="button_gen" type="button" value="Apply">
                   </div>
