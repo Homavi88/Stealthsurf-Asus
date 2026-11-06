@@ -22,7 +22,14 @@ html, body {
 }
 #TopBanner small { color: #9ab; font-weight: 400; margin-left: 12px; font-size: 12px; }
 #Loading.popup_bg { display: none; }
-table.content { width: 100%; max-width: 1180px; margin: 0 auto; }
+/* Match stock Merlin: fixed 998px content column + middown-style fill */
+table.content {
+  width: 998px;
+  margin: 0 auto;
+  border: 0;
+  background: #2b3539;
+  padding-bottom: 24px;
+}
 #mainMenu {
   width: 190px;
   background: #2b3539;

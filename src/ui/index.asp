@@ -1,6 +1,5 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml">
-<html xmlns:v>
 <head>
 <meta http-equiv="X-UA-Compatible" content="IE=Edge"/>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
@@ -59,7 +58,6 @@ function initial() {
 <style type="text/css">
   /* Layout/buttons aligned with XrayUI (Asuswrt-Merlin FormTable patterns) */
   #Loading, #overDiv { z-index: 9999; }
-  .FormTitle { position: relative; }
   .FormTitle .formfonttitle { text-align: left; }
   .formfontdesc { margin-left: 0; }
   .ss-panel { display: block; margin: 0; }
@@ -419,8 +417,7 @@ function initial() {
     color: #fff;
   }
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
-  /* Keep Merlin chrome visible; do not collapse menu column if empty before show_menu */
-  table.content { width: 100%; }
+  /* Do NOT override .content width — Merlin uses 998px + middown_bg (same as XrayUI). */
 </style>
 </head>
 <body onload="initial();" class="bg">
@@ -428,7 +425,7 @@ function initial() {
 <div id="Loading" class="popup_bg"></div>
 <iframe name="hidden_frame" id="hidden_frame" src="" width="0" height="0" frameborder="0"></iframe>
 
-<form method="post" name="form" id="ruleForm" action="start_apply.htm" target="hidden_frame">
+<form method="post" name="form" id="ruleForm" action="/start_apply.htm" target="hidden_frame">
 <input type="hidden" name="current_page" id="ss_current_page" value="user1.asp">
 <input type="hidden" name="next_page" id="ss_next_page" value="user1.asp">
 <input type="hidden" name="group_id" value="">
@@ -442,6 +439,7 @@ function initial() {
 <input type="hidden" name="amng_custom" id="ss_payload_field" value="">
 
 <table class="content" align="center" cellpadding="0" cellspacing="0">
+  <tbody>
   <tr>
     <td width="17">&nbsp;</td>
     <td valign="top" width="202">
@@ -451,11 +449,14 @@ function initial() {
     <td valign="top">
       <div id="tabMenu" class="submenuBlock"></div>
       <table width="98%" border="0" align="left" cellpadding="0" cellspacing="0">
+        <tbody>
         <tr>
-          <td align="left" valign="top">
-            <table width="760px" border="0" cellpadding="5" cellspacing="0" bordercolor="#6b8fa3" id="FormTitle" class="FormTitle">
+          <td valign="top">
+            <table width="760px" border="0" cellpadding="4" cellspacing="0" id="FormTitle" class="FormTitle">
+              <tbody>
               <tr bgcolor="#4D595D">
                 <td valign="top">
+                  <div class="formfontdesc">
                   <div>&nbsp;</div>
                   <div class="formfonttitle" style="text-align:left">StealthSurf UI <span id="titleVer"></span></div>
                   <div id="formfontdesc" class="formfontdesc">
@@ -1066,15 +1067,18 @@ function initial() {
                   </div>
 
                   <div id="msg" class="ss-msg"></div>
+                  </div>
                 </td>
               </tr>
+              </tbody>
             </table>
           </td>
         </tr>
+        </tbody>
       </table>
     </td>
-    <td width="10" align="center" valign="top">&nbsp;</td>
   </tr>
+  </tbody>
 </table>
 </form>
 

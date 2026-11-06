@@ -29,6 +29,18 @@ grep -q 'function byId' "$APP" && ok "byId helper" || bad "byId helper"
 grep -q 'id="mainMenu"' "$ASP" && ok "mainMenu placeholder" || bad "mainMenu placeholder"
 grep -q 'typeof show_menu' "$ASP" && ok "show_menu call site" || bad "show_menu call site"
 grep -q 'try { initial(); }' "$ASP" && ok "early initial() before app.js" || bad "early initial() before app.js"
+# Must keep Merlin .content at 998px — width:100% leaves a black void next to FormTitle
+if grep -Eq 'table\.content[[:space:]]*\{[^}]*width:[[:space:]]*100%' "$ASP"; then
+  bad "index.asp overrides .content to 100%"
+else
+  ok "index.asp keeps Merlin .content width"
+fi
+grep -q 'width="760px"' "$ASP" && ok "FormTitle 760px" || bad "FormTitle 760px"
+grep -q '<tbody>' "$ASP" && ok "tbody like XrayUI" || bad "tbody like XrayUI"
+grep -q 'action="/start_apply.htm"' "$ASP" && ok "start_apply path" || bad "start_apply path"
+# Duplicate <html> breaks some browsers' layout
+html_count=$(grep -c '<html' "$ASP" || true)
+[ "$html_count" = "1" ] && ok "single html root" || bad "single html root (got $html_count)"
 
 # GNU-only `\s` in sed never matches on BusyBox routers
 if grep -n 'url:\\s\*' "$MOUNT" >/dev/null 2>&1; then
