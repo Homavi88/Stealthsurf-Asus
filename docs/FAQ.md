@@ -124,6 +124,21 @@ Mark/table у нас отдельные (`0x20000`/`78` vs `0x10000`/`77`), но
 
 С v1.0.22 `app.js` больше не перезаписывает jQuery `$` — из‑за этого Merlin `show_menu()` падал в `$.inArray` и **не рисовал левое меню** (шапка TopBanner при этом могла быть). Вкладка **VPN → StealthSurf** вставляется в `menuTree.js` через awk (BusyBox без `\s`).
 
+С v1.0.23 каркас страницы совпадает с XrayUI: стоковый `.content` 998px (`middown_bg`), `FormTitle` 760px, без `width:100%` на таблице — иначе справа оставалась чёрная пустота.
+
+## API-ключ не сохраняется / пустой список ключей в WebUI
+
+С v1.0.23 хук `service-event` смотрит на `$2` (`stealthsurf_…`), как XrayUI. Раньше требовался `$1=start`, а UI слал `stealthsurf_setkey` без префикса `start_` — Merlin вызывал хук с пустым `$1`, и **setkey/addkey/sync из WebUI не выполнялись**.
+
+После обновления:
+
+```sh
+ssurf upd -f
+# или: /jffs/scripts/stealthsurf doctor
+```
+
+Затем выйти/войти в WebUI и снова **Сохранить и проверить**. Через SSH по-прежнему: `ssurf key 'stlth_…'`.
+
 После обновления:
 
 ```sh

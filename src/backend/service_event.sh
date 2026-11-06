@@ -102,11 +102,15 @@ ss_service_event() {
       ss_json_response false "api_key missing" null
       return 1
     fi
+    # Persist first so UI / conf keep the key even if API is briefly unreachable
+    ss_ensure_dirs
+    ss_api_keys_store_add "$SS_API_KEY" "primary"
+    SS_API_KEYS=$(jq -r '.[].key' "$SS_CACHE_KEYS" 2>/dev/null | tr '\n' ' ')
     ss_save_conf
     if ss_api_verify_key >/dev/null; then
-      ss_json_response true "API key saved" "$(cat "$SS_CACHE_PROFILE")"
+      ss_json_response true "API key saved" "$(ss_jq_file_or "$SS_CACHE_PROFILE" '{}')"
     else
-      ss_json_response false "API key rejected" null
+      ss_json_response false "API key saved locally but verify failed (check internet / key)" "$(ss_jq_file_or "$SS_CACHE_KEYS" '[]')"
       return 1
     fi
     ;;

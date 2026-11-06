@@ -106,7 +106,9 @@ function triggerService(action, payload, opts) {
   const page = (location.pathname || "").replace(/^\//, "") || "user1.asp";
   if (form.current_page) form.current_page.value = page;
   if (form.next_page) form.next_page.value = page;
-  form.action_script.value = "stealthsurf_" + action;
+  // Merlin: start_NAME → service-event $1=start $2=NAME.
+  // Without start_, $1 is empty; our hook still matches $2, but start_ is the stock path.
+  form.action_script.value = "start_stealthsurf_" + action;
   form.action_mode.value = "apply";
   form.action_wait.value = String(wait);
 

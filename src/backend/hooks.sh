@@ -1,13 +1,15 @@
 #!/bin/sh
 
 ss_service_event_block() {
-  # Always refresh amng_custom → payload so UI actions (checkupdate/update/…) see fresh JSON.
-  # Extract .stealthsurf namespace when present (preserves other addons' amng_custom keys).
-  # Run in foreground so Merlin action_wait covers real work (UI refresh won't race).
-  # Never auto-run uninstall from this hook.
+  # Merlin splits action_script as:
+  #   start_FOO  → $1=start  $2=FOO
+  #   FOO        → $1=""     $2=FOO   (same path XrayUI uses)
+  # Match on $2 starting with stealthsurf_ — requiring $1=start alone drops all
+  # UI actions that omit the start_ prefix (setkey/addkey/sync never ran).
+  # Run in foreground so Merlin action_wait covers real work.
   cat <<'EOF'
 # StealthSurf UI hook begin
-if [ "$1" = "start" ] && echo "$2" | grep -q "^stealthsurf_"; then
+if echo "$2" | grep -q "^stealthsurf_"; then
   action="${2#stealthsurf_}"
   case "$action" in
   uninstall|remove|purge)
