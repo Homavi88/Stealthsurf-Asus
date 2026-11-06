@@ -454,6 +454,39 @@ function initial() {
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
   /* Do NOT override .content width — Merlin uses 998px + middown_bg (same as XrayUI). */
 
+  .ss-proxy-tag {
+    display: inline-block;
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin: 2px 4px 2px 0;
+    font-size: 11px;
+    font-weight: bold;
+    border: 1px solid #fc0;
+    background: transparent;
+  }
+  .ss-proxy-tag.proto { border-color: #fc0; color: #fc0; }
+  .ss-proxy-tag.runtime { border-color: #8bc34a; color: #8bc34a; background: rgba(139,195,74,0.12); }
+  .ss-proxy-tag.sec { border-color: #b388ff; color: #b388ff; }
+  .ss-proxy-tag.off { border-color: #6b757b; color: #9ab; }
+  .ss-proxy-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+    background: #6b757b;
+  }
+  .ss-proxy-dot.on { background: #4caf50; box-shadow: 0 0 4px #4caf50; }
+  .ss-proxy-dot.err { background: #f44336; box-shadow: 0 0 4px #f44336; }
+  .ss-proxy-row th {
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .ss-modal-card.ss-wide-card {
     width: min(920px, 96vw);
   }
@@ -785,11 +818,29 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
+                        <th>API keys</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
                         <th>General options</th>
                         <td>
-                          <span class="ss-meta-inline">Автостарт, reboot по плану, backup, geoip/geosite</span>
+                          <span class="ss-meta-inline">Автостарт, reboot по плану, geoip/geosite</span>
                           <span class="row-buttons">
                             <input id="btnSettings" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Backup / Logs</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
+                          <span class="row-buttons">
+                            <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
                         </td>
                       </tr>
@@ -807,32 +858,33 @@ function initial() {
                     </tbody>
                   </table>
 
-                  <!-- Section menu: open each block in a modal (XrayUI-style) -->
-                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable ss-section-menu" id="sec-menu">
+                  <!-- Outbounds: XrayUI-style compact list; edit opens modal -->
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-outbounds">
                     <thead>
-                      <tr><td colspan="2">Управление</td></tr>
+                      <tr><td colspan="2">Outbounds / catalog <span class="ss-menu-summary" id="sumCatalog" style="float:right;font-weight:normal"></span></td></tr>
+                    </thead>
+                    <tbody id="outboundListBody">
+                      <tr>
+                        <th width="30%">Фильтр / default</th>
+                        <td>
+                          <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
+                          <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
+                          <span class="row-buttons" style="margin-left:6px">
+                            <input id="btnSetDefault" class="button_gen button_gen_small" type="button" value="Назначить default">
+                            <input id="btnRebuild" class="button_gen button_gen_small" type="button" value="Пересобрать Xray">
+                          </span>
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-routing">
+                    <thead>
+                      <tr><td colspan="2">Routing</td></tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <th>API keys</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
-                          <span class="row-buttons">
-                            <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Outbounds / catalog</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumCatalog">конфигов: —</span>
-                          <span class="row-buttons">
-                            <input id="btnManageCatalog" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Routing</th>
+                        <th width="30%">Правила</th>
                         <td>
                           <span class="ss-menu-summary" id="sumRouting">правил: —</span>
                           <span class="row-buttons">
@@ -840,6 +892,14 @@ function initial() {
                           </span>
                         </td>
                       </tr>
+                    </tbody>
+                  </table>
+
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable ss-section-menu" id="sec-menu">
+                    <thead>
+                      <tr><td colspan="2">Advanced</td></tr>
+                    </thead>
+                    <tbody>
                       <tr>
                         <th>Clients / MAC policies</th>
                         <td>
@@ -855,15 +915,6 @@ function initial() {
                           <span class="ss-menu-summary" id="sumGeneral">mode: —</span>
                           <span class="row-buttons">
                             <input id="btnManageGeneral" class="button_gen button_gen_small" type="button" value="manage">
-                          </span>
-                        </td>
-                      </tr>
-                      <tr>
-                        <th>Backup / Logs</th>
-                        <td>
-                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
-                          <span class="row-buttons">
-                            <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
                         </td>
                       </tr>
@@ -918,75 +969,52 @@ function initial() {
                       </div>
                     </div>
                   </div>
-                  <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
+                                    <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
                     <div class="ss-modal-card ss-wide-card">
-                      <div class="ss-modal-head" id="catalogModalTitle">Outbounds / catalog</div>
-                      <p class="ss-modal-summary">Каталог конфигов, default outbound, PATCH location/protocol и сборные подписки.</p>
+                      <div class="ss-modal-head" id="catalogModalTitle">Outbound settings</div>
+                      <p class="ss-modal-summary" id="catalogModalSummary">Смена location / protocol и опции для выбранного конфига.</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-catalog">
-<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Outbounds / catalog</td></tr></thead>
-                      <tbody>
-                        <tr>
-                          <th width="30%">Фильтр / default</th>
-                          <td>
-                            <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
-                            <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
-                            <span class="row-buttons" style="margin-left:6px">
-                              <input id="btnSetDefault" class="button_gen button_gen_small" type="button" value="Назначить default">
-                              <input id="btnRebuild" class="button_gen button_gen_small" type="button" value="Пересобрать Xray">
-                            </span>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Конфиги</th>
-                          <td>
-                            <div class="ss-table-scroll"><table class="ss-data-table">
-                              <thead>
-                                <tr>
-                                  <th>ID</th><th>Название</th><th>Протокол</th><th class="ss-col-hide-sm">Локация</th>
-                                  <th class="ss-col-hide-sm">Online</th><th class="ss-col-hide-sm">Expires</th><th>Outbound</th><th></th>
-                                </tr>
-                              </thead>
-                              <tbody id="configTable"></tbody>
-                            </table></div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Смена location / protocol</th>
-                          <td>
-                            <div>
-                              <select id="configSelect" class="input_32_table"></select>
-                            </div>
-                            <div style="margin-top:6px">
-                              <select id="locationSelect" class="input_25_table"></select>
-                              <select id="protocolSelect" class="input_25_table" style="margin-left:6px"></select>
-                            </div>
-                            <div class="ss-opt-row" style="margin-top:8px">
-                              <label><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
-                              <label><input type="checkbox" id="optUseGrpc"> use_grpc</label>
-                              <label><input type="checkbox" id="optUseWarp"> use_warp</label>
-                              <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
-                              <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
-                            </div>
-                            <div class="row-buttons" style="margin-top:8px">
-                              <input id="btnUpdateSettings" class="button_gen button_gen_small" type="button" value="PATCH на StealthSurf">
-                              <input id="btnApplySole" class="button_gen button_gen_small" type="button" value="Apply как единственный">
-                            </div>
-                            <div id="protoHint" class="ss-hint">После смены на сайте нажмите «Синхронизировать».</div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th>Сборные подписки</th>
-                          <td>
-                            <div class="ss-table-scroll"><table class="ss-data-table">
-                              <thead><tr><th>ID</th><th>Название</th><th>Статус</th></tr></thead>
-                              <tbody id="subsTable"></tbody>
-                            </table></div>
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                          <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                            <tbody>
+                              <tr>
+                                <th width="30%">Конфиг</th>
+                                <td>
+                                  <select id="configSelect" class="input_32_table"></select>
+                                </td>
+                              </tr>
+                              <tr>
+                                <th>Location / protocol</th>
+                                <td>
+                                  <select id="locationSelect" class="input_25_table"></select>
+                                  <select id="protocolSelect" class="input_25_table" style="margin-left:6px"></select>
+                                  <div class="ss-opt-row" style="margin-top:8px">
+                                    <label><input type="checkbox" id="optUseXhttp"> use_xhttp</label>
+                                    <label><input type="checkbox" id="optUseGrpc"> use_grpc</label>
+                                    <label><input type="checkbox" id="optUseWarp"> use_warp</label>
+                                    <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
+                                    <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
+                                  </div>
+                                  <div class="row-buttons" style="margin-top:8px">
+                                    <input id="btnUpdateSettings" class="button_gen button_gen_small" type="button" value="PATCH на StealthSurf">
+                                    <input id="btnApplySole" class="button_gen button_gen_small" type="button" value="Apply как единственный">
+                                  </div>
+                                  <div id="protoHint" class="ss-hint">После смены на сайте нажмите «Синхронизировать».</div>
+                                </td>
+                              </tr>
+                              <tr>
+                                <th>Сборные подписки</th>
+                                <td>
+                                  <div class="ss-table-scroll"><table class="ss-data-table">
+                                    <thead><tr><th>ID</th><th>Название</th><th>Статус</th></tr></thead>
+                                    <tbody id="subsTable"></tbody>
+                                  </table></div>
+                                </td>
+                              </tr>
+                            </tbody>
+                          </table>
+                          <!-- keep configTable for legacy tests; hidden -->
+                          <table style="display:none"><tbody id="configTable"></tbody></table>
                         </div>
                       </div>
                       <div class="ss-modal-actions">
@@ -994,7 +1022,7 @@ function initial() {
                       </div>
                     </div>
                   </div>
-                  <div id="routingModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="routingModalTitle">
+<div id="routingModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="routingModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="routingModalTitle">Routing</div>
                       <p class="ss-modal-summary">Пресеты, правила домен/geoip и JSON routing для dataplane.</p>

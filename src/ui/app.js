@@ -410,6 +410,13 @@ function switchTab(name) {
     requestVersionsList(false);
     return;
   }
+  if (name === "catalog" || name === "outbounds") {
+    const panel = byId("sec-outbounds");
+    if (panel && typeof panel.scrollIntoView === "function") {
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    return;
+  }
   if (modalId) {
     openSsModal(modalId);
     return;
@@ -1135,64 +1142,126 @@ function protoBadge(proto) {
   return ' <span class="label label-warning" title="' + (info.status || "") + '">n/a</span>';
 }
 
+function openConfigEditModal(configId) {
+  const select = byId("configSelect");
+  if (select && configId != null) {
+    select.value = String(configId);
+    onConfigChange();
+  }
+  const c = (configsCache || []).find((x) => x && String(x.id) === String(configId));
+  const title = byId("catalogModalTitle");
+  const summary = byId("catalogModalSummary");
+  if (title) {
+    title.textContent = c
+      ? "Outbound · " + (c.title || "#" + c.id)
+      : "Outbound settings";
+  }
+  if (summary) {
+    summary.textContent = c
+      ? "#" + c.id + " · " + (c.protocol || "—") + " · location " + (c.location_id ?? "—")
+      : "Смена location / protocol и опции для выбранного конфига.";
+  }
+  openSsModal("catalogModal");
+}
+
 function renderConfigs(configs) {
   configsCache = (configs || []).filter(Boolean);
-  const filter = (byId("catalogFilter").value || "").toLowerCase();
-  const tbody = byId("configTable");
+  const filterEl = byId("catalogFilter");
+  const filter = ((filterEl && filterEl.value) || "").toLowerCase();
+  const listBody = byId("outboundListBody");
+  const legacyTable = byId("configTable");
   const select = byId("configSelect");
-  tbody.innerHTML = "";
-  select.innerHTML = "";
+  if (legacyTable) legacyTable.innerHTML = "";
+  if (select) select.innerHTML = "";
   const en = enabledSet();
+
+  // Keep filter/default row; remove previously rendered proxy rows
+  if (listBody) {
+    Array.from(listBody.querySelectorAll("tr.ss-proxy-row")).forEach((tr) => tr.remove());
+  }
 
   configsCache.forEach((c) => {
     const hay = [c.id, c.title, c.protocol, c.location_id].join(" ").toLowerCase();
     if (filter && !hay.includes(filter)) return;
     const supported = protoSupported(c.protocol);
     const enabled = en.has(String(c.id));
-    const tr = document.createElement("tr");
-    tr.innerHTML =
-      "<td>" +
-      c.id +
-      "</td><td>" +
-      (c.title || "—") +
-      "</td><td>" +
-      (c.protocol || "—") +
-      protoBadge(c.protocol) +
-      '</td><td class="ss-col-hide-sm">' +
-      (c.location_id ?? "—") +
-      '</td><td class="ss-col-hide-sm">' +
-      (c.is_online ? "yes" : "no") +
-      '</td><td class="ss-col-hide-sm">' +
-      (c.expires_at || "—") +
-      "</td><td>" +
-      (enabled ? '<span class="label label-success">ss-' + c.id + "</span>" : "—") +
-      "</td><td></td>";
-    const actions = tr.lastChild;
-    if (supported) {
-      const btn = document.createElement("input");
-      btn.type = "button";
-      btn.className = btnClass(enabled ? "secondary" : "");
-      btn.value = enabled ? "Выкл" : "Вкл";
-      btn.title = enabled ? "Выключить outbound" : "Включить outbound";
-      btn.addEventListener("click", () =>
-        triggerService(enabled ? "disableoutbound" : "enableoutbound", { config_id: Number(c.id) })
-      );
-      actions.appendChild(btn);
-    } else {
-      actions.textContent = "в разработке";
-    }
-    tbody.appendChild(tr);
+    const info = protocolsCache[c.protocol] || {};
+    const runtime = info.runtime || (String(c.protocol || "").indexOf("hysteria") >= 0 ? "hysteria" : "xray");
 
-    const opt = document.createElement("option");
-    opt.value = String(c.id);
-    opt.textContent = "#" + c.id + " " + (c.title || "") + " (" + c.protocol + ")";
-    opt.dataset.locationId = String(c.location_id ?? "");
-    opt.dataset.protocol = c.protocol || "vless";
-    opt.disabled = !supported;
-    select.appendChild(opt);
+    if (listBody) {
+      const tr = document.createElement("tr");
+      tr.className = "ss-proxy-row";
+      const th = document.createElement("th");
+      th.innerHTML =
+        '<span class="ss-proxy-dot ' +
+        (c.is_online ? "on" : enabled ? "err" : "") +
+        '" title="' +
+        (c.is_online ? "online" : "offline") +
+        '"></span>' +
+        (c.title || "#" + c.id);
+      const td = document.createElement("td");
+      const tags = document.createElement("span");
+      tags.innerHTML =
+        '<span class="ss-proxy-tag proto">' +
+        (c.protocol || "—") +
+        "</span>" +
+        '<span class="ss-proxy-tag runtime">' +
+        runtime +
+        "</span>" +
+        (enabled
+          ? '<span class="ss-proxy-tag sec">ss-' + c.id + "</span>"
+          : '<span class="ss-proxy-tag off">off</span>');
+      td.appendChild(tags);
+      const actions = document.createElement("span");
+      actions.className = "row-buttons";
+      if (supported) {
+        const edit = document.createElement("input");
+        edit.type = "button";
+        edit.className = btnClass("");
+        edit.value = "e";
+        edit.title = "Редактировать";
+        edit.addEventListener("click", () => openConfigEditModal(c.id));
+        const tog = document.createElement("input");
+        tog.type = "button";
+        tog.className = btnClass(enabled ? "secondary" : "");
+        tog.value = enabled ? "x" : "+";
+        tog.title = enabled ? "Выключить outbound" : "Включить outbound";
+        tog.addEventListener("click", () =>
+          triggerService(enabled ? "disableoutbound" : "enableoutbound", { config_id: Number(c.id) })
+        );
+        actions.appendChild(edit);
+        actions.appendChild(tog);
+      } else {
+        const n = document.createElement("span");
+        n.className = "ss-meta-inline";
+        n.textContent = "в разработке";
+        actions.appendChild(n);
+      }
+      td.appendChild(actions);
+      tr.appendChild(th);
+      tr.appendChild(td);
+      listBody.appendChild(tr);
+    }
+
+    if (legacyTable) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = "<td>" + c.id + "</td><td>" + (c.title || "—") + "</td>";
+      legacyTable.appendChild(tr);
+    }
+
+    if (select) {
+      const opt = document.createElement("option");
+      opt.value = String(c.id);
+      opt.textContent = "#" + c.id + " " + (c.title || "") + " (" + c.protocol + ")";
+      opt.dataset.locationId = String(c.location_id ?? "");
+      opt.dataset.protocol = c.protocol || "vless";
+      opt.disabled = !supported;
+      select.appendChild(opt);
+    }
   });
   fillOutboundSelects();
   onConfigChange();
+  updateSectionSummaries();
 }
 
 function renderLocations(locations) {
@@ -1377,29 +1446,34 @@ function parseXraySettingsFlags(raw) {
 }
 
 function onConfigChange() {
-  const opt = byId("configSelect").selectedOptions[0];
-  if (!opt) return;
-  if (opt.dataset.locationId) byId("locationSelect").value = opt.dataset.locationId;
+  const sel = byId("configSelect");
+  if (!sel || !sel.selectedOptions || !sel.selectedOptions[0]) return;
+  const opt = sel.selectedOptions[0];
+  if (opt.dataset.locationId && byId("locationSelect")) {
+    byId("locationSelect").value = opt.dataset.locationId;
+  }
   if (opt.dataset.protocol) {
     const p = byId("protocolSelect");
-    if ([...p.options].some((o) => o.value === opt.dataset.protocol && !o.disabled)) {
+    if (p && [...p.options].some((o) => o.value === opt.dataset.protocol && !o.disabled)) {
       p.value = opt.dataset.protocol;
     }
   }
   const cfg = (configsCache || []).find((c) => c && String(c.id) === String(opt.value));
   const flags = parseXraySettingsFlags(cfg && cfg.xray_config);
-  byId("optUseXhttp").checked = flags.use_xhttp;
-  byId("optUseGrpc").checked = flags.use_grpc;
-  byId("optUseWarp").checked = flags.use_warp;
-  byId("optUseSalamander").checked = flags.use_salamander;
-  byId("optDisableReality").checked = flags.disable_reality;
+  if (byId("optUseXhttp")) byId("optUseXhttp").checked = flags.use_xhttp;
+  if (byId("optUseGrpc")) byId("optUseGrpc").checked = flags.use_grpc;
+  if (byId("optUseWarp")) byId("optUseWarp").checked = flags.use_warp;
+  if (byId("optUseSalamander")) byId("optUseSalamander").checked = flags.use_salamander;
+  if (byId("optDisableReality")) byId("optDisableReality").checked = flags.disable_reality;
   const info = protocolsCache[opt.dataset.protocol];
   const runtime = info
     ? "runtime: " + info.runtime + (info.status ? " · " + info.status : "")
     : "";
-  byId("protoHint").textContent =
-    (runtime ? runtime + ". " : "") +
-    "Смена на сайте → «Синхронизировать» (или autosync */15) подтянет connection_url и пересоберёт включённые outbound.";
+  if (byId("protoHint")) {
+    byId("protoHint").textContent =
+      (runtime ? runtime + ". " : "") +
+      "Смена на сайте → «Синхронизировать» (или autosync */15) подтянет connection_url и пересоберёт включённые outbound.";
+  }
 }
 
 async function refreshAll() {
@@ -1821,10 +1895,9 @@ function bind() {
     byId("btnSettingsClose").addEventListener("click", () => closeSettingsModal());
   }
 
-  // Section manage buttons → XrayUI-style modals
+  // Section manage buttons → XrayUI-style modals (Configuration + Advanced)
   const manageMap = [
     ["btnManageKeys", "keysModal"],
-    ["btnManageCatalog", "catalogModal"],
     ["btnManageRouting", "routingModal"],
     ["btnManagePolicies", "policiesModal"],
     ["btnManageGeneral", "generalModal"],
@@ -1835,6 +1908,10 @@ function bind() {
     const btn = byId(btnId);
     if (!btn) return;
     btn.addEventListener("click", () => openSsModal(modalId));
+  });
+  // Close controls for all section modals (including outbound edit)
+  Object.values(SS_SECTION_MODALS).forEach((modalId) => {
+    if (modalId === "settingsModal" || modalId === "versionsModal") return;
     const closeBtn = byId("btnClose_" + modalId);
     if (closeBtn) closeBtn.addEventListener("click", () => closeSsModal(modalId));
     const modal = byId(modalId);
