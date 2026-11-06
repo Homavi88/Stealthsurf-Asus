@@ -488,12 +488,41 @@ function initial() {
   }
 
   .ss-modal-card.ss-wide-card {
-    width: min(920px, 96vw);
+    width: min(980px, 98vw);
   }
   .ss-modal-card .FormTable {
     margin-bottom: 8px;
+    table-layout: auto;
+    width: 100%;
   }
   .ss-modal-card .FormTable thead { display: none; }
+  /* Shrink label column to text; give content column the rest (XrayUI modal feel) */
+  .ss-modal-card .FormTable th,
+  .ss-modal-card .FormTable th[width],
+  .ss-modal-card .FormTable th[width="30%"] {
+    width: 1% !important;
+    max-width: 160px;
+    white-space: nowrap;
+    vertical-align: top;
+    padding-right: 10px;
+  }
+  .ss-modal-card .FormTable td {
+    width: auto;
+    vertical-align: top;
+  }
+  .ss-modal-card .FormTable input.input_25_table,
+  .ss-modal-card .FormTable input.input_32_table,
+  .ss-modal-card .FormTable select.input_25_table,
+  .ss-modal-card .FormTable select.input_32_table {
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .ss-modal-card .ss-table-scroll {
+    width: 100%;
+  }
+  .ss-modal-card .ss-data-table {
+    min-width: 100%;
+  }
   .ss-section-menu th { width: 30%; }
   .ss-table-scroll {
     width: 100%;

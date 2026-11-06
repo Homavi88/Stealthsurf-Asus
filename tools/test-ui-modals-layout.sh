@@ -67,6 +67,7 @@ PY
 check "openConfigEditModal" "$JS" 'function openConfigEditModal'
 check "ss-proxy-row render" "$JS" 'ss-proxy-row'
 check "openSsModal helper" "$JS" 'function openSsModal'
+check "modal th shrink-wrap" "$ASP" 'ss-modal-card \.FormTable th'
 check_not "no catalog manage button" "$ASP" 'id="btnManageCatalog"'
 
 if [ "$fail" -ne 0 ]; then
