@@ -13,8 +13,9 @@ ss_xray_running() {
 
 ss_write_state() {
   ss_ensure_dirs
-  local mode
+  local mode xrayui_json
   mode=$(ss_fw_detect_mode 2>/dev/null || echo "${SS_MODE:-proxy}")
+  xrayui_json=$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')
   jq -nc \
     --arg active "${SS_ACTIVE_CONFIG_ID}" \
     --arg mode "${SS_MODE}" \
@@ -28,6 +29,7 @@ ss_write_state() {
     --arg tproxy "${SS_TPROXY_PORT}" \
     --arg redirect "${SS_REDIRECT_PORT}" \
     --arg version "$ADDON_VERSION" \
+    --argjson xrayui "$xrayui_json" \
     '{
       active_config_id: (if $active == "" then null else ($active|tonumber?) // $active end),
       mode: $mode,
@@ -40,7 +42,10 @@ ss_write_state() {
       http_port: ($http|tonumber),
       tproxy_port: ($tproxy|tonumber),
       redirect_port: ($redirect|tonumber),
-      version: $version
+      version: $version,
+      xrayui: $xrayui,
+      conflict: $xrayui.conflict,
+      conflict_message: $xrayui.message
     }' >"$SS_STATE_FILE"
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
   # Keep protocol matrix + version for UI
@@ -183,6 +188,11 @@ ss_needs_side_runtimes() {
 
 ss_start_inner() {
   ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
+  # Dual transparent proxy with XrayUI blackholes LAN — hard refuse
+  if ! ss_refuse_if_xrayui; then
+    ss_write_state
+    return 1
+  fi
   ss_desired_mark 2>/dev/null || true
   ss_ensure_xray || {
     ss_error "xray not installed"

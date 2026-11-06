@@ -315,3 +315,121 @@ ss_jq_file_or() {
     printf '%s' "$fallback"
   fi
 }
+
+# ── XrayUI coexistence ────────────────────────────────────────────────
+# Both addons drive transparent proxy. Separate marks/tables avoid collision,
+# but dual hijack of LAN still breaks internet. Refuse start while XrayUI runs.
+
+SS_XRAYUI_PIDFILE="${SS_XRAYUI_PIDFILE:-/var/run/xray.pid}"
+SS_XRAYUI_DESIRED="${SS_XRAYUI_DESIRED:-/tmp/xrayui.desired}"
+SS_XRAYUI_CONFIG="${SS_XRAYUI_CONFIG:-/opt/etc/xray/config.json}"
+SS_XRAYUI_MSG_RU="XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя."
+
+ss_xrayui_installed() {
+  [ -x /jffs/scripts/xrayui ] && return 0
+  [ -d /opt/share/xrayui ] && return 0
+  [ -d /jffs/addons/xrayui ] && return 0
+  [ -f /opt/etc/xrayui.conf ] && return 0
+  return 1
+}
+
+ss_xrayui_pid_alive() {
+  local pid=""
+  [ -f "$SS_XRAYUI_PIDFILE" ] || return 1
+  pid=$(cat "$SS_XRAYUI_PIDFILE" 2>/dev/null)
+  [ -n "$pid" ] || return 1
+  # Must not be our StealthSurf Xray
+  if [ -f "$XRAY_PIDFILE" ]; then
+    local ours
+    ours=$(cat "$XRAY_PIDFILE" 2>/dev/null)
+    [ -n "$ours" ] && [ "$pid" = "$ours" ] && return 1
+  fi
+  kill -0 "$pid" 2>/dev/null
+}
+
+ss_xrayui_process_running() {
+  # xrayui uses /opt/etc/xray/config.json; we use stealthsurf.json
+  local cfg="$SS_XRAYUI_CONFIG"
+  local line=""
+  # BusyBox ps: look for foreign xray config in cmdline
+  if command -v ps >/dev/null 2>&1; then
+    # shellcheck disable=SC2009
+    line=$(ps w 2>/dev/null | grep -E '[x]ray.*(run )?.*(/opt/etc/xray/config\.json|xrayui)' | grep -v stealthsurf | head -1)
+    [ -n "$line" ] && return 0
+  fi
+  # /proc fallback
+  local p cmd
+  for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
+    cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+    case "$cmd" in
+    *xray*"$cfg"* | *xray*xrayui*)
+      case "$cmd" in
+      *stealthsurf.json*) continue ;;
+      *) return 0 ;;
+      esac
+      ;;
+    esac
+  done
+  return 1
+}
+
+ss_xrayui_firewall_active() {
+  local ipt
+  ipt=$(ss_resolve_system_iptables 2>/dev/null) || ipt="iptables"
+  "$ipt" -w -t nat -nL XRAYUI >/dev/null 2>&1 && return 0
+  "$ipt" -w -t mangle -nL XRAYUI >/dev/null 2>&1 && return 0
+  return 1
+}
+
+ss_xrayui_running() {
+  # Strong signals that XrayUI dataplane is up
+  if ss_xrayui_pid_alive; then
+    return 0
+  fi
+  if ss_xrayui_process_running; then
+    return 0
+  fi
+  # Desired + live firewall chain = working transparent session
+  if [ -f "$SS_XRAYUI_DESIRED" ] && ss_xrayui_firewall_active; then
+    return 0
+  fi
+  return 1
+}
+
+ss_xrayui_conflict_message() {
+  printf '%s\n' "$SS_XRAYUI_MSG_RU"
+}
+
+ss_xrayui_status_json() {
+  local installed=false running=false conflict=""
+  ss_xrayui_installed && installed=true
+  if ss_xrayui_running; then
+    running=true
+    conflict="xrayui"
+  fi
+  jq -nc \
+    --argjson installed "$installed" \
+    --argjson running "$running" \
+    --arg conflict "$conflict" \
+    --arg message "$( [ "$running" = true ] && ss_xrayui_conflict_message || echo '' )" \
+    '{
+      installed:$installed,
+      running:$running,
+      conflict:(if $conflict=="" then null else $conflict end),
+      message:(if $message=="" then null else $message end)
+    }'
+}
+
+ss_refuse_if_xrayui() {
+  # Call before start / autostart / watchdog restart
+  if ss_xrayui_running; then
+    ss_error "$(ss_xrayui_conflict_message)"
+    if type ss_desired_clear >/dev/null 2>&1; then
+      ss_desired_clear 2>/dev/null || true
+    fi
+    ss_activity "start.blocked" "xrayui_running=1"
+    return 1
+  fi
+  return 0
+}

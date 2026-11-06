@@ -26,12 +26,14 @@ ss_diag_dump() {
     --arg iptables_mangle "$(iptables -w -t mangle -S "$SS_FW_CHAIN" 2>/dev/null | head -c 4000 || echo '')" \
     --arg ip_rule "$(ip rule list 2>/dev/null | head -c 2000 || echo '')" \
     --argjson endpoints "$(ss_jq_file_or "$SS_ENDPOINTS_FILE" '[]')" \
+    --argjson xrayui "$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')" \
     '{
       version:$version, arch:$arch, mode:$mode, dns_mode:$dns, running:$running,
       xray:{bin:$xray_bin, version:$xray_ver},
       protocols:$protocols, state:$state, outbounds:$outbounds,
       routing:$routing, policies:$policies, endpoints:$endpoints,
       firewall:{nat:$iptables, mangle:$iptables_mangle, ip_rule:$ip_rule},
+      xrayui:$xrayui,
       ts:(now|floor)
     }' >"$SS_DIAG_FILE"
   cat "$SS_DIAG_FILE"
@@ -98,6 +100,16 @@ ss_watchdog_tick() {
       fi
       ;;
     esac
+    return 0
+  fi
+  # Never fight XrayUI — clear desired so we do not loop-restart into a conflict
+  if ss_xrayui_running 2>/dev/null; then
+    ss_warn "Watchdog: XrayUI running — will not start StealthSurf"
+    ss_desired_clear 2>/dev/null || true
+    if ss_firewall_is_configured 2>/dev/null; then
+      ss_cleanup_firewall 2>/dev/null || true
+    fi
+    ss_write_state 2>/dev/null || true
     return 0
   fi
   # Xray dead but desired — drop hijack first so LAN keeps internet, then restart

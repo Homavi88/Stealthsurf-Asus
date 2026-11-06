@@ -101,9 +101,15 @@ ss_startup() {
   ss_version_local >/dev/null 2>&1 || true
 
   if [ "${SS_AUTO_START:-1}" = "1" ] && [ -f "$XRAY_CONFIG_FILE" ]; then
-    ss_desired_mark
-    ss_prepare_runtime
-    ss_start || ss_warn "Startup start failed"
+    if ss_xrayui_running 2>/dev/null; then
+      ss_warn "Autostart skipped — XrayUI is running (stop XrayUI to use StealthSurf)"
+      ss_desired_clear 2>/dev/null || true
+      ss_write_state 2>/dev/null || true
+    else
+      ss_desired_mark
+      ss_prepare_runtime
+      ss_start || ss_warn "Startup start failed"
+    fi
   else
     ss_info "Autostart skipped (SS_AUTO_START=${SS_AUTO_START:-1} or no config)"
   fi
@@ -117,6 +123,13 @@ ss_wan_up_hook() {
   ss_activity "wan.up" "restoring firewall if needed"
   sleep 2
   if ss_desired_is_set || ss_xray_running; then
+    if ss_xrayui_running 2>/dev/null; then
+      ss_warn "WAN-up: XrayUI running — skipping StealthSurf restore/start"
+      ss_desired_clear 2>/dev/null || true
+      ss_cleanup_firewall 2>/dev/null || true
+      ss_write_state 2>/dev/null || true
+      return 0
+    fi
     if ! ss_xray_running && [ -f "$XRAY_CONFIG_FILE" ] && [ "${SS_AUTO_START:-1}" = "1" ]; then
       ss_prepare_runtime
       ss_start || true
