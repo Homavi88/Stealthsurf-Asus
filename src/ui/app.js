@@ -44,23 +44,43 @@ function setMsg(text, kind) {
   el.className = "ss-msg" + (kind ? " " + kind : "");
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(), {
-    cache: "no-store",
-  });
+async function fetchWithTimeout(url, opts, ms) {
+  const timeoutMs = ms == null ? 8000 : ms;
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timer = null;
+  try {
+    if (ctrl) timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(url, Object.assign({}, opts || {}, ctrl ? { signal: ctrl.signal } : {}));
+    return res;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchJson(url, timeoutMs) {
+  const res = await fetchWithTimeout(
+    url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(),
+    { cache: "no-store" },
+    timeoutMs == null ? 6000 : timeoutMs
+  );
   if (!res.ok) throw new Error(url + " HTTP " + res.status);
   return res.json();
 }
 
-async function fetchGithubJson(url) {
+async function fetchGithubJson(url, timeoutMs) {
   // Same idea as XrayUI engine.fetchGithubJson — direct browser GET to api.github.com
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "stealthsurf-merlin-webui",
+  // Hard timeout: blocked/slow GitHub must not stall the WebUI.
+  const res = await fetchWithTimeout(
+    url,
+    {
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "stealthsurf-merlin-webui",
+      },
     },
-  });
+    timeoutMs == null ? 3500 : timeoutMs
+  );
   if (!res.ok) throw new Error("GitHub HTTP " + res.status);
   return res.json();
 }
@@ -568,8 +588,46 @@ function fillModalList(ulId, boxId, items) {
   box.style.display = "block";
 }
 
-function changelogKey(info) {
-  return "ss_changelog_seen_" + String((info && (info.tag || info.latest)) || "");
+function updateNoticeTag(info) {
+  return String((info && (info.tag || info.latest)) || "").replace(/^v/i, "") || "";
+}
+
+function updateDismissKey(info) {
+  return "ss_update_dismiss_" + updateNoticeTag(info);
+}
+
+function updateLaterKey(info) {
+  return "ss_update_later_" + updateNoticeTag(info);
+}
+
+/** True if auto-popup should show for this release (respect Later / Close). */
+function shouldAutoShowUpdateModal(info) {
+  if (!info || !info.update_available) return false;
+  const tag = updateNoticeTag(info);
+  if (!tag) return false;
+  try {
+    if (localStorage.getItem(updateDismissKey(info)) === "1") return false;
+    if (sessionStorage.getItem(updateLaterKey(info)) === "1") return false;
+  } catch (_) {}
+  return true;
+}
+
+function snoozeUpdateNotice(info) {
+  // «Обновить позднее» — скрыть до следующего захода в WebUI (эта сессия браузера)
+  try {
+    sessionStorage.setItem(updateLaterKey(info || versionCache), "1");
+  } catch (_) {}
+  closeUpdateModal();
+  setMsg("Напомним об обновлении при следующем открытии страницы", "");
+}
+
+function dismissUpdateNotice(info) {
+  // «Закрыть уведомление» — не показывать снова для этой версии
+  try {
+    localStorage.setItem(updateDismissKey(info || versionCache), "1");
+  } catch (_) {}
+  closeUpdateModal();
+  setMsg("Уведомление об этой версии скрыто. Баннер и кнопка Update остаются доступны.", "");
 }
 
 function openUpdateModal(info, opts) {
@@ -586,7 +644,11 @@ function openUpdateModal(info, opts) {
     byId("modalSummary").textContent =
       cl.summary ||
       cl.headline ||
-      ("Сейчас установлена " + installed + ". На GitHub есть " + latest + ".");
+      ("Сейчас установлена версия " +
+        installed +
+        ". На GitHub доступна " +
+        latest +
+        ". Можно обновить сейчас, отложить напоминание или закрыть уведомление.");
   }
   fillModalList("modalFeatures", "modalFeatBox", cl.features);
   fillModalList("modalFixes", "modalFixBox", cl.fixes);
@@ -607,9 +669,10 @@ function openUpdateModal(info, opts) {
   }
 
   modal.classList.add("show");
-  if (!options.keepSeen) {
+  if (options.markAutoShown) {
+    // remember we already auto-opened once this session for this tag (extra guard)
     try {
-      sessionStorage.setItem(changelogKey(data), "1");
+      sessionStorage.setItem("ss_update_autoshown_" + updateNoticeTag(data), "1");
     } catch (_) {}
   }
 }
@@ -812,18 +875,24 @@ async function requestVersionsList(andOpen) {
 
 async function checkUpdateFromGithub(opts) {
   const options = opts || {};
-  setMsg("Проверка версии на GitHub…", "");
+  if (!options.quiet) setMsg("Проверка версии на GitHub…", "");
   const installed = installedVersionHint();
   try {
     const latestRel = await fetchGithubJson(SS_GH_LATEST_API);
     const info = buildVersionInfoFromGithubLatest(latestRel, installed);
+    // Skip auto-modal inside renderVersion when caller will decide (boot / forced open)
+    if (options.skipAutoModal) info._skipAutoModal = true;
     renderVersion(info);
     if (info.update_available) {
-      setMsg("Доступно обновление " + info.latest, "ok");
-      if (options.openModalIfUpdate) openUpdateModal(info, { keepSeen: true });
+      if (!options.quiet) setMsg("Доступно обновление " + info.latest, "ok");
+      // Manual check always shows modal; auto path uses shouldAutoShowUpdateModal
+      if (options.openModalIfUpdate) openUpdateModal(info, { markAutoShown: true });
+      else if (!options.skipAutoModal && shouldAutoShowUpdateModal(info)) {
+        openUpdateModal(info, { markAutoShown: true });
+      }
     } else {
-      setMsg("Установлена актуальная версия " + (info.installed || installed), "ok");
-      if (options.openModalAlways) openUpdateModal(info, { keepSeen: true });
+      if (!options.quiet) setMsg("Установлена актуальная версия " + (info.installed || installed), "ok");
+      if (options.openModalAlways) openUpdateModal(info);
     }
     return info;
   } catch (err) {
@@ -831,12 +900,15 @@ async function checkUpdateFromGithub(opts) {
     try {
       const cached = await fetchJson(EXT + "/version.json");
       if (cached) {
+        if (options.skipAutoModal) cached._skipAutoModal = true;
         renderVersion({ ...cached, error: cached.error || msg });
-        setMsg("GitHub из браузера недоступен — показан кэш version.json (" + msg + ")", "warn");
+        if (!options.quiet) {
+          setMsg("GitHub из браузера недоступен — показан кэш version.json (" + msg + ")", "warn");
+        }
         return cached;
       }
     } catch (_) {}
-    setMsg("Проверка версии не удалась: " + msg, "err");
+    if (!options.quiet) setMsg("Проверка версии не удалась: " + msg, "err");
     return null;
   }
 }
@@ -857,13 +929,13 @@ function installSelectedVersion() {
   triggerService("installversion", { tag: rel.tag, force: dir === "same" ? "1" : "0" });
 }
 
-function maybeAutoOpenChangelog(info) {
-  if (!info || !info.update_available) return;
-  if (!info.changelog) return;
+function maybeAutoOpenUpdateModal(info) {
+  if (info && info._skipAutoModal) return;
+  if (!shouldAutoShowUpdateModal(info)) return;
   try {
-    if (sessionStorage.getItem(changelogKey(info)) === "1") return;
+    if (sessionStorage.getItem("ss_update_autoshown_" + updateNoticeTag(info)) === "1") return;
   } catch (_) {}
-  openUpdateModal(info);
+  openUpdateModal(info, { markAutoShown: true });
 }
 
 function renderVersion(info) {
@@ -895,7 +967,8 @@ function renderVersion(info) {
     byId("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
     byId("bannerInstalled").textContent = installed;
     btnUpdate.style.display = "inline-block";
-    maybeAutoOpenChangelog(info);
+    // Banner always shows when update exists; modal only if not Later/Dismissed
+    maybeAutoOpenUpdateModal(info);
   } else {
     pill.style.display = "none";
     banner.classList.remove("show");
@@ -1162,6 +1235,15 @@ function openConfigEditModal(configId) {
       : "Смена location / protocol и опции для выбранного конфига.";
   }
   openSsModal("catalogModal");
+  // locations.json can be large — fill after modal is visible
+  ensureLocationsLoaded()
+    .then(() => {
+      if (select && configId != null) {
+        select.value = String(configId);
+        onConfigChange();
+      }
+    })
+    .catch(() => {});
 }
 
 function renderConfigs(configs) {
@@ -1476,40 +1558,69 @@ function onConfigChange() {
   }
 }
 
-async function refreshAll() {
-  try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, versions, protocols, response] =
-      await Promise.all([
-        fetchJson(EXT + "/state.json").catch(() => null),
-        fetchJson(EXT + "/configs.json").catch(() => []),
-        fetchJson(EXT + "/locations.json").catch(() => []),
-        fetchJson(EXT + "/subscriptions.json").catch(() => []),
-        fetchJson(EXT + "/api_keys.json").catch(() => []),
-        fetchJson(EXT + "/outbounds.json").catch(() => ({ enabled: [], default: "" })),
-        fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
-        fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
-        fetchJson(EXT + "/version.json").catch(() => null),
-        fetchJson(EXT + "/versions.json").catch(() => null),
-        fetchJson(EXT + "/protocols.json").catch(() => null),
-        fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
-      ]);
-    outboundsCache = outbounds || { enabled: [], default: "" };
-    if (protocols && typeof protocols === "object") protocolsCache = protocols;
-    renderState(state);
-    if (version) renderVersion(version);
-    else if (state && state.version) renderVersion({ installed: state.version, latest: null });
-    if (versions && Array.isArray(versions.releases)) {
-      versionsCache = versions;
-    }
-    const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
-    renderProtocolSelect();
-    renderConfigs(cfgList);
+let secondaryLoadPromise = null;
+let locationsLoaded = false;
+
+/** Fast first paint: only files needed for status + outbound list. */
+async function refreshCritical() {
+  const [state, configs, keys, outbounds, version, protocols, response] = await Promise.all([
+    fetchJson(EXT + "/state.json", 5000).catch(() => null),
+    fetchJson(EXT + "/configs.json", 5000).catch(() => []),
+    fetchJson(EXT + "/api_keys.json", 4000).catch(() => []),
+    fetchJson(EXT + "/outbounds.json", 4000).catch(() => ({ enabled: [], default: "" })),
+    fetchJson(EXT + "/version.json", 4000).catch(() => null),
+    fetchJson(EXT + "/protocols.json", 4000).catch(() => null),
+    fetchJson(EXT + "/stealthsurf-response.json", 4000).catch(() => null),
+  ]);
+  outboundsCache = outbounds || { enabled: [], default: "" };
+  if (protocols && typeof protocols === "object") protocolsCache = protocols;
+  renderState(state);
+  if (version) {
+    version._skipAutoModal = true; // boot path owns the update modal
+    renderVersion(version);
+  } else if (state && state.version) {
+    renderVersion({ installed: state.version, latest: null, _skipAutoModal: true });
+  }
+  const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
+  renderProtocolSelect();
+  renderConfigs(cfgList);
+  renderKeys(Array.isArray(keys) ? keys : []);
+  updateSectionSummaries();
+  return { state, configs: cfgList, response, version };
+}
+
+/** Heavier JSON used only inside modals / editors — load after paint. */
+async function refreshSecondary() {
+  if (secondaryLoadPromise) return secondaryLoadPromise;
+  secondaryLoadPromise = (async () => {
+    const [locations, subs, routing, policies] = await Promise.all([
+      fetchJson(EXT + "/locations.json", 8000).catch(() => []),
+      fetchJson(EXT + "/subscriptions.json", 5000).catch(() => []),
+      fetchJson(EXT + "/routing.json", 5000).catch(() => ({ rules: [] })),
+      fetchJson(EXT + "/policies.json", 5000).catch(() => ({ catchall: true, rules: [] })),
+    ]);
+    locationsLoaded = true;
     renderLocations(locations);
     renderSubs(Array.isArray(subs) ? subs : []);
-    renderKeys(Array.isArray(keys) ? keys : []);
     renderRouting(routing);
     renderPolicies(policies);
     updateSectionSummaries();
+  })().finally(() => {
+    secondaryLoadPromise = null;
+  });
+  return secondaryLoadPromise;
+}
+
+async function ensureLocationsLoaded() {
+  if (locationsLoaded && byId("locationSelect") && byId("locationSelect").options.length) return;
+  await refreshSecondary();
+}
+
+async function refreshAll() {
+  try {
+    const { response } = await refreshCritical();
+    // Don't await secondary — keep UI responsive; fill modals shortly after
+    refreshSecondary().catch(() => {});
     if (response && response.message) {
       setMsg(response.message, response.status ? "ok" : "err");
       const data = response.data;
@@ -1658,18 +1769,24 @@ function bind() {
   if (byId("btnBannerChangelog")) {
     byId("btnBannerChangelog").addEventListener("click", () => openUpdateModal(versionCache, { keepSeen: true }));
   }
-  if (byId("btnModalClose")) byId("btnModalClose").addEventListener("click", () => closeUpdateModal());
-  if (byId("btnModalLater")) byId("btnModalLater").addEventListener("click", () => closeUpdateModal());
+  if (byId("btnModalClose")) {
+    byId("btnModalClose").addEventListener("click", () => dismissUpdateNotice(versionCache));
+  }
+  if (byId("btnModalLater")) {
+    byId("btnModalLater").addEventListener("click", () => snoozeUpdateNotice(versionCache));
+  }
   if (byId("btnModalUpdate")) {
     byId("btnModalUpdate").addEventListener("click", () => {
-      if (!confirm("Установить обновление " + (versionCache.latest || "") + " с GitHub?")) return;
+      const ver = versionCache.latest || versionCache.tag || "";
+      if (!confirm("Обновить StealthSurf до " + ver + " с GitHub?")) return;
       closeUpdateModal();
       triggerService("update", { force: "0" });
     });
   }
   if (byId("updateModal")) {
     byId("updateModal").addEventListener("click", (e) => {
-      if (e.target === byId("updateModal")) closeUpdateModal();
+      // Click outside = «позднее», чтобы случайно не скрыть навсегда
+      if (e.target === byId("updateModal")) snoozeUpdateNotice(versionCache);
     });
   }
   if (byId("btnCheckUpdate2")) {
@@ -1907,7 +2024,17 @@ function bind() {
   manageMap.forEach(([btnId, modalId]) => {
     const btn = byId(btnId);
     if (!btn) return;
-    btn.addEventListener("click", () => openSsModal(modalId));
+    btn.addEventListener("click", () => {
+      openSsModal(modalId);
+      // Routing / policies / backup need deferred JSON — kick load when opened
+      if (modalId === "routingModal" || modalId === "policiesModal") {
+        refreshSecondary().catch(() => {});
+      }
+      if (modalId === "backupModal") {
+        loadBackups();
+        loadLogPreview();
+      }
+    });
   });
   // Close controls for all section modals (including outbound edit)
   Object.values(SS_SECTION_MODALS).forEach((modalId) => {
@@ -2323,19 +2450,38 @@ function initHelpHints() {
 ensureMerlinChrome();
 bind();
 initHelpHints();
-refreshAll();
-loadBackups();
-setTimeout(loadLogPreview, 300);
+// Critical JSON first (status + outbounds), then deferred secondary + optional GitHub.
+refreshCritical()
+  .then(({ version }) => {
+    refreshSecondary().catch(() => {});
+    // Instant notify from cron cache if already known — don't wait on GitHub
+    if (version && shouldAutoShowUpdateModal(version)) {
+      openUpdateModal(version, { markAutoShown: true });
+    }
+  })
+  .catch((e) => setMsg(String(e), "err"));
 setTimeout(ensureMerlinChrome, 50);
 setTimeout(ensureMerlinChrome, 500);
-// Passive version display only — do NOT auto form-submit checkupdate on page open.
-// Auto submit previously hit Merlin start_apply on every visit; cron still runs
-// `stealthsurf check-update` every 12h. User can press «Проверить версию».
+// Soft GitHub refresh (timeout) — only after UI is up; never blocks first paint.
 setTimeout(async () => {
   try {
-    const v = await fetchJson(EXT + "/version.json");
-    renderVersion(v);
+    const info = await checkUpdateFromGithub({ quiet: true, skipAutoModal: true });
+    if (!info || !shouldAutoShowUpdateModal(info)) return;
+    try {
+      if (sessionStorage.getItem("ss_update_autoshown_" + updateNoticeTag(info)) === "1") return;
+    } catch (_) {}
+    openUpdateModal(info, { markAutoShown: true });
   } catch (_) {
-    /* offline / first install */
+    /* offline / slow GitHub */
   }
-}, 800);
+}, 1500);
+// Backups/logs are rare — load lazily when modal opens, or idle later
+setTimeout(() => {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => {
+      loadBackups().catch(() => {});
+    });
+  } else {
+    loadBackups().catch(() => {});
+  }
+}, 4000);

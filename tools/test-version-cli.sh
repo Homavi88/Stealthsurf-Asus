@@ -155,10 +155,16 @@ grep -q 'live addon untouched' "$ROOT/src/backend/backup.sh" && echo "OK  atomic
   echo "FAIL atomic update"
   fail=$((fail + 1))
 }
-grep -q 'do NOT auto form-submit checkupdate' "$ROOT/src/ui/app.js" && echo "OK  no auto checkupdate submit" || {
+# Boot may auto-check GitHub in-browser, but must never form-submit checkupdate
+if grep -n 'triggerService("checkupdate"' "$ROOT/src/ui/app.js" >/dev/null 2>&1; then
   echo "FAIL no auto checkupdate submit"
   fail=$((fail + 1))
-}
+elif grep -q 'checkUpdateFromGithub({ quiet: true, skipAutoModal: true })' "$ROOT/src/ui/app.js"; then
+  echo "OK  no auto checkupdate submit"
+else
+  echo "FAIL no auto checkupdate submit"
+  fail=$((fail + 1))
+fi
 grep -q 'force-update | update-force | uf' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  force-update" || {
   echo "FAIL force-update"
   fail=$((fail + 1))
