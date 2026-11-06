@@ -857,12 +857,12 @@ function initial() {
                           </div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <span class="row-buttons">
-                              <input id="btnTgTest" class="button_gen button_gen_small" type="button" value="Проверить соединение"
-                                data-ss-hint="Сразу вызывает Telegram Bot API (getMe). Можно проверить токен из поля выше ещё до сохранения; если поле пустое — используется уже сохранённый токен.">
+                              <input id="btnTgTest" class="button_gen button_gen_small" type="button" value="Проверить и в очередь"
+                                data-ss-hint="Проверяет token через api.telegram.org и ставит Telegram-настройки в очередь. Сохранение на роутере — только после «Применить» внизу главной страницы (как остальные настройки).">
                             </span>
                             <span id="setTgTestStatus" class="ss-hint" style="margin-left:8px"></span>
                           </div>
-                          <div id="setTgHint" class="ss-hint">Команды: /on /off /restart /update /list /rules /ruleadd … · /help</div>
+                          <div id="setTgHint" class="ss-hint">Сначала token → «Проверить и в очередь» / «В очередь» → «Применить». Затем /whoami боту → chat_id в whitelist → снова Применить. Команды: /on /off /restart /update /list /rules /ruleadd …</div>
                         </div>
                         <div class="ss-modal-section">
                           <h4 data-ss-hint="Справочники «какой IP/сайт к какой стране относится». Используются правилами маршрутизации.">GeoIP / GeoSite</h4>

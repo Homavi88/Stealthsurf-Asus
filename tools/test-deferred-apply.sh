@@ -63,16 +63,46 @@ do
   grep -q "queuePending(" "$APP" && grep -q "\"$act\"" "$APP" && ok "queue path mentions $act" || bad "queue path mentions $act"
 done
 
-# Settings modal queues setsettings
-if grep -n 'function saveSettingsFromModal' -A40 "$APP" | grep -q 'queuePending("settings", "setsettings"'; then
+# Settings modal queues setsettings (via helper or direct)
+if grep -q 'function queueSettingsFromModal' "$APP" && grep -n 'function saveSettingsFromModal' -A50 "$APP" | grep -q 'queueSettingsFromModal\|queuePending("settings"'; then
   ok "settings modal queues setsettings"
 else
   bad "settings modal queues setsettings"
 fi
-if grep -n 'function saveSettingsFromModal' -A40 "$APP" | grep -q 'triggerService("setsettings"'; then
+if grep -n 'function saveSettingsFromModal' -A50 "$APP" | grep -q 'triggerService("setsettings"'; then
   bad "settings modal still triggerService setsettings"
 else
   ok "settings modal no immediate setsettings"
+fi
+
+# Telegram: must NOT Merlin-submit testtelegram (queues + browser fetch)
+if grep -n 'function testTelegramFromModal' -A80 "$APP" | grep -q 'triggerService("testtelegram"'; then
+  bad "telegram test still triggerService(testtelegram)"
+else
+  ok "telegram test no Merlin triggerService"
+fi
+if grep -n 'function testTelegramFromModal' -A40 "$APP" | grep -q 'queueSettingsFromModal\|queuePending'; then
+  ok "telegram test queues settings"
+else
+  bad "telegram test queues settings"
+fi
+grep -q 'RULE: Deferred Apply' "$APP" && ok "deferred-apply RULE comment in app.js" || bad "deferred-apply RULE comment in app.js"
+[ -f "$ROOT/docs/DEFERRED_APPLY.md" ] && ok "docs/DEFERRED_APPLY.md present" || bad "docs/DEFERRED_APPLY.md present"
+grep -q 'queuePending' "$ROOT/docs/DEFERRED_APPLY.md" && ok "docs mention queuePending" || bad "docs mention queuePending"
+
+# No literal config-save triggerService left outside applyPending/queuePending fallback
+for act in setsettings setkey setrouting setpolicies setmode setdnsmode setoutbounds; do
+  hits=$(grep -n "triggerService(\"$act\"" "$APP" | grep -v 'applyPendingChanges\|queuePending\|SS_PENDING\|RULE:' || true)
+  if [ -n "$hits" ]; then
+    bad "literal triggerService($act) outside pending path"
+  else
+    ok "no stray triggerService($act)"
+  fi
+done
+if grep -n 'btnRebuild' -A12 "$APP" | grep -q 'triggerService("setoutbounds"'; then
+  bad "btnRebuild still immediate setoutbounds"
+else
+  ok "btnRebuild queues setoutbounds"
 fi
 
 # Immediate operational actions still use triggerService
@@ -101,8 +131,8 @@ grep -q 'SS_DEFER_REBUILD' "$SE" && ok "applypending sets SS_DEFER_REBUILD" || b
 # Optional payload override for nested ops
 grep -q 'Optional 3rd arg: explicit payload' "$SE" && ok "service_event payload override" || bad "service_event payload override"
 
-# Version bump
-grep -q 'ADDON_VERSION="1.0.32"' "$ROOT/src/backend/_globals.sh" && ok "ADDON_VERSION 1.0.32" || bad "ADDON_VERSION 1.0.32"
+# Version present (do not pin patch here — release bumps independently)
+grep -qE 'ADDON_VERSION="1\.[0-9]+\.[0-9]+"' "$ROOT/src/backend/_globals.sh" && ok "ADDON_VERSION set" || bad "ADDON_VERSION set"
 
 # --- Lightweight smoke: SS_BATCH_SILENT + SS_DEFER_REBUILD semantics ---------
 TMP=$(mktemp -d)
