@@ -1,4 +1,11 @@
 const EXT = "/ext/stealthsurf";
+// Mirror XrayUI Version.vue: read-only GitHub lookups happen in the browser.
+// Never route listversions/checkupdate through Merlin start_apply.htm.
+const SS_GH_REPO = "Homavi88/Stealthsurf-Asus";
+const SS_GH_RELEASES_API = "https://api.github.com/repos/" + SS_GH_REPO + "/releases";
+const SS_GH_LATEST_API = SS_GH_RELEASES_API + "/latest";
+const SS_RELEASE_ASSET = "asuswrt-merlin-stealthsurf.tar.gz";
+const SS_RELEASES_TO_SHOW = 15;
 
 // Do not bind a global `$`. Merlin show_menu() needs jQuery `$` (inArray, #tabMenu)
 // before it paints #mainMenu. Shadowing `$` leaves the left router menu empty.
@@ -43,6 +50,192 @@ async function fetchJson(url) {
   });
   if (!res.ok) throw new Error(url + " HTTP " + res.status);
   return res.json();
+}
+
+async function fetchGithubJson(url) {
+  // Same idea as XrayUI engine.fetchGithubJson — direct browser GET to api.github.com
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: {
+      Accept: "application/vnd.github+json",
+      "User-Agent": "stealthsurf-merlin-webui",
+    },
+  });
+  if (!res.ok) throw new Error("GitHub HTTP " + res.status);
+  return res.json();
+}
+
+function versionNormalize(v) {
+  return String(v || "")
+    .replace(/^[vV]/, "")
+    .replace(/[^0-9.].*$/, "");
+}
+
+function versionCmp(a, b) {
+  const pa = versionNormalize(a)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const pb = versionNormalize(b)
+    .split(".")
+    .map((n) => parseInt(n, 10) || 0);
+  const len = Math.max(pa.length, pb.length);
+  for (let i = 0; i < len; i++) {
+    const x = pa[i] || 0;
+    const y = pb[i] || 0;
+    if (x > y) return 1;
+    if (x < y) return -1;
+  }
+  return 0;
+}
+
+function cleanChangelogBullet(line) {
+  return String(line || "")
+    .replace(/^[*#-]+\s*/, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+by @[A-Za-z0-9_-]+(\s+in\s+(#[0-9]+|https?:\/\/\S+))?\s*$/i, "")
+    .replace(/\s+\(#[0-9]+\)\s*$/, "")
+    .replace(/\s+in https?:\/\/\S+/i, "")
+    .replace(/^docs:\s*/i, "Документация: ")
+    .replace(/^fix:\s*/i, "Исправление: ")
+    .replace(/^feat(\([^)]*\))?:\s*/i, "Новое: ")
+    .replace(/^chore(\([^)]*\))?:\s*/i, "")
+    .replace(/^ci(\([^)]*\))?:\s*/i, "CI: ")
+    .replace(/^Release v[0-9.]+\s*:\s*/i, "")
+    .trim();
+}
+
+function classifyChangelogLine(line) {
+  const s = String(line || "");
+  if (!s) return "skip";
+  if (/what.?s changed|full changelog|new contributors|^---+$/i.test(s)) return "skip";
+  if (/release v[0-9]|merge pull request|bump version|ship main/i.test(s)) return "skip";
+  if (/fix|bug|crash|ошибк|исправ|blackhole|конфликт|conflict|broken|не работ/i.test(s)) return "fixes";
+  if (/feat|added|\badd\b|новое|добав|modal|screenshot|\bcli\b|баннер|guard|\bblock\b|блок|xrayui|оптимиз|optim|performance|\bcpu\b|memory|\bram\b|\bui\b|webui|changelog|human/i.test(s))
+    return "features";
+  if (/docs|readme|документац|chore|\bci\b|workflow/i.test(s)) return "other";
+  return "other";
+}
+
+function humanizeChangelog(body, tag, name) {
+  const features = [];
+  const fixes = [];
+  const other = [];
+  const seen = {};
+  String(body || "")
+    .split(/\r?\n/)
+    .forEach((raw) => {
+      const line = String(raw || "");
+      if (/^#{1,3}\s/.test(line)) return;
+      if (!/^[\*\-]\s+/.test(line) && !/^[0-9]+\.\s+/.test(line)) return;
+      const cleaned = cleanChangelogBullet(line);
+      if (!cleaned || cleaned.length < 8 || seen[cleaned]) return;
+      seen[cleaned] = 1;
+      const kind = classifyChangelogLine(cleaned);
+      if (kind === "fixes") fixes.push(cleaned);
+      else if (kind === "features") features.push(cleaned);
+      else if (kind === "other") other.push(cleaned);
+    });
+  const featN = features.length;
+  const fixN = fixes.length;
+  let headline = name || tag || "Релиз";
+  if (featN && fixN) headline = "Новые возможности и исправления ошибок";
+  else if (featN) headline = "Новые возможности";
+  else if (fixN) headline = "Исправления ошибок";
+  const summaryParts = [];
+  if (featN) summaryParts.push("новое: " + featN);
+  if (fixN) summaryParts.push("исправления: " + fixN);
+  if (other.length) summaryParts.push("ещё: " + other.length);
+  return {
+    headline: headline,
+    summary: summaryParts.length ? summaryParts.join(" · ") : headline,
+    features: features.slice(0, 12),
+    fixes: fixes.slice(0, 12),
+    other: other.slice(0, 8),
+  };
+}
+
+function assetUrlFromGithubRelease(rel, tag) {
+  const assets = (rel && rel.assets) || [];
+  for (let i = 0; i < assets.length; i++) {
+    if (assets[i] && assets[i].name === SS_RELEASE_ASSET && assets[i].browser_download_url) {
+      return assets[i].browser_download_url;
+    }
+  }
+  if (tag) {
+    return "https://github.com/" + SS_GH_REPO + "/releases/download/" + tag + "/" + SS_RELEASE_ASSET;
+  }
+  return "https://github.com/" + SS_GH_REPO + "/releases/latest/download/" + SS_RELEASE_ASSET;
+}
+
+function mapGithubRelease(rel, installed) {
+  if (!rel || rel.draft || !rel.tag_name) return null;
+  const tag = String(rel.tag_name);
+  const version = versionNormalize(tag);
+  const cmp = versionCmp(version, installed || "0");
+  const direction = cmp > 0 ? "newer" : cmp < 0 ? "older" : "same";
+  return {
+    tag: tag,
+    version: version || null,
+    name: rel.name || null,
+    release_url: rel.html_url || null,
+    download_url: assetUrlFromGithubRelease(rel, tag),
+    published_at: rel.published_at || rel.created_at || null,
+    prerelease: !!rel.prerelease,
+    direction: direction,
+    current: direction === "same",
+    changelog: humanizeChangelog(rel.body || "", tag, rel.name || ""),
+  };
+}
+
+function buildVersionsFromGithubList(list, installed) {
+  const releases = [];
+  (Array.isArray(list) ? list : []).forEach((rel) => {
+    const entry = mapGithubRelease(rel, installed);
+    if (entry) releases.push(entry);
+  });
+  return {
+    installed: installed || "—",
+    repo: SS_GH_REPO,
+    checked_at: Math.floor(Date.now() / 1000),
+    error: null,
+    releases: releases.slice(0, SS_RELEASES_TO_SHOW),
+  };
+}
+
+function buildVersionInfoFromGithubLatest(latestRel, installed) {
+  const entry = mapGithubRelease(latestRel, installed);
+  const latest = entry && entry.version ? entry.version : null;
+  const upd = !!(latest && installed && versionCmp(latest, installed) > 0);
+  return {
+    installed: installed || "—",
+    latest: latest,
+    tag: entry && entry.tag ? entry.tag : null,
+    release_url: entry && entry.release_url ? entry.release_url : null,
+    download_url: entry && entry.download_url ? entry.download_url : null,
+    update_available: upd,
+    repo: SS_GH_REPO,
+    checked_at: Math.floor(Date.now() / 1000),
+    error: null,
+    changelog: entry && entry.changelog ? entry.changelog : null,
+  };
+}
+
+function installedVersionHint() {
+  return (
+    (versionCache && versionCache.installed && versionCache.installed !== "—" && versionCache.installed) ||
+    (stateCache && stateCache.version) ||
+    (byId("installedVer") && byId("installedVer").textContent.replace(/^v/, "")) ||
+    "—"
+  );
+}
+
+function setVersionsModalStatus(kind, text) {
+  const el = byId("versionsStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "ss-versions-status" + (kind ? " " + kind : "");
+  el.style.display = text ? "block" : "none";
 }
 
 function buildAmngCustom(payload) {
@@ -97,11 +290,20 @@ function triggerService(action, payload, opts) {
     setMsg("Удаление из WebUI отключено. В SSH: ssurf un --yes (или сначала ssurf doctor)", "err");
     return;
   }
+  // Read-only GitHub lookups must NOT hijack Merlin start_apply / percent progress.
+  // Mirror XrayUI: browser fetch → modal; only install/update uses form submit.
+  if (action === "checkupdate") {
+    checkUpdateFromGithub({ openModalIfUpdate: true });
+    return;
+  }
+  if (action === "listversions" || action === "versions") {
+    requestVersionsList(true);
+    return;
+  }
   // Update downloads a release — needs a longer httpd wait / refresh
   let wait = Number(options.wait || 0);
   if (!wait) {
     if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
-    else if (action === "checkupdate" || action === "listversions" || action === "versions") wait = 20;
     else if (action === "installxray" || action === "sync") wait = 20;
     else if (action === "backup" || action === "restore") wait = 15;
     else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
@@ -139,9 +341,6 @@ function triggerService(action, payload, opts) {
   form.action_wait.value = String(wait);
 
   const labels = {
-    checkupdate: "Проверка версии на GitHub…",
-    listversions: "Загрузка списка версий с GitHub…",
-    versions: "Загрузка списка версий с GitHub…",
     installversion: "Установка выбранной версии с GitHub…",
     switchversion: "Переключение версии с GitHub…",
     rollback: "Откат на выбранную версию…",
@@ -478,9 +677,92 @@ function closeVersionsModal() {
   if (modal) modal.classList.remove("show");
 }
 
-function requestVersionsList(andOpen) {
-  if (andOpen) openVersionsModal(versionsCache);
-  triggerService("listversions", {});
+function setVersionsSelectLoading(on) {
+  const sel = byId("versionSelect");
+  const refresh = byId("btnVersionsRefresh");
+  if (sel) sel.disabled = !!on;
+  if (refresh) refresh.disabled = !!on;
+  if (on && sel) {
+    sel.innerHTML = "";
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = "Загрузка списка с GitHub…";
+    sel.appendChild(o);
+  }
+}
+
+async function requestVersionsList(andOpen) {
+  // XrayUI-style: open overlay, load releases via fetch — never start_apply.
+  if (andOpen !== false) openVersionsModal(versionsCache);
+  setVersionsSelectLoading(true);
+  setVersionsModalStatus("loading", "Загрузка релизов с GitHub…");
+  setMsg("Загрузка списка версий с GitHub…", "");
+  const installed = installedVersionHint();
+  try {
+    const list = await fetchGithubJson(SS_GH_RELEASES_API + "?per_page=" + (SS_RELEASES_TO_SHOW + 5));
+    if (!Array.isArray(list)) throw new Error("unexpected releases response");
+    const data = buildVersionsFromGithubList(list, installed);
+    if (!data.releases.length) throw new Error("пустой список релизов");
+    applyVersionsData(data);
+    setVersionsModalStatus("", "");
+    setMsg("Загружено релизов: " + data.releases.length, "ok");
+    if (andOpen !== false) openVersionsModal(data);
+  } catch (err) {
+    // Soft fallback to cached /ext JSON written by CLI/cron — still no apply form
+    try {
+      const cached = await fetchJson(EXT + "/versions.json");
+      if (cached && Array.isArray(cached.releases) && cached.releases.length) {
+        applyVersionsData(cached);
+        setVersionsModalStatus("warn", "GitHub недоступен из браузера — показан кэш роутера.");
+        setMsg("Показан кэш versions.json (GitHub: " + (err && err.message ? err.message : "ошибка") + ")", "warn");
+        if (andOpen !== false) openVersionsModal(cached);
+        return;
+      }
+    } catch (_) {}
+    const msg = err && err.message ? err.message : String(err);
+    applyVersionsData({
+      installed: installed,
+      repo: SS_GH_REPO,
+      checked_at: Math.floor(Date.now() / 1000),
+      error: msg,
+      releases: (versionsCache && versionsCache.releases) || [],
+    });
+    setVersionsModalStatus("error", "Не удалось загрузить релизы: " + msg);
+    setMsg("Не удалось загрузить список версий: " + msg, "err");
+  } finally {
+    setVersionsSelectLoading(false);
+  }
+}
+
+async function checkUpdateFromGithub(opts) {
+  const options = opts || {};
+  setMsg("Проверка версии на GitHub…", "");
+  const installed = installedVersionHint();
+  try {
+    const latestRel = await fetchGithubJson(SS_GH_LATEST_API);
+    const info = buildVersionInfoFromGithubLatest(latestRel, installed);
+    renderVersion(info);
+    if (info.update_available) {
+      setMsg("Доступно обновление " + info.latest, "ok");
+      if (options.openModalIfUpdate) openUpdateModal(info, { keepSeen: true });
+    } else {
+      setMsg("Установлена актуальная версия " + (info.installed || installed), "ok");
+      if (options.openModalAlways) openUpdateModal(info, { keepSeen: true });
+    }
+    return info;
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    try {
+      const cached = await fetchJson(EXT + "/version.json");
+      if (cached) {
+        renderVersion({ ...cached, error: cached.error || msg });
+        setMsg("GitHub из браузера недоступен — показан кэш version.json (" + msg + ")", "warn");
+        return cached;
+      }
+    } catch (_) {}
+    setMsg("Проверка версии не удалась: " + msg, "err");
+    return null;
+  }
 }
 
 function installSelectedVersion() {
@@ -1204,7 +1486,7 @@ function bind() {
     triggerService("restart", {});
   });
   byId("btnRefresh").addEventListener("click", () => refreshAll());
-  byId("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
+  byId("btnCheckUpdate").addEventListener("click", () => checkUpdateFromGithub({ openModalIfUpdate: true }));
   byId("btnUpdate").addEventListener("click", () => {
     openUpdateModal(versionCache, { keepSeen: true });
   });
@@ -1217,11 +1499,9 @@ function bind() {
   if (byId("btnVersionFooter")) {
     byId("btnVersionFooter").addEventListener("click", (e) => {
       e.preventDefault();
-      if (versionCache && versionCache.update_available) {
-        openUpdateModal(versionCache, { keepSeen: true });
-      } else {
-        triggerService("checkupdate", {});
-      }
+      // XrayUI footer opens the version modal (releases list), not Merlin apply
+      openVersionsModal(versionsCache);
+      requestVersionsList(false);
     });
   }
   if (byId("btnBannerUpdate")) {
@@ -1248,7 +1528,7 @@ function bind() {
     });
   }
   if (byId("btnCheckUpdate2")) {
-    byId("btnCheckUpdate2").addEventListener("click", () => triggerService("checkupdate", {}));
+    byId("btnCheckUpdate2").addEventListener("click", () => checkUpdateFromGithub({ openModalIfUpdate: true }));
   }
   if (byId("btnForceUpdate")) {
     byId("btnForceUpdate").addEventListener("click", () => {
@@ -1258,9 +1538,8 @@ function bind() {
   }
   const openVersionsUi = () => {
     openVersionsModal(versionsCache);
-    if (!versionsCache.releases || !versionsCache.releases.length) {
-      requestVersionsList(false);
-    }
+    // Always refresh from GitHub inside the modal (XrayUI loads on open)
+    requestVersionsList(false);
   };
   if (byId("btnVersions")) byId("btnVersions").addEventListener("click", openVersionsUi);
   if (byId("btnVersions2")) byId("btnVersions2").addEventListener("click", openVersionsUi);
