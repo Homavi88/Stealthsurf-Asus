@@ -305,13 +305,33 @@ extract_and_place() {
   step_begin "Распаковка и установка файлов"
   [ -s "$TMP_TGZ" ] || die "Пустой архив пакета"
   info "цель: ${C_DIM}$ADDON_DIR${C_RESET}"
-  rm -rf "$ADDON_DIR"
-  mkdir -p /jffs/addons /jffs/scripts
-  tar -xzf "$TMP_TGZ" -C /jffs/addons
-  [ -f "$ADDON_DIR/stealthsurf" ] || die "В архиве нет $ADDON_DIR/stealthsurf"
-  [ -f "$ADDON_DIR/index.asp" ] || die "В архиве нет index.asp"
-  [ -f "$ADDON_DIR/app.js" ] || die "В архиве нет app.js"
+  # Validate archive BEFORE removing any live files (failed update previously wiped the addon)
+  if ! tar -tzf "$TMP_TGZ" >/dev/null 2>&1; then
+    die "Скачанный файл не является tar.gz пакетом (отказ трогать установленный аддон)"
+  fi
+  STAGE_DIR="/tmp/stealthsurf-install-stage.$$"
+  rm -rf "$STAGE_DIR"
+  mkdir -p "$STAGE_DIR" /jffs/addons /jffs/scripts
+  if ! tar -xzf "$TMP_TGZ" -C "$STAGE_DIR"; then
+    rm -rf "$STAGE_DIR"
+    die "Не удалось распаковать архив (установленный аддон не тронут)"
+  fi
+  [ -f "$STAGE_DIR/stealthsurf/stealthsurf" ] || {
+    rm -rf "$STAGE_DIR"
+    die "В архиве нет stealthsurf/stealthsurf"
+  }
+  [ -f "$STAGE_DIR/stealthsurf/index.asp" ] || {
+    rm -rf "$STAGE_DIR"
+    die "В архиве нет index.asp"
+  }
+  [ -f "$STAGE_DIR/stealthsurf/app.js" ] || {
+    rm -rf "$STAGE_DIR"
+    die "В архиве нет app.js"
+  }
 
+  rm -rf "$ADDON_DIR"
+  mv "$STAGE_DIR/stealthsurf" "$ADDON_DIR"
+  rm -rf "$STAGE_DIR"
   mv -f "$ADDON_DIR/stealthsurf" "$SCRIPT_DST"
   chmod 0755 "$SCRIPT_DST"
   ln -sf "$SCRIPT_DST" "/opt/bin/${ADDON_TAG}" 2>/dev/null || true

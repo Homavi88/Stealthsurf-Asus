@@ -149,6 +149,15 @@
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
 </style>
 <script type="text/javascript">
+/* Merlin addon settings blob — merge StealthSurf payload into this, never replace wholesale */
+var custom_settings;
+try {
+  custom_settings = <% get_custom_settings(); %>;
+} catch (e) {
+  custom_settings = {};
+}
+if (!custom_settings || typeof custom_settings !== "object") custom_settings = {};
+
 function initial() {
   try {
     if (typeof show_menu === "function") show_menu();

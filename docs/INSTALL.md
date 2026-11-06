@@ -1,6 +1,6 @@
 # Установка StealthSurf UI (Asuswrt-Merlin)
 
-Версия пакета: **v1.0.11** (GitHub Releases).
+Версия пакета: **v1.0.12** (GitHub Releases).
 
 ## Требования
 
@@ -90,11 +90,19 @@ ssurf upd -f      # всегда latest с GitHub
 ## Удаление
 
 ```sh
-ssurf un
-# или: stealthsurf uninstall | remove | purge
+ssurf un --yes
+# или: stealthsurf uninstall --yes
 ```
 
+Нужен явный `--yes` (алиас `rm` убран — слишком легко снести аддон).  
 Чистит iptables/ip rule, хуки, cron, UI, данные. Бинарь Xray в `/opt` не трогается (может быть общим).
+
+Если вкладка или `ssurf` пропали после сбоя/обновления — сначала восстановление:
+
+```sh
+/jffs/scripts/stealthsurf doctor
+# затем выйти/войти в WebUI
+```
 
 ## Smoke после reboot
 

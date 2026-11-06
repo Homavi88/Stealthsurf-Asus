@@ -251,9 +251,14 @@ ss_restore() {
 }
 
 ss_update_self() {
+  # Atomic self-update: never delete the live addon until the new package is validated.
+  # A failed download/extract previously wiped /jffs/addons/stealthsurf and left the UI gone.
   local tmp="/tmp/asuswrt-merlin-stealthsurf.tar.gz"
   local url=""
   local new_ver=""
+  local stage="/tmp/stealthsurf-update-stage.$$"
+  local bak="/tmp/stealthsurf-update-bak.$$"
+  local new_script=""
   ss_backup_auto "pre-update" || true
 
   # Resolve download URL from last check (or refresh)
@@ -278,27 +283,73 @@ ss_update_self() {
       return 1
     fi
   fi
-  rm -rf "$ADDON_JFFS_ADN_DIR"
-  mkdir -p /jffs/addons /jffs/scripts
-  if ! tar -xzf "$tmp" -C /jffs/addons; then
-    ss_error "Failed to extract release archive"
-    ss_activity "update.fail" "extract failed"
+
+  # Reject HTML error pages / empty files before touching live addon files
+  if [ ! -s "$tmp" ] || ! tar -tzf "$tmp" >/dev/null 2>&1; then
+    ss_error "Downloaded file is not a valid release archive (refusing to replace addon)"
+    ss_activity "update.fail" "invalid archive"
+    rm -f "$tmp"
     return 1
   fi
-  [ -f "$ADDON_JFFS_ADN_DIR/stealthsurf" ] || {
-    ss_error "Invalid release archive layout (missing stealthsurf script)"
-    ss_activity "update.fail" "bad archive"
+
+  rm -rf "$stage" "$bak"
+  mkdir -p "$stage" /jffs/addons /jffs/scripts
+  if ! tar -xzf "$tmp" -C "$stage"; then
+    ss_error "Failed to extract release archive (live addon untouched)"
+    ss_activity "update.fail" "extract failed"
+    rm -rf "$stage"
+    rm -f "$tmp"
     return 1
-  }
-  mv -f "$ADDON_JFFS_ADN_DIR/stealthsurf" "$ADDON_SCRIPT"
+  fi
+
+  if [ ! -f "$stage/stealthsurf/stealthsurf" ] || [ ! -f "$stage/stealthsurf/index.asp" ] || [ ! -f "$stage/stealthsurf/app.js" ]; then
+    ss_error "Invalid release archive layout (live addon untouched)"
+    ss_activity "update.fail" "bad archive"
+    rm -rf "$stage"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  # Snapshot current files for rollback
+  mkdir -p "$bak"
+  [ -d "$ADDON_JFFS_ADN_DIR" ] && cp -a "$ADDON_JFFS_ADN_DIR" "$bak/addons" 2>/dev/null || true
+  [ -f "$ADDON_SCRIPT" ] && cp -a "$ADDON_SCRIPT" "$bak/stealthsurf" 2>/dev/null || true
+
+  # Swap in new addon dir
+  rm -rf "$ADDON_JFFS_ADN_DIR"
+  if ! mv "$stage/stealthsurf" "$ADDON_JFFS_ADN_DIR"; then
+    ss_error "Failed to install extracted addon — restoring previous files"
+    ss_activity "update.fail" "swap failed"
+    [ -d "$bak/addons" ] && mv "$bak/addons" "$ADDON_JFFS_ADN_DIR" 2>/dev/null || true
+    [ -f "$bak/stealthsurf" ] && cp -a "$bak/stealthsurf" "$ADDON_SCRIPT" 2>/dev/null || true
+    rm -rf "$stage" "$bak"
+    rm -f "$tmp"
+    return 1
+  fi
+
+  new_script="$ADDON_JFFS_ADN_DIR/stealthsurf"
+  if ! mv -f "$new_script" "$ADDON_SCRIPT"; then
+    ss_error "Failed to replace CLI script — restoring previous files"
+    ss_activity "update.fail" "script swap failed"
+    rm -rf "$ADDON_JFFS_ADN_DIR"
+    [ -d "$bak/addons" ] && mv "$bak/addons" "$ADDON_JFFS_ADN_DIR" 2>/dev/null || true
+    [ -f "$bak/stealthsurf" ] && cp -a "$bak/stealthsurf" "$ADDON_SCRIPT" 2>/dev/null || true
+    rm -rf "$stage" "$bak"
+    rm -f "$tmp"
+    return 1
+  fi
   chmod 0755 "$ADDON_SCRIPT"
-  # UI assets live next to the script under /jffs/addons/stealthsurf/
+  rm -rf "$stage" "$bak"
+  rm -f "$tmp"
+
+  # Recreate CLI symlinks (Entware /opt may have been remounted)
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+  ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
+
   # Re-run install with NEW script (hooks, deps, mount UI, version.json)
   if ! sh "$ADDON_SCRIPT" install; then
-    ss_warn "Post-update install reported errors — check logs"
+    ss_warn "Post-update install reported errors — run: $ADDON_SCRIPT doctor"
   fi
-  rm -f "$tmp"
   # Refresh version after install (new ADDON_VERSION is inside new script; this shell still has old)
   sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
   sh "$ADDON_SCRIPT" check-update >/dev/null 2>&1 || true

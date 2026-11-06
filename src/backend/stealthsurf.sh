@@ -43,8 +43,8 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   baks           backups        cl             clients
   dev            devices        conn [url]     connectivity
   xray           install-xray   geo            geodata
-  un|rm          uninstall      h|?            help
-  m|menu         интерактивное меню
+  un --yes       uninstall      doctor         восстановить UI/CLI
+  h|?            help           m|menu         интерактивное меню
 
 ── Полные имена (как раньше) ───────────────────────────────
   start stop restart status install uninstall version
@@ -107,11 +107,11 @@ EOF
     read -r cid || return 0
     set -- en "$cid"
     ;;
-  x | un | rm)
+  x | un)
     printf 'Точно удалить аддон? [y/N]: '
     read -r yn || return 0
     case "$yn" in
-    y | Y | yes | YES) set -- un ;;
+    y | Y | yes | YES) set -- uninstall --yes ;;
     *)
       echo "Отмена"
       return 0
@@ -178,8 +178,20 @@ ss_cli_dispatch() {
   install)
     ss_install || return 1
     ;;
-  uninstall | remove | purge | un | rm)
-    ss_uninstall
+  uninstall | remove | purge | un)
+    # Require explicit confirmation — former alias `rm` was too easy to run by mistake
+    # and wiped the whole addon (UI + CLI). Usage: ssurf un --yes
+    case "${2:-}" in
+    --yes | -y | yes | confirm | 1) ss_uninstall ;;
+    *)
+      ss_error "uninstall refuses without confirmation. Run: ssurf un --yes"
+      ss_info "If the tab/CLI vanished after a glitch, try first: ssurf doctor"
+      return 1
+      ;;
+    esac
+    ;;
+  doctor | heal | fix | repair)
+    ss_doctor || return 1
     ;;
   mount_ui)
     ss_mount_ui || return 1

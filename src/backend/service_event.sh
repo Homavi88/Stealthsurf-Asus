@@ -6,16 +6,27 @@
 
 ss_read_payload() {
   # Prefer fresh amng_custom from the WebUI form submit; fall back to payload file.
+  # UI stores our action JSON under .stealthsurf so other Merlin addons' amng_custom
+  # keys are not wiped. Legacy flat payloads (no .stealthsurf) still work.
   local f="/tmp/stealthsurf_payload.json"
-  local custom
+  local custom extracted
   custom=$(nvram get amng_custom 2>/dev/null)
   if [ -n "$custom" ] && printf '%s' "$custom" | jq -e . >/dev/null 2>&1; then
-    printf '%s' "$custom" >"$f"
-    printf '%s' "$custom"
+    if printf '%s' "$custom" | jq -e 'has("stealthsurf")' >/dev/null 2>&1; then
+      extracted=$(printf '%s' "$custom" | jq -c '.stealthsurf // {}')
+    else
+      extracted=$(printf '%s' "$custom" | jq -c .)
+    fi
+    printf '%s' "$extracted" >"$f"
+    printf '%s' "$extracted"
     return 0
   fi
   if [ -f "$f" ] && jq -e . "$f" >/dev/null 2>&1; then
-    cat "$f"
+    if jq -e 'has("stealthsurf")' "$f" >/dev/null 2>&1; then
+      jq -c '.stealthsurf // {}' "$f"
+    else
+      cat "$f"
+    fi
     return 0
   fi
   echo '{}'
@@ -330,15 +341,17 @@ ss_service_event() {
     fi
     ;;
   uninstall | remove | purge)
-    # Dangerous — only via explicit CLI normally; allow UI if payload.confirm=1
-    local confirm
-    confirm=$(printf '%s' "$payload" | jq -r '.confirm // "0"')
-    if [ "$confirm" != "1" ] && [ "$confirm" != "true" ]; then
-      ss_json_response false "uninstall requires confirm=1" null
+    # Hard-block from WebUI service-event — full wipe only via CLI: ssurf un --yes
+    ss_json_response false "uninstall disabled from WebUI; use: ssurf un --yes" null
+    return 1
+    ;;
+  doctor | heal | fix)
+    if ss_doctor >/dev/null; then
+      ss_json_response true "doctor ok" "$(ss_jq_file_or "$SS_STATE_FILE" '{}')"
+    else
+      ss_json_response false "doctor failed" null
       return 1
     fi
-    ss_uninstall
-    ss_json_response true "uninstalled" null
     ;;
   geodata)
     ss_geodata_update && ss_json_response true "geodata updated" null || ss_json_response false "geodata failed" null

@@ -39,9 +39,33 @@ async function fetchJson(url) {
   return res.json();
 }
 
+function buildAmngCustom(payload) {
+  // Namespace under .stealthsurf so we do not wipe other Merlin addons' amng_custom keys.
+  let base = {};
+  try {
+    if (typeof custom_settings === "object" && custom_settings) {
+      base = JSON.parse(JSON.stringify(custom_settings));
+    }
+  } catch (_) {
+    base = {};
+  }
+  base.stealthsurf = payload || {};
+  let blob = JSON.stringify(base);
+  // Merlin amng_custom is size-limited; fall back to namespaced-only payload
+  if (blob.length > 3500) {
+    blob = JSON.stringify({ stealthsurf: payload || {} });
+  }
+  return blob;
+}
+
 function triggerService(action, payload, opts) {
   const data = payload || {};
   const options = opts || {};
+  // Hard-block destructive actions from the browser — CLI only
+  if (action === "uninstall" || action === "remove" || action === "purge") {
+    setMsg("Удаление из WebUI отключено. В SSH: ssurf un --yes (или сначала ssurf doctor)", "err");
+    return;
+  }
   // Update downloads a release — needs a longer httpd wait / refresh
   let wait = Number(options.wait || 0);
   if (!wait) {
@@ -63,8 +87,7 @@ function triggerService(action, payload, opts) {
     return;
   }
 
-  const blob = JSON.stringify(data);
-  // Merlin amng_custom is size-limited; reject oversized payloads instead of truncating JSON
+  const blob = buildAmngCustom(data);
   if (blob.length > 3500) {
     setMsg(
       "Payload слишком большой (" + blob.length + " байт). Упростите routing/policies или правьте через CLI.",
@@ -843,16 +866,14 @@ bind();
 refreshAll();
 loadBackups();
 setTimeout(loadLogPreview, 300);
-// Soft re-check: only if version.json is older than 6h (avoids form submit every open)
+// Passive version display only — do NOT auto form-submit checkupdate on page open.
+// Auto submit previously hit Merlin start_apply on every visit; cron still runs
+// `stealthsurf check-update` every 12h. User can press «Проверить версию».
 setTimeout(async () => {
   try {
     const v = await fetchJson(EXT + "/version.json");
     renderVersion(v);
-    const age = Date.now() / 1000 - Number(v.checked_at || 0);
-    if (!v.checked_at || age > 6 * 3600) {
-      triggerService("checkupdate", {});
-    }
   } catch (_) {
-    /* offline / first install — user can press «Проверить версию» */
+    /* offline / first install */
   }
 }, 800);
