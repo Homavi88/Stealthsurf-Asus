@@ -473,6 +473,8 @@ function openSsModal(id) {
     if (el) el.classList.remove("show");
   });
   modal.classList.add("show");
+  // Ensure dashed hintstyle marks exist for any freshly rendered modal rows
+  refreshHelpHintStyles(modal);
 }
 
 function closeSsModal(id) {
@@ -981,6 +983,7 @@ function openVersionsModal(data) {
   if (data) applyVersionsData(data);
   else fillVersionsSelect(versionsCache);
   modal.classList.add("show");
+  refreshHelpHintStyles(modal);
 }
 
 function closeVersionsModal() {
@@ -2379,6 +2382,7 @@ async function openSettingsModal() {
     geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
   });
   modal.classList.add("show");
+  refreshHelpHintStyles(modal);
   try {
     const s = await fetchJson(EXT + "/settings.json");
     if (s && typeof s === "object") {
@@ -2566,8 +2570,24 @@ function ensureMerlinChrome() {
   }
 }
 
+function styleHelpHintEl(el) {
+  if (!el || !el.getAttribute) return;
+  const text = (el.getAttribute("data-ss-hint") || "").trim();
+  if (!text) return;
+  // Drop previous "?" click targets — tip opens on hover of the whole item
+  Array.from(el.querySelectorAll(".ss-help")).forEach((n) => n.parentNode.removeChild(n));
+  el.classList.add("ss-hintstyle");
+  el.setAttribute("title", ""); // avoid native browser tooltip doubling
+}
+
+function refreshHelpHintStyles(root) {
+  const scope = root && root.querySelectorAll ? root : document;
+  scope.querySelectorAll("[data-ss-hint]").forEach(styleHelpHintEl);
+}
+
 function initHelpHints() {
   // Asuswrt-Merlin style: hover the label → overlib tip (no click), like stock hintstyle.
+  // Event delegation so tips keep working after modal open / dynamic row re-render.
   let tip = byId("ssHelpTip");
   if (!tip) {
     tip = document.createElement("div");
@@ -2577,7 +2597,7 @@ function initHelpHints() {
   }
   let hideTimer = null;
   let showTimer = null;
-  const useOverlib = typeof window.overlib === "function";
+  let activeHintEl = null;
 
   const placeTip = (anchor) => {
     const r = anchor.getBoundingClientRect();
@@ -2605,10 +2625,24 @@ function initHelpHints() {
     tip.classList.remove("show");
   };
 
+  const ensureOverDivAboveModals = () => {
+    // Stock Merlin sets #overDiv ~9999; our .ss-modal is 10050 — bump tip layer when shown.
+    const od = byId("overDiv");
+    if (od) {
+      od.style.zIndex = "11050";
+      if (od.parentNode && od.parentNode !== document.body) {
+        try {
+          document.body.appendChild(od);
+        } catch (_) {}
+      }
+    }
+  };
+
   const hideHint = () => {
     clearTimeout(showTimer);
     showTimer = null;
-    if (useOverlib && typeof window.nd === "function") {
+    activeHintEl = null;
+    if (typeof window.nd === "function") {
       try {
         window.nd();
       } catch (_) {}
@@ -2619,13 +2653,21 @@ function initHelpHints() {
   const showHint = (anchor, text) => {
     clearTimeout(hideTimer);
     clearTimeout(showTimer);
+    activeHintEl = anchor;
     // Merlin-like delay before showing
     showTimer = setTimeout(() => {
-      if (useOverlib) {
+      if (activeHintEl !== anchor) return;
+      ensureOverDivAboveModals();
+      if (typeof window.overlib === "function") {
         try {
           // Stock Merlin / XrayUI: hover opens overlib, mouseout closes via nd()
-          if (typeof window.WIDTH !== "undefined") {
-            window.overlib(text, OFFSETX, 8, RIGHT, DELAY, 0, WIDTH, 380);
+          // Resolve constants via window.* — bare OFFSETX can throw if overlib globals lag.
+          const OX = typeof window.OFFSETX !== "undefined" ? window.OFFSETX : null;
+          const R = typeof window.RIGHT !== "undefined" ? window.RIGHT : null;
+          const D = typeof window.DELAY !== "undefined" ? window.DELAY : null;
+          const W = typeof window.WIDTH !== "undefined" ? window.WIDTH : null;
+          if (OX != null && R != null && D != null && W != null) {
+            window.overlib(text, OX, 8, R, D, 0, W, 380);
           } else {
             window.overlib(text);
           }
@@ -2639,27 +2681,53 @@ function initHelpHints() {
     }, 350);
   };
 
-  document.querySelectorAll("[data-ss-hint]").forEach((el) => {
-    if (el.dataset.ssHelpBound) return;
-    el.dataset.ssHelpBound = "1";
-    const text = (el.getAttribute("data-ss-hint") || "").trim();
-    if (!text) return;
+  refreshHelpHintStyles(document);
 
-    // Drop previous "?" click targets — tip opens on hover of the whole item
-    Array.from(el.querySelectorAll(".ss-help")).forEach((n) => n.parentNode.removeChild(n));
+  if (document.documentElement.dataset.ssHelpDelegated) return;
+  document.documentElement.dataset.ssHelpDelegated = "1";
 
-    el.classList.add("ss-hintstyle");
-    el.setAttribute("title", ""); // avoid native browser tooltip doubling
-    el.addEventListener("mouseover", (ev) => {
-      // Don't retrigger when moving between children
+  document.addEventListener(
+    "mouseover",
+    (ev) => {
+      const t = ev.target;
+      if (!t || !t.closest) return;
+      const el = t.closest("[data-ss-hint]");
+      if (!el) return;
+      // Don't retrigger when moving between children of the same hint target
       if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+      const text = (el.getAttribute("data-ss-hint") || "").trim();
+      if (!text) return;
+      styleHelpHintEl(el);
       showHint(el, text);
-    });
-    el.addEventListener("mouseout", (ev) => {
+    },
+    true
+  );
+
+  document.addEventListener(
+    "mouseout",
+    (ev) => {
+      const t = ev.target;
+      if (!t || !t.closest) return;
+      const el = t.closest("[data-ss-hint]");
+      if (!el) return;
       if (ev.relatedTarget && el.contains(ev.relatedTarget)) return;
+      // Moving into a nested/sibling hint target — switch tip instead of blanking
+      const next =
+        ev.relatedTarget && ev.relatedTarget.closest
+          ? ev.relatedTarget.closest("[data-ss-hint]")
+          : null;
+      if (next && next !== el) {
+        const text = (next.getAttribute("data-ss-hint") || "").trim();
+        if (text) {
+          styleHelpHintEl(next);
+          showHint(next, text);
+          return;
+        }
+      }
       hideHint();
-    });
-  });
+    },
+    true
+  );
 
   document.addEventListener(
     "scroll",

@@ -74,7 +74,14 @@ check "help tip host" "$ASP" 'id="ssHelpTip"'
 check "initHelpHints in app.js" "$JS" 'function initHelpHints'
 check "hover uses overlib when present" "$JS" 'window.overlib'
 check "hover closes with nd" "$JS" 'window.nd'
+check "hint event delegation" "$JS" 'ssHelpDelegated'
+check "refreshHelpHintStyles helper" "$JS" 'function refreshHelpHintStyles'
+check "modal open refreshes hints" "$JS" 'refreshHelpHintStyles\(modal\)'
+check "overDiv z-index above modals" "$ASP" '#overDiv \{ z-index: 11050; \}'
+check "ss-modal z-index below overDiv" "$ASP" 'z-index: 10050;'
+check "ensureOverDivAboveModals" "$JS" 'ensureOverDivAboveModals'
 check_not "no catalog manage button" "$ASP" 'id="btnManageCatalog"'
+check_not "old shared Loading/overDiv z-index" "$ASP" '#Loading, #overDiv \{ z-index: 9999; \}'
 
 # Enough hints for Configuration + settings + modals
 hint_n=$(grep -o 'data-ss-hint=' "$ASP" | wc -l | tr -d ' ')
@@ -84,6 +91,21 @@ else
   echo "FAIL hint count too low ($hint_n)"
   fail=1
 fi
+
+# Key modal panels must carry data-ss-hint bindings (not only main page rows)
+for modal_id in keysModal catalogModal routingModal policiesModal generalModal backupModal diagModal settingsModal; do
+  python3 - "$ASP" "$modal_id" <<'PY' || fail=1
+import sys
+from pathlib import Path
+asp, mid = Path(sys.argv[1]).read_text(), sys.argv[2]
+i = asp.find('id="%s"' % mid)
+assert i > 0, mid + " missing"
+chunk = asp[i : i + 4500]
+n = chunk.count("data-ss-hint=")
+assert n >= 1, "%s: expected data-ss-hint in modal markup, got %d" % (mid, n)
+print("OK  %s has data-ss-hint (%d)" % (mid, n))
+PY
+done
 
 if [ "$fail" -ne 0 ]; then
   echo "UI layout tests FAILED"
