@@ -76,9 +76,15 @@ ss_connectivity_check() {
 # ss_tail_logs provided by logging.sh (addon|activity|errors|devices|access|xray-error)
 
 ss_watchdog_tick() {
-  # If watchdog enabled and xray should be running, restart on death
+  # Lightweight: pidfile check + optional firewall restore. Rotate logs so USB
+  # does not fill. Avoid lsmod/modprobe and /proc scans on the happy path.
   [ "$SS_WATCHDOG" = "1" ] || return 0
   [ -f "$XRAY_CONFIG_FILE" ] || return 0
+
+  if type ss_log_rotate >/dev/null 2>&1; then
+    ss_log_rotate 2>/dev/null || true
+  fi
+
   # Respect intentional stop (xrayui desired-state pattern)
   if type ss_desired_is_set >/dev/null 2>&1; then
     if ! ss_desired_is_set; then
@@ -91,7 +97,7 @@ ss_watchdog_tick() {
     fi
   fi
   if ss_xray_running; then
-    case "$(ss_fw_detect_mode 2>/dev/null || echo proxy)" in
+    case "${SS_MODE:-proxy}" in
     proxy) ;;
     *)
       if ! ss_firewall_is_configured 2>/dev/null; then

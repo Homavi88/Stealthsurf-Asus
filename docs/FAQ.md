@@ -40,6 +40,19 @@ ssurf doctor
 
 Прозрачный режим включайте только после успешного sync/apply: `ssurf mode redirect` → `ssurf up`.
 
+## Нагрузка на CPU / память роутера
+
+StealthSurf рассчитан на слабые ARM (Merlin):
+
+- **Xray** — основной процесс (как у xrayui); access-лог по умолчанию **выключен**
+- **watchdog** раз в **10 мин** (pidfile + при необходимости firewall); ротация логов
+- **autosync** раз в **15 мин** (curl + jq, без лишней работы если fingerprint не менялся)
+- детект XrayUI: сначала pidfile, TTL-кэш 45 с — без обхода `/proc` на каждом тике
+- `nat-start` / `firewall-start` не пересобирают правила, если WAN fingerprint не изменился
+- UI **не** поллит в фоне — только при открытии страницы / после действий
+
+Если роутер «задыхается»: `ssurf mode proxy`, отключите transparent, проверьте `top` на процесс `xray`.
+
 ## Можно ли вместе с XrayUI?
 
 **Нет, одновременно нельзя.** С v1.0.15 StealthSurf:

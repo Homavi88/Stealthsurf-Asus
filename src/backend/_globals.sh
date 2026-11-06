@@ -68,6 +68,8 @@ SS_PROXY_MODE="proxy" # mirrors SS_MODE; transparent only after explicit set-mod
 SS_AUTO_START="1"
 SS_WATCHDOG="1"
 SS_FALLBACK_OUTBOUND="direct"
+# 0 = Xray access log disabled (saves CPU/USB); 1 = write xray-access.log
+SS_XRAY_ACCESS_LOG="0"
 
 # Firewall / TPROXY marks — MUST differ from xrayui (0x10000 / table 77)
 # otherwise both addons fight over the same policy-routing table.

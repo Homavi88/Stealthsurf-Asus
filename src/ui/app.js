@@ -922,6 +922,14 @@ async function loadLogPreview() {
       return;
     }
   } catch (_) {}
+  // Never pull full xray access/error into the browser — can be huge on LAN routers
+  if (kind === "access" || kind === "xray-error") {
+    showLogText(
+      "Access-лог по умолчанию выключен (SS_XRAY_ACCESS_LOG=0). Для хвоста нажмите «Логи» — backend отдаёт только tail.",
+      kind
+    );
+    return;
+  }
   try {
     const res = await fetch(EXT + (map[kind] || "/activity.log") + "?_=" + Date.now(), {
       cache: "no-store",
