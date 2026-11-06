@@ -1,8 +1,9 @@
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns:v>
 <head>
-<meta http-equiv="X-UA-Compatible" content="IE=Edge">
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=Edge"/>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Cache-Control" content="no-cache">
 <meta http-equiv="Expires" content="-1">
@@ -11,6 +12,7 @@
 <title>StealthSurf</title>
 <link rel="stylesheet" type="text/css" href="index_style.css">
 <link rel="stylesheet" type="text/css" href="form_style.css">
+<link rel="stylesheet" type="text/css" href="menu_style.css">
 <link rel="stylesheet" type="text/css" href="/js/table/table.css">
 <script type="text/javascript" src="/js/jquery.js"></script>
 <script type="text/javascript" src="/js/httpApi.js"></script>
@@ -19,6 +21,40 @@
 <script type="text/javascript" src="/popup.js"></script>
 <script type="text/javascript" src="/help.js"></script>
 <script type="text/javascript" src="/validator.js"></script>
+<!-- custom_settings outside of try/catch — a broken ASP inject must not kill show_menu() -->
+<xmp id="ss_custom_settings_data" hidden><% get_custom_settings(); %></xmp>
+<script type="text/javascript">
+var custom_settings = {};
+(function () {
+  try {
+    var raw = document.getElementById("ss_custom_settings_data");
+    if (!raw) return;
+    var txt = (raw.textContent || raw.innerText || "").replace(/^\s+|\s+$/g, "");
+    if (!txt || txt.charAt(0) === "<") return;
+    custom_settings = JSON.parse(txt);
+    if (!custom_settings || typeof custom_settings !== "object") custom_settings = {};
+  } catch (e) {
+    custom_settings = {};
+  }
+})();
+
+function ss_page_name() {
+  var p = (location.pathname || "").replace(/^\//, "");
+  return p || "user1.asp";
+}
+
+function initial() {
+  var page = ss_page_name();
+  // show_menu() reads form.current_page to pick the active Merlin section/tab
+  if (document.form) {
+    if (document.form.current_page) document.form.current_page.value = page;
+    if (document.form.next_page) document.form.next_page.value = page;
+  }
+  if (typeof show_menu === "function") {
+    show_menu();
+  }
+}
+</script>
 <style type="text/css">
   #Loading, #overDiv { z-index: 9999; }
   .FormTitle .formfonttitle { text-align: left; }
@@ -147,37 +183,18 @@
     color: #fff;
   }
   .ss-opt-row input[type="checkbox"] { vertical-align: middle; }
+  /* Keep Merlin chrome visible; do not collapse menu column if empty before show_menu */
+  table.content { width: 100%; }
 </style>
-<script type="text/javascript">
-/* Merlin addon settings blob — merge StealthSurf payload into this, never replace wholesale */
-var custom_settings;
-try {
-  custom_settings = <% get_custom_settings(); %>;
-} catch (e) {
-  custom_settings = {};
-}
-if (!custom_settings || typeof custom_settings !== "object") custom_settings = {};
-
-function initial() {
-  try {
-    if (typeof show_menu === "function") show_menu();
-  } catch (e) {}
-  var page = (location.pathname || "").replace(/^\//, "") || "user1.asp";
-  var cur = document.getElementById("ss_current_page");
-  var next = document.getElementById("ss_next_page");
-  if (cur) cur.value = page;
-  if (next) next.value = page;
-}
-</script>
 </head>
 <body onload="initial();" class="bg">
 <div id="TopBanner"></div>
 <div id="Loading" class="popup_bg"></div>
-<iframe name="hidden_frame" id="hidden_frame" src="" width="0" height="0" frameborder="0" style="display:none"></iframe>
+<iframe name="hidden_frame" id="hidden_frame" src="" width="0" height="0" frameborder="0"></iframe>
 
-<form method="post" name="form" id="ruleForm" action="/start_apply.htm" target="hidden_frame">
-<input type="hidden" name="current_page" id="ss_current_page" value="">
-<input type="hidden" name="next_page" id="ss_next_page" value="">
+<form method="post" name="form" id="ruleForm" action="start_apply.htm" target="hidden_frame">
+<input type="hidden" name="current_page" id="ss_current_page" value="user1.asp">
+<input type="hidden" name="next_page" id="ss_next_page" value="user1.asp">
 <input type="hidden" name="group_id" value="">
 <input type="hidden" name="modified" value="0">
 <input type="hidden" name="action_mode" value="apply">
@@ -191,7 +208,7 @@ function initial() {
 <table class="content" align="center" cellpadding="0" cellspacing="0">
   <tr>
     <td width="17">&nbsp;</td>
-    <td width="202" valign="top">
+    <td valign="top" width="202">
       <div id="mainMenu"></div>
       <div id="subMenu"></div>
     </td>
@@ -199,8 +216,8 @@ function initial() {
       <div id="tabMenu" class="submenuBlock"></div>
       <table width="98%" border="0" align="left" cellpadding="0" cellspacing="0">
         <tr>
-          <td valign="top">
-            <table width="760px" border="0" cellpadding="4" cellspacing="0" id="FormTitle" class="FormTitle">
+          <td align="left" valign="top">
+            <table width="760px" border="0" cellpadding="5" cellspacing="0" bordercolor="#6b8fa3" id="FormTitle" class="FormTitle">
               <tr bgcolor="#4D595D">
                 <td valign="top">
                   <div>&nbsp;</div>

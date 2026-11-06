@@ -20,6 +20,20 @@ JFFS custom scripts должны быть включены.
 
 `stealthsurf stop` и `uninstall` чистят цепочки `STEALTHSURF` и `ip rule`. Если интернет пропал — перезапустите firewall роутера (`service restart_firewall`) или reboot.
 
+## Нет левого меню / шапки Asus на странице StealthSurf
+
+С v1.0.13 страница копируется в `userN.asp` (не symlink), вызывается `show_menu()` с корректным `current_page`, подключается `menu_style.css`.
+
+После обновления:
+
+```sh
+ssurf upd -f
+# или
+/jffs/scripts/stealthsurf doctor
+```
+
+Затем **выйти из WebUI и зайти снова**. Проверьте с ПК (на телефоне Merlin часто сам прячет левое меню, но шапка TopBanner должна быть).
+
 ## Пропала вкладка VPN → StealthSurf и/или команда `ssurf`
 
 Частые причины:

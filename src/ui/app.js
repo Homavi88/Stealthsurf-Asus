@@ -862,10 +862,33 @@ async function loadLogPreview() {
   }
 }
 
+function ensureMerlinChrome() {
+  // Backup if body onload initial() raced or failed — fill TopBanner / left menu
+  try {
+    const page = (location.pathname || "").replace(/^\//, "") || "user1.asp";
+    if (document.form) {
+      if (document.form.current_page) document.form.current_page.value = page;
+      if (document.form.next_page) document.form.next_page.value = page;
+    }
+    const banner = document.getElementById("TopBanner");
+    const menu = document.getElementById("mainMenu");
+    const emptyBanner = !banner || !banner.innerHTML || banner.innerHTML.length < 20;
+    const emptyMenu = !menu || !menu.innerHTML || menu.innerHTML.length < 20;
+    if ((emptyBanner || emptyMenu) && typeof show_menu === "function") {
+      show_menu();
+    }
+  } catch (e) {
+    if (typeof console !== "undefined" && console.warn) console.warn("StealthSurf show_menu:", e);
+  }
+}
+
+ensureMerlinChrome();
 bind();
 refreshAll();
 loadBackups();
 setTimeout(loadLogPreview, 300);
+setTimeout(ensureMerlinChrome, 50);
+setTimeout(ensureMerlinChrome, 500);
 // Passive version display only — do NOT auto form-submit checkupdate on page open.
 // Auto submit previously hit Merlin start_apply on every visit; cron still runs
 // `stealthsurf check-update` every 12h. User can press «Проверить версию».
