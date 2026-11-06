@@ -1,11 +1,14 @@
 const EXT = "/ext/stealthsurf";
 // Mirror XrayUI Version.vue: read-only GitHub lookups happen in the browser.
 // Never route listversions/checkupdate through Merlin start_apply.htm.
+// Same for balance refresh — browser GET api.stealthsurf.net/profile (CORS), never start_apply.
 const SS_GH_REPO = "Homavi88/Stealthsurf-Asus";
 const SS_GH_RELEASES_API = "https://api.github.com/repos/" + SS_GH_REPO + "/releases";
 const SS_GH_LATEST_API = SS_GH_RELEASES_API + "/latest";
 const SS_RELEASE_ASSET = "asuswrt-merlin-stealthsurf.tar.gz";
 const SS_RELEASES_TO_SHOW = 15;
+const SS_API_BASE = "https://api.stealthsurf.net";
+const SS_BALANCE_CACHE_TTL_SEC = 120;
 
 // Do not bind a global `$`. Merlin show_menu() needs jQuery `$` (inArray, #tabMenu)
 // before it paints #mainMenu. Shadowing `$` leaves the left router menu empty.
@@ -371,8 +374,8 @@ function triggerService(action, payload, opts) {
     setMsg("Удаление из WebUI отключено. В SSH: ssurf un --yes (или сначала ssurf doctor)", "err");
     return;
   }
-  // Read-only GitHub lookups must NOT hijack Merlin start_apply / percent progress.
-  // Mirror XrayUI: browser fetch → modal; only install/update uses form submit.
+  // Read-only GitHub / StealthSurf lookups must NOT hijack Merlin start_apply / percent progress.
+  // Mirror XrayUI: browser fetch → modal; only mutating ops use form submit.
   if (action === "checkupdate") {
     checkUpdateFromGithub({ openModalIfUpdate: true });
     return;
@@ -381,12 +384,16 @@ function triggerService(action, payload, opts) {
     requestVersionsList(true);
     return;
   }
+  if (action === "balances" || action === "refreshbalances" || action === "balance") {
+    const force = data.force === "1" || data.force === 1 || data.force === true;
+    requestBalancesRefresh(force);
+    return;
+  }
   // Update downloads a release — needs a longer httpd wait / refresh
   let wait = Number(options.wait || 0);
   if (!wait) {
     if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
     else if (action === "installxray" || action === "sync") wait = 20;
-    else if (action === "balances" || action === "refreshbalances" || action === "balance") wait = 20;
     else if (action === "backup" || action === "restore") wait = 15;
     else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
     else wait = 10;
@@ -440,9 +447,6 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
-    balances: "Запрос баланса по API-ключам…",
-    refreshbalances: "Запрос баланса по API-ключам…",
-    balance: "Запрос баланса по API-ключам…",
   };
   setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
@@ -1734,6 +1738,155 @@ let secondaryLoadPromise = null;
 let locationsLoaded = false;
 
 
+function maskBalanceEmail(email) {
+  const raw = String(email || "");
+  const at = raw.indexOf("@");
+  if (at < 1) return raw || null;
+  const local = raw.slice(0, at);
+  const domain = raw.slice(at + 1);
+  if (local.length <= 2) return "*@" + domain;
+  return local.slice(0, 2) + "***" + local.slice(-1) + "@" + domain;
+}
+
+function balanceKeyMeta(key, stored) {
+  const parts = String(key || "").split("_");
+  const key_fp = parts.length >= 2 ? parts[1] : "";
+  const key_tail = String(key || "").slice(-8);
+  let label = (stored && stored.label) || "";
+  if (!label) label = "";
+  return { label: label || "—", key_fp: key_fp || "", key_tail: key_tail || "" };
+}
+
+function friendlyBalanceError(msg) {
+  const m = String(msg || "")
+    .replace(/stlth_[A-Za-z0-9_]*/g, "stlth_***")
+    .slice(0, 160);
+  if (/access denied|unauthorized|401/i.test(m)) return "Ключ отклонён";
+  if (/network|failed to fetch|abort/i.test(m)) return "Нет связи с API";
+  return m || "API request failed";
+}
+
+async function fetchStealthsurfProfile(apiKey, timeoutMs) {
+  const res = await fetchWithTimeout(
+    SS_API_BASE + "/profile",
+    {
+      cache: "no-store",
+      headers: {
+        Accept: "application/json",
+        Authorization: "Bearer " + apiKey,
+        "User-Agent": "stealthsurf-merlin-webui",
+      },
+    },
+    timeoutMs == null ? 12000 : timeoutMs
+  );
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (_) {
+    body = null;
+  }
+  if (!res.ok) {
+    const err =
+      (body && (body.message || body.errorCode || body.error)) || "HTTP " + res.status;
+    throw new Error(String(err));
+  }
+  if (body && body.status === false) {
+    throw new Error(String(body.message || body.errorCode || "API error"));
+  }
+  return (body && body.data) || {};
+}
+
+async function loadApiKeysForBalance() {
+  try {
+    const keys = await fetchJson(EXT + "/api_keys.json", 4000);
+    return Array.isArray(keys) ? keys.filter((k) => k && k.key) : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function aggregateBalancesPayload(rows) {
+  const now = Math.floor(Date.now() / 1000);
+  const okRows = rows.filter((r) => r && r.ok);
+  const fail = rows.length - okRows.length;
+  const total_balance = okRows.reduce((s, r) => s + Number(r.balance || 0), 0);
+  const total_referral = okRows.reduce((s, r) => s + Number(r.referral_balance || 0), 0);
+  let message = "Баланс обновлён";
+  if (!rows.length) message = "Нет сохранённых API-ключей";
+  else if (okRows.length === 0) message = "Не удалось получить баланс";
+  else if (fail) message = "Баланс частично обновлён";
+  return {
+    fetched_at: now,
+    keys: rows,
+    total_balance,
+    total_referral,
+    currency: "RUB",
+    ok: okRows.length,
+    fail,
+    message,
+  };
+}
+
+async function refreshBalancesFromApi(opts) {
+  // Quiet browser path — same idea as checkUpdateFromGithub (no Merlin apply UI).
+  const options = opts || {};
+  const force = !!options.force;
+  const statusEl = byId("balanceStatus");
+  if (!force && balancesCache && !balancesCacheIsStale()) {
+    renderBalances(balancesCache);
+    return balancesCache;
+  }
+  if (statusEl) {
+    statusEl.textContent = "Запрос баланса…";
+    statusEl.className = "ss-hint";
+  }
+  const storedKeys = await loadApiKeysForBalance();
+  if (!storedKeys.length) {
+    const empty = aggregateBalancesPayload([]);
+    renderBalances(empty);
+    if (!options.quiet) setMsg(empty.message, "");
+    return empty;
+  }
+  const rows = await Promise.all(
+    storedKeys.map(async (stored) => {
+      const meta = balanceKeyMeta(stored.key, stored);
+      try {
+        const data = await fetchStealthsurfProfile(stored.key);
+        const balance = data.balance != null ? Number(data.balance) : 0;
+        const referral = data.referral_balance != null ? Number(data.referral_balance) : 0;
+        return Object.assign({}, meta, {
+          ok: true,
+          user_id: data.id != null ? data.id : null,
+          email: maskBalanceEmail(data.email),
+          balance: Number.isFinite(balance) ? balance : 0,
+          referral_balance: Number.isFinite(referral) ? referral : 0,
+          currency: "RUB",
+          error: null,
+        });
+      } catch (e) {
+        return Object.assign({}, meta, {
+          ok: false,
+          user_id: null,
+          email: null,
+          balance: null,
+          referral_balance: null,
+          currency: "RUB",
+          error: friendlyBalanceError(e && e.message),
+        });
+      }
+    })
+  );
+  const payload = aggregateBalancesPayload(rows);
+  renderBalances(payload);
+  if (!options.quiet) {
+    setMsg(
+      payload.ok > 0 ? payload.message : payload.message || "Ошибка баланса",
+      payload.ok > 0 ? "ok" : "err"
+    );
+  }
+  return payload;
+}
+
 async function loadBalancesCache() {
   try {
     const bal = await fetchJson(EXT + "/balances.json", 4000);
@@ -1744,21 +1897,27 @@ async function loadBalancesCache() {
 function balancesCacheIsStale() {
   if (!balancesCache || !balancesCache.fetched_at) return true;
   const age = Math.floor(Date.now() / 1000) - Number(balancesCache.fetched_at || 0);
-  return !Number.isFinite(age) || age > 120;
+  return !Number.isFinite(age) || age > SS_BALANCE_CACHE_TTL_SEC;
 }
 
-function requestBalancesRefresh(force) {
+function requestBalancesRefresh(force, opts) {
+  // Never form-submit balances — Merlin «Подождите / Выполнение» must not appear.
   if (balanceRefreshPending) return;
   balanceRefreshPending = true;
-  const statusEl = byId("balanceStatus");
-  if (statusEl) {
-    statusEl.textContent = "Запрос баланса…";
-    statusEl.className = "ss-hint";
-  }
-  triggerService("balances", { force: force ? "1" : "0" }, { wait: 20 });
-  setTimeout(() => {
-    balanceRefreshPending = false;
-  }, 25000);
+  const options = opts || {};
+  const quiet = options.quiet != null ? !!options.quiet : !force;
+  refreshBalancesFromApi({ force: !!force, quiet: quiet })
+    .catch((e) => {
+      const statusEl = byId("balanceStatus");
+      if (statusEl) {
+        statusEl.textContent = friendlyBalanceError(e && e.message);
+        statusEl.className = "ss-hint err";
+      }
+      if (!quiet) setMsg(friendlyBalanceError(e && e.message), "err");
+    })
+    .finally(() => {
+      balanceRefreshPending = false;
+    });
 }
 
 /** Fast first paint: only files needed for status + outbound list. */
@@ -2252,9 +2411,10 @@ function bind() {
         loadLogPreview();
       }
       if (modalId === "keysModal") {
+        // Cache first, then quiet live refresh — never Merlin start_apply / «Подождите».
         loadBalancesCache().then(() => {
           renderBalances(balancesCache);
-          if (balancesCacheIsStale()) requestBalancesRefresh(true);
+          if (balancesCacheIsStale()) requestBalancesRefresh(true, { quiet: true });
         });
       }
     });

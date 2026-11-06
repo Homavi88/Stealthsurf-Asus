@@ -151,6 +151,12 @@ grep -q 'id="balanceTable"' "$ROOT/src/ui/index.asp" && ok "UI balance table" ||
 grep -q 'function renderBalances' "$ROOT/src/ui/app.js" && ok "app renderBalances" || bad "app renderBalances"
 grep -q 'requestBalancesRefresh' "$ROOT/src/ui/app.js" && ok "app requestBalancesRefresh" || bad "app requestBalancesRefresh"
 grep -q 'balances.json' "$ROOT/src/ui/app.js" && ok "app loads balances.json" || bad "app loads balances.json"
+grep -q 'refreshBalancesFromApi' "$ROOT/src/ui/app.js" && ok "app refreshBalancesFromApi" || bad "app refreshBalancesFromApi"
+if grep -nE 'triggerService\("balances"|triggerService\("refreshbalances"|triggerService\("balance"' "$ROOT/src/ui/app.js" >/dev/null 2>&1; then
+  bad "UI still form-submits balances via triggerService"
+else
+  ok "UI does not form-submit balances"
+fi
 grep -q 'balances | balance | bal)' "$ROOT/src/backend/stealthsurf.sh" && ok "CLI bal command" || bad "CLI bal command"
 grep -q 'SS_CACHE_BALANCES' "$ROOT/src/backend/_globals.sh" && ok "globals SS_CACHE_BALANCES" || bad "globals SS_CACHE_BALANCES"
 
