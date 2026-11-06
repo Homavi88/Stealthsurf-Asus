@@ -543,23 +543,27 @@ ss_telegram_start_daemon() {
   fi
   ss_ensure_dirs
   # Prefer background daemon; fall back to minute cron tick
-  if [ -x "$ADDON_SCRIPT" ]; then
+  # Use ${ADDON_SCRIPT:-} — under dash `set -u`, bare $ADDON_SCRIPT aborts the shell
+  # (not catchable by `|| true`) when the var is unset in unit tests / early boot.
+  _ss_tg_script="${ADDON_SCRIPT:-/jffs/scripts/${ADDON_TAG:-stealthsurf}}"
+  if [ -n "$_ss_tg_script" ] && [ -x "$_ss_tg_script" ]; then
     # Detach: nohup + redirect; daemon re-execs addon entry
     (
-      # shellcheck disable=SC2086
-      nohup "$ADDON_SCRIPT" telegram-daemon >/dev/null 2>&1 &
+      nohup "$_ss_tg_script" telegram-daemon >/dev/null 2>&1 &
     ) >/dev/null 2>&1
     sleep 1
     if ss_telegram_running; then
       ss_ok "Telegram bot daemon started"
       ss_activity "telegram.daemon" "started"
+      unset _ss_tg_script
       return 0
     fi
   fi
+  unset _ss_tg_script
   # Fallback: cru every minute with short poll (timeout still 25 — ok if cron overlaps guarded by lock)
   if command -v cru >/dev/null 2>&1; then
     cru d stealthsurf_tg 2>/dev/null || true
-    cru a stealthsurf_tg "* * * * * /jffs/scripts/$ADDON_TAG telegram-tick"
+    cru a stealthsurf_tg "* * * * * /jffs/scripts/${ADDON_TAG:-stealthsurf} telegram-tick"
     ss_ok "Telegram bot via cru (minute tick)"
     return 0
   fi

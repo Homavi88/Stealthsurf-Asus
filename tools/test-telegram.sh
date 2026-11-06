@@ -24,6 +24,8 @@ export SS_ENDPOINTS_FILE="$TMP/endpoints.json"
 export SS_TG_PIDFILE="$TMP/telegram.pid"
 export SS_TG_OFFSET_FILE="$TMP/telegram.offset"
 export SS_TG_LOG="$TMP/logs/telegram.log"
+export ADDON_SCRIPT="$TMP/missing-stealthsurf" # not executable; daemon start must no-op safely
+export ADDON_TAG=stealthsurf
 export SS_API_KEY="" SS_API_KEYS="" SS_API_BASE="https://api.stealthsurf.net"
 export SS_ACTIVE_CONFIG_ID="" SS_DEFAULT_OUTBOUND="ss-101" SS_ENABLED_OUTBOUNDS="101"
 export SS_SOCKS_PORT=10808 SS_HTTP_PORT=10809 SS_TPROXY_PORT=10810 SS_REDIRECT_PORT=10811 SS_DNS_PORT=5353
