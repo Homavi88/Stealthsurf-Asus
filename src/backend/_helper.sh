@@ -50,6 +50,7 @@ SS_PROXY_MODE='$SS_PROXY_MODE'
 SS_AUTO_START='$SS_AUTO_START'
 SS_WATCHDOG='$SS_WATCHDOG'
 SS_FALLBACK_OUTBOUND='$SS_FALLBACK_OUTBOUND'
+SS_XRAY_ACCESS_LOG='${SS_XRAY_ACCESS_LOG:-0}'
 SS_AUTO_BACKUP='${SS_AUTO_BACKUP:-1}'
 SS_BACKUP_KEEP='${SS_BACKUP_KEEP:-10}'
 SS_LOG_MAX_BYTES='${SS_LOG_MAX_BYTES:-1048576}'
@@ -233,7 +234,8 @@ ss_iptables_init() {
 ss_dokodemo_listening() {
   # True if transparent inbound port is accepting connections (avoid blackhole LAN)
   local mode port
-  mode=$(ss_fw_detect_mode 2>/dev/null || echo proxy)
+  # Prefer conf mode — avoid lsmod/modprobe on every poll
+  mode="${SS_MODE:-proxy}"
   case "$mode" in
   tproxy) port="${SS_TPROXY_PORT:-10810}" ;;
   redirect) port="${SS_REDIRECT_PORT:-10811}" ;;
@@ -314,4 +316,154 @@ ss_jq_file_or() {
   else
     printf '%s' "$fallback"
   fi
+}
+
+# ── XrayUI coexistence ────────────────────────────────────────────────
+# Both addons drive transparent proxy. Separate marks/tables avoid collision,
+# but dual hijack of LAN still breaks internet. Refuse start while XrayUI runs.
+# Detection is cheap-first + short TTL cache so watchdog/state writes stay light.
+
+SS_XRAYUI_PIDFILE="${SS_XRAYUI_PIDFILE:-/var/run/xray.pid}"
+SS_XRAYUI_DESIRED="${SS_XRAYUI_DESIRED:-/tmp/xrayui.desired}"
+SS_XRAYUI_CONFIG="${SS_XRAYUI_CONFIG:-/opt/etc/xray/config.json}"
+SS_XRAYUI_CACHE="${SS_XRAYUI_CACHE:-/tmp/stealthsurf.xrayui.cache}"
+SS_XRAYUI_CACHE_TTL="${SS_XRAYUI_CACHE_TTL:-45}"
+SS_XRAYUI_MSG_RU="XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя."
+
+ss_xrayui_installed() {
+  [ -x /jffs/scripts/xrayui ] && return 0
+  [ -d /opt/share/xrayui ] && return 0
+  [ -d /jffs/addons/xrayui ] && return 0
+  [ -f /opt/etc/xrayui.conf ] && return 0
+  return 1
+}
+
+ss_xrayui_pid_alive() {
+  local pid=""
+  [ -f "$SS_XRAYUI_PIDFILE" ] || return 1
+  pid=$(cat "$SS_XRAYUI_PIDFILE" 2>/dev/null)
+  [ -n "$pid" ] || return 1
+  # Must not be our StealthSurf Xray
+  if [ -f "$XRAY_PIDFILE" ]; then
+    local ours
+    ours=$(cat "$XRAY_PIDFILE" 2>/dev/null)
+    [ -n "$ours" ] && [ "$pid" = "$ours" ] && return 1
+  fi
+  kill -0 "$pid" 2>/dev/null
+}
+
+ss_xrayui_process_running() {
+  # xrayui uses /opt/etc/xray/config.json; we use stealthsurf.json
+  local cfg="$SS_XRAYUI_CONFIG"
+  local line=""
+  # Prefer single ps; skip expensive /proc walk when ps exists
+  if command -v ps >/dev/null 2>&1; then
+    # shellcheck disable=SC2009
+    line=$(ps w 2>/dev/null | grep -E '[x]ray.*(run )?.*(/opt/etc/xray/config\.json|xrayui)' | grep -v stealthsurf | head -1)
+    [ -n "$line" ] && return 0
+    return 1
+  fi
+  # /proc fallback only when ps is unavailable
+  local p cmd
+  for p in /proc/[0-9]*; do
+    [ -r "$p/cmdline" ] || continue
+    cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+    case "$cmd" in
+    *xray*"$cfg"* | *xray*xrayui*)
+      case "$cmd" in
+      *stealthsurf.json*) continue ;;
+      *) return 0 ;;
+      esac
+      ;;
+    esac
+  done
+  return 1
+}
+
+ss_xrayui_firewall_active() {
+  local ipt
+  ipt=$(ss_resolve_system_iptables 2>/dev/null) || ipt="iptables"
+  "$ipt" -w -t nat -nL XRAYUI >/dev/null 2>&1 && return 0
+  "$ipt" -w -t mangle -nL XRAYUI >/dev/null 2>&1 && return 0
+  return 1
+}
+
+ss_xrayui_cache_invalidate() {
+  rm -f "$SS_XRAYUI_CACHE" 2>/dev/null || true
+}
+
+ss_xrayui_cache_store() {
+  # $1 = 0|1
+  printf '%s %s\n' "$(date +%s 2>/dev/null || echo 0)" "$1" >"$SS_XRAYUI_CACHE" 2>/dev/null || true
+}
+
+ss_xrayui_running() {
+  # ss_xrayui_running [force] — force bypasses TTL cache (use on start/refuse)
+  local force="${1:-}"
+  local ts status now age running=0
+
+  if [ "$force" != "force" ] && [ -f "$SS_XRAYUI_CACHE" ]; then
+    read -r ts status <"$SS_XRAYUI_CACHE" 2>/dev/null || true
+    now=$(date +%s 2>/dev/null || echo 0)
+    if [ -n "$ts" ] && [ -n "$status" ] && [ "$now" -ge "$ts" ] 2>/dev/null; then
+      age=$((now - ts))
+      if [ "$age" -lt "$SS_XRAYUI_CACHE_TTL" ] 2>/dev/null; then
+        [ "$status" = "1" ]
+        return $?
+      fi
+    fi
+  fi
+
+  # Cheap → expensive. Skip ps when XrayUI is clearly not installed (periodic paths).
+  if ss_xrayui_pid_alive; then
+    running=1
+  elif [ -f "$SS_XRAYUI_DESIRED" ] && ss_xrayui_firewall_active; then
+    running=1
+  elif ss_xrayui_installed || [ "$force" = "force" ]; then
+    if ss_xrayui_process_running; then
+      running=1
+    fi
+  fi
+
+  ss_xrayui_cache_store "$running"
+  [ "$running" = "1" ]
+}
+
+ss_xrayui_conflict_message() {
+  printf '%s\n' "$SS_XRAYUI_MSG_RU"
+}
+
+ss_xrayui_status_json() {
+  local installed=false running=false conflict="" msg=""
+  ss_xrayui_installed && installed=true
+  if ss_xrayui_running; then
+    running=true
+    conflict="xrayui"
+    msg="$SS_XRAYUI_MSG_RU"
+  fi
+  jq -nc \
+    --argjson installed "$installed" \
+    --argjson running "$running" \
+    --arg conflict "$conflict" \
+    --arg message "$msg" \
+    '{
+      installed:$installed,
+      running:$running,
+      conflict:(if $conflict=="" then null else $conflict end),
+      message:(if $message=="" then null else $message end)
+    }'
+}
+
+ss_refuse_if_xrayui() {
+  # Call before start / autostart / watchdog restart — always fresh detect
+  ss_xrayui_cache_invalidate
+  if ss_xrayui_running force; then
+    ss_error "$(ss_xrayui_conflict_message)"
+    if type ss_desired_clear >/dev/null 2>&1; then
+      ss_desired_clear 2>/dev/null || true
+    fi
+    ss_activity "start.blocked" "xrayui_running=1"
+    return 1
+  fi
+  return 0
 }

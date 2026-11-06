@@ -145,6 +145,61 @@ function labelClass(kind) {
   return "label label-muted";
 }
 
+function xrayuiInfo(state) {
+  if (!state) return { installed: false, running: false, message: "" };
+  const xu = state.xrayui || {};
+  const running = !!(xu.running || state.conflict === "xrayui");
+  const installed = !!(xu.installed || running);
+  const message =
+    xu.message ||
+    state.conflict_message ||
+    (running
+      ? "XrayUI сейчас работает. Остановите XrayUI, затем запускайте StealthSurf."
+      : "");
+  return { installed, running, message };
+}
+
+function renderConflict(state) {
+  const info = xrayuiInfo(state);
+  const banner = $("conflictBanner");
+  const conflictPill = $("conflictPill");
+  const xrayuiPill = $("xrayuiPill");
+  const btnStart = $("btnStart");
+  const btnRestart = $("btnRestart");
+
+  if (banner) {
+    if (info.running) {
+      banner.classList.add("show");
+      if ($("conflictText") && info.message) $("conflictText").textContent = info.message;
+    } else {
+      banner.classList.remove("show");
+    }
+  }
+
+  if (conflictPill) {
+    if (info.running) {
+      conflictPill.style.display = "inline-block";
+      conflictPill.className = labelClass("err");
+      conflictPill.textContent = "XrayUI конфликт";
+    } else {
+      conflictPill.style.display = "none";
+    }
+  }
+
+  if (xrayuiPill) {
+    if (info.installed && !info.running) {
+      xrayuiPill.style.display = "inline-block";
+      xrayuiPill.className = labelClass("warn");
+      xrayuiPill.textContent = "XrayUI установлен (остановлен)";
+    } else {
+      xrayuiPill.style.display = "none";
+    }
+  }
+
+  if (btnStart) btnStart.disabled = !!info.running;
+  if (btnRestart) btnRestart.disabled = !!info.running;
+}
+
 function renderState(state) {
   if (!state) return;
   stateCache = state;
@@ -172,6 +227,7 @@ function renderState(state) {
     $("installedVer").textContent = "версия: " + state.version;
     if ($("titleVer")) $("titleVer").textContent = "v" + state.version;
   }
+  renderConflict(state);
 }
 
 function renderVersion(info) {
@@ -603,9 +659,25 @@ function bind() {
     })
   );
   $("btnSync").addEventListener("click", () => triggerService("sync", {}));
-  $("btnStart").addEventListener("click", () => triggerService("start", {}));
+  $("btnStart").addEventListener("click", () => {
+    const info = xrayuiInfo(stateCache);
+    if (info.running) {
+      setMsg(info.message || "Сначала остановите XrayUI", "err");
+      renderConflict(stateCache);
+      return;
+    }
+    triggerService("start", {});
+  });
   $("btnStop").addEventListener("click", () => triggerService("stop", {}));
-  $("btnRestart").addEventListener("click", () => triggerService("restart", {}));
+  $("btnRestart").addEventListener("click", () => {
+    const info = xrayuiInfo(stateCache);
+    if (info.running) {
+      setMsg(info.message || "Сначала остановите XrayUI", "err");
+      renderConflict(stateCache);
+      return;
+    }
+    triggerService("restart", {});
+  });
   $("btnRefresh").addEventListener("click", () => refreshAll());
   $("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
   $("btnUpdate").addEventListener("click", () => {
@@ -850,6 +922,14 @@ async function loadLogPreview() {
       return;
     }
   } catch (_) {}
+  // Never pull full xray access/error into the browser — can be huge on LAN routers
+  if (kind === "access" || kind === "xray-error") {
+    showLogText(
+      "Access-лог по умолчанию выключен (SS_XRAY_ACCESS_LOG=0). Для хвоста нажмите «Логи» — backend отдаёт только tail.",
+      kind
+    );
+    return;
+  }
   try {
     const res = await fetch(EXT + (map[kind] || "/activity.log") + "?_=" + Date.now(), {
       cache: "no-store",

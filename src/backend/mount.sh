@@ -175,8 +175,7 @@ ss_doctor() {
     fi
     ;;
   esac
-  ss_write_state 2>/dev/null || true
-  ss_version_local >/dev/null 2>&1 || true
+  ss_write_state full 2>/dev/null || true
   if [ "$ok" = "1" ]; then
     ss_ok "Doctor: hooks, CLI symlinks and WebUI remounted. Re-login to WebUI if tab missing."
     ss_info "CLI: /jffs/scripts/stealthsurf  ·  ssurf  ·  stealthsurf"

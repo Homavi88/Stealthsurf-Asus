@@ -65,6 +65,11 @@ ss_autostart() {
   [ "${SS_AUTO_START:-1}" = "1" ] || return 0
   if [ -x /opt/bin/opkg ] || [ -x /opt/sbin/xray ] || [ -x /opt/bin/xray ]; then
     if [ -f "$XRAY_CONFIG_FILE" ]; then
+      if ss_xrayui_running 2>/dev/null; then
+        ss_warn "Autostart skipped — XrayUI is running"
+        ss_desired_clear 2>/dev/null || true
+        return 0
+      fi
       ss_info "Autostart (services-start fallback)"
       ss_desired_mark 2>/dev/null || true
       ss_start || ss_warn "Autostart failed"

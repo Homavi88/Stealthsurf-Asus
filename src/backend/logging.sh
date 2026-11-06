@@ -27,8 +27,9 @@ ss_log_rotate() {
   ss_log_rotate_one "$SS_ACTIVITY_LOG"
   ss_log_rotate_one "$SS_ERROR_LOG_FILE"
   ss_log_rotate_one "$SS_DEVICES_LOG"
-  ss_log_rotate_one "$XRAY_ACCESS_LOG" 2097152
-  ss_log_rotate_one "$XRAY_ERROR_LOG" 2097152
+  # Cap Xray logs tightly — USB flash + small RAM routers
+  ss_log_rotate_one "$XRAY_ACCESS_LOG" 524288
+  ss_log_rotate_one "$XRAY_ERROR_LOG" 524288
 }
 
 # Override base helpers with richer logging (sourced after _helper.sh)

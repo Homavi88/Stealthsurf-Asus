@@ -251,13 +251,23 @@ ss_service_event() {
     fi
     ;;
   start)
-    ss_start && ss_json_response true "started" "$(cat "$SS_STATE_FILE")" || ss_json_response false "start failed" null
+    if ss_xrayui_running; then
+      ss_write_state
+      ss_json_response false "$(ss_xrayui_conflict_message)" "$(cat "$SS_STATE_FILE")"
+      return 1
+    fi
+    ss_start && ss_json_response true "started" "$(cat "$SS_STATE_FILE")" || ss_json_response false "start failed" "$(ss_jq_file_or "$SS_STATE_FILE" 'null')"
     ;;
   stop)
     ss_stop && ss_json_response true "stopped" "$(cat "$SS_STATE_FILE")" || ss_json_response false "stop failed" null
     ;;
   restart)
-    ss_restart && ss_json_response true "restarted" "$(cat "$SS_STATE_FILE")" || ss_json_response false "restart failed" null
+    if ss_xrayui_running; then
+      ss_write_state
+      ss_json_response false "$(ss_xrayui_conflict_message)" "$(cat "$SS_STATE_FILE")"
+      return 1
+    fi
+    ss_restart && ss_json_response true "restarted" "$(cat "$SS_STATE_FILE")" || ss_json_response false "restart failed" "$(ss_jq_file_or "$SS_STATE_FILE" 'null')"
     ;;
   status)
     ss_status >/dev/null

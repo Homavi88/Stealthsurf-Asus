@@ -61,13 +61,24 @@
 - am_settings custom_settings.txt — свой conf + JSON stores
 - Vue/i18n стек xrayui — оставляем plain JS
 
+## Совместимость runtime (v1.0.15+)
+
+| Ситуация | Поведение StealthSurf |
+| --- | --- |
+| XrayUI не установлен | нормальный старт |
+| XrayUI установлен, остановлен | старт разрешён; в UI жёлтый hint |
+| XrayUI **running** (pid / process / desired+XRAYUI chain) | **старт запрещён**; красный баннер; autostart/watchdog не поднимают dataplane |
+
+Причина: два transparent proxy на одном LAN ломают интернет даже при разных mark/table.
+
 ## Рекомендуемые настройки на роутере
 
 1. JFFS custom scripts = Yes, reboot  
 2. Entware через amtm  
-3. Режим аддона: **redirect** (или **tproxy** если есть `xt_TPROXY`)  
-4. После sync: apply конфиг → Старт  
-5. Проверка: `stealthsurf diag` и IP клиента Wi‑Fi = нода StealthSurf  
+3. Не держите XrayUI и StealthSurf running одновременно  
+4. Режим аддона: **redirect** (или **tproxy** если есть `xt_TPROXY`)  
+5. После sync: apply конфиг → Старт  
+6. Проверка: `stealthsurf diag` и IP клиента Wi‑Fi = нода StealthSurf  
 
 ## Быстрая диагностика «не идёт через VPN»
 

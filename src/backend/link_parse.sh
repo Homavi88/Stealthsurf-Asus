@@ -387,11 +387,15 @@ ss_build_xray_config() {
   default_tag=$(printf '%s' "$outbound_json" | jq -r '.tag')
   inbounds=$(ss_build_inbounds_json)
 
+  # access:"none" by default — access logs fill USB under LAN load; enable with SS_XRAY_ACCESS_LOG=1
+  local access_path="none"
+  [ "${SS_XRAY_ACCESS_LOG:-0}" = "1" ] && access_path="$XRAY_ACCESS_LOG"
+
   jq -nc \
     --argjson outbound "$outbound_json" \
     --argjson inbounds "$inbounds" \
     --arg def "$default_tag" \
-    --arg access "$XRAY_ACCESS_LOG" \
+    --arg access "$access_path" \
     --arg error "$XRAY_ERROR_LOG" '
     {
       log: { loglevel: "warning", access: $access, error: $error },
@@ -441,12 +445,15 @@ ss_build_xray_config_multi() {
     default_tag=$(printf '%s' "$outbounds" | jq -r '[.[] | select(.tag|startswith("ss-"))][0].tag // "direct"')
   fi
 
+  local access_path="none"
+  [ "${SS_XRAY_ACCESS_LOG:-0}" = "1" ] && access_path="$XRAY_ACCESS_LOG"
+
   jq -nc \
     --argjson outbounds "$outbounds" \
     --argjson inbounds "$inbounds" \
     --argjson rules "$rules" \
     --arg def "$default_tag" \
-    --arg access "$XRAY_ACCESS_LOG" \
+    --arg access "$access_path" \
     --arg error "$XRAY_ERROR_LOG" \
     --arg strategy "$(jq -r '.domainStrategy // "AsIs"' "$SS_ROUTING_FILE" 2>/dev/null || echo AsIs)" '
     {

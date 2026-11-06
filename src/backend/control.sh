@@ -12,9 +12,16 @@ ss_xray_running() {
 }
 
 ss_write_state() {
+  # ss_write_state [full] — full refreshes protocols.json + version.json (mount/doctor)
   ss_ensure_dirs
-  local mode
-  mode=$(ss_fw_detect_mode 2>/dev/null || echo "${SS_MODE:-proxy}")
+  local mode xrayui_json full="${1:-}"
+  # Use configured mode — avoid lsmod/modprobe on every state write
+  mode="${SS_MODE:-proxy}"
+  case "$mode" in
+  proxy | redirect | tproxy) ;;
+  *) mode="proxy" ;;
+  esac
+  xrayui_json=$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')
   jq -nc \
     --arg active "${SS_ACTIVE_CONFIG_ID}" \
     --arg mode "${SS_MODE}" \
@@ -28,6 +35,7 @@ ss_write_state() {
     --arg tproxy "${SS_TPROXY_PORT}" \
     --arg redirect "${SS_REDIRECT_PORT}" \
     --arg version "$ADDON_VERSION" \
+    --argjson xrayui "$xrayui_json" \
     '{
       active_config_id: (if $active == "" then null else ($active|tonumber?) // $active end),
       mode: $mode,
@@ -40,15 +48,22 @@ ss_write_state() {
       http_port: ($http|tonumber),
       tproxy_port: ($tproxy|tonumber),
       redirect_port: ($redirect|tonumber),
-      version: $version
+      version: $version,
+      xrayui: $xrayui,
+      conflict: $xrayui.conflict,
+      conflict_message: $xrayui.message
     }' >"$SS_STATE_FILE"
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
-  # Keep protocol matrix + version for UI
-  if type ss_protocol_status_matrix >/dev/null 2>&1; then
-    ss_protocol_status_matrix >/dev/null 2>&1 || true
+  # Heavy UI sidecars only when missing or explicitly requested
+  if [ "$full" = "full" ] || [ ! -f "$ADDON_WEB_DIR/protocols.json" ]; then
+    if type ss_protocol_status_matrix >/dev/null 2>&1; then
+      ss_protocol_status_matrix >/dev/null 2>&1 || true
+    fi
   fi
-  if type ss_version_local >/dev/null 2>&1; then
-    ss_version_local >/dev/null 2>&1 || true
+  if [ "$full" = "full" ] || [ ! -f "$SS_VERSION_FILE" ]; then
+    if type ss_version_local >/dev/null 2>&1; then
+      ss_version_local >/dev/null 2>&1 || true
+    fi
   fi
 }
 
@@ -183,6 +198,11 @@ ss_needs_side_runtimes() {
 
 ss_start_inner() {
   ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
+  # Dual transparent proxy with XrayUI blackholes LAN — hard refuse
+  if ! ss_refuse_if_xrayui; then
+    ss_write_state
+    return 1
+  fi
   ss_desired_mark 2>/dev/null || true
   ss_ensure_xray || {
     ss_error "xray not installed"
@@ -216,7 +236,6 @@ ss_start_inner() {
       ss_warn "Xray running but firewall rules missing — restoring"
     fi
     ss_configure_firewall
-    ss_log_devices_snapshot 2>/dev/null || true
     ss_write_state
     ss_activity "start.already" "pid=$(cat "$XRAY_PIDFILE")"
     return 0
@@ -230,11 +249,24 @@ ss_start_inner() {
 
   "$XRAY_BIN" run -c "$XRAY_CONFIG_FILE" >/dev/null 2>&1 &
   echo $! >"$XRAY_PIDFILE"
-  # Give Xray time to bind dokodemo ports before firewall hijack
-  sleep 3
+  # Wait until dokodemo listens (or timeout) instead of fixed sleep 3
+  local waited=0
+  while [ "$waited" -lt 6 ]; do
+    if type ss_dokodemo_listening >/dev/null 2>&1 && ss_dokodemo_listening 2>/dev/null; then
+      break
+    fi
+    if [ "$waited" -ge 2 ] && ss_xray_running; then
+      # ports may be proxy-only; don't block forever
+      case "${SS_MODE:-proxy}" in
+      proxy) break ;;
+      esac
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
   if ss_xray_running; then
     if ! ss_configure_firewall; then
-      case "$(ss_fw_detect_mode)" in
+      case "${SS_MODE:-proxy}" in
       proxy) ;;
       *)
         ss_warn "Transparent firewall not applied — LAN stays direct (safe). Fix config/mode then restart."
@@ -248,9 +280,8 @@ ss_start_inner() {
       ss_dnsmasq_restart
       ;;
     esac
-    ss_log_devices_snapshot 2>/dev/null || true
-    ss_ok "Xray started (pid $(cat "$XRAY_PIDFILE")), mode=$(ss_fw_detect_mode)"
-    ss_activity "start.done" "pid=$(cat "$XRAY_PIDFILE") mode=$(ss_fw_detect_mode)"
+    ss_ok "Xray started (pid $(cat "$XRAY_PIDFILE")), mode=${SS_MODE:-proxy}"
+    ss_activity "start.done" "pid=$(cat "$XRAY_PIDFILE") mode=${SS_MODE:-proxy}"
     ss_write_state
     return 0
   fi

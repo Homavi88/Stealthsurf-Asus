@@ -167,6 +167,30 @@ function initial() {
     align-items: center;
     justify-content: space-between;
   }
+  #conflictBanner {
+    display: none;
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #f66;
+    background: rgba(255, 68, 68, 0.14);
+    color: #ffb3b3;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+  #conflictBanner.show { display: block; }
+  #conflictBanner b { color: #ff8080; }
+  #conflictBanner code {
+    background: #2f3a3e;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 11px;
+    color: #fff;
+  }
+  #btnStart:disabled,
+  #btnRestart:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
   .ss-data-table { width: 100%; border-collapse: collapse; }
   .ss-data-table th,
   .ss-data-table td {
@@ -238,6 +262,14 @@ function initial() {
                     </div>
                   </div>
 
+                  <div id="conflictBanner">
+                    <b>Конфликт с XrayUI</b> — <span id="conflictText">XrayUI сейчас работает. Запуск StealthSurf заблокирован.</span>
+                    <div style="margin-top:6px">
+                      Остановите XrayUI (VPN → XrayUI → Stop), затем нажмите <b>Старт</b> здесь.
+                      Одновременно оба transparent-proxy аддона использовать нельзя — пропадёт интернет в LAN.
+                    </div>
+                  </div>
+
                   <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
                     <thead>
                       <tr><td colspan="2">Состояние сервиса</td></tr>
@@ -247,6 +279,8 @@ function initial() {
                         <th width="30%">Статус</th>
                         <td>
                           <span id="runState" class="label label-error">stopped</span>
+                          <span id="conflictPill" class="label label-error" style="display:none">XrayUI конфликт</span>
+                          <span id="xrayuiPill" class="label label-warning" style="display:none">XrayUI установлен</span>
                           <span id="activeCfg" class="label label-muted">active: —</span>
                           <span id="modePill" class="label label-muted">mode: —</span>
                           <span id="ports" class="label label-muted">ports: —</span>

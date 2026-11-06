@@ -40,6 +40,37 @@ ssurf doctor
 
 Прозрачный режим включайте только после успешного sync/apply: `ssurf mode redirect` → `ssurf up`.
 
+## Нагрузка на CPU / память роутера
+
+StealthSurf рассчитан на слабые ARM (Merlin):
+
+- **Xray** — основной процесс (как у xrayui); access-лог по умолчанию **выключен**
+- **watchdog** раз в **10 мин** (pidfile + при необходимости firewall); ротация логов
+- **autosync** раз в **15 мин** (curl + jq, без лишней работы если fingerprint не менялся)
+- детект XrayUI: сначала pidfile, TTL-кэш 45 с — без обхода `/proc` на каждом тике
+- `nat-start` / `firewall-start` не пересобирают правила, если WAN fingerprint не изменился
+- UI **не** поллит в фоне — только при открытии страницы / после действий
+
+Если роутер «задыхается»: `ssurf mode proxy`, отключите transparent, проверьте `top` на процесс `xray`.
+
+## Можно ли вместе с XrayUI?
+
+**Нет, одновременно нельзя.** С v1.0.15 StealthSurf:
+
+- детектит работающий XrayUI (`/var/run/xray.pid`, процесс с `config.json`, цепочка `XRAYUI`)
+- **блокирует Старт / Рестарт / autostart / watchdog**, пока XrayUI активен
+- показывает красный баннер в WebUI: «Конфликт с XrayUI»
+
+Mark/table у нас отдельные (`0x20000`/`78` vs `0x10000`/`77`), но два transparent proxy всё равно рвут LAN.
+
+Порядок:
+
+1. В XrayUI → Stop  
+2. В StealthSurf → Старт  
+(или наоборот — только один dataplane)
+
+Если XrayUI только установлен, но остановлен — StealthSurf можно запускать (жёлтый hint в статусе).
+
 ## Нет левого меню / шапки Asus на странице StealthSurf
 
 С v1.0.13 страница копируется в `userN.asp` (не symlink), вызывается `show_menu()` с корректным `current_page`, подключается `menu_style.css`.

@@ -1,8 +1,13 @@
 #!/bin/sh
 # Transparent proxy dataplane: REDIRECT (TCP) and TPROXY (TCP+UDP)
 
+ss_fw_modules_present() {
+  # Read-only check — never modprobe (safe for watchdog / detect)
+  lsmod 2>/dev/null | grep -q xt_TPROXY
+}
+
 ss_fw_modules_ok() {
-  # Returns 0 if TPROXY modules look usable
+  # Load TPROXY modules when configuring dataplane
   lsmod 2>/dev/null | grep -q xt_TPROXY || modprobe xt_TPROXY 2>/dev/null || return 1
   lsmod 2>/dev/null | grep -q xt_socket || modprobe xt_socket 2>/dev/null || true
   return 0
@@ -10,6 +15,7 @@ ss_fw_modules_ok() {
 
 ss_fw_detect_mode() {
   # Prefer configured proxy mode; fall back to REDIRECT if TPROXY unavailable
+  # Does NOT modprobe — use ss_fw_modules_ok only from configure path
   local want="${SS_PROXY_MODE:-redirect}"
   case "${SS_MODE}" in
   proxy) echo proxy; return 0 ;;
@@ -17,7 +23,7 @@ ss_fw_detect_mode() {
   tproxy) want=tproxy ;;
   esac
   if [ "$want" = "tproxy" ]; then
-    if ss_fw_modules_ok; then
+    if ss_fw_modules_present; then
       echo tproxy
       return 0
     fi
@@ -26,6 +32,15 @@ ss_fw_detect_mode() {
     return 0
   fi
   echo redirect
+}
+
+ss_fw_network_sig() {
+  # Fingerprint for skipping redundant firewall rebuilds on Merlin hook storms
+  printf '%s|%s|%s|%s\n' \
+    "$(nvram get wan0_ifname 2>/dev/null || true)" \
+    "$(nvram get wan1_ifname 2>/dev/null || true)" \
+    "$(nvram get lan_ipaddr 2>/dev/null || true)" \
+    "${SS_MODE:-proxy}"
 }
 
 ss_fw_ipt() {
@@ -163,7 +178,7 @@ ss_fw_exclude_private() {
 ss_firewall_is_configured() {
   local chain="$SS_FW_CHAIN"
   ss_iptables_init
-  case "$(ss_fw_detect_mode)" in
+  case "${SS_MODE:-proxy}" in
   tproxy)
     "$SS_IPTABLES" -w -t mangle -L "$chain" -n >/dev/null 2>&1
     ;;
@@ -386,11 +401,16 @@ ss_configure_firewall_tproxy() {
 
 ss_configure_firewall() {
   local mode
+  # Load TPROXY modules only when configuring (not on every detect/watchdog)
+  if [ "${SS_MODE}" = "tproxy" ] || [ "${SS_PROXY_MODE}" = "tproxy" ]; then
+    ss_fw_modules_ok 2>/dev/null || true
+  fi
   mode=$(ss_fw_detect_mode)
   case "$mode" in
   proxy)
     ss_info "Mode=proxy — skipping transparent firewall (LAN internet stays direct)"
     ss_cleanup_firewall 2>/dev/null || true
+    rm -f /tmp/stealthsurf.fw.sig 2>/dev/null || true
     return 0
     ;;
   tproxy | redirect)
@@ -408,9 +428,11 @@ ss_configure_firewall() {
     else
       ss_configure_firewall_redirect
     fi
+    ss_fw_network_sig >/tmp/stealthsurf.fw.sig 2>/dev/null || true
     ;;
   *)
     ss_configure_firewall_redirect
+    ss_fw_network_sig >/tmp/stealthsurf.fw.sig 2>/dev/null || true
     ;;
   esac
 }
@@ -450,18 +472,22 @@ ss_cleanup_firewall() {
   ip rule del fwmark "$SS_TPROXY_MARK" lookup "$SS_TPROXY_TABLE" 2>/dev/null || true
   ip route flush table "$SS_TPROXY_TABLE" 2>/dev/null || true
   ss_fw_tcpmss_cleanup 2>/dev/null || true
+  rm -f /tmp/stealthsurf.fw.sig 2>/dev/null || true
 
   ss_ok "Firewall cleaned up"
 }
 
 ss_restore_firewall() {
-  # Called from nat-start / firewall-start / wan-start after reboot/WAN up
+  # Called from nat-start / firewall-start / wan-start after reboot/WAN up.
+  # Merlin often fires both hooks — skip rebuild when chain + WAN fingerprint match.
+  local sigf="/tmp/stealthsurf.fw.sig" newsig=""
   if ss_xray_running 2>/dev/null; then
     if [ -f "$XRAY_CONFIG_FILE" ]; then
-      if ss_firewall_is_configured; then
-        # Still rebuild — WAN ifnames / NAT may have changed
-        ss_info "Re-applying firewall after network event"
+      newsig=$(ss_fw_network_sig 2>/dev/null || echo "")
+      if ss_firewall_is_configured && [ -n "$newsig" ] && [ -f "$sigf" ] && [ "$(cat "$sigf" 2>/dev/null)" = "$newsig" ]; then
+        return 0
       fi
+      ss_info "Re-applying firewall after network event"
       ss_cleanup_firewall 2>/dev/null
       ss_configure_firewall
       ss_activity "firewall.restore" "reconfigured while running"
