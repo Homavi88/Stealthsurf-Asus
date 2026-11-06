@@ -12,7 +12,6 @@
 <title>StealthSurf</title>
 <link rel="stylesheet" type="text/css" href="index_style.css">
 <link rel="stylesheet" type="text/css" href="form_style.css">
-<link rel="stylesheet" type="text/css" href="menu_style.css">
 <link rel="stylesheet" type="text/css" href="/js/table/table.css">
 <script type="text/javascript" src="/js/jquery.js"></script>
 <script type="text/javascript" src="/js/httpApi.js"></script>
@@ -50,8 +49,10 @@ function initial() {
     if (document.form.current_page) document.form.current_page.value = page;
     if (document.form.next_page) document.form.next_page.value = page;
   }
-  if (typeof show_menu === "function") {
-    show_menu();
+  try {
+    if (typeof show_menu === "function") show_menu();
+  } catch (e) {
+    if (typeof console !== "undefined" && console.warn) console.warn("StealthSurf show_menu:", e);
   }
 }
 </script>
@@ -1078,6 +1079,10 @@ function initial() {
 </form>
 
 <div id="footer"></div>
+<script type="text/javascript">
+  // Paint TopBanner / left menu while jQuery `$` is still intact (app.js must not shadow it).
+  try { initial(); } catch (e) {}
+</script>
 <script type="text/javascript" src="/ext/stealthsurf/routing-suggest.js"></script>
 <script type="text/javascript" src="/ext/stealthsurf/app.js"></script>
 </body>
