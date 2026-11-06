@@ -128,7 +128,10 @@ Mark/table у нас отдельные (`0x20000`/`78` vs `0x10000`/`77`), но
 
 ## API-ключ не сохраняется / пустой список ключей в WebUI
 
-С v1.0.23 хук `service-event` смотрит на `$2` (`stealthsurf_…`), как XrayUI. Раньше требовался `$1=start`, а UI слал `stealthsurf_setkey` без префикса `start_` — Merlin вызывал хук с пустым `$1`, и **setkey/addkey/sync из WebUI не выполнялись**.
+Две отдельные поломки (обе закрыты):
+
+1. **v1.0.23** — хук `service-event` смотрит на `$2` (`stealthsurf_…`), как XrayUI. Раньше требовался `$1=start`, а UI слал `stealthsurf_setkey` без `start_` — Merlin вызывал хук с пустым `$1`, и setkey не запускался.
+2. **v1.0.24** — даже когда хук уже срабатывал, payload был пустой. Merlin `write_custom_settings()` пишет `amng_custom` только в `/jffs/addons/custom_settings.txt` как **плоские строки** и **не** делает `nvram set amng_custom`. Вложенный JSON `{stealthsurf:{api_key:…}}` теряется (`json_object_get_string` для object → NULL). Теперь UI кладёт действие в строку `stealthsurf_payload`, а backend читает её из `custom_settings.txt` (как XrayUI с `xray_payload*`).
 
 После обновления:
 
@@ -139,15 +142,13 @@ ssurf upd -f
 
 Затем выйти/войти в WebUI и снова **Сохранить и проверить**. Через SSH по-прежнему: `ssurf key 'stlth_…'`.
 
-После обновления:
+Проверка, что ключ записался:
 
 ```sh
-ssurf upd -f
-# или
-/jffs/scripts/stealthsurf doctor
+cat /opt/share/stealthsurf/api_keys.json
+grep SS_API_KEY /opt/etc/stealthsurf.conf
+cat /www/user/stealthsurf/stealthsurf-response.json
 ```
-
-Затем **выйти из WebUI и зайти снова**. Проверьте с ПК (на телефоне Merlin часто сам прячет левое меню, но шапка TopBanner должна быть).
 
 ## Пропала вкладка VPN → StealthSurf и/или команда `ssurf`
 

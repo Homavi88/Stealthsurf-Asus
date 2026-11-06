@@ -4,29 +4,72 @@
 #   stealthsurf service_event <action> [arg]
 # Payload JSON may be posted by the ASP page into /tmp/stealthsurf_payload.json
 
+ss_am_settings_get() {
+  # Read one flat key from Merlin /jffs/addons/custom_settings.txt
+  local key="$1"
+  local settings="/jffs/addons/custom_settings.txt"
+  [ -f "$settings" ] || return 0
+  grep -E "^${key} " "$settings" 2>/dev/null | head -1 | cut -f2- -d ' '
+}
+
+ss_clear_ui_payload_settings() {
+  # Drop transient UI payload keys so API keys do not linger in custom_settings.txt
+  local settings="/jffs/addons/custom_settings.txt"
+  local tmp
+  [ -f "$settings" ] || return 0
+  grep -qE '^stealthsurf_payload|^stealthsurf ' "$settings" 2>/dev/null || return 0
+  tmp="$settings.ss.$$"
+  grep -vE '^stealthsurf_payload([0-9]+)? |^stealthsurf ' "$settings" >"$tmp" 2>/dev/null && mv -f "$tmp" "$settings"
+  rm -f "$tmp" 2>/dev/null || true
+}
+
+ss_normalize_payload_json() {
+  # Accept either flat action JSON or legacy {stealthsurf:{...}} wrapper
+  local raw="$1"
+  if printf '%s' "$raw" | jq -e 'has("stealthsurf")' >/dev/null 2>&1; then
+    printf '%s' "$raw" | jq -c '.stealthsurf // {}'
+  else
+    printf '%s' "$raw" | jq -c .
+  fi
+}
+
 ss_read_payload() {
-  # Prefer fresh amng_custom from the WebUI form submit; fall back to payload file.
-  # UI stores our action JSON under .stealthsurf so other Merlin addons' amng_custom
-  # keys are not wiped. Legacy flat payloads (no .stealthsurf) still work.
+  # Merlin httpd write_custom_settings() stores amng_custom into
+  # /jffs/addons/custom_settings.txt as FLAT strings — it does NOT nvram_set
+  # amng_custom. UI writes action JSON as stealthsurf_payload / stealthsurf_payloadN
+  # (same idea as XrayUI xray_payload*). Fall back to legacy nvram / tmp file.
   local f="/tmp/stealthsurf_payload.json"
-  local custom extracted
+  local custom extracted payload_raw="" chunk idx
+
+  payload_raw=$(ss_am_settings_get stealthsurf_payload)
+  if [ -z "$payload_raw" ]; then
+    idx=0
+    while [ "$idx" -le 20 ]; do
+      chunk=$(ss_am_settings_get "stealthsurf_payload${idx}")
+      [ -n "$chunk" ] || break
+      payload_raw="${payload_raw}${chunk}"
+      idx=$((idx + 1))
+    done
+  fi
+
+  if [ -n "$payload_raw" ] && printf '%s' "$payload_raw" | jq -e . >/dev/null 2>&1; then
+    extracted=$(ss_normalize_payload_json "$payload_raw")
+    printf '%s' "$extracted" >"$f"
+    ss_clear_ui_payload_settings
+    printf '%s' "$extracted"
+    return 0
+  fi
+
   custom=$(nvram get amng_custom 2>/dev/null)
   if [ -n "$custom" ] && printf '%s' "$custom" | jq -e . >/dev/null 2>&1; then
-    if printf '%s' "$custom" | jq -e 'has("stealthsurf")' >/dev/null 2>&1; then
-      extracted=$(printf '%s' "$custom" | jq -c '.stealthsurf // {}')
-    else
-      extracted=$(printf '%s' "$custom" | jq -c .)
-    fi
+    extracted=$(ss_normalize_payload_json "$custom")
     printf '%s' "$extracted" >"$f"
     printf '%s' "$extracted"
     return 0
   fi
+
   if [ -f "$f" ] && jq -e . "$f" >/dev/null 2>&1; then
-    if jq -e 'has("stealthsurf")' "$f" >/dev/null 2>&1; then
-      jq -c '.stealthsurf // {}' "$f"
-    else
-      cat "$f"
-    fi
+    ss_normalize_payload_json "$(cat "$f")"
     return 0
   fi
   echo '{}'

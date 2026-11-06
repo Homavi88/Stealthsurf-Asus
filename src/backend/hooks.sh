@@ -6,6 +6,8 @@ ss_service_event_block() {
   #   FOO        → $1=""     $2=FOO   (same path XrayUI uses)
   # Match on $2 starting with stealthsurf_ — requiring $1=start alone drops all
   # UI actions that omit the start_ prefix (setkey/addkey/sync never ran).
+  # Payload lives in /jffs/addons/custom_settings.txt (stealthsurf_payload*), NOT
+  # nvram amng_custom — httpd never nvram_sets that field. ss_read_payload loads it.
   # Run in foreground so Merlin action_wait covers real work.
   cat <<'EOF'
 # StealthSurf UI hook begin
@@ -16,12 +18,6 @@ if echo "$2" | grep -q "^stealthsurf_"; then
     echo '{"status":false,"message":"uninstall blocked from WebUI"}' > /www/user/stealthsurf/stealthsurf-response.json 2>/dev/null
     ;;
   *)
-    custom=$(nvram get amng_custom 2>/dev/null)
-    if [ -n "$custom" ]; then
-      printf '%s\n' "$custom" > /tmp/stealthsurf_payload.json
-    else
-      echo '{}' > /tmp/stealthsurf_payload.json
-    fi
     /jffs/scripts/stealthsurf service_event "$action" >/tmp/stealthsurf-service-event.log 2>&1
     ;;
   esac
