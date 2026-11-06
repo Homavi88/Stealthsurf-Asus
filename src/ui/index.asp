@@ -785,7 +785,7 @@ function initial() {
                   <div id="settingsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
                     <div class="ss-modal-card ss-settings-card">
                       <div class="ss-modal-head" id="settingsTitle">Настройки StealthSurf</div>
-                      <p class="ss-modal-summary">Автозапуск, плановая перезагрузка, backup и обновление geoip/geosite.</p>
+                      <p class="ss-modal-summary">Автозапуск, плановая перезагрузка, backup, Telegram-бот и обновление geoip/geosite.</p>
                       <div class="ss-settings-grid">
                         <div class="ss-modal-section">
                           <h4 data-ss-hint="Когда и как StealthSurf стартует на роутере после включения электричества или перезагрузки.">Запуск</h4>
@@ -837,6 +837,32 @@ function initial() {
                             </span>
                           </div>
                           <div id="settingsBackupHint" class="ss-hint">Файлы: /opt/share/stealthsurf/backups/</div>
+                        </div>
+                        <div class="ss-modal-section">
+                          <h4 data-ss-hint="Управление StealthSurf через Telegram: включение/выключение VPN, перезапуск, обновление аддона и добавление правил маршрутизации.">Telegram-бот</h4>
+                          <div class="ss-settings-row">
+                            <label class="ss-check" data-ss-hint="Включить long-poll бота на роутере. Нужны Bot Token от @BotFather и ваш chat_id в whitelist."><input id="setTgEnabled" type="checkbox"> Включить Telegram-бота</label>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <div class="ss-settings-field" style="flex:1 1 100%">
+                              <span data-ss-hint="Токен от @BotFather (формат 123456:ABC…). В веб-интерфейсе хранится маска; пустое поле при сохранении оставляет прежний токен.">Bot Token</span>
+                              <input id="setTgBotToken" class="input_32_table" type="password" maxlength="128" placeholder="123456:ABC…" autocomplete="off">
+                            </div>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <div class="ss-settings-field" style="flex:1 1 100%">
+                              <span data-ss-hint="Разрешённые chat_id через запятую или пробел. Узнать свой id: напишите боту /whoami. Без whitelist команды управления недоступны.">Разрешённые chat_id</span>
+                              <input id="setTgChatIds" class="input_32_table" type="text" maxlength="256" placeholder="123456789, 987654321">
+                            </div>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <span class="row-buttons">
+                              <input id="btnTgTest" class="button_gen button_gen_small" type="button" value="Проверить соединение"
+                                data-ss-hint="Сразу вызывает Telegram Bot API (getMe). Можно проверить токен из поля выше ещё до сохранения; если поле пустое — используется уже сохранённый токен.">
+                            </span>
+                            <span id="setTgTestStatus" class="ss-hint" style="margin-left:8px"></span>
+                          </div>
+                          <div id="setTgHint" class="ss-hint">Команды: /on /off /restart /update /list /rules /ruleadd … · /help</div>
                         </div>
                         <div class="ss-modal-section">
                           <h4 data-ss-hint="Справочники «какой IP/сайт к какой стране относится». Используются правилами маршрутизации.">GeoIP / GeoSite</h4>

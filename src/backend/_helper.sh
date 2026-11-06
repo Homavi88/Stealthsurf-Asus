@@ -134,6 +134,9 @@ SS_REBOOT_CRON='${SS_REBOOT_CRON:-}'
 SS_GEODATA_AUTO='${SS_GEODATA_AUTO:-0}'
 SS_GEODATA_SCHEDULE='${SS_GEODATA_SCHEDULE:-weekly}'
 SS_GEODATA_BASE='${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}'
+SS_TG_ENABLED='${SS_TG_ENABLED:-0}'
+SS_TG_BOT_TOKEN='${SS_TG_BOT_TOKEN:-}'
+SS_TG_CHAT_IDS='${SS_TG_CHAT_IDS:-}'
 EOF
   chmod 600 "$SS_CONF_FILE"
   if type ss_settings_publish >/dev/null 2>&1; then

@@ -43,6 +43,11 @@ stealthsurf <команда>           # полное имя
 | `conn` | `connectivity` | Проверка связи |
 | `xray` | `install-xray` | Поставить Xray |
 | `geo` | `geodata` | Обновить geoip/geosite |
+| `cfg` | `settings` | Показать настройки (JSON) |
+| `setcfg` | `set-settings` | Применить JSON настроек |
+| `tg` | `telegram` | Статус Telegram-бота |
+| `tg-start` / `tg-stop` | `telegram-start` / `telegram-stop` | Запуск / остановка бота |
+| `tg-test` [`token`] | `telegram-test` | Проверка Bot API (getMe) |
 | `un --yes` | `uninstall --yes` | Полное удаление (без `--yes` отказ) |
 | `doctor` | `doctor` | Восстановить UI / CLI symlink / хуки |
 | `m` | `menu` | Интерактивное меню |

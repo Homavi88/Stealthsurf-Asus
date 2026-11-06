@@ -447,5 +447,6 @@ ss_remove_cron() {
     cru d stealthsurf_ver 2>/dev/null || true
     cru d stealthsurf_reboot 2>/dev/null || true
     cru d stealthsurf_geodata 2>/dev/null || true
+    cru d stealthsurf_tg 2>/dev/null || true
   fi
 }

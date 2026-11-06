@@ -14,6 +14,9 @@ ss_settings_defaults() {
   SS_GEODATA_AUTO="${SS_GEODATA_AUTO:-0}"
   SS_GEODATA_SCHEDULE="${SS_GEODATA_SCHEDULE:-weekly}" # daily|every3d|weekly|monthly
   SS_GEODATA_BASE="${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}"
+  SS_TG_ENABLED="${SS_TG_ENABLED:-0}"
+  SS_TG_BOT_TOKEN="${SS_TG_BOT_TOKEN:-}"
+  SS_TG_CHAT_IDS="${SS_TG_CHAT_IDS:-}"
 }
 
 ss_settings_apply_geodata_base() {
@@ -39,6 +42,15 @@ ss_settings_publish() {
 ss_settings_json() {
   ss_settings_defaults
   ss_settings_apply_geodata_base
+  local tg_hint tg_running
+  tg_hint=""
+  if type ss_telegram_token_hint >/dev/null 2>&1; then
+    tg_hint=$(ss_telegram_token_hint "$SS_TG_BOT_TOKEN")
+  fi
+  tg_running=false
+  if type ss_telegram_running >/dev/null 2>&1 && ss_telegram_running; then
+    tg_running=true
+  fi
   jq -nc \
     --arg auto_start "$SS_AUTO_START" \
     --arg watchdog "$SS_WATCHDOG" \
@@ -51,6 +63,11 @@ ss_settings_json() {
     --arg geodata_schedule "$SS_GEODATA_SCHEDULE" \
     --arg geodata_base "$GEODATA_BASE" \
     --arg version "$ADDON_VERSION" \
+    --arg tg_enabled "$SS_TG_ENABLED" \
+    --arg tg_token_set "$([ -n "$SS_TG_BOT_TOKEN" ] && echo 1 || echo 0)" \
+    --arg tg_token_hint "$tg_hint" \
+    --arg tg_chat_ids "$SS_TG_CHAT_IDS" \
+    --argjson tg_running "$tg_running" \
     '{
       auto_start: ($auto_start == "1"),
       watchdog: ($watchdog == "1"),
@@ -62,7 +79,15 @@ ss_settings_json() {
       geodata_auto: ($geodata_auto == "1"),
       geodata_schedule: $geodata_schedule,
       geodata_base: $geodata_base,
-      version: $version
+      version: $version,
+      telegram: {
+        enabled: ($tg_enabled == "1"),
+        bot_token_set: ($tg_token_set == "1"),
+        bot_token_hint: (if $tg_token_hint=="" then null else $tg_token_hint end),
+        bot_token: (if $tg_token_set=="1" then "********" else "" end),
+        chat_ids: $tg_chat_ids,
+        running: $tg_running
+      }
     }'
 }
 
@@ -179,6 +204,55 @@ ss_settings_apply() {
     esac
   fi
 
+  # Telegram bot (nested .telegram or flat telegram_* keys)
+  v=$(ss_settings_bool01 "$payload" telegram_enabled)
+  if [ -z "$v" ]; then
+    v=$(printf '%s' "$payload" | jq -r 'if has("telegram") then (if .telegram.enabled==true or .telegram.enabled==1 or .telegram.enabled=="1" then "1" elif .telegram.enabled==false or .telegram.enabled==0 or .telegram.enabled=="0" then "0" else empty end) else empty end' 2>/dev/null || true)
+  fi
+  [ -n "$v" ] && SS_TG_ENABLED="$v" || true
+
+  v=$(printf '%s' "$payload" | jq -r '
+    if has("telegram") and (.telegram|type)=="object" and (.telegram|has("bot_token")) then
+      (.telegram.bot_token // "")|tostring
+    elif has("telegram_bot_token") then
+      (.telegram_bot_token // "")|tostring
+    else "__omit__" end' 2>/dev/null || true)
+  case "$v" in
+  __omit__) ;;
+  *)
+    if type ss_telegram_mask_token >/dev/null 2>&1; then
+      SS_TG_BOT_TOKEN=$(ss_telegram_mask_token "$v")
+    else
+      case "$v" in
+      "" | "********" | "***") ;;
+      *) SS_TG_BOT_TOKEN="$v" ;;
+      esac
+    fi
+    ;;
+  esac
+
+  v=$(printf '%s' "$payload" | jq -r '
+    if has("telegram") and (.telegram|type)=="object" and (.telegram|has("chat_ids")) then
+      (.telegram.chat_ids // "")|tostring
+    elif has("telegram_chat_ids") then
+      (.telegram_chat_ids // "")|tostring
+    else "__omit__" end' 2>/dev/null || true)
+  case "$v" in
+  __omit__) ;;
+  *)
+    if type ss_telegram_normalize_chat_ids >/dev/null 2>&1; then
+      SS_TG_CHAT_IDS=$(ss_telegram_normalize_chat_ids "$v")
+    else
+      SS_TG_CHAT_IDS=$(printf '%s' "$v" | tr ',;' '  ' | tr -s ' \t' ' ' | sed 's/^ *//;s/ *$//')
+    fi
+    ;;
+  esac
+
+  if [ "$SS_TG_ENABLED" = "1" ] && [ -z "$SS_TG_BOT_TOKEN" ]; then
+    ss_error "telegram.enabled requires bot_token"
+    return 1
+  fi
+
   # Validate custom reboot cron roughly (5 fields)
   if [ "$SS_REBOOT_SCHEDULE" = "custom" ]; then
     # collapse whitespace; count tokens
@@ -202,7 +276,10 @@ ss_settings_apply() {
   else
     ss_settings_install_extra_cron 2>/dev/null || true
   fi
-  ss_activity "settings.apply" "auto_start=$SS_AUTO_START reboot=$SS_REBOOT_SCHEDULE geodata_auto=$SS_GEODATA_AUTO"
+  if type ss_telegram_ensure >/dev/null 2>&1; then
+    ss_telegram_ensure 2>/dev/null || true
+  fi
+  ss_activity "settings.apply" "auto_start=$SS_AUTO_START reboot=$SS_REBOOT_SCHEDULE geodata_auto=$SS_GEODATA_AUTO tg=$SS_TG_ENABLED"
   ss_ok "Settings saved"
   ss_settings_json
 }

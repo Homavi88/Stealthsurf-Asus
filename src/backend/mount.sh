@@ -214,6 +214,9 @@ ss_doctor() {
     fi
     ;;
   esac
+  if type ss_telegram_ensure >/dev/null 2>&1; then
+    ss_telegram_ensure 2>/dev/null || true
+  fi
   ss_write_state full 2>/dev/null || true
   if [ "$ok" = "1" ]; then
     ss_ok "Doctor: hooks, CLI symlinks and WebUI remounted. Re-login to WebUI if tab missing."

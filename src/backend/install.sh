@@ -241,6 +241,9 @@ ss_uninstall() {
   ss_remove_service_event_hook 2>/dev/null || true
   ss_remove_hook_scripts 2>/dev/null || true
   ss_remove_cron 2>/dev/null || true
+  if type ss_telegram_stop_daemon >/dev/null 2>&1; then
+    ss_telegram_stop_daemon 2>/dev/null || true
+  fi
 
   # Symlinks and addon-owned paths
   rm -f "/opt/bin/$ADDON_TAG" "/opt/bin/ssurf"
@@ -256,6 +259,7 @@ ss_uninstall() {
   rm -f /tmp/stealthsurf_payload.json /tmp/stealthsurf-service-event.log 2>/dev/null
   rm -f /tmp/stealthsurf.desired /tmp/stealthsurf.lock 2>/dev/null
   rm -f /tmp/stealthsurf-xray-test.log 2>/dev/null
+  rm -f /var/run/stealthsurf-telegram.pid /tmp/stealthsurf-tg-cmd.out 2>/dev/null
   # Hysteria binary downloaded by the addon (leave shared Xray untouched)
   rm -f /opt/sbin/hysteria /opt/bin/hysteria 2>/dev/null
 

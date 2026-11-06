@@ -447,6 +447,9 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
+    testtelegram: "Проверка Telegram Bot API…",
+    telegramtest: "Проверка Telegram Bot API…",
+    tgtest: "Проверка Telegram Bot API…",
     applypending: "Применение настроек…",
     batch: "Применение настроек…",
   };
@@ -2213,6 +2216,9 @@ async function refreshAll() {
         setSettingsStatus("Сохранено");
         if (/settings saved/i.test(response.message)) setMsg("Настройки сохранены", "ok");
       }
+      if (/telegram ok|telegram failed/i.test(response.message)) {
+        applyTelegramTestResult(response.status, data, response.message);
+      }
       if (data && Array.isArray(data.keys) && (/balances|balance/i.test(response.message) || data.total_balance != null)) {
         renderBalances(data);
         balanceRefreshPending = false;
@@ -2695,6 +2701,9 @@ function bind() {
       triggerService("geodata", {});
     });
   }
+  if (byId("btnTgTest")) {
+    byId("btnTgTest").addEventListener("click", () => testTelegramFromModal());
+  }
   if (byId("settingsModal")) {
     byId("settingsModal").addEventListener("click", (ev) => {
       if (ev.target === byId("settingsModal")) closeSettingsModal();
@@ -2705,6 +2714,54 @@ function bind() {
 function setSettingsStatus(text) {
   const el = byId("settingsStatus");
   if (el) el.textContent = text || "";
+}
+
+function setTgTestStatus(text, cls) {
+  const el = byId("setTgTestStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "ss-hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
+}
+
+function applyTelegramTestResult(ok, data, message) {
+  const d = data && typeof data === "object" ? data : {};
+  if (ok && d.ok !== false) {
+    let msg = "OK";
+    if (d.username) msg += " @" + d.username;
+    else if (d.first_name) msg += " " + d.first_name;
+    if (d.bot_id != null) msg += " (id " + d.bot_id + ")";
+    if (d.latency_ms != null) msg += " · " + d.latency_ms + " мс";
+    if (d.chat_id) {
+      msg += d.chat_ok ? " · chat " + d.chat_id + " доступен" : " · chat " + d.chat_id + " недоступен";
+      if (!d.chat_ok && d.error) msg += " (" + d.error + ")";
+    }
+    setTgTestStatus(msg, "ok");
+    setSettingsStatus("Telegram: соединение есть");
+    setMsg("Telegram Bot API: соединение OK" + (d.username ? " (@" + d.username + ")" : ""), "ok");
+    return;
+  }
+  const err = (d && d.error) || message || "нет ответа";
+  setTgTestStatus("Ошибка: " + err, "err");
+  setSettingsStatus("Telegram: нет соединения");
+  setMsg("Telegram: " + err, "err");
+}
+
+function testTelegramFromModal() {
+  const tokEl = byId("setTgBotToken");
+  const raw = tokEl ? tokEl.value.trim() : "";
+  const placeholderSet = tokEl && /сохранён/.test(tokEl.placeholder || "");
+  if (!raw && !placeholderSet) {
+    setTgTestStatus("Укажите Bot Token или сначала сохраните его", "err");
+    setMsg("Нет Bot Token для проверки", "err");
+    return;
+  }
+  const payload = {
+    bot_token: raw && raw !== "********" ? raw : "********",
+    chat_ids: (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "",
+  };
+  setTgTestStatus("Проверяю api.telegram.org…", "");
+  setSettingsStatus("Проверка Telegram…");
+  triggerService("testtelegram", payload, { wait: 15 });
 }
 
 function syncRebootCronVisibility() {
@@ -2730,10 +2787,37 @@ function fillSettingsForm(s) {
       data.geodata_base ||
       "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
   }
+  const tg = data.telegram || {};
+  if (byId("setTgEnabled")) byId("setTgEnabled").checked = !!tg.enabled;
+  if (byId("setTgBotToken")) {
+    // Keep password field empty when token already set (placeholder shows mask)
+    byId("setTgBotToken").value = "";
+    byId("setTgBotToken").placeholder = tg.bot_token_set
+      ? "******** (сохранён" + (tg.bot_token_hint ? ", " + tg.bot_token_hint : "") + ")"
+      : "123456:ABC…";
+  }
+  if (byId("setTgChatIds")) byId("setTgChatIds").value = tg.chat_ids || "";
+  if (byId("setTgHint")) {
+    const run = tg.running ? "бот запущен" : tg.enabled ? "бот включён, ожидает старта" : "бот выключен";
+    byId("setTgHint").textContent =
+      "Команды: /on /off /restart /update /list /rules /ruleadd … · /help · сейчас: " + run;
+  }
   syncRebootCronVisibility();
 }
 
 function collectSettingsPayload() {
+  const tgTokenEl = byId("setTgBotToken");
+  const tgTokenRaw = tgTokenEl ? tgTokenEl.value.trim() : "";
+  const telegram = {
+    enabled: !!(byId("setTgEnabled") && byId("setTgEnabled").checked),
+    chat_ids: (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "",
+  };
+  // Empty token = keep previous; never send the UI mask "********" as a new secret
+  if (tgTokenRaw && tgTokenRaw !== "********") {
+    telegram.bot_token = tgTokenRaw;
+  } else {
+    telegram.bot_token = "********";
+  }
   return {
     auto_start: !!( byId("setAutoStart") && byId("setAutoStart").checked ),
     watchdog: !!( byId("setWatchdog") && byId("setWatchdog").checked ),
@@ -2745,6 +2829,7 @@ function collectSettingsPayload() {
     geodata_auto: !!( byId("setGeodataAuto") && byId("setGeodataAuto").checked ),
     geodata_schedule: (byId("setGeodataSchedule") && byId("setGeodataSchedule").value) || "weekly",
     geodata_base: (byId("setGeodataBase") && byId("setGeodataBase").value.trim()) || "",
+    telegram: telegram,
   };
 }
 
@@ -2762,6 +2847,7 @@ async function openSettingsModal() {
     geodata_auto: false,
     geodata_schedule: "weekly",
     geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
+    telegram: { enabled: false, bot_token_set: false, chat_ids: "", running: false },
   });
   modal.classList.add("show");
   refreshHelpHintStyles(modal);
@@ -2798,7 +2884,30 @@ function saveSettingsFromModal() {
     setMsg("Неверный адрес geodata", "err");
     return;
   }
-  queuePending("settings", "setsettings", payload, "Настройки аддона (автозапуск / watchdog / backup / geodata)");
+  if (payload.telegram && payload.telegram.enabled) {
+    const tok = payload.telegram.bot_token || "";
+    const ids = (payload.telegram.chat_ids || "").trim();
+    const tokenLooksNew = tok && tok !== "********";
+    const tokenPlaceholderSet =
+      byId("setTgBotToken") &&
+      /сохранён/.test(byId("setTgBotToken").placeholder || "");
+    if (!tokenLooksNew && !tokenPlaceholderSet) {
+      setSettingsStatus("Для Telegram нужен Bot Token");
+      setMsg("Укажите Bot Token от @BotFather", "err");
+      return;
+    }
+    if (!ids) {
+      setSettingsStatus("Укажите хотя бы один chat_id");
+      setMsg("Добавьте chat_id (бот ответит /whoami)", "err");
+      return;
+    }
+  }
+  queuePending(
+    "settings",
+    "setsettings",
+    payload,
+    "Настройки аддона (автозапуск / watchdog / backup / telegram / geodata)"
+  );
   setSettingsStatus("В очереди — нажмите «Применить» внизу");
   closeSettingsModal();
 }

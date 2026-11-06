@@ -132,6 +132,14 @@ grep -q 'import ./settings.sh' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  s
   echo "FAIL settings import"
   fail=$((fail + 1))
 }
+grep -q 'import ./telegram.sh' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  telegram import" || {
+  echo "FAIL telegram import"
+  fail=$((fail + 1))
+}
+grep -q 'setTgEnabled' "$ROOT/src/ui/index.asp" && echo "OK  ASP telegram settings" || {
+  echo "FAIL ASP telegram settings"
+  fail=$((fail + 1))
+}
 grep -q '08-settings-modal.png' "$ROOT/tools/capture-ui-screenshots.mjs" && echo "OK  settings screenshot" || {
   echo "FAIL settings screenshot"
   fail=$((fail + 1))

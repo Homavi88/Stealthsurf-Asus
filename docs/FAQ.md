@@ -241,3 +241,18 @@ StealthSurf: ~60 запросов/мин. При HTTP 429 подождите и 
 ## Несколько API-ключей
 
 `stealthsurf add-key 'stlth_…' 'work'` — sync объединяет конфиги всех ключей в один каталог.
+
+## Telegram-бот
+
+В **Настройки** → блок **Telegram-бот**:
+
+1. Создайте бота у [@BotFather](https://t.me/BotFather), скопируйте token
+2. Вставьте token → кнопка **Проверить соединение** (вызов `getMe` к api.telegram.org)
+3. Включите бота, сохраните настройки (Применить)
+4. Напишите боту `/whoami` — он ответит ваш `chat_id`
+5. Добавьте `chat_id` в whitelist и снова сохраните (при проверке также смотрится доступность chat)
+
+Команды: `/on` `/off` `/restart` `/update` `/list` `/rules` `/ruleadd <type> <matcher> <outbound> [name]`.  
+Правила дописываются к уже существующим и используют включённые VPN (`ss-<id>`) / `direct` / `block`.
+
+CLI: `ssurf tg` · `ssurf tg-test` · `ssurf tg-start` · `ssurf tg-stop`.
