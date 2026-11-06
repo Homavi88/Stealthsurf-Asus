@@ -30,9 +30,14 @@ fs.mkdirSync(dist, { recursive: true });
 
 const merged = inlineShellImports(join(root, "src", "backend", "stealthsurf.sh"));
 fs.writeFileSync(join(dist, "stealthsurf"), merged, { mode: 0o755 });
-fs.copyFileSync(join(root, "src", "ui", "index.asp"), join(dist, "index.asp"));
+
+const pkg = JSON.parse(fs.readFileSync(join(root, "package.json"), "utf8"));
+const ver = String(pkg.version || "0");
+let indexAsp = fs.readFileSync(join(root, "src", "ui", "index.asp"), "utf8");
+indexAsp = indexAsp.replaceAll("__SS_VERSION__", ver);
+fs.writeFileSync(join(dist, "index.asp"), indexAsp);
 fs.copyFileSync(join(root, "src", "ui", "app.js"), join(dist, "app.js"));
 fs.copyFileSync(join(root, "src", "ui", "routing-suggest.js"), join(dist, "routing-suggest.js"));
 
 console.log("Built dist/stealthsurf, dist/index.asp, dist/app.js, dist/routing-suggest.js");
-console.log(`Shell size: ${merged.length} bytes`);
+console.log(`Shell size: ${merged.length} bytes; UI cache-bust v=${ver}`);

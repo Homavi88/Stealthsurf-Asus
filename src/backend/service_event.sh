@@ -121,7 +121,7 @@ ss_service_event() {
     ;;
   installversion | switchversion | rollback)
     # Install a chosen GitHub release tag (upgrade or rollback). Payload: {tag:"v1.0.16"}
-    local tag force_tag
+    local tag force_tag rc
     tag=$(printf '%s' "$payload" | jq -r '.tag // .version // empty')
     force_tag=$(printf '%s' "$payload" | jq -r '.force // "0"')
     if [ -z "$tag" ]; then
@@ -132,7 +132,11 @@ ss_service_event() {
     SS_FORCE_TAG="$force_tag"
     export SS_FORCE_TAG
     ss_version_install_tag "$tag"
-    case $? in
+    rc=$?
+    if [ -x "$ADDON_SCRIPT" ]; then
+      sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
+    fi
+    case $rc in
     0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
     2) ss_json_response true "already on version" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
     *) ss_json_response false "install version failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
@@ -417,16 +421,23 @@ ss_service_event() {
     fi
     ;;
   update | upgrade)
-    # force=1 → always reinstall latest; tag=… → install that release; else only when newer
-    local force tag
+    # force=1 → always reinstall latest; tag/version → install that release; else only when newer.
+    # WebUI Update must pass tag from browser GitHub check — router curl often fails/blocks and
+    # would otherwise return "already up to date" without downloading.
+    local force tag rc
     force=$(printf '%s' "$payload" | jq -r '.force // "0"')
-    tag=$(printf '%s' "$payload" | jq -r '.tag // empty')
+    tag=$(printf '%s' "$payload" | jq -r '.tag // .version // empty')
     ss_activity "ui.update" "force=$force tag=${tag:-}"
     if [ -n "$tag" ]; then
       SS_FORCE_TAG="$force"
       export SS_FORCE_TAG
       ss_version_install_tag "$tag"
-      case $? in
+      rc=$?
+      # Post-install: re-read version.json written by NEW script (this shell still has old ADDON_VERSION)
+      if [ -x "$ADDON_SCRIPT" ]; then
+        sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
+      fi
+      case $rc in
       0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
       2) ss_json_response true "already on version" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
       *) ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
@@ -435,13 +446,20 @@ ss_service_event() {
     elif [ "$force" = "1" ] || [ "$force" = "true" ]; then
       ss_version_check >/dev/null 2>&1 || true
       if ss_update_self; then
+        if [ -x "$ADDON_SCRIPT" ]; then
+          sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
+        fi
         ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       else
         ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')"
       fi
     else
       ss_version_update_if_available 0
-      case $? in
+      rc=$?
+      if [ "$rc" -eq 0 ] && [ -x "$ADDON_SCRIPT" ]; then
+        sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
+      fi
+      case $rc in
       0) ss_json_response true "updated" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
       2) ss_json_response true "already up to date" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;
       *) ss_json_response false "update failed" "$(ss_jq_file_or "$SS_VERSION_FILE" '{}')" ;;

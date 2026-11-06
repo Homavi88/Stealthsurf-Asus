@@ -190,13 +190,21 @@ grep -q '/opt/bin/ssurf' "$ROOT/src/backend/install.sh" && echo "OK  ssurf symli
   fail=$((fail + 1))
 }
 
-# UI binds check/update
+# UI binds check/update (Update passes tag via triggerWebUiUpdate → triggerService("update"))
 grep -q 'checkupdate' "$ROOT/src/ui/app.js" && echo "OK  UI checkupdate" || {
   echo "FAIL UI checkupdate"
   fail=$((fail + 1))
 }
 grep -q 'triggerService("update"' "$ROOT/src/ui/app.js" && echo "OK  UI update" || {
   echo "FAIL UI update"
+  fail=$((fail + 1))
+}
+grep -q 'function triggerWebUiUpdate' "$ROOT/src/ui/app.js" && echo "OK  UI triggerWebUiUpdate" || {
+  echo "FAIL UI triggerWebUiUpdate"
+  fail=$((fail + 1))
+}
+grep -q 'tag // .version' "$ROOT/src/backend/service_event.sh" && echo "OK  update payload tag/version" || {
+  echo "FAIL update payload tag/version"
   fail=$((fail + 1))
 }
 grep -q 'StealthSurf UI hook begin' "$ROOT/src/backend/hooks.sh" && echo "OK  hook refresh payload" || {
