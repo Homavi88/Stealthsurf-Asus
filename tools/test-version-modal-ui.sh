@@ -108,6 +108,20 @@ grep -q 'value="Обновить"' "$ASP" && ok "modal Update button RU" || bad 
 grep -q 'Обновить позднее' "$ASP" && ok "modal Later button RU" || bad "modal Later button RU"
 grep -q 'Закрыть уведомление' "$ASP" && ok "modal Dismiss button RU" || bad "modal Dismiss button RU"
 grep -q 'quiet: true, skipAutoModal: true' "$APP" && ok "boot quiet GitHub check" || bad "boot quiet GitHub check"
+grep -q 'function refreshCritical' "$APP" && ok "refreshCritical fast path" || bad "refreshCritical fast path"
+grep -q 'function refreshSecondary' "$APP" && ok "refreshSecondary deferred" || bad "refreshSecondary deferred"
+grep -q 'fetchWithTimeout' "$APP" && ok "fetchWithTimeout" || bad "fetchWithTimeout"
+# versions.json must not be in critical boot Promise.all
+if awk '/async function refreshCritical/,/^async function |^function /' "$APP" | grep -q 'versions.json'; then
+  bad "versions.json still in critical boot path"
+else
+  ok "versions.json not in critical boot"
+fi
+if awk '/async function refreshCritical/,/^async function |^function /' "$APP" | grep -q 'locations.json'; then
+  bad "locations.json still in critical boot path"
+else
+  ok "locations.json deferred from critical"
+fi
 
 rm -f "$TMP"
 

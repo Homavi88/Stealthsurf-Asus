@@ -44,23 +44,43 @@ function setMsg(text, kind) {
   el.className = "ss-msg" + (kind ? " " + kind : "");
 }
 
-async function fetchJson(url) {
-  const res = await fetch(url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(), {
-    cache: "no-store",
-  });
+async function fetchWithTimeout(url, opts, ms) {
+  const timeoutMs = ms == null ? 8000 : ms;
+  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+  let timer = null;
+  try {
+    if (ctrl) timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const res = await fetch(url, Object.assign({}, opts || {}, ctrl ? { signal: ctrl.signal } : {}));
+    return res;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function fetchJson(url, timeoutMs) {
+  const res = await fetchWithTimeout(
+    url + (url.includes("?") ? "&" : "?") + "_=" + Date.now(),
+    { cache: "no-store" },
+    timeoutMs == null ? 6000 : timeoutMs
+  );
   if (!res.ok) throw new Error(url + " HTTP " + res.status);
   return res.json();
 }
 
-async function fetchGithubJson(url) {
+async function fetchGithubJson(url, timeoutMs) {
   // Same idea as XrayUI engine.fetchGithubJson — direct browser GET to api.github.com
-  const res = await fetch(url, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/vnd.github+json",
-      "User-Agent": "stealthsurf-merlin-webui",
+  // Hard timeout: blocked/slow GitHub must not stall the WebUI.
+  const res = await fetchWithTimeout(
+    url,
+    {
+      cache: "no-store",
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "stealthsurf-merlin-webui",
+      },
     },
-  });
+    timeoutMs == null ? 3500 : timeoutMs
+  );
   if (!res.ok) throw new Error("GitHub HTTP " + res.status);
   return res.json();
 }
@@ -1215,6 +1235,15 @@ function openConfigEditModal(configId) {
       : "Смена location / protocol и опции для выбранного конфига.";
   }
   openSsModal("catalogModal");
+  // locations.json can be large — fill after modal is visible
+  ensureLocationsLoaded()
+    .then(() => {
+      if (select && configId != null) {
+        select.value = String(configId);
+        onConfigChange();
+      }
+    })
+    .catch(() => {});
 }
 
 function renderConfigs(configs) {
@@ -1529,40 +1558,69 @@ function onConfigChange() {
   }
 }
 
-async function refreshAll() {
-  try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, versions, protocols, response] =
-      await Promise.all([
-        fetchJson(EXT + "/state.json").catch(() => null),
-        fetchJson(EXT + "/configs.json").catch(() => []),
-        fetchJson(EXT + "/locations.json").catch(() => []),
-        fetchJson(EXT + "/subscriptions.json").catch(() => []),
-        fetchJson(EXT + "/api_keys.json").catch(() => []),
-        fetchJson(EXT + "/outbounds.json").catch(() => ({ enabled: [], default: "" })),
-        fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
-        fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
-        fetchJson(EXT + "/version.json").catch(() => null),
-        fetchJson(EXT + "/versions.json").catch(() => null),
-        fetchJson(EXT + "/protocols.json").catch(() => null),
-        fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
-      ]);
-    outboundsCache = outbounds || { enabled: [], default: "" };
-    if (protocols && typeof protocols === "object") protocolsCache = protocols;
-    renderState(state);
-    if (version) renderVersion(version);
-    else if (state && state.version) renderVersion({ installed: state.version, latest: null });
-    if (versions && Array.isArray(versions.releases)) {
-      versionsCache = versions;
-    }
-    const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
-    renderProtocolSelect();
-    renderConfigs(cfgList);
+let secondaryLoadPromise = null;
+let locationsLoaded = false;
+
+/** Fast first paint: only files needed for status + outbound list. */
+async function refreshCritical() {
+  const [state, configs, keys, outbounds, version, protocols, response] = await Promise.all([
+    fetchJson(EXT + "/state.json", 5000).catch(() => null),
+    fetchJson(EXT + "/configs.json", 5000).catch(() => []),
+    fetchJson(EXT + "/api_keys.json", 4000).catch(() => []),
+    fetchJson(EXT + "/outbounds.json", 4000).catch(() => ({ enabled: [], default: "" })),
+    fetchJson(EXT + "/version.json", 4000).catch(() => null),
+    fetchJson(EXT + "/protocols.json", 4000).catch(() => null),
+    fetchJson(EXT + "/stealthsurf-response.json", 4000).catch(() => null),
+  ]);
+  outboundsCache = outbounds || { enabled: [], default: "" };
+  if (protocols && typeof protocols === "object") protocolsCache = protocols;
+  renderState(state);
+  if (version) {
+    version._skipAutoModal = true; // boot path owns the update modal
+    renderVersion(version);
+  } else if (state && state.version) {
+    renderVersion({ installed: state.version, latest: null, _skipAutoModal: true });
+  }
+  const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
+  renderProtocolSelect();
+  renderConfigs(cfgList);
+  renderKeys(Array.isArray(keys) ? keys : []);
+  updateSectionSummaries();
+  return { state, configs: cfgList, response, version };
+}
+
+/** Heavier JSON used only inside modals / editors — load after paint. */
+async function refreshSecondary() {
+  if (secondaryLoadPromise) return secondaryLoadPromise;
+  secondaryLoadPromise = (async () => {
+    const [locations, subs, routing, policies] = await Promise.all([
+      fetchJson(EXT + "/locations.json", 8000).catch(() => []),
+      fetchJson(EXT + "/subscriptions.json", 5000).catch(() => []),
+      fetchJson(EXT + "/routing.json", 5000).catch(() => ({ rules: [] })),
+      fetchJson(EXT + "/policies.json", 5000).catch(() => ({ catchall: true, rules: [] })),
+    ]);
+    locationsLoaded = true;
     renderLocations(locations);
     renderSubs(Array.isArray(subs) ? subs : []);
-    renderKeys(Array.isArray(keys) ? keys : []);
     renderRouting(routing);
     renderPolicies(policies);
     updateSectionSummaries();
+  })().finally(() => {
+    secondaryLoadPromise = null;
+  });
+  return secondaryLoadPromise;
+}
+
+async function ensureLocationsLoaded() {
+  if (locationsLoaded && byId("locationSelect") && byId("locationSelect").options.length) return;
+  await refreshSecondary();
+}
+
+async function refreshAll() {
+  try {
+    const { response } = await refreshCritical();
+    // Don't await secondary — keep UI responsive; fill modals shortly after
+    refreshSecondary().catch(() => {});
     if (response && response.message) {
       setMsg(response.message, response.status ? "ok" : "err");
       const data = response.data;
@@ -1966,7 +2024,17 @@ function bind() {
   manageMap.forEach(([btnId, modalId]) => {
     const btn = byId(btnId);
     if (!btn) return;
-    btn.addEventListener("click", () => openSsModal(modalId));
+    btn.addEventListener("click", () => {
+      openSsModal(modalId);
+      // Routing / policies / backup need deferred JSON — kick load when opened
+      if (modalId === "routingModal" || modalId === "policiesModal") {
+        refreshSecondary().catch(() => {});
+      }
+      if (modalId === "backupModal") {
+        loadBackups();
+        loadLogPreview();
+      }
+    });
   });
   // Close controls for all section modals (including outbound edit)
   Object.values(SS_SECTION_MODALS).forEach((modalId) => {
@@ -2382,30 +2450,38 @@ function initHelpHints() {
 ensureMerlinChrome();
 bind();
 initHelpHints();
-refreshAll();
-loadBackups();
-setTimeout(loadLogPreview, 300);
+// Critical JSON first (status + outbounds), then deferred secondary + optional GitHub.
+refreshCritical()
+  .then(({ version }) => {
+    refreshSecondary().catch(() => {});
+    // Instant notify from cron cache if already known — don't wait on GitHub
+    if (version && shouldAutoShowUpdateModal(version)) {
+      openUpdateModal(version, { markAutoShown: true });
+    }
+  })
+  .catch((e) => setMsg(String(e), "err"));
 setTimeout(ensureMerlinChrome, 50);
 setTimeout(ensureMerlinChrome, 500);
-// Auto-notify about a newer GitHub release (browser fetch — no Merlin apply/%).
-// Shows modal: Обновить / Обновить позднее / Закрыть уведомление.
+// Soft GitHub refresh (timeout) — only after UI is up; never blocks first paint.
 setTimeout(async () => {
   try {
-    // Live GitHub check in browser (no Merlin apply). Opens modal if newer + not Later/Dismissed.
-    let info = await checkUpdateFromGithub({ quiet: true, skipAutoModal: true });
-    if (!info) {
-      try {
-        info = await fetchJson(EXT + "/version.json");
-        if (info) {
-          info._skipAutoModal = true;
-          renderVersion(info);
-        }
-      } catch (_) {}
-    }
-    if (info && shouldAutoShowUpdateModal(info)) {
-      openUpdateModal(info, { markAutoShown: true });
-    }
+    const info = await checkUpdateFromGithub({ quiet: true, skipAutoModal: true });
+    if (!info || !shouldAutoShowUpdateModal(info)) return;
+    try {
+      if (sessionStorage.getItem("ss_update_autoshown_" + updateNoticeTag(info)) === "1") return;
+    } catch (_) {}
+    openUpdateModal(info, { markAutoShown: true });
   } catch (_) {
-    /* offline / first install */
+    /* offline / slow GitHub */
   }
-}, 900);
+}, 1500);
+// Backups/logs are rare — load lazily when modal opens, or idle later
+setTimeout(() => {
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => {
+      loadBackups().catch(() => {});
+    });
+  } else {
+    loadBackups().catch(() => {});
+  }
+}, 4000);
