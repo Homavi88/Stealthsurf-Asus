@@ -123,6 +123,7 @@ ss_backup() {
     "$SS_CACHE_SUBSCRIPTIONS" \
     "$SS_CACHE_LOCATIONS" \
     "$SS_CACHE_PROFILE" \
+    "$SS_CACHE_BALANCES" \
     "$SS_STATE_FILE" \
     "$SS_ENDPOINTS_FILE" \
     "$XRAY_CONFIG_FILE"; do
@@ -227,6 +228,7 @@ ss_restore() {
   [ -f "$src/subscriptions.json" ] && cp -f "$src/subscriptions.json" "$SS_CACHE_SUBSCRIPTIONS"
   [ -f "$src/locations.json" ] && cp -f "$src/locations.json" "$SS_CACHE_LOCATIONS"
   [ -f "$src/profile.json" ] && cp -f "$src/profile.json" "$SS_CACHE_PROFILE"
+  [ -f "$src/balances.json" ] && cp -f "$src/balances.json" "$SS_CACHE_BALANCES"
   [ -f "$src/state.json" ] && cp -f "$src/state.json" "$SS_STATE_FILE"
   [ -f "$src/endpoints.json" ] && cp -f "$src/endpoints.json" "$SS_ENDPOINTS_FILE"
   [ -f "$src/stealthsurf.json" ] && cp -f "$src/stealthsurf.json" "$XRAY_CONFIG_FILE"

@@ -35,8 +35,9 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   sy             sync           ls|l           list
   ap|a <id>      apply          en <id>        enable
   dis <id>       disable        def <tag>      set-default
-  key <stlth_>   set-key        mode <m>       set-mode
-  dns <m>        set-dns-mode   rb             rebuild
+  key <stlth_>   set-key        bal            balances
+  mode <m>       set-mode       dns <m>        set-dns-mode
+  rb             rebuild
   v|ver          version        cu|chk         check-update
   upd [ -f ]     update         uf             force-update
   lv             list-versions  iv <tag>       install-version / rollback
@@ -52,7 +53,7 @@ $ADDON_TITLE $ADDON_VERSION — CLI
 ── Полные имена (как раньше) ───────────────────────────────
   start stop restart status install uninstall version
   check-update update force-update list-versions install-version
-  set-key add-key remove-key verify sync list apply enable disable
+  set-key add-key remove-key verify balances sync list apply enable disable
   set-default update-settings set-routing preset set-policies clients
   set-mode set-dns-mode rebuild diag test-config connectivity
   protocols logs devices backup backups restore
@@ -267,6 +268,10 @@ ss_cli_dispatch() {
     ;;
   verify)
     ss_api_verify_key || return 1
+    ;;
+  balances | balance | bal)
+    # Force refresh account balance(s) for all configured API keys
+    ss_api_fetch_balances 1 || return 1
     ;;
   sync | sy)
     ss_sync_from_provider || return 1

@@ -34,9 +34,11 @@ let routingCache = { rules: [] };
 let policiesCache = { catchall: true, rules: [] };
 let protocolsCache = {};
 let clientsCache = [];
+let balancesCache = null;
 let versionCache = { installed: "—", latest: null, update_available: false };
 let versionsCache = { installed: "—", releases: [] };
 let selectedRelease = null;
+let balanceRefreshPending = false;
 
 function setMsg(text, kind) {
   const el = byId("msg");
@@ -384,6 +386,7 @@ function triggerService(action, payload, opts) {
   if (!wait) {
     if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
     else if (action === "installxray" || action === "sync") wait = 20;
+    else if (action === "balances" || action === "refreshbalances" || action === "balance") wait = 20;
     else if (action === "backup" || action === "restore") wait = 15;
     else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
     else wait = 10;
@@ -437,6 +440,9 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
+    balances: "Запрос баланса по API-ключам…",
+    refreshbalances: "Запрос баланса по API-ключам…",
+    balance: "Запрос баланса по API-ключам…",
   };
   setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
@@ -506,6 +512,110 @@ function switchTab(name) {
   }
 }
 
+function formatRub(n) {
+  if (n == null || n === "" || Number.isNaN(Number(n))) return "—";
+  const num = Number(n);
+  try {
+    return (
+      new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(num) + " ₽"
+    );
+  } catch (_) {
+    return String(num) + " ₽";
+  }
+}
+
+function formatBalanceFetchedAt(ts) {
+  if (!ts) return "";
+  try {
+    return new Date(Number(ts) * 1000).toLocaleString("ru-RU", {
+      timeZone: "Europe/Moscow",
+      day: "2-digit",
+      month: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch (_) {
+    return "";
+  }
+}
+
+function balanceSummaryText(bal) {
+  if (!bal || !Array.isArray(bal.keys) || !bal.keys.length) return "баланс: —";
+  const ok = bal.keys.filter((k) => k && k.ok);
+  if (!ok.length) {
+    const fail = Number(bal.fail || 0);
+    return fail ? "баланс: ошибка" : "баланс: —";
+  }
+  if (ok.length === 1) return "баланс: " + formatRub(ok[0].balance);
+  return "баланс: " + formatRub(bal.total_balance) + " (" + ok.length + " ключа)";
+}
+
+function renderBalances(bal) {
+  balancesCache = bal || balancesCache;
+  const data = balancesCache;
+  const sumEl = byId("sumBalance");
+  const summaryEl = byId("balanceSummary");
+  const statusEl = byId("balanceStatus");
+  const tbody = byId("balanceTable");
+  const text = balanceSummaryText(data);
+  if (sumEl) sumEl.textContent = text;
+  if (summaryEl) {
+    if (data && Array.isArray(data.keys) && data.keys.length) {
+      const ref =
+        data.total_referral != null && Number(data.total_referral) > 0
+          ? " · реф.: " + formatRub(data.total_referral)
+          : "";
+      summaryEl.textContent = text + ref;
+    } else {
+      summaryEl.textContent = "баланс: —";
+    }
+  }
+  if (statusEl) {
+    if (!data || !data.fetched_at) {
+      statusEl.textContent = "Ещё не запрашивался — нажмите «Обновить баланс»";
+      statusEl.className = "ss-hint";
+    } else {
+      const when = formatBalanceFetchedAt(data.fetched_at);
+      const msg = data.message || "";
+      const fail = Number(data.fail || 0);
+      statusEl.textContent =
+        (when ? "Обновлено: " + when + " (МСК)" : "Кэш на роутере") +
+        (msg ? " · " + msg : "") +
+        (fail ? " · ошибок: " + fail : "");
+      statusEl.className = "ss-hint" + (fail && !data.ok ? " err" : fail ? "" : " ok");
+    }
+  }
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  if (!data || !Array.isArray(data.keys) || !data.keys.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = '<td colspan="5">Нет данных — сохраните API-ключ и обновите баланс</td>';
+    tbody.appendChild(tr);
+    return;
+  }
+  data.keys.forEach((row) => {
+    const tr = document.createElement("tr");
+    const label = (row && row.label) || "—";
+    const tail = row && row.key_tail ? "…" + row.key_tail : "—";
+    const balTxt = row && row.ok ? formatRub(row.balance) : "—";
+    const refTxt = row && row.ok ? formatRub(row.referral_balance) : "—";
+    const st = row && row.ok ? "ok" : row && row.error ? row.error : "ошибка";
+    tr.innerHTML =
+      "<td>" +
+      label +
+      "</td><td>" +
+      tail +
+      "</td><td>" +
+      balTxt +
+      "</td><td>" +
+      refTxt +
+      "</td><td>" +
+      st +
+      "</td>";
+    tbody.appendChild(tr);
+  });
+}
+
 function updateSectionSummaries() {
   const set = (id, text) => {
     const el = byId(id);
@@ -513,6 +623,7 @@ function updateSectionSummaries() {
   };
   const keysN = (byId("keysTable") && byId("keysTable").children.length) || 0;
   set("sumKeys", "ключей: " + keysN);
+  if (byId("sumBalance")) byId("sumBalance").textContent = balanceSummaryText(balancesCache);
   const cfgN = (configsCache || []).length;
   const enN = enabledSet().size;
   set("sumCatalog", "конфигов: " + cfgN + " · outbound: " + enN);
@@ -1622,9 +1733,37 @@ function onConfigChange() {
 let secondaryLoadPromise = null;
 let locationsLoaded = false;
 
+
+async function loadBalancesCache() {
+  try {
+    const bal = await fetchJson(EXT + "/balances.json", 4000);
+    if (bal && typeof bal === "object") renderBalances(bal);
+  } catch (_) {}
+}
+
+function balancesCacheIsStale() {
+  if (!balancesCache || !balancesCache.fetched_at) return true;
+  const age = Math.floor(Date.now() / 1000) - Number(balancesCache.fetched_at || 0);
+  return !Number.isFinite(age) || age > 120;
+}
+
+function requestBalancesRefresh(force) {
+  if (balanceRefreshPending) return;
+  balanceRefreshPending = true;
+  const statusEl = byId("balanceStatus");
+  if (statusEl) {
+    statusEl.textContent = "Запрос баланса…";
+    statusEl.className = "ss-hint";
+  }
+  triggerService("balances", { force: force ? "1" : "0" }, { wait: 20 });
+  setTimeout(() => {
+    balanceRefreshPending = false;
+  }, 25000);
+}
+
 /** Fast first paint: only files needed for status + outbound list. */
 async function refreshCritical() {
-  const [state, configs, keys, outbounds, version, protocols, response] = await Promise.all([
+  const [state, configs, keys, outbounds, version, protocols, response, balances] = await Promise.all([
     fetchJson(EXT + "/state.json", 5000).catch(() => null),
     fetchJson(EXT + "/configs.json", 5000).catch(() => []),
     fetchJson(EXT + "/api_keys.json", 4000).catch(() => []),
@@ -1632,6 +1771,7 @@ async function refreshCritical() {
     fetchJson(EXT + "/version.json", 4000).catch(() => null),
     fetchJson(EXT + "/protocols.json", 4000).catch(() => null),
     fetchJson(EXT + "/stealthsurf-response.json", 4000).catch(() => null),
+    fetchJson(EXT + "/balances.json", 4000).catch(() => null),
   ]);
   outboundsCache = outbounds || { enabled: [], default: "" };
   if (protocols && typeof protocols === "object") protocolsCache = protocols;
@@ -1647,6 +1787,8 @@ async function refreshCritical() {
   renderProtocolSelect();
   renderConfigs(cfgList);
   renderKeys(Array.isArray(keys) ? keys : []);
+  if (balances && typeof balances === "object") renderBalances(balances);
+  else renderBalances(balancesCache);
   updateSectionSummaries();
   return { state, configs: cfgList, response, version };
 }
@@ -1751,6 +1893,14 @@ async function refreshAll() {
         setSettingsStatus("Сохранено");
         if (/settings saved/i.test(response.message)) setMsg("Настройки сохранены", "ok");
       }
+      if (data && Array.isArray(data.keys) && (/balances|balance/i.test(response.message) || data.total_balance != null)) {
+        renderBalances(data);
+        balanceRefreshPending = false;
+        setMsg(response.status ? (data.message || "Баланс обновлён") : (response.message || "Ошибка баланса"), response.status ? "ok" : "err");
+      }
+      if (data && data.balances && typeof data.balances === "object") {
+        renderBalances(data.balances);
+      }
       if (/^restored$/i.test(response.message)) {
         setBackupStatus("Восстановлено из " + ((data && data.path) || "архива"), "ok");
         setTimeout(() => refreshAll(), 1200);
@@ -1785,6 +1935,9 @@ function bind() {
       label: byId("apiKeyLabel").value.trim(),
     })
   );
+  if (byId("btnRefreshBalance")) {
+    byId("btnRefreshBalance").addEventListener("click", () => requestBalancesRefresh(true));
+  }
   byId("btnSync").addEventListener("click", () => triggerService("sync", {}));
   byId("btnStart").addEventListener("click", () => {
     const info = xrayuiInfo(stateCache);
@@ -2097,6 +2250,12 @@ function bind() {
       if (modalId === "backupModal") {
         loadBackups();
         loadLogPreview();
+      }
+      if (modalId === "keysModal") {
+        loadBalancesCache().then(() => {
+          renderBalances(balancesCache);
+          if (balancesCacheIsStale()) requestBalancesRefresh(true);
+        });
       }
     });
   });

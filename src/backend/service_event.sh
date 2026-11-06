@@ -155,6 +155,7 @@ ss_service_event() {
     SS_API_KEYS=$(jq -r '.[].key' "$SS_CACHE_KEYS" 2>/dev/null | tr '\n' ' ')
     ss_save_conf
     if ss_api_verify_key >/dev/null; then
+      ss_api_fetch_balances 1 >/dev/null 2>&1 || true
       ss_json_response true "API key saved" "$(ss_jq_file_or "$SS_CACHE_PROFILE" '{}')"
     else
       ss_json_response false "API key saved locally but verify failed (check internet / key)" "$(ss_jq_file_or "$SS_CACHE_KEYS" '[]')"
@@ -166,6 +167,7 @@ ss_service_event() {
     key=$(printf '%s' "$payload" | jq -r '.api_key // empty')
     label=$(printf '%s' "$payload" | jq -r '.label // empty')
     if ss_api_add_key "$key" "$label"; then
+      ss_api_fetch_balances 1 >/dev/null 2>&1 || true
       ss_json_response true "key added" "$(cat "$SS_CACHE_KEYS")"
     else
       ss_json_response false "add key failed" null
@@ -176,17 +178,34 @@ ss_service_event() {
     local key
     key=$(printf '%s' "$payload" | jq -r '.api_key // empty')
     ss_api_keys_store_remove "$key"
+    ss_api_fetch_balances 1 >/dev/null 2>&1 || true
     ss_json_response true "key removed" "$(cat "$SS_CACHE_KEYS")"
+    ;;
+  balances | refreshbalances | balance)
+    # Pull account balance(s) for configured StealthSurf API keys (GET /profile)
+    local force
+    force=$(printf '%s' "$payload" | jq -r '.force // "1"')
+    [ -n "$force" ] || force="1"
+    if ss_api_fetch_balances "$force" >/dev/null; then
+      ss_json_response true "balances" "$(ss_jq_file_or "$SS_CACHE_BALANCES" '{}')"
+    else
+      # Still return cache so UI can show per-key errors
+      ss_json_response false "$(jq -r '.message // "balance refresh failed"' "$SS_CACHE_BALANCES" 2>/dev/null || echo "balance refresh failed")" \
+        "$(ss_jq_file_or "$SS_CACHE_BALANCES" '{}')"
+      return 1
+    fi
     ;;
   sync)
     # Pull from StealthSurf API and rebuild dataplane if enabled configs changed
     if ss_sync_from_provider >/dev/null; then
+      ss_api_fetch_balances 1 >/dev/null 2>&1 || true
       ss_json_response true "synced" "$(jq -nc \
         --slurpfile configs "$SS_CACHE_CONFIGS" \
         --slurpfile locations "$SS_CACHE_LOCATIONS" \
         --slurpfile subs "$SS_CACHE_SUBSCRIPTIONS" \
         --slurpfile state "$SS_STATE_FILE" \
-        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {})}')"
+        --slurpfile balances "$SS_CACHE_BALANCES" \
+        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {}), balances: ($balances[0] // {})}')"
     else
       ss_json_response false "sync failed" null
       return 1

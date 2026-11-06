@@ -883,9 +883,10 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th data-ss-hint="Это «пароль» от вашего аккаунта StealthSurf. Без ключа роутер не сможет скачать ваши серверы. Manage открывает окно, где ключ можно добавить или удалить.">API keys</th>
+                        <th data-ss-hint="Это «пароль» от вашего аккаунта StealthSurf. Без ключа роутер не сможет скачать ваши серверы. Manage открывает окно, где ключ можно добавить или удалить. Рядом показывается баланс счёта с api.stealthsurf.net (обновляется при открытии окна ключей или кнопкой «Обновить баланс»).">API keys</th>
                         <td>
                           <span class="ss-menu-summary" id="sumKeys">ключей: —</span>
+                          <span class="ss-meta-inline" id="sumBalance" style="margin-left:8px">баланс: —</span>
                           <span class="row-buttons">
                             <input id="btnManageKeys" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
@@ -998,7 +999,7 @@ function initial() {
                   <div id="keysModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="keysModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="keysModalTitle">API keys</div>
-                      <p class="ss-modal-summary">Добавление и проверка ключей StealthSurf. Несколько ключей собираются в один каталог при sync.</p>
+                      <p class="ss-modal-summary">Добавление и проверка ключей StealthSurf. Несколько ключей собираются в один каталог при sync. Баланс счёта подтягивается с api.stealthsurf.net по каждому ключу.</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-keys">
 <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
@@ -1014,6 +1015,20 @@ function initial() {
                               <input id="btnAddKey" class="button_gen button_gen_small" type="button" value="Добавить ещё ключ">
                             </span>
                             <div class="ss-hint">Можно хранить несколько ключей — sync соберёт конфиги со всех учёток в один каталог.</div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <th data-ss-hint="Баланс основного счёта и реферального баланса по каждому сохранённому API-ключу (StealthSurf GET /profile). Кэш на роутере ~2 минуты; кнопка обновляет принудительно.">Баланс счёта</th>
+                          <td>
+                            <div id="balanceSummary" class="ss-meta-inline">баланс: —</div>
+                            <div id="balanceStatus" class="ss-hint" style="margin-top:4px">Ещё не запрашивался</div>
+                            <span class="row-buttons" style="margin-top:6px;display:inline-block">
+                              <input id="btnRefreshBalance" class="button_gen button_gen_small" type="button" value="Обновить баланс">
+                            </span>
+                            <div class="ss-table-scroll" style="margin-top:8px"><table class="ss-data-table">
+                              <thead><tr><th>Метка</th><th>Ключ</th><th>Баланс</th><th>Реф.</th><th>Статус</th></tr></thead>
+                              <tbody id="balanceTable"></tbody>
+                            </table></div>
                           </td>
                         </tr>
                         <tr>
@@ -1034,7 +1049,8 @@ function initial() {
                       </div>
                     </div>
                   </div>
-                                    <div id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
+                                    <div
+                                    id="catalogModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="catalogModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="catalogModalTitle">Outbound settings</div>
                       <p class="ss-modal-summary" id="catalogModalSummary">Смена location / protocol и опции для выбранного конфига.</p>
