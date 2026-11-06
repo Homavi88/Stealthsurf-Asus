@@ -1,12 +1,32 @@
 #!/bin/sh
 
+ss_is_our_webui_page() {
+  # Detect StealthSurf page whether mounted as symlink or copied .asp
+  local page="$1"
+  local path="/www/user/$page"
+  local title="/www/user/${page%.asp}.title"
+  [ -e "$path" ] || [ -L "$path" ] || return 1
+  if [ -L "$path" ]; then
+    case "$(readlink "$path" 2>/dev/null)" in
+    *stealthsurf*) return 0 ;;
+    esac
+  fi
+  if [ -f "$title" ] && grep -q 'StealthSurf' "$title" 2>/dev/null; then
+    return 0
+  fi
+  if [ -f "$path" ] && grep -q 'ss_custom_settings_data\|StealthSurf UI' "$path" 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 ss_get_webui_page() {
   local page i
   ADDON_USER_PAGE="none"
   for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     page="user$i.asp"
     if [ -f "/www/user/$page" ] || [ -L "/www/user/$page" ]; then
-      if [ -L "/www/user/$page" ] && [ "$(readlink "/www/user/$page" 2>/dev/null)" = "$ADDON_JFFS_ADN_DIR/index.asp" ]; then
+      if ss_is_our_webui_page "$page"; then
         ADDON_USER_PAGE="$page"
         return 0
       fi
@@ -31,7 +51,13 @@ ss_mount_ui() {
 
   mkdir -p /www/user "$ADDON_WEB_DIR" "$ADDON_JFFS_ADN_DIR"
 
-  ln -sf "$ADDON_JFFS_ADN_DIR/index.asp" "/www/user/$ADDON_USER_PAGE"
+  # Copy (not only symlink) so Merlin httpd always serves a real .asp with ASP tags processed,
+  # and so we can bake the real userN.asp name into current_page (required by show_menu).
+  cp -f "$ADDON_JFFS_ADN_DIR/index.asp" "/www/user/$ADDON_USER_PAGE"
+  # Ensure show_menu() finds this page in menuTree (default placeholder is user1.asp)
+  if command -v sed >/dev/null 2>&1; then
+    sed -i "s/value=\"user1.asp\"/value=\"$ADDON_USER_PAGE\"/g" "/www/user/$ADDON_USER_PAGE" 2>/dev/null || true
+  fi
   echo "StealthSurf" >"/www/user/${ADDON_USER_PAGE%.asp}.title"
 
   if [ ! -f /tmp/menuTree.js ]; then
@@ -93,15 +119,17 @@ ss_mount_ui() {
 }
 
 ss_unmount_ui() {
+  local f base
   ss_get_webui_page
   if [ -n "$ADDON_USER_PAGE" ] && [ "$ADDON_USER_PAGE" != "none" ]; then
     rm -f "/www/user/$ADDON_USER_PAGE" "/www/user/${ADDON_USER_PAGE%.asp}.title"
   fi
   for f in /www/user/user*.asp; do
-    [ -L "$f" ] || continue
-    case "$(readlink "$f" 2>/dev/null)" in
-    *stealthsurf*) rm -f "$f" "${f%.asp}.title" ;;
-    esac
+    [ -e "$f" ] || [ -L "$f" ] || continue
+    base=$(basename "$f")
+    if ss_is_our_webui_page "$base"; then
+      rm -f "$f" "${f%.asp}.title"
+    fi
   done
 
   if [ -f /tmp/menuTree.js ]; then
