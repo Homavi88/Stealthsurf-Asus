@@ -167,6 +167,65 @@ function initial() {
     align-items: center;
     justify-content: space-between;
   }
+  .ss-modal {
+    display: none;
+    position: fixed;
+    z-index: 10050;
+    left: 0; top: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.55);
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .ss-modal.show { display: flex; }
+  .ss-modal-card {
+    width: min(560px, 96vw);
+    max-height: 86vh;
+    overflow: auto;
+    background: #4d595d;
+    border: 1px solid #fc0;
+    color: #fff;
+    padding: 14px 16px 12px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+  }
+  .ss-modal-head {
+    font-size: 16px;
+    font-weight: 700;
+    color: #fc0;
+    margin-bottom: 8px;
+  }
+  .ss-modal-summary {
+    color: #cfd8dc;
+    font-size: 13px;
+    line-height: 1.45;
+    margin: 0 0 10px;
+  }
+  .ss-modal-section { margin: 10px 0 6px; }
+  .ss-modal-section h4 {
+    margin: 0 0 4px;
+    font-size: 13px;
+    color: #fc0;
+  }
+  .ss-modal-section ul {
+    margin: 0;
+    padding-left: 18px;
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .ss-modal-section li { margin: 3px 0; }
+  .ss-modal-actions {
+    margin-top: 14px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .ss-modal-link {
+    color: #fc0;
+    font-size: 12px;
+    margin-left: auto;
+  }
   #conflictBanner {
     display: none;
     margin: 8px 0 12px;
@@ -258,7 +317,33 @@ function initial() {
                       (установлена <span id="bannerInstalled">—</span>)
                     </div>
                     <div class="ss-row-buttons">
+                      <input id="btnBannerChangelog" class="button_gen button_gen_small" type="button" value="Что нового">
                       <input id="btnBannerUpdate" class="button_gen button_gen_small" type="button" value="Установить обновление">
+                    </div>
+                  </div>
+
+                  <div id="updateModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+                    <div class="ss-modal-card">
+                      <div class="ss-modal-head" id="modalTitle">Доступно обновление <span id="modalLatest">—</span></div>
+                      <p class="ss-modal-summary" id="modalSummary">Загрузка описания с GitHub…</p>
+                      <div class="ss-modal-section" id="modalFeatBox" style="display:none">
+                        <h4>Новое</h4>
+                        <ul id="modalFeatures"></ul>
+                      </div>
+                      <div class="ss-modal-section" id="modalFixBox" style="display:none">
+                        <h4>Исправления</h4>
+                        <ul id="modalFixes"></ul>
+                      </div>
+                      <div class="ss-modal-section" id="modalOtherBox" style="display:none">
+                        <h4>Ещё изменения</h4>
+                        <ul id="modalOther"></ul>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnModalUpdate" class="button_gen button_gen_small" type="button" value="Установить с GitHub">
+                        <input id="btnModalLater" class="button_gen button_gen_small" type="button" value="Позже">
+                        <input id="btnModalClose" class="button_gen button_gen_small" type="button" value="Закрыть">
+                        <a id="modalGhLink" class="ss-modal-link" href="#" target="_blank" rel="noopener">Открыть релиз на GitHub</a>
+                      </div>
                     </div>
                   </div>
 
