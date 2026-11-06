@@ -95,8 +95,19 @@ fi
 grep -q 'triggerService("installversion"' "$APP" && ok "install still uses triggerService" || bad "install still uses triggerService"
 grep -q 'triggerService("update"' "$APP" && ok "update still uses triggerService" || bad "update still uses triggerService"
 
-# Passive boot path still avoids auto apply
-grep -q 'do NOT auto form-submit checkupdate' "$APP" && ok "no auto checkupdate submit on boot" || bad "no auto checkupdate submit on boot"
+# Boot auto-notifies via browser GitHub fetch — must NOT form-submit checkupdate
+if grep -n 'triggerService("checkupdate"' "$APP" >/dev/null 2>&1; then
+  bad "boot/path still form-submits checkupdate"
+else
+  ok "no form-submit checkupdate anywhere"
+fi
+grep -q 'shouldAutoShowUpdateModal' "$APP" && ok "auto update modal gate" || bad "auto update modal gate"
+grep -q 'snoozeUpdateNotice' "$APP" && ok "later = snooze" || bad "later = snooze"
+grep -q 'dismissUpdateNotice' "$APP" && ok "close = dismiss" || bad "close = dismiss"
+grep -q 'value="Обновить"' "$ASP" && ok "modal Update button RU" || bad "modal Update button RU"
+grep -q 'Обновить позднее' "$ASP" && ok "modal Later button RU" || bad "modal Later button RU"
+grep -q 'Закрыть уведомление' "$ASP" && ok "modal Dismiss button RU" || bad "modal Dismiss button RU"
+grep -q 'quiet: true, skipAutoModal: true' "$APP" && ok "boot quiet GitHub check" || bad "boot quiet GitHub check"
 
 rm -f "$TMP"
 

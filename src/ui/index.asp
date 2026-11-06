@@ -679,8 +679,8 @@ function initial() {
 
                   <div id="updateModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
                     <div class="ss-modal-card">
-                      <div class="ss-modal-head" id="modalTitle">Доступно обновление <span id="modalLatest">—</span></div>
-                      <p class="ss-modal-summary" id="modalSummary">Загрузка описания с GitHub…</p>
+                      <div class="ss-modal-head" id="modalTitle">Доступна новая версия <span id="modalLatest">—</span></div>
+                      <p class="ss-modal-summary" id="modalSummary">На GitHub вышла более новая версия аддона StealthSurf.</p>
                       <div class="ss-modal-section" id="modalFeatBox" style="display:none">
                         <h4>Новое</h4>
                         <ul id="modalFeatures"></ul>
@@ -694,9 +694,9 @@ function initial() {
                         <ul id="modalOther"></ul>
                       </div>
                       <div class="ss-modal-actions">
-                        <input id="btnModalUpdate" class="button_gen button_gen_small" type="button" value="Установить с GitHub">
-                        <input id="btnModalLater" class="button_gen button_gen_small" type="button" value="Позже">
-                        <input id="btnModalClose" class="button_gen button_gen_small" type="button" value="Закрыть">
+                        <input id="btnModalUpdate" class="button_gen button_gen_small" type="button" value="Обновить">
+                        <input id="btnModalLater" class="button_gen button_gen_small" type="button" value="Обновить позднее">
+                        <input id="btnModalClose" class="button_gen button_gen_small" type="button" value="Закрыть уведомление">
                         <a id="modalGhLink" class="ss-modal-link" href="#" target="_blank" rel="noopener">Открыть релиз на GitHub</a>
                       </div>
                     </div>

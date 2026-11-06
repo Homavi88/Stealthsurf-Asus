@@ -568,8 +568,46 @@ function fillModalList(ulId, boxId, items) {
   box.style.display = "block";
 }
 
-function changelogKey(info) {
-  return "ss_changelog_seen_" + String((info && (info.tag || info.latest)) || "");
+function updateNoticeTag(info) {
+  return String((info && (info.tag || info.latest)) || "").replace(/^v/i, "") || "";
+}
+
+function updateDismissKey(info) {
+  return "ss_update_dismiss_" + updateNoticeTag(info);
+}
+
+function updateLaterKey(info) {
+  return "ss_update_later_" + updateNoticeTag(info);
+}
+
+/** True if auto-popup should show for this release (respect Later / Close). */
+function shouldAutoShowUpdateModal(info) {
+  if (!info || !info.update_available) return false;
+  const tag = updateNoticeTag(info);
+  if (!tag) return false;
+  try {
+    if (localStorage.getItem(updateDismissKey(info)) === "1") return false;
+    if (sessionStorage.getItem(updateLaterKey(info)) === "1") return false;
+  } catch (_) {}
+  return true;
+}
+
+function snoozeUpdateNotice(info) {
+  // «Обновить позднее» — скрыть до следующего захода в WebUI (эта сессия браузера)
+  try {
+    sessionStorage.setItem(updateLaterKey(info || versionCache), "1");
+  } catch (_) {}
+  closeUpdateModal();
+  setMsg("Напомним об обновлении при следующем открытии страницы", "");
+}
+
+function dismissUpdateNotice(info) {
+  // «Закрыть уведомление» — не показывать снова для этой версии
+  try {
+    localStorage.setItem(updateDismissKey(info || versionCache), "1");
+  } catch (_) {}
+  closeUpdateModal();
+  setMsg("Уведомление об этой версии скрыто. Баннер и кнопка Update остаются доступны.", "");
 }
 
 function openUpdateModal(info, opts) {
@@ -586,7 +624,11 @@ function openUpdateModal(info, opts) {
     byId("modalSummary").textContent =
       cl.summary ||
       cl.headline ||
-      ("Сейчас установлена " + installed + ". На GitHub есть " + latest + ".");
+      ("Сейчас установлена версия " +
+        installed +
+        ". На GitHub доступна " +
+        latest +
+        ". Можно обновить сейчас, отложить напоминание или закрыть уведомление.");
   }
   fillModalList("modalFeatures", "modalFeatBox", cl.features);
   fillModalList("modalFixes", "modalFixBox", cl.fixes);
@@ -607,9 +649,10 @@ function openUpdateModal(info, opts) {
   }
 
   modal.classList.add("show");
-  if (!options.keepSeen) {
+  if (options.markAutoShown) {
+    // remember we already auto-opened once this session for this tag (extra guard)
     try {
-      sessionStorage.setItem(changelogKey(data), "1");
+      sessionStorage.setItem("ss_update_autoshown_" + updateNoticeTag(data), "1");
     } catch (_) {}
   }
 }
@@ -812,18 +855,24 @@ async function requestVersionsList(andOpen) {
 
 async function checkUpdateFromGithub(opts) {
   const options = opts || {};
-  setMsg("Проверка версии на GitHub…", "");
+  if (!options.quiet) setMsg("Проверка версии на GitHub…", "");
   const installed = installedVersionHint();
   try {
     const latestRel = await fetchGithubJson(SS_GH_LATEST_API);
     const info = buildVersionInfoFromGithubLatest(latestRel, installed);
+    // Skip auto-modal inside renderVersion when caller will decide (boot / forced open)
+    if (options.skipAutoModal) info._skipAutoModal = true;
     renderVersion(info);
     if (info.update_available) {
-      setMsg("Доступно обновление " + info.latest, "ok");
-      if (options.openModalIfUpdate) openUpdateModal(info, { keepSeen: true });
+      if (!options.quiet) setMsg("Доступно обновление " + info.latest, "ok");
+      // Manual check always shows modal; auto path uses shouldAutoShowUpdateModal
+      if (options.openModalIfUpdate) openUpdateModal(info, { markAutoShown: true });
+      else if (!options.skipAutoModal && shouldAutoShowUpdateModal(info)) {
+        openUpdateModal(info, { markAutoShown: true });
+      }
     } else {
-      setMsg("Установлена актуальная версия " + (info.installed || installed), "ok");
-      if (options.openModalAlways) openUpdateModal(info, { keepSeen: true });
+      if (!options.quiet) setMsg("Установлена актуальная версия " + (info.installed || installed), "ok");
+      if (options.openModalAlways) openUpdateModal(info);
     }
     return info;
   } catch (err) {
@@ -831,12 +880,15 @@ async function checkUpdateFromGithub(opts) {
     try {
       const cached = await fetchJson(EXT + "/version.json");
       if (cached) {
+        if (options.skipAutoModal) cached._skipAutoModal = true;
         renderVersion({ ...cached, error: cached.error || msg });
-        setMsg("GitHub из браузера недоступен — показан кэш version.json (" + msg + ")", "warn");
+        if (!options.quiet) {
+          setMsg("GitHub из браузера недоступен — показан кэш version.json (" + msg + ")", "warn");
+        }
         return cached;
       }
     } catch (_) {}
-    setMsg("Проверка версии не удалась: " + msg, "err");
+    if (!options.quiet) setMsg("Проверка версии не удалась: " + msg, "err");
     return null;
   }
 }
@@ -857,13 +909,13 @@ function installSelectedVersion() {
   triggerService("installversion", { tag: rel.tag, force: dir === "same" ? "1" : "0" });
 }
 
-function maybeAutoOpenChangelog(info) {
-  if (!info || !info.update_available) return;
-  if (!info.changelog) return;
+function maybeAutoOpenUpdateModal(info) {
+  if (info && info._skipAutoModal) return;
+  if (!shouldAutoShowUpdateModal(info)) return;
   try {
-    if (sessionStorage.getItem(changelogKey(info)) === "1") return;
+    if (sessionStorage.getItem("ss_update_autoshown_" + updateNoticeTag(info)) === "1") return;
   } catch (_) {}
-  openUpdateModal(info);
+  openUpdateModal(info, { markAutoShown: true });
 }
 
 function renderVersion(info) {
@@ -895,7 +947,8 @@ function renderVersion(info) {
     byId("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
     byId("bannerInstalled").textContent = installed;
     btnUpdate.style.display = "inline-block";
-    maybeAutoOpenChangelog(info);
+    // Banner always shows when update exists; modal only if not Later/Dismissed
+    maybeAutoOpenUpdateModal(info);
   } else {
     pill.style.display = "none";
     banner.classList.remove("show");
@@ -1658,18 +1711,24 @@ function bind() {
   if (byId("btnBannerChangelog")) {
     byId("btnBannerChangelog").addEventListener("click", () => openUpdateModal(versionCache, { keepSeen: true }));
   }
-  if (byId("btnModalClose")) byId("btnModalClose").addEventListener("click", () => closeUpdateModal());
-  if (byId("btnModalLater")) byId("btnModalLater").addEventListener("click", () => closeUpdateModal());
+  if (byId("btnModalClose")) {
+    byId("btnModalClose").addEventListener("click", () => dismissUpdateNotice(versionCache));
+  }
+  if (byId("btnModalLater")) {
+    byId("btnModalLater").addEventListener("click", () => snoozeUpdateNotice(versionCache));
+  }
   if (byId("btnModalUpdate")) {
     byId("btnModalUpdate").addEventListener("click", () => {
-      if (!confirm("Установить обновление " + (versionCache.latest || "") + " с GitHub?")) return;
+      const ver = versionCache.latest || versionCache.tag || "";
+      if (!confirm("Обновить StealthSurf до " + ver + " с GitHub?")) return;
       closeUpdateModal();
       triggerService("update", { force: "0" });
     });
   }
   if (byId("updateModal")) {
     byId("updateModal").addEventListener("click", (e) => {
-      if (e.target === byId("updateModal")) closeUpdateModal();
+      // Click outside = «позднее», чтобы случайно не скрыть навсегда
+      if (e.target === byId("updateModal")) snoozeUpdateNotice(versionCache);
     });
   }
   if (byId("btnCheckUpdate2")) {
@@ -2328,14 +2387,25 @@ loadBackups();
 setTimeout(loadLogPreview, 300);
 setTimeout(ensureMerlinChrome, 50);
 setTimeout(ensureMerlinChrome, 500);
-// Passive version display only — do NOT auto form-submit checkupdate on page open.
-// Auto submit previously hit Merlin start_apply on every visit; cron still runs
-// `stealthsurf check-update` every 12h. User can press «Проверить версию».
+// Auto-notify about a newer GitHub release (browser fetch — no Merlin apply/%).
+// Shows modal: Обновить / Обновить позднее / Закрыть уведомление.
 setTimeout(async () => {
   try {
-    const v = await fetchJson(EXT + "/version.json");
-    renderVersion(v);
+    // Live GitHub check in browser (no Merlin apply). Opens modal if newer + not Later/Dismissed.
+    let info = await checkUpdateFromGithub({ quiet: true, skipAutoModal: true });
+    if (!info) {
+      try {
+        info = await fetchJson(EXT + "/version.json");
+        if (info) {
+          info._skipAutoModal = true;
+          renderVersion(info);
+        }
+      } catch (_) {}
+    }
+    if (info && shouldAutoShowUpdateModal(info)) {
+      openUpdateModal(info, { markAutoShown: true });
+    }
   } catch (_) {
     /* offline / first install */
   }
-}, 800);
+}, 900);
