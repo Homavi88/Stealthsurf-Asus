@@ -2216,8 +2216,88 @@ function ensureMerlinChrome() {
   }
 }
 
+function initHelpHints() {
+  // Plain-language tips on [data-ss-hint] — XrayUI-style help marks for everyone
+  let tip = byId("ssHelpTip");
+  if (!tip) {
+    tip = document.createElement("div");
+    tip.id = "ssHelpTip";
+    tip.setAttribute("role", "tooltip");
+    document.body.appendChild(tip);
+  }
+  let hideTimer = null;
+  const placeTip = (anchor) => {
+    const r = anchor.getBoundingClientRect();
+    const pad = 8;
+    tip.classList.add("show");
+    let left = r.left;
+    let top = r.bottom + 8;
+    const tw = tip.offsetWidth || 280;
+    const th = tip.offsetHeight || 80;
+    if (left + tw > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - tw - pad);
+    if (top + th > window.innerHeight - pad) top = Math.max(pad, r.top - th - 8);
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  };
+  const showTip = (anchor, text) => {
+    clearTimeout(hideTimer);
+    tip.textContent = text;
+    placeTip(anchor);
+  };
+  const hideTip = (delay) => {
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => tip.classList.remove("show"), delay || 0);
+  };
+  document.querySelectorAll("[data-ss-hint]").forEach((el) => {
+    if (el.dataset.ssHelpBound) return;
+    el.dataset.ssHelpBound = "1";
+    const text = (el.getAttribute("data-ss-hint") || "").trim();
+    if (!text) return;
+    let mark = null;
+    for (let i = 0; i < el.children.length; i++) {
+      if (el.children[i].classList && el.children[i].classList.contains("ss-help")) {
+        mark = el.children[i];
+        break;
+      }
+    }
+    if (!mark) {
+      mark = document.createElement("span");
+      mark.className = "ss-help";
+      mark.setAttribute("tabindex", "0");
+      mark.setAttribute("role", "button");
+      mark.setAttribute("aria-label", "Подсказка");
+      mark.textContent = "?";
+      el.appendChild(mark);
+    }
+    const open = (ev) => {
+      if (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+      }
+      showTip(mark, text);
+    };
+    mark.addEventListener("mouseenter", open);
+    mark.addEventListener("focus", open);
+    mark.addEventListener("mouseleave", () => hideTip(120));
+    mark.addEventListener("blur", () => hideTip(120));
+    mark.addEventListener("click", open);
+  });
+  document.addEventListener("click", (ev) => {
+    if (ev.target && ev.target.closest && ev.target.closest(".ss-help")) return;
+    hideTip(0);
+  });
+  document.addEventListener(
+    "scroll",
+    () => {
+      if (tip.classList.contains("show")) tip.classList.remove("show");
+    },
+    true
+  );
+}
+
 ensureMerlinChrome();
 bind();
+initHelpHints();
 refreshAll();
 loadBackups();
 setTimeout(loadLogPreview, 300);

@@ -68,7 +68,19 @@ check "openConfigEditModal" "$JS" 'function openConfigEditModal'
 check "ss-proxy-row render" "$JS" 'ss-proxy-row'
 check "openSsModal helper" "$JS" 'function openSsModal'
 check "modal th shrink-wrap" "$ASP" 'ss-modal-card \.FormTable th'
+check "plain-language hints present" "$ASP" 'data-ss-hint='
+check "help tip host" "$ASP" 'id="ssHelpTip"'
+check "initHelpHints in app.js" "$JS" 'function initHelpHints'
 check_not "no catalog manage button" "$ASP" 'id="btnManageCatalog"'
+
+# Enough hints for Configuration + settings + modals
+hint_n=$(grep -o 'data-ss-hint=' "$ASP" | wc -l | tr -d ' ')
+if [ "$hint_n" -ge 30 ]; then
+  echo "OK  hint count ($hint_n)"
+else
+  echo "FAIL hint count too low ($hint_n)"
+  fail=1
+fi
 
 if [ "$fail" -ne 0 ]; then
   echo "UI layout tests FAILED"
