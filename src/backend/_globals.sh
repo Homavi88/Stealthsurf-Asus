@@ -8,7 +8,7 @@ unset LD_LIBRARY_PATH
 ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
-ADDON_VERSION="1.0.20"
+ADDON_VERSION="1.0.21"
 SS_STARTUP_DELAY="8"
 SS_BACKUP_KEEP="10"
 SS_AUTO_BACKUP="1"
@@ -104,7 +104,10 @@ GEODATA_BASE="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/do
 ADDON_REPO="Homavi88/Stealthsurf-Asus"
 ADDON_RELEASE_TGZ="https://github.com/${ADDON_REPO}/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz"
 ADDON_RELEASE_API="https://api.github.com/repos/${ADDON_REPO}/releases/latest"
+ADDON_RELEASES_API="https://api.github.com/repos/${ADDON_REPO}/releases"
+ADDON_RELEASE_ASSET="asuswrt-merlin-stealthsurf.tar.gz"
 SS_VERSION_FILE="$ADDON_SHARE_DIR/version.json"
+SS_VERSIONS_FILE="$ADDON_SHARE_DIR/versions.json"
 SS_SETTINGS_FILE="$ADDON_SHARE_DIR/settings.json"
 
 if [ -f "$SS_CONF_FILE" ]; then

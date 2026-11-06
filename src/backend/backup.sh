@@ -253,28 +253,40 @@ ss_restore() {
 ss_update_self() {
   # Atomic self-update: never delete the live addon until the new package is validated.
   # A failed download/extract previously wiped /jffs/addons/stealthsurf and left the UI gone.
+  # Optional $1 = pinned download URL (used for install-version / rollback — no latest fallback).
   local tmp="/tmp/asuswrt-merlin-stealthsurf.tar.gz"
   local url=""
+  local pinned="${1:-}"
   local new_ver=""
   local stage="/tmp/stealthsurf-update-stage.$$"
   local bak="/tmp/stealthsurf-update-bak.$$"
   local new_script=""
   ss_backup_auto "pre-update" || true
 
-  # Resolve download URL from last check (or refresh)
-  url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
-  if [ -z "$url" ] || [ "$url" = "null" ]; then
-    url="$ADDON_RELEASE_TGZ"
-  fi
-  # If version.json is stale, refresh so we pick the release asset URL
-  if [ ! -f "$SS_VERSION_FILE" ] || ! jq -e '.download_url' "$SS_VERSION_FILE" >/dev/null 2>&1; then
-    ss_version_check >/dev/null 2>&1 || true
+  if [ -n "$pinned" ] && [ "$pinned" != "null" ]; then
+    url="$pinned"
+  else
+    # Resolve download URL from last check (or refresh)
     url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
+    if [ -z "$url" ] || [ "$url" = "null" ]; then
+      url="$ADDON_RELEASE_TGZ"
+    fi
+    # If version.json is stale, refresh so we pick the release asset URL
+    if [ ! -f "$SS_VERSION_FILE" ] || ! jq -e '.download_url' "$SS_VERSION_FILE" >/dev/null 2>&1; then
+      ss_version_check >/dev/null 2>&1 || true
+      url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
+    fi
   fi
 
   ss_info "Downloading release from $url …"
   ss_activity "update.start" "from=$url"
   if ! curl -fsSL -L -o "$tmp" "$url"; then
+    if [ -n "$pinned" ]; then
+      # Pinned tag/rollback must not silently install latest
+      ss_error "Could not download pinned release tarball: $url"
+      ss_activity "update.fail" "pinned download failed"
+      return 1
+    fi
     # Fallback to canonical latest/download URL
     ss_warn "Primary download failed, trying $ADDON_RELEASE_TGZ"
     if ! curl -fsSL -L -o "$tmp" "$ADDON_RELEASE_TGZ"; then

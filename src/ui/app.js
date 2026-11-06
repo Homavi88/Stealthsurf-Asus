@@ -24,6 +24,8 @@ let policiesCache = { catchall: true, rules: [] };
 let protocolsCache = {};
 let clientsCache = [];
 let versionCache = { installed: "—", latest: null, update_available: false };
+let versionsCache = { installed: "—", releases: [] };
+let selectedRelease = null;
 
 function setMsg(text, kind) {
   const el = $("msg");
@@ -69,8 +71,8 @@ function triggerService(action, payload, opts) {
   // Update downloads a release — needs a longer httpd wait / refresh
   let wait = Number(options.wait || 0);
   if (!wait) {
-    if (action === "update" || action === "upgrade") wait = 40;
-    else if (action === "checkupdate") wait = 15;
+    if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
+    else if (action === "checkupdate" || action === "listversions" || action === "versions") wait = 20;
     else if (action === "installxray" || action === "sync") wait = 20;
     else if (action === "backup" || action === "restore") wait = 15;
     else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
@@ -106,6 +108,11 @@ function triggerService(action, payload, opts) {
 
   const labels = {
     checkupdate: "Проверка версии на GitHub…",
+    listversions: "Загрузка списка версий с GitHub…",
+    versions: "Загрузка списка версий с GitHub…",
+    installversion: "Установка выбранной версии с GitHub…",
+    switchversion: "Переключение версии с GitHub…",
+    rollback: "Откат на выбранную версию…",
     update: "Установка обновления с GitHub (скачивание)…",
     upgrade: "Установка обновления с GitHub…",
     start: "Запуск…",
@@ -305,6 +312,161 @@ function closeUpdateModal() {
   if (modal) modal.classList.remove("show");
 }
 
+function directionLabel(dir) {
+  if (dir === "newer") return { text: "новее (обновление)", cls: "newer" };
+  if (dir === "older") return { text: "старше (откат)", cls: "older" };
+  if (dir === "same") return { text: "текущая", cls: "same" };
+  return { text: "—", cls: "" };
+}
+
+function findReleaseByTag(tag) {
+  const list = (versionsCache && versionsCache.releases) || [];
+  return list.find((r) => r && (r.tag === tag || r.version === tag)) || null;
+}
+
+function renderSelectedRelease(rel) {
+  selectedRelease = rel || null;
+  const badge = $("versionDirection");
+  const summary = $("versionPickSummary");
+  const btn = $("btnVersionInstall");
+  const link = $("versionGhLink");
+  if (!rel) {
+    if (badge) {
+      badge.textContent = "—";
+      badge.className = "ss-version-badge";
+    }
+    if (summary) summary.textContent = "Выберите версию в списке.";
+    fillModalList("verFeatures", "verFeatBox", []);
+    fillModalList("verFixes", "verFixBox", []);
+    fillModalList("verOther", "verOtherBox", []);
+    if (btn) {
+      btn.disabled = true;
+      btn.value = "Установить выбранную";
+    }
+    if (link) link.style.display = "none";
+    return;
+  }
+  const cl = rel.changelog || {};
+  const dir = directionLabel(rel.direction);
+  if (badge) {
+    badge.textContent = dir.text;
+    badge.className = "ss-version-badge" + (dir.cls ? " " + dir.cls : "");
+  }
+  if (summary) {
+    summary.textContent =
+      cl.summary ||
+      cl.headline ||
+      ("Релиз " + (rel.tag || rel.version || "") + (rel.name ? " — " + rel.name : "") + ".");
+  }
+  fillModalList("verFeatures", "verFeatBox", cl.features);
+  fillModalList("verFixes", "verFixBox", cl.fixes);
+  fillModalList("verOther", "verOtherBox", cl.other);
+  if (btn) {
+    btn.disabled = false;
+    if (rel.direction === "older") btn.value = "Откатиться на " + (rel.tag || rel.version);
+    else if (rel.direction === "newer") btn.value = "Обновить до " + (rel.tag || rel.version);
+    else btn.value = "Переустановить " + (rel.tag || rel.version);
+  }
+  if (link) {
+    if (rel.release_url) {
+      link.href = rel.release_url;
+      link.style.display = "inline";
+    } else {
+      link.href = "#";
+      link.style.display = "none";
+    }
+  }
+}
+
+function fillVersionsSelect(data) {
+  const sel = $("versionSelect");
+  if (!sel) return;
+  const releases = (data && data.releases) || [];
+  const installed = (data && data.installed) || (versionCache && versionCache.installed) || "—";
+  if ($("versionsInstalled")) $("versionsInstalled").textContent = installed !== "—" ? "v" + installed : "—";
+  sel.innerHTML = "";
+  if (!releases.length) {
+    const o = document.createElement("option");
+    o.value = "";
+    o.textContent = data && data.error ? "Ошибка: " + data.error : "Нет релизов (нажмите «Обновить список»)";
+    sel.appendChild(o);
+    renderSelectedRelease(null);
+    return;
+  }
+  releases.forEach((r) => {
+    if (!r || !r.tag) return;
+    const o = document.createElement("option");
+    o.value = r.tag;
+    const mark =
+      r.direction === "same" ? " ★ текущая" : r.direction === "older" ? " ↓ откат" : " ↑ новее";
+    o.textContent = (r.tag || r.version) + mark + (r.changelog && r.changelog.headline ? " — " + r.changelog.headline : "");
+    sel.appendChild(o);
+  });
+  const prefer =
+    releases.find((r) => r.direction === "newer") ||
+    releases.find((r) => r.direction === "same") ||
+    releases[0];
+  if (prefer) {
+    sel.value = prefer.tag;
+    renderSelectedRelease(prefer);
+  }
+}
+
+function applyVersionsData(data) {
+  if (!data) return;
+  versionsCache = data;
+  fillVersionsSelect(data);
+  // Soft-refresh installed/latest labels without auto-opening the update modal
+  if (data.installed && versionCache) {
+    const top = (data.releases && data.releases[0]) || null;
+    versionCache = {
+      ...versionCache,
+      installed: data.installed,
+      latest: top && top.version ? top.version : versionCache.latest,
+      tag: top && top.tag ? top.tag : versionCache.tag,
+      update_available: top ? top.direction === "newer" : !!versionCache.update_available,
+      error: data.error || versionCache.error || null,
+    };
+    if ($("installedVer") && data.installed) $("installedVer").textContent = "v" + data.installed;
+    if ($("versionsInstalled")) $("versionsInstalled").textContent = "v" + data.installed;
+    if ($("latestVer") && versionCache.latest) $("latestVer").textContent = "GitHub: " + versionCache.latest;
+  }
+}
+
+function openVersionsModal(data) {
+  const modal = $("versionsModal");
+  if (!modal) return;
+  if (data) applyVersionsData(data);
+  else fillVersionsSelect(versionsCache);
+  modal.classList.add("show");
+}
+
+function closeVersionsModal() {
+  const modal = $("versionsModal");
+  if (modal) modal.classList.remove("show");
+}
+
+function requestVersionsList(andOpen) {
+  if (andOpen) openVersionsModal(versionsCache);
+  triggerService("listversions", {});
+}
+
+function installSelectedVersion() {
+  const rel = selectedRelease || findReleaseByTag($("versionSelect") && $("versionSelect").value);
+  if (!rel || !rel.tag) {
+    setMsg("Сначала выберите версию", "err");
+    return;
+  }
+  const dir = rel.direction || "same";
+  let msg = "Установить " + rel.tag + " с GitHub?";
+  if (dir === "older") msg = "Откатиться на " + rel.tag + "? Текущая версия будет заменена.";
+  else if (dir === "newer") msg = "Обновить до " + rel.tag + "?";
+  else msg = "Переустановить текущую " + rel.tag + "?";
+  if (!confirm(msg)) return;
+  closeVersionsModal();
+  triggerService("installversion", { tag: rel.tag, force: dir === "same" ? "1" : "0" });
+}
+
 function maybeAutoOpenChangelog(info) {
   if (!info || !info.update_available) return;
   if (!info.changelog) return;
@@ -330,6 +492,7 @@ function renderVersion(info) {
   }
   if ($("titleVer") && installed && installed !== "—") $("titleVer").textContent = "v" + installed;
   if ($("footerVer") && installed && installed !== "—") $("footerVer").textContent = "v" + installed;
+  if ($("versionsInstalled") && installed && installed !== "—") $("versionsInstalled").textContent = "v" + installed;
 
   const pill = $("updatePill");
   const banner = $("updateBanner");
@@ -350,16 +513,22 @@ function renderVersion(info) {
     closeUpdateModal();
   }
 
+  let t = "установлена " + installed;
+  if (latest) t += " · GitHub " + latest;
+  if (info.error) t += " · ошибка проверки: " + info.error;
+  else if (upd) t += " · доступно обновление";
+  else if (latest) t += " · актуально";
+  if (upd && info.changelog && info.changelog.headline) t += " · " + info.changelog.headline;
+  const cls = labelClass(upd ? "warn" : latest ? "on" : "muted");
   const detail = $("verDetail");
   if (detail) {
-    let t = "установлена " + installed;
-    if (latest) t += " · GitHub " + latest;
-    if (info.error) t += " · ошибка проверки: " + info.error;
-    else if (upd) t += " · доступно обновление";
-    else if (latest) t += " · актуально";
-    if (upd && info.changelog && info.changelog.headline) t += " · " + info.changelog.headline;
     detail.textContent = t;
-    detail.className = labelClass(upd ? "warn" : latest ? "on" : "muted");
+    detail.className = cls;
+  }
+  const detailAdv = $("verDetailAdvanced");
+  if (detailAdv) {
+    detailAdv.textContent = t;
+    detailAdv.className = cls;
   }
 }
 
@@ -851,7 +1020,7 @@ function onConfigChange() {
 
 async function refreshAll() {
   try {
-    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, protocols, response] =
+    const [state, configs, locations, subs, keys, outbounds, routing, policies, version, versions, protocols, response] =
       await Promise.all([
         fetchJson(EXT + "/state.json").catch(() => null),
         fetchJson(EXT + "/configs.json").catch(() => []),
@@ -862,6 +1031,7 @@ async function refreshAll() {
         fetchJson(EXT + "/routing.json").catch(() => ({ rules: [] })),
         fetchJson(EXT + "/policies.json").catch(() => ({ catchall: true, rules: [] })),
         fetchJson(EXT + "/version.json").catch(() => null),
+        fetchJson(EXT + "/versions.json").catch(() => null),
         fetchJson(EXT + "/protocols.json").catch(() => null),
         fetchJson(EXT + "/stealthsurf-response.json").catch(() => null),
       ]);
@@ -870,6 +1040,9 @@ async function refreshAll() {
     renderState(state);
     if (version) renderVersion(version);
     else if (state && state.version) renderVersion({ installed: state.version, latest: null });
+    if (versions && Array.isArray(versions.releases)) {
+      versionsCache = versions;
+    }
     const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
     renderProtocolSelect();
     renderConfigs(cfgList);
@@ -889,7 +1062,7 @@ async function refreshAll() {
       if (data && (data.installed || data.update_available != null)) {
         renderVersion(data);
       }
-      if (/version checked|updated|already up to date/i.test(response.message)) {
+      if (/version checked|updated|already up to date|already on version/i.test(response.message)) {
         if (data && data.installed) renderVersion(data);
         fetchJson(EXT + "/version.json")
           .then((v) => {
@@ -897,6 +1070,19 @@ async function refreshAll() {
             if (v && v.update_available) openUpdateModal(v, { keepSeen: true });
           })
           .catch(() => {});
+      }
+      if (/versions listed/i.test(response.message)) {
+        if (data && Array.isArray(data.releases)) {
+          applyVersionsData(data);
+          openVersionsModal(data);
+        } else {
+          fetchJson(EXT + "/versions.json")
+            .then((v) => {
+              applyVersionsData(v);
+              openVersionsModal(v);
+            })
+            .catch(() => {});
+        }
       }
       if (/^updated$/i.test(response.message)) {
         setTimeout(() => location.reload(), 1500);
@@ -1036,6 +1222,31 @@ function bind() {
     $("btnForceUpdate").addEventListener("click", () => {
       if (!confirm("Принудительно скачать и установить latest с GitHub (даже если версия та же)?")) return;
       triggerService("update", { force: "1" });
+    });
+  }
+  const openVersionsUi = () => {
+    openVersionsModal(versionsCache);
+    if (!versionsCache.releases || !versionsCache.releases.length) {
+      requestVersionsList(false);
+    }
+  };
+  if ($("btnVersions")) $("btnVersions").addEventListener("click", openVersionsUi);
+  if ($("btnVersions2")) $("btnVersions2").addEventListener("click", openVersionsUi);
+  if ($("btnVersionsClose")) $("btnVersionsClose").addEventListener("click", () => closeVersionsModal());
+  if ($("btnVersionsRefresh")) {
+    $("btnVersionsRefresh").addEventListener("click", () => requestVersionsList(false));
+  }
+  if ($("btnVersionInstall")) {
+    $("btnVersionInstall").addEventListener("click", () => installSelectedVersion());
+  }
+  if ($("versionSelect")) {
+    $("versionSelect").addEventListener("change", () => {
+      renderSelectedRelease(findReleaseByTag($("versionSelect").value));
+    });
+  }
+  if ($("versionsModal")) {
+    $("versionsModal").addEventListener("click", (e) => {
+      if (e.target === $("versionsModal")) closeVersionsModal();
     });
   }
 

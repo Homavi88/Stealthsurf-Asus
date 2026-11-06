@@ -107,6 +107,9 @@ ss_mount_ui() {
     ss_version_local >/dev/null 2>&1 || true
   fi
   ln -sf "$SS_VERSION_FILE" "$ADDON_WEB_DIR/version.json" 2>/dev/null || true
+  if [ -f "$SS_VERSIONS_FILE" ]; then
+    ln -sf "$SS_VERSIONS_FILE" "$ADDON_WEB_DIR/versions.json" 2>/dev/null || true
+  fi
   if type ss_settings_publish >/dev/null 2>&1; then
     ss_settings_publish 2>/dev/null || true
   fi
