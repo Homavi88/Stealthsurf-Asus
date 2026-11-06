@@ -328,6 +328,10 @@ extract_and_place() {
     rm -rf "$STAGE_DIR"
     die "В архиве нет app.js"
   }
+  [ -f "$STAGE_DIR/stealthsurf/routing-suggest.js" ] || {
+    rm -rf "$STAGE_DIR"
+    die "В архиве нет routing-suggest.js"
+  }
 
   rm -rf "$ADDON_DIR"
   mv "$STAGE_DIR/stealthsurf" "$ADDON_DIR"

@@ -2,7 +2,24 @@
 
 Каждый включённый StealthSurf config становится outbound с тегом `ss-<id>`.
 
-## Правила
+## WebUI: конструктор правил
+
+Вкладка **Routing**:
+
+1. Выберите тип (`domain` / `geosite` / `geoip` / …)
+2. Выберите outbound — VPN из API-каталога (`ss-<id>`) или `direct` / `block`
+3. Введите matcher — при вводе домена/категории появляются **подсказки** из списка
+4. **Добавить в список** → **Сохранить routing + Apply**
+
+Подсказки:
+
+- **domain** — популярные сайты (youtube.com, telegram.org, …)
+- **geosite** — категории Loyalsoldier (`youtube`, `category-ru`, `category-ads-all`, …)
+- **geoip** — `private`, `ru`, `cn`, `us`, …
+
+Если домен есть в списке — подсказка подсвечивается; своё значение тоже можно ввести.
+
+## Правила (JSON)
 
 ```json
 [
@@ -52,6 +69,7 @@ stealthsurf preset block-ads 205
 
 ```sh
 stealthsurf geodata
+# или кнопка «Обновить geoip/geosite» в WebUI
 ```
 
-Файлы: `/opt/sbin/geoip.dat`, `/opt/sbin/geosite.dat`.
+Файлы: `/opt/sbin/geoip.dat`, `/opt/sbin/geosite.dat` (репозиторий [Loyalsoldier/v2ray-rules-dat](https://github.com/Loyalsoldier/v2ray-rules-dat)).

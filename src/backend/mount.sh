@@ -79,6 +79,7 @@ ss_mount_ui() {
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
   ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
   ln -sf "$ADDON_JFFS_ADN_DIR/app.js" "$ADDON_WEB_DIR/app.js"
+  ln -sf "$ADDON_JFFS_ADN_DIR/routing-suggest.js" "$ADDON_WEB_DIR/routing-suggest.js" 2>/dev/null || true
   ln -sf "$SS_CACHE_CONFIGS" "$ADDON_WEB_DIR/configs.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/locations.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_SUBSCRIPTIONS" "$ADDON_WEB_DIR/subscriptions.json" 2>/dev/null || true
@@ -152,6 +153,9 @@ ss_doctor() {
   if [ ! -f "$ADDON_JFFS_ADN_DIR/index.asp" ] || [ ! -f "$ADDON_JFFS_ADN_DIR/app.js" ]; then
     ss_error "UI files missing under $ADDON_JFFS_ADN_DIR — run: $ADDON_SCRIPT update -f  (or reinstall)"
     ok=0
+  fi
+  if [ ! -f "$ADDON_JFFS_ADN_DIR/routing-suggest.js" ]; then
+    ss_warn "routing-suggest.js missing — domain/geosite autocomplete unavailable until update"
   fi
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || ss_warn "Cannot link /opt/bin/$ADDON_TAG (Entware up?)"
   ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || ss_warn "Cannot link /opt/bin/ssurf (Entware up?)"

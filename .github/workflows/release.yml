@@ -28,6 +28,7 @@ jobs:
           sh tools/test-version-cli.sh
           sh tools/test-sync-fingerprint.sh
           sh tools/test-xrayui-detect.sh
+          sh tools/test-routing-suggest.sh
 
       - name: Build and pack
         run: |
