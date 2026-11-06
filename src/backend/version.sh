@@ -310,13 +310,19 @@ ss_version_download_url() {
 ss_version_update_if_available() {
   # Install from GitHub only if newer (or force=1).
   # Exit 2 = already up to date (no download); 0 = installed; 1 = failure.
+  # Prefer a successful live check; if GitHub is blocked, still honor version.json
+  # when it already marks update_available (e.g. prior cron check).
   local force="${1:-0}"
   local info
   info=$(ss_version_check) || true
   if [ "$force" != "1" ] && ! printf '%s' "$info" | jq -e '.update_available == true' >/dev/null 2>&1; then
-    ss_info "No newer release to install (installed=$ADDON_VERSION)"
-    printf '%s\n' "$info"
-    return 2
+    if [ -f "$SS_VERSION_FILE" ] && jq -e '.update_available == true' "$SS_VERSION_FILE" >/dev/null 2>&1; then
+      info=$(cat "$SS_VERSION_FILE")
+    else
+      ss_info "No newer release to install (installed=$ADDON_VERSION)"
+      printf '%s\n' "$info"
+      return 2
+    fi
   fi
   ss_update_self
 }

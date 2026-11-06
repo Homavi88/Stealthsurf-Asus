@@ -241,13 +241,72 @@ function buildVersionInfoFromGithubLatest(latestRel, installed) {
   };
 }
 
+function normalizeVersionLabel(v) {
+  if (v == null || v === "" || v === "—") return "";
+  return String(v).replace(/^v/i, "");
+}
+
+/** Prefer version.json (versionCache.installed) over state.version for labels. */
+function displayInstalledVersion(fallback) {
+  const fromCache = normalizeVersionLabel(versionCache && versionCache.installed);
+  if (fromCache) return fromCache;
+  const fromFallback = normalizeVersionLabel(fallback);
+  if (fromFallback) return fromFallback;
+  const fromState = normalizeVersionLabel(stateCache && stateCache.version);
+  return fromState || "";
+}
+
 function installedVersionHint() {
   return (
-    (versionCache && versionCache.installed && versionCache.installed !== "—" && versionCache.installed) ||
-    (stateCache && stateCache.version) ||
-    (byId("installedVer") && byId("installedVer").textContent.replace(/^v/, "")) ||
+    displayInstalledVersion(null) ||
+    (byId("installedVer") && byId("installedVer").textContent.replace(/^v/i, "")) ||
     "—"
   );
+}
+
+/** Tag known from browser GitHub check / version.json — needed so router curl re-check can't no-op. */
+function updatePayloadTag(info) {
+  const data = info || versionCache || {};
+  let tag = data.tag || "";
+  if (!tag && data.latest) tag = String(data.latest);
+  tag = String(tag || "").trim();
+  if (!tag || tag === "—") return "";
+  if (!/^v/i.test(tag) && /^\d/.test(tag)) tag = "v" + tag;
+  return tag;
+}
+
+function clearUpdateNoticeKeys(info) {
+  try {
+    const tag = updateNoticeTag(info || versionCache);
+    if (!tag) return;
+    localStorage.removeItem("ss_update_dismiss_" + tag);
+    sessionStorage.removeItem("ss_update_later_" + tag);
+    sessionStorage.removeItem("ss_update_autoshown_" + tag);
+  } catch (_) {}
+}
+
+function hardReloadUi() {
+  try {
+    const url = new URL(location.href);
+    url.searchParams.set("_ssv", String(Date.now()));
+    location.replace(url.toString());
+  } catch (_) {
+    location.reload();
+  }
+}
+
+/** WebUI Update: always pass known GitHub tag so backend uses install_tag (not curl re-check no-op). */
+function triggerWebUiUpdate(opts) {
+  const options = opts || {};
+  const force = options.force ? "1" : "0";
+  const info = options.info || versionCache;
+  const tag = updatePayloadTag(info);
+  const payload = { force: force };
+  if (tag) {
+    payload.tag = tag;
+    if (info && info.latest) payload.version = String(info.latest).replace(/^v/i, "");
+  }
+  triggerService("update", payload);
 }
 
 function setVersionsModalStatus(kind, text) {
@@ -562,10 +621,12 @@ function renderState(state) {
   byId("defaultPill").textContent = "default: " + (state.default_outbound || "—");
   if (state.mode && byId("modeSelect")) byId("modeSelect").value = state.mode;
   if (state.dns_mode && byId("dnsModeSelect")) byId("dnsModeSelect").value = state.dns_mode;
-  if (state.version) {
-    if (byId("installedVer")) byId("installedVer").textContent = "v" + state.version;
-    if (byId("titleVer")) byId("titleVer").textContent = "v" + state.version;
-    if (byId("footerVer")) byId("footerVer").textContent = "v" + state.version;
+  // Prefer version.json (versionCache) — do not clobber a fresher installed label with state.version
+  const verLabel = displayInstalledVersion(state.version);
+  if (verLabel) {
+    if (byId("installedVer")) byId("installedVer").textContent = "v" + verLabel;
+    if (byId("titleVer")) byId("titleVer").textContent = "v" + verLabel;
+    if (byId("footerVer")) byId("footerVer").textContent = "v" + verLabel;
   }
   renderConflict(state);
 }
@@ -1574,13 +1635,14 @@ async function refreshCritical() {
   ]);
   outboundsCache = outbounds || { enabled: [], default: "" };
   if (protocols && typeof protocols === "object") protocolsCache = protocols;
-  renderState(state);
+  // version.json first so renderState cannot overwrite labels with stale state.version
   if (version) {
     version._skipAutoModal = true; // boot path owns the update modal
     renderVersion(version);
   } else if (state && state.version) {
     renderVersion({ installed: state.version, latest: null, _skipAutoModal: true });
   }
+  renderState(state);
   const cfgList = Array.isArray(configs) ? configs : configs?.data || [];
   renderProtocolSelect();
   renderConfigs(cfgList);
@@ -1634,7 +1696,7 @@ async function refreshAll() {
       }
       if (/version checked|updated|already up to date|already on version/i.test(response.message)) {
         if (data && data.installed) renderVersion(data);
-        fetchJson(EXT + "/version.json")
+        fetchJson(EXT + "/version.json?_=" + Date.now())
           .then((v) => {
             renderVersion(v);
             if (v && v.update_available) openUpdateModal(v, { keepSeen: true });
@@ -1655,7 +1717,9 @@ async function refreshAll() {
         }
       }
       if (/^updated$/i.test(response.message)) {
-        setTimeout(() => location.reload(), 1500);
+        clearUpdateNoticeKeys(data || versionCache);
+        if (data && data.installed) renderVersion(data);
+        setTimeout(() => hardReloadUi(), 1500);
       }
       // clients → array
       if (Array.isArray(data) && /clients/i.test(response.message)) {
@@ -1762,8 +1826,8 @@ function bind() {
   }
   if (byId("btnBannerUpdate")) {
     byId("btnBannerUpdate").addEventListener("click", () => {
-      if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
-      triggerService("update", { force: "0" });
+      if (!confirm("Установить обновление " + (versionCache.latest || versionCache.tag || "") + "?")) return;
+      triggerWebUiUpdate({ force: false });
     });
   }
   if (byId("btnBannerChangelog")) {
@@ -1780,7 +1844,7 @@ function bind() {
       const ver = versionCache.latest || versionCache.tag || "";
       if (!confirm("Обновить StealthSurf до " + ver + " с GitHub?")) return;
       closeUpdateModal();
-      triggerService("update", { force: "0" });
+      triggerWebUiUpdate({ force: false });
     });
   }
   if (byId("updateModal")) {
@@ -1795,7 +1859,7 @@ function bind() {
   if (byId("btnForceUpdate")) {
     byId("btnForceUpdate").addEventListener("click", () => {
       if (!confirm("Принудительно скачать и установить latest с GitHub (даже если версия та же)?")) return;
-      triggerService("update", { force: "1" });
+      triggerWebUiUpdate({ force: true });
     });
   }
   const openVersionsUi = () => {

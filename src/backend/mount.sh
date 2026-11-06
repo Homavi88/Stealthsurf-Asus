@@ -75,8 +75,10 @@ ss_mount_ui() {
   # and so we can bake the real userN.asp name into current_page (required by show_menu).
   cp -f "$ADDON_JFFS_ADN_DIR/index.asp" "/www/user/$ADDON_USER_PAGE"
   # Ensure show_menu() finds this page in menuTree (default placeholder is user1.asp)
+  # Also bake ADDON_VERSION into script ?v= so browsers pick up new app.js after update.
   if command -v sed >/dev/null 2>&1; then
     sed -i "s/value=\"user1.asp\"/value=\"$ADDON_USER_PAGE\"/g" "/www/user/$ADDON_USER_PAGE" 2>/dev/null || true
+    sed -i "s/__SS_VERSION__/${ADDON_VERSION}/g" "/www/user/$ADDON_USER_PAGE" 2>/dev/null || true
   fi
   echo "StealthSurf" >"/www/user/${ADDON_USER_PAGE%.asp}.title"
 

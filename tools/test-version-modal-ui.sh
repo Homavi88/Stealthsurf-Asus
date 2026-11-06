@@ -94,6 +94,10 @@ fi
 # Install/update still go through triggerService (mutating ops OK with apply)
 grep -q 'triggerService("installversion"' "$APP" && ok "install still uses triggerService" || bad "install still uses triggerService"
 grep -q 'triggerService("update"' "$APP" && ok "update still uses triggerService" || bad "update still uses triggerService"
+grep -q 'triggerWebUiUpdate' "$APP" && ok "Update buttons pass tag via triggerWebUiUpdate" || bad "Update buttons pass tag via triggerWebUiUpdate"
+grep -q 'displayInstalledVersion' "$APP" && ok "prefer version.json installed label" || bad "prefer version.json installed label"
+grep -q 'hardReloadUi' "$APP" && ok "hard reload after updated" || bad "hard reload after updated"
+grep -q 'app.js?v=__SS_VERSION__' "$ASP" && ok "ASP script cache-bust placeholder" || bad "ASP script cache-bust placeholder"
 
 # Boot auto-notifies via browser GitHub fetch — must NOT form-submit checkupdate
 if grep -n 'triggerService("checkupdate"' "$APP" >/dev/null 2>&1; then

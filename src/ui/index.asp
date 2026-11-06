@@ -1422,7 +1422,7 @@ function initial() {
   // Paint TopBanner / left menu while jQuery `$` is still intact (app.js must not shadow it).
   try { initial(); } catch (e) {}
 </script>
-<script type="text/javascript" src="/ext/stealthsurf/routing-suggest.js"></script>
-<script type="text/javascript" src="/ext/stealthsurf/app.js"></script>
+<script type="text/javascript" src="/ext/stealthsurf/routing-suggest.js?v=__SS_VERSION__"></script>
+<script type="text/javascript" src="/ext/stealthsurf/app.js?v=__SS_VERSION__"></script>
 </body>
 </html>
