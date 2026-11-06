@@ -447,11 +447,145 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
+    applypending: "Применение настроек…",
+    batch: "Применение настроек…",
   };
   setMsg(labels[action] || "Выполняется: " + action + "…", "");
   if (typeof showLoading === "function") showLoading();
   form.submit();
   setTimeout(() => refreshAll(), Math.max(3000, wait * 1000 - 1000));
+}
+
+// ---------------------------------------------------------------------------
+// Deferred Apply — queue config edits client-side; Merlin wait only on «Применить».
+// Operational actions (start/stop/sync/update/backup/diag/…) stay immediate.
+// ---------------------------------------------------------------------------
+const SS_PENDING_STORAGE_KEY = "ss_pending_ops_v1";
+const SS_PENDING_CONFIG_ACTIONS = {
+  setkey: 1,
+  addkey: 1,
+  removekey: 1,
+  setmode: 1,
+  setdnsmode: 1,
+  setrouting: 1,
+  preset: 1,
+  setpolicies: 1,
+  setdefault: 1,
+  setoutbounds: 1,
+  enableoutbound: 1,
+  disableoutbound: 1,
+  updatesettings: 1,
+  apply: 1,
+  setsettings: 1,
+};
+
+let pendingOps = {};
+
+function escapePendingHtml(text) {
+  return String(text || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function loadPendingFromStorage() {
+  try {
+    const raw = sessionStorage.getItem(SS_PENDING_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) pendingOps = parsed;
+  } catch (_) {
+    pendingOps = {};
+  }
+}
+
+function persistPending() {
+  try {
+    sessionStorage.setItem(SS_PENDING_STORAGE_KEY, JSON.stringify(pendingOps));
+  } catch (_) {}
+}
+
+function getPendingList() {
+  return Object.keys(pendingOps)
+    .map((k) => pendingOps[k])
+    .filter((o) => o && o.action)
+    .sort((a, b) => (a.at || 0) - (b.at || 0));
+}
+
+function renderPendingPanel() {
+  const btn = byId("btnApplyAll");
+  const list = byId("pendingChangesList");
+  const ops = getPendingList();
+  if (btn) {
+    btn.disabled = ops.length === 0;
+    btn.value = "Применить";
+    btn.title = ops.length
+      ? "Применить " + ops.length + " изменений"
+      : "Нет изменений для применения";
+  }
+  if (!list) return;
+  if (!ops.length) {
+    list.className = "ss-pending-list empty";
+    list.innerHTML = '<div class="ss-pending-empty">Нет изменений</div>';
+    return;
+  }
+  list.className = "ss-pending-list";
+  list.innerHTML =
+    "<ul>" +
+    ops.map((o) => "<li>" + escapePendingHtml(o.label || o.action) + "</li>").join("") +
+    "</ul>";
+}
+
+function queuePending(slot, action, payload, label) {
+  if (!slot || !action) return;
+  if (!SS_PENDING_CONFIG_ACTIONS[action]) {
+    // Safety: unknown slots should not silently no-op Merlin
+    triggerService(action, payload || {});
+    return;
+  }
+  pendingOps[slot] = {
+    action: String(action),
+    payload: payload || {},
+    label: String(label || action),
+    at: Date.now(),
+  };
+  persistPending();
+  renderPendingPanel();
+  setMsg("В очереди: " + (label || action) + ". Нажмите «Применить» внизу.", "ok");
+}
+
+function clearPending(opts) {
+  pendingOps = {};
+  persistPending();
+  if (!(opts && opts.skipRender)) renderPendingPanel();
+}
+
+function applyPendingChanges() {
+  const ops = getPendingList();
+  if (!ops.length) {
+    setMsg("Нет изменений для применения", "");
+    renderPendingPanel();
+    return;
+  }
+  // Clear before Merlin submit so a reload does not re-queue the same ops.
+  const snapshot = ops.map((o) => ({
+    action: o.action,
+    payload: o.payload || {},
+    label: o.label,
+  }));
+  clearPending({ skipRender: true });
+  if (snapshot.length === 1) {
+    triggerService(snapshot[0].action, snapshot[0].payload, { wait: 20 });
+    return;
+  }
+  triggerService(
+    "applypending",
+    {
+      ops: snapshot.map((o) => ({ action: o.action, payload: o.payload })),
+    },
+    { wait: 30 }
+  );
 }
 
 const SS_SECTION_MODALS = {
@@ -1487,9 +1621,24 @@ function renderConfigs(configs) {
         tog.className = btnClass(enabled ? "secondary" : "");
         tog.value = enabled ? "x" : "+";
         tog.title = enabled ? "Выключить outbound" : "Включить outbound";
-        tog.addEventListener("click", () =>
-          triggerService(enabled ? "disableoutbound" : "enableoutbound", { config_id: Number(c.id) })
-        );
+        tog.addEventListener("click", () => {
+          const id = Number(c.id);
+          const nextEnable = !enabled;
+          let enabledIds = (outboundsCache.enabled || []).map(Number).filter((n) => Number.isFinite(n));
+          if (nextEnable) {
+            if (enabledIds.indexOf(id) < 0) enabledIds.push(id);
+          } else {
+            enabledIds = enabledIds.filter((n) => n !== id);
+          }
+          outboundsCache.enabled = enabledIds;
+          queuePending(
+            "outbound:" + id,
+            nextEnable ? "enableoutbound" : "disableoutbound",
+            { config_id: id },
+            (nextEnable ? "Включить outbound #" : "Выключить outbound #") + id
+          );
+          renderConfigs(configsCache);
+        });
         actions.appendChild(edit);
         actions.appendChild(tog);
       } else {
@@ -1570,7 +1719,16 @@ function renderKeys(keys) {
     btn.type = "button";
     btn.className = btnClass("danger");
     btn.value = "Удалить";
-    btn.addEventListener("click", () => triggerService("removekey", { api_key: k.key }));
+    btn.addEventListener("click", () => {
+      const key = k.key;
+      const tail = String(key || "").slice(-8);
+      queuePending(
+        "removekey:" + tail,
+        "removekey",
+        { api_key: key },
+        "Удалить API-ключ …" + tail
+      );
+    });
     tr.lastChild.appendChild(btn);
     tbody.appendChild(tr);
   });
@@ -1634,7 +1792,7 @@ function addRoutingRuleFromForm() {
   if (byId("ruleName")) byId("ruleName").value = "";
   hideRuleSuggest();
   renderRouting(routingCache);
-  setMsg("Правило добавлено в список. Нажмите «Сохранить routing + Apply».", "ok");
+  setMsg("Правило добавлено в список. Нажмите «Сохранить routing», затем «Применить» внизу.", "ok");
 }
 
 function renderPolicies(policies) {
@@ -2088,15 +2246,28 @@ function bind() {
   byId("configSelect").addEventListener("change", onConfigChange);
   byId("catalogFilter").addEventListener("input", () => renderConfigs(configsCache));
 
-  byId("btnSaveKey").addEventListener("click", () =>
-    triggerService("setkey", { api_key: byId("apiKey").value.trim() })
-  );
-  byId("btnAddKey").addEventListener("click", () =>
-    triggerService("addkey", {
-      api_key: byId("apiKey").value.trim(),
-      label: byId("apiKeyLabel").value.trim(),
-    })
-  );
+  byId("btnSaveKey").addEventListener("click", () => {
+    const api_key = byId("apiKey").value.trim();
+    if (!api_key) {
+      setMsg("Введите API-ключ", "err");
+      return;
+    }
+    queuePending("setkey", "setkey", { api_key: api_key }, "Сохранить API-ключ …" + api_key.slice(-8));
+  });
+  byId("btnAddKey").addEventListener("click", () => {
+    const api_key = byId("apiKey").value.trim();
+    const label = byId("apiKeyLabel").value.trim();
+    if (!api_key) {
+      setMsg("Введите API-ключ", "err");
+      return;
+    }
+    queuePending(
+      "addkey:" + api_key.slice(-8),
+      "addkey",
+      { api_key: api_key, label: label },
+      "Добавить API-ключ" + (label ? " («" + label + "»)" : "") + " …" + api_key.slice(-8)
+    );
+  });
   if (byId("btnRefreshBalance")) {
     byId("btnRefreshBalance").addEventListener("click", () => requestBalancesRefresh(true));
   }
@@ -2127,8 +2298,8 @@ function bind() {
   });
   if (byId("btnApplyAll")) {
     byId("btnApplyAll").addEventListener("click", () => {
-      // Like XrayUI Apply — rebuild dataplane from current settings
-      triggerService("rebuild", {}, { wait: 20 });
+      // Deferred Apply: one Merlin submit for all queued config edits
+      applyPendingChanges();
     });
   }
   if (byId("btnVersionFooter")) {
@@ -2202,40 +2373,66 @@ function bind() {
     });
   }
 
-  byId("btnApplySole").addEventListener("click", () =>
-    triggerService("apply", { config_id: Number(byId("configSelect").value), sole: "1" })
-  );
-  byId("btnUpdateSettings").addEventListener("click", () =>
-    triggerService("updatesettings", {
-      config_id: Number(byId("configSelect").value),
-      settings: {
-        location_id: Number(byId("locationSelect").value),
-        protocol: byId("protocolSelect").value,
-        use_xhttp: !!byId("optUseXhttp").checked,
-        use_grpc: !!byId("optUseGrpc").checked,
-        use_warp: !!byId("optUseWarp").checked,
-        use_salamander: !!byId("optUseSalamander").checked,
-        disable_reality: !!byId("optDisableReality").checked,
+  byId("btnApplySole").addEventListener("click", () => {
+    const config_id = Number(byId("configSelect").value);
+    if (!Number.isFinite(config_id) || !config_id) {
+      setMsg("Выберите конфиг", "err");
+      return;
+    }
+    queuePending(
+      "apply",
+      "apply",
+      { config_id: config_id, sole: "1" },
+      "Apply как единственный outbound #" + config_id
+    );
+  });
+  byId("btnUpdateSettings").addEventListener("click", () => {
+    const config_id = Number(byId("configSelect").value);
+    if (!Number.isFinite(config_id) || !config_id) {
+      setMsg("Выберите конфиг", "err");
+      return;
+    }
+    const settings = {
+      location_id: Number(byId("locationSelect").value),
+      protocol: byId("protocolSelect").value,
+      use_xhttp: !!byId("optUseXhttp").checked,
+      use_grpc: !!byId("optUseGrpc").checked,
+      use_warp: !!byId("optUseWarp").checked,
+      use_salamander: !!byId("optUseSalamander").checked,
+      disable_reality: !!byId("optDisableReality").checked,
+    };
+    queuePending(
+      "updatesettings:" + config_id,
+      "updatesettings",
+      { config_id: config_id, settings: settings },
+      "PATCH настроек конфига #" + config_id + " (" + settings.protocol + ")"
+    );
+  });
+  byId("btnSetDefault").addEventListener("click", () => {
+    const outbound = byId("defaultOutbound").value;
+    outboundsCache.default = outbound;
+    queuePending("setdefault", "setdefault", { outbound: outbound }, "Default outbound → " + outbound);
+  });
+  byId("btnRebuild").addEventListener("click", () => {
+    // Explicit rebuild from current outbound selection — immediate (operational)
+    triggerService(
+      "setoutbounds",
+      {
+        enabled: outboundsCache.enabled || [],
+        default: outboundsCache.default || byId("defaultOutbound").value,
       },
-    })
-  );
-  byId("btnSetDefault").addEventListener("click", () =>
-    triggerService("setdefault", { outbound: byId("defaultOutbound").value })
-  );
-  byId("btnRebuild").addEventListener("click", () =>
-    triggerService("setoutbounds", {
-      enabled: outboundsCache.enabled || [],
-      default: outboundsCache.default || byId("defaultOutbound").value,
-    })
-  );
+      { wait: 20 }
+    );
+  });
 
-  byId("btnPreset").addEventListener("click", () =>
-    triggerService("preset", {
-      preset: byId("presetSelect").value,
-      default_id: Number(byId("presetDefault").value),
-      alt_id: Number(byId("presetAlt").value) || undefined,
-    })
-  );
+  byId("btnPreset").addEventListener("click", () => {
+    const preset = byId("presetSelect").value;
+    const default_id = Number(byId("presetDefault").value);
+    const altRaw = Number(byId("presetAlt").value);
+    const payload = { preset: preset, default_id: default_id };
+    if (Number.isFinite(altRaw) && altRaw) payload.alt_id = altRaw;
+    queuePending("preset", "preset", payload, "Пресет routing → " + preset);
+  });
   if (byId("btnAddRule")) {
     byId("btnAddRule").addEventListener("click", () => addRoutingRuleFromForm());
   }
@@ -2315,10 +2512,15 @@ function bind() {
       setMsg("Правила должны быть массивом JSON", "err");
       return;
     }
-    triggerService("setrouting", {
-      rules,
-      default_outbound: byId("defaultOutbound").value,
-    });
+    queuePending(
+      "routing",
+      "setrouting",
+      {
+        rules: rules,
+        default_outbound: byId("defaultOutbound").value,
+      },
+      "Routing: " + rules.length + " правил, default " + (byId("defaultOutbound").value || "—")
+    );
   });
   byId("btnGeodata").addEventListener("click", () => triggerService("geodata", {}));
 
@@ -2336,18 +2538,38 @@ function bind() {
       proto: byId("policyProto").value,
     });
     renderPolicies(policiesCache);
+    setMsg("Политика добавлена в список. Нажмите «Сохранить политики», затем «Применить».", "ok");
   });
   byId("btnSavePolicies").addEventListener("click", () => {
     policiesCache.catchall = byId("policyCatchall").checked;
-    triggerService("setpolicies", policiesCache);
+    queuePending(
+      "policies",
+      "setpolicies",
+      policiesCache,
+      "Политики устройств: " + ((policiesCache.rules && policiesCache.rules.length) || 0) + " правил"
+    );
   });
 
-  byId("btnSetMode").addEventListener("click", () =>
-    triggerService("setmode", { mode: byId("modeSelect").value })
-  );
-  byId("btnSetDns").addEventListener("click", () =>
-    triggerService("setdnsmode", { dns_mode: byId("dnsModeSelect").value })
-  );
+  if (byId("modeSelect")) {
+    byId("modeSelect").addEventListener("change", () => {
+      const mode = byId("modeSelect").value;
+      queuePending("mode", "setmode", { mode: mode }, "Режим dataplane → " + mode);
+    });
+  }
+  if (byId("dnsModeSelect")) {
+    byId("dnsModeSelect").addEventListener("change", () => {
+      const dns_mode = byId("dnsModeSelect").value;
+      queuePending("dns", "setdnsmode", { dns_mode: dns_mode }, "DNS mode → " + dns_mode);
+    });
+  }
+  byId("btnSetMode").addEventListener("click", () => {
+    const mode = byId("modeSelect").value;
+    queuePending("mode", "setmode", { mode: mode }, "Режим dataplane → " + mode);
+  });
+  byId("btnSetDns").addEventListener("click", () => {
+    const dns_mode = byId("dnsModeSelect").value;
+    queuePending("dns", "setdnsmode", { dns_mode: dns_mode }, "DNS mode → " + dns_mode);
+  });
   byId("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
   byId("btnBackup").addEventListener("click", () => {
     setBackupStatus("Создаю backup…", "");
@@ -2576,8 +2798,9 @@ function saveSettingsFromModal() {
     setMsg("Неверный адрес geodata", "err");
     return;
   }
-  setSettingsStatus("Сохраняю…");
-  triggerService("setsettings", payload, { wait: 12 });
+  queuePending("settings", "setsettings", payload, "Настройки аддона (автозапуск / watchdog / backup / geodata)");
+  setSettingsStatus("В очереди — нажмите «Применить» внизу");
+  closeSettingsModal();
 }
 
 function setBackupStatus(text, cls) {
@@ -2900,6 +3123,8 @@ function initHelpHints() {
 
 ensureMerlinChrome();
 bind();
+loadPendingFromStorage();
+renderPendingPanel();
 initHelpHints();
 // Critical JSON first (status + outbounds), then deferred secondary + optional GitHub.
 refreshCritical()

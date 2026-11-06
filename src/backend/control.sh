@@ -174,6 +174,12 @@ ss_soft_restart_inner() {
 ss_rebuild_and_restart() {
   # Rebuild once, then soft-restart Xray (do not call ss_restart — it rebuilds again
   # and would re-start Hysteria/AWG a second time during apply/enable).
+  # applypending sets SS_DEFER_REBUILD=1 so multiple config ops share one final rebuild.
+  if [ "${SS_DEFER_REBUILD:-0}" = "1" ]; then
+    SS_NEED_REBUILD=1
+    export SS_NEED_REBUILD
+    return 0
+  fi
   ss_rebuild_xray_config || return 1
   if ! command -v xray >/dev/null 2>&1 && [ ! -x "$XRAY_BIN" ]; then
     ss_warn "xray binary not found — config written to $XRAY_CONFIG_FILE"

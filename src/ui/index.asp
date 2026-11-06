@@ -178,6 +178,44 @@ function initial() {
   .apply_gen .button_gen {
     min-width: 120px;
   }
+  .apply_gen .button_gen:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .ss-pending {
+    margin: 8px auto 0;
+    max-width: 520px;
+    text-align: left;
+    font-size: 12px;
+    color: #cfd8dc;
+  }
+  .ss-pending-title {
+    font-weight: bold;
+    color: #fc0;
+    margin-bottom: 4px;
+    text-align: center;
+  }
+  .ss-pending-list {
+    margin: 0;
+    padding: 6px 10px;
+    background: rgba(0, 0, 0, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+  }
+  .ss-pending-list ul {
+    margin: 0;
+    padding-left: 18px;
+  }
+  .ss-pending-list li {
+    margin: 2px 0;
+  }
+  .ss-pending-list.empty,
+  .ss-pending-empty {
+    text-align: center;
+    color: #90a4ae;
+    font-style: italic;
+    padding: 4px 0;
+  }
   .ss-version {
     padding-top: 10px;
     min-height: 22px;
@@ -828,7 +866,7 @@ function initial() {
                         </div>
                       </div>
                       <div class="ss-modal-actions">
-                        <input id="btnSettingsSave" class="button_gen button_gen_small" type="button" value="Сохранить">
+                        <input id="btnSettingsSave" class="button_gen button_gen_small" type="button" value="В очередь">
                         <input id="btnSettingsClose" class="button_gen button_gen_small" type="button" value="Закрыть">
                         <span id="settingsStatus" class="ss-hint" style="margin-left:auto"></span>
                       </div>
@@ -1156,7 +1194,7 @@ function initial() {
                             </div>
                             <div class="row-buttons" style="margin-top:6px">
                               <input id="btnAddRule" class="button_gen button_gen_small" type="button" value="Добавить в список">
-                              <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing + Apply">
+                              <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing">
                               <input id="btnGeodata" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite">
                             </div>
                           </td>
@@ -1230,7 +1268,7 @@ function initial() {
                             </select>
                             <span class="row-buttons" style="margin-left:6px">
                               <input id="btnAddPolicy" class="button_gen button_gen_small" type="button" value="Добавить">
-                              <input id="btnSavePolicies" class="button_gen button_gen_small" type="button" value="Apply политики">
+                              <input id="btnSavePolicies" class="button_gen button_gen_small" type="button" value="Сохранить политики">
                             </span>
                           </td>
                         </tr>
@@ -1412,7 +1450,11 @@ function initial() {
                     </div>
                   </div>
                   <div class="apply_gen">
-                    <input id="btnApplyAll" class="button_gen" type="button" value="Apply">
+                    <input id="btnApplyAll" class="button_gen" type="button" value="Применить" disabled>
+                    <div id="pendingChangesPanel" class="ss-pending">
+                      <div class="ss-pending-title">Изменения к применению</div>
+                      <div id="pendingChangesList" class="ss-pending-list empty"><div class="ss-pending-empty">Нет изменений</div></div>
+                    </div>
                   </div>
                   <div class="ss-version">
                     <a href="#" id="btnVersionFooter" title="Проверить обновление">STEALTHSURF <span id="footerVer">v—</span></a>
