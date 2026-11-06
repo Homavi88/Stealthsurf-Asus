@@ -35,12 +35,28 @@
 
 См. [PROTOCOLS.md](./PROTOCOLS.md).
 
+## WebUI (нативная оболочка Merlin)
+
+Как в xrayui, страница аддона встроена в стоковый WebUI роутера:
+
+| Паттерн xrayui | StealthSurf |
+| --- | --- |
+| `index_style.css` / `form_style.css` | подключены в `index.asp` |
+| `state.js` / `general.js` / `popup.js` + `show_menu()` | есть (`initial()`) |
+| `#TopBanner`, `#Loading`, `#mainMenu`, `#subMenu`, `#tabMenu` | есть |
+| `FormTitle` + `FormTable` + `button_gen` | есть |
+| `label-success` / `label-error` | есть |
+| вкладка **VPN → …** через `menuTree.js` | **VPN → StealthSurf** |
+
+Отличие: xrayui — Vue SPA; у нас — лёгкий ASP + `app.js` без сборки фронта на роутере.
+
 ## Намеренно не переносим (не нужны для StealthSurf UX)
 
 - b4sni / rtls-scanner / reality helpers — диагностика xrayui
 - subscriptions URL parser — у нас StealthSurf API catalog
 - tun.sh full TUN mode — у нас REDIRECT/TPROXY
 - am_settings custom_settings.txt — свой conf + JSON stores
+- Vue/i18n стек xrayui — оставляем plain JS
 
 ## Рекомендуемые настройки на роутере
 

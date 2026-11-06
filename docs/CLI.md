@@ -41,7 +41,8 @@ stealthsurf <команда>           # полное имя
 | `conn` | `connectivity` | Проверка связи |
 | `xray` | `install-xray` | Поставить Xray |
 | `geo` | `geodata` | Обновить geoip/geosite |
-| `un` | `uninstall` | Полное удаление |
+| `un --yes` | `uninstall --yes` | Полное удаление (без `--yes` отказ) |
+| `doctor` | `doctor` | Восстановить UI / CLI symlink / хуки |
 | `m` | `menu` | Интерактивное меню |
 
 Полные имена (`start`, `check-update`, …) по-прежнему работают.
@@ -61,7 +62,8 @@ ssurf sy
 
 ssurf cu && ssurf upd
 ssurf dn
-ssurf un
+ssurf doctor          # если пропал UI/CLI
+ssurf un --yes        # полное удаление
 ```
 
 `sy` / autosync: тянут каталог API и пересобирают dataplane только при изменении включённых конфигов. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).

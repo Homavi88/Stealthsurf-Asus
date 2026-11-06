@@ -2,18 +2,27 @@
 
 ss_service_event_block() {
   # Always refresh amng_custom → payload so UI actions (checkupdate/update/…) see fresh JSON.
+  # Extract .stealthsurf namespace when present (preserves other addons' amng_custom keys).
   # Run in foreground so Merlin action_wait covers real work (UI refresh won't race).
+  # Never auto-run uninstall from this hook.
   cat <<'EOF'
 # StealthSurf UI hook begin
 if [ "$1" = "start" ] && echo "$2" | grep -q "^stealthsurf_"; then
   action="${2#stealthsurf_}"
-  custom=$(nvram get amng_custom 2>/dev/null)
-  if [ -n "$custom" ]; then
-    printf '%s\n' "$custom" > /tmp/stealthsurf_payload.json
-  else
-    echo '{}' > /tmp/stealthsurf_payload.json
-  fi
-  /jffs/scripts/stealthsurf service_event "$action" >/tmp/stealthsurf-service-event.log 2>&1
+  case "$action" in
+  uninstall|remove|purge)
+    echo '{"status":false,"message":"uninstall blocked from WebUI"}' > /www/user/stealthsurf/stealthsurf-response.json 2>/dev/null
+    ;;
+  *)
+    custom=$(nvram get amng_custom 2>/dev/null)
+    if [ -n "$custom" ]; then
+      printf '%s\n' "$custom" > /tmp/stealthsurf_payload.json
+    else
+      echo '{}' > /tmp/stealthsurf_payload.json
+    fi
+    /jffs/scripts/stealthsurf service_event "$action" >/tmp/stealthsurf-service-event.log 2>&1
+    ;;
+  esac
 fi
 # StealthSurf UI hook end
 EOF

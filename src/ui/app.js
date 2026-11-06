@@ -28,7 +28,7 @@ let versionCache = { installed: "—", latest: null, update_available: false };
 function setMsg(text, kind) {
   const el = $("msg");
   el.textContent = text || "";
-  el.className = kind || "";
+  el.className = "ss-msg" + (kind ? " " + kind : "");
 }
 
 async function fetchJson(url) {
@@ -39,9 +39,33 @@ async function fetchJson(url) {
   return res.json();
 }
 
+function buildAmngCustom(payload) {
+  // Namespace under .stealthsurf so we do not wipe other Merlin addons' amng_custom keys.
+  let base = {};
+  try {
+    if (typeof custom_settings === "object" && custom_settings) {
+      base = JSON.parse(JSON.stringify(custom_settings));
+    }
+  } catch (_) {
+    base = {};
+  }
+  base.stealthsurf = payload || {};
+  let blob = JSON.stringify(base);
+  // Merlin amng_custom is size-limited; fall back to namespaced-only payload
+  if (blob.length > 3500) {
+    blob = JSON.stringify({ stealthsurf: payload || {} });
+  }
+  return blob;
+}
+
 function triggerService(action, payload, opts) {
   const data = payload || {};
   const options = opts || {};
+  // Hard-block destructive actions from the browser — CLI only
+  if (action === "uninstall" || action === "remove" || action === "purge") {
+    setMsg("Удаление из WebUI отключено. В SSH: ssurf un --yes (или сначала ssurf doctor)", "err");
+    return;
+  }
   // Update downloads a release — needs a longer httpd wait / refresh
   let wait = Number(options.wait || 0);
   if (!wait) {
@@ -57,14 +81,13 @@ function triggerService(action, payload, opts) {
     sessionStorage.setItem("ss_payload", JSON.stringify(data));
   } catch (_) {}
 
-  const form = $("hidden_action_form");
+  const form = document.form || $("ruleForm");
   if (!form) {
     setMsg("Форма действия не найдена", "err");
     return;
   }
 
-  const blob = JSON.stringify(data);
-  // Merlin amng_custom is size-limited; reject oversized payloads instead of truncating JSON
+  const blob = buildAmngCustom(data);
   if (blob.length > 3500) {
     setMsg(
       "Payload слишком большой (" + blob.length + " байт). Упростите routing/policies или правьте через CLI.",
@@ -74,6 +97,9 @@ function triggerService(action, payload, opts) {
   }
   $("ss_payload_field").value = blob;
 
+  const page = (location.pathname || "").replace(/^\//, "") || "user1.asp";
+  if (form.current_page) form.current_page.value = page;
+  if (form.next_page) form.next_page.value = page;
   form.action_script.value = "stealthsurf_" + action;
   form.action_mode.value = "apply";
   form.action_wait.value = String(wait);
@@ -99,12 +125,24 @@ function triggerService(action, payload, opts) {
 }
 
 function switchTab(name) {
-  document.querySelectorAll(".tab").forEach((t) => {
+  document.querySelectorAll(".ss-tab").forEach((t) => {
     t.classList.toggle("active", t.dataset.tab === name);
   });
-  document.querySelectorAll(".panel[id^='tab-']").forEach((p) => {
+  document.querySelectorAll(".ss-panel[id^='tab-']").forEach((p) => {
     p.classList.toggle("active", p.id === "tab-" + name);
   });
+}
+
+function btnClass(kind) {
+  // Native Merlin buttons; kind kept for API compatibility
+  return "button_gen button_gen_small";
+}
+
+function labelClass(kind) {
+  if (kind === "on" || kind === "ok" || kind === "success") return "label label-success";
+  if (kind === "off" || kind === "err" || kind === "error") return "label label-error";
+  if (kind === "warn" || kind === "update" || kind === "warning") return "label label-warning";
+  return "label label-muted";
 }
 
 function renderState(state) {
@@ -113,9 +151,11 @@ function renderState(state) {
   const running = !!state.running;
   const pill = $("runState");
   pill.textContent = running ? "running" : "stopped";
-  pill.className = "pill " + (running ? "on" : "off");
+  pill.className = labelClass(running ? "on" : "off");
   $("activeCfg").textContent = "active: " + (state.active_config_id ?? "—");
+  $("activeCfg").className = labelClass("muted");
   $("modePill").textContent = "mode: " + (state.proxy_mode || state.mode || "—");
+  $("modePill").className = labelClass("muted");
   $("ports").textContent =
     "socks :" +
     (state.socks_port || "—") +
@@ -123,10 +163,15 @@ function renderState(state) {
     (state.http_port || "—") +
     " / tp :" +
     (state.tproxy_port || state.redirect_port || "—");
+  $("ports").className = labelClass("muted");
   $("defaultPill").textContent = "default: " + (state.default_outbound || "—");
+  $("defaultPill").className = labelClass("muted");
   if (state.mode) $("modeSelect").value = state.mode;
   if (state.dns_mode) $("dnsModeSelect").value = state.dns_mode;
-  if (state.version) $("installedVer").textContent = "версия: " + state.version;
+  if (state.version) {
+    $("installedVer").textContent = "версия: " + state.version;
+    if ($("titleVer")) $("titleVer").textContent = "v" + state.version;
+  }
 }
 
 function renderVersion(info) {
@@ -137,16 +182,17 @@ function renderVersion(info) {
   const upd = !!info.update_available;
 
   $("installedVer").textContent = "версия: " + installed;
-  $("installedVer").className = "pill " + (upd ? "warn" : "on");
+  $("installedVer").className = labelClass(upd ? "warn" : "on");
   $("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
-  $("latestVer").className = "pill" + (upd ? " update" : "");
+  $("latestVer").className = labelClass(upd ? "warn" : "muted");
+  if ($("titleVer") && installed && installed !== "—") $("titleVer").textContent = "v" + installed;
 
   const pill = $("updatePill");
   const banner = $("updateBanner");
   const btnUpdate = $("btnUpdate");
   if (upd) {
     pill.style.display = "inline-block";
-    pill.className = "pill update";
+    pill.className = labelClass("warn");
     pill.textContent = "есть обновление " + latest;
     banner.classList.add("show");
     $("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
@@ -166,7 +212,7 @@ function renderVersion(info) {
     else if (upd) t += " · доступно обновление";
     else if (latest) t += " · актуально";
     detail.textContent = t;
-    detail.className = "pill " + (upd ? "update" : latest ? "on" : "");
+    detail.className = labelClass(upd ? "warn" : latest ? "on" : "muted");
   }
 }
 
@@ -214,9 +260,11 @@ function protoBadge(proto) {
   if (!info) return "";
   if (info.supported) {
     const st = info.status ? String(info.status) : info.runtime || "ok";
-    return ' <span class="pill on" title="' + st + '">' + (info.runtime || "ok") + "</span>";
+    return (
+      ' <span class="label label-success" title="' + st + '">' + (info.runtime || "ok") + "</span>"
+    );
   }
-  return ' <span class="pill warn" title="' + (info.status || "") + '">n/a</span>';
+  return ' <span class="label label-warning" title="' + (info.status || "") + '">n/a</span>';
 }
 
 function renderConfigs(configs) {
@@ -249,14 +297,14 @@ function renderConfigs(configs) {
       "</td><td>" +
       (c.expires_at || "—") +
       "</td><td>" +
-      (enabled ? '<span class="pill on">ss-' + c.id + "</span>" : "—") +
+      (enabled ? '<span class="label label-success">ss-' + c.id + "</span>" : "—") +
       "</td><td></td>";
     const actions = tr.lastChild;
     if (supported) {
-      const btn = document.createElement("button");
+      const btn = document.createElement("input");
       btn.type = "button";
-      btn.className = "small " + (enabled ? "secondary" : "");
-      btn.textContent = enabled ? "Выкл" : "Вкл outbound";
+      btn.className = btnClass(enabled ? "secondary" : "");
+      btn.value = enabled ? "Выкл" : "Вкл outbound";
       btn.addEventListener("click", () =>
         triggerService(enabled ? "disableoutbound" : "enableoutbound", { config_id: Number(c.id) })
       );
@@ -319,10 +367,10 @@ function renderKeys(keys) {
     const tr = document.createElement("tr");
     const tail = (k.key || "").slice(-8);
     tr.innerHTML = "<td>" + (k.label || "—") + "</td><td>…" + tail + "</td><td></td>";
-    const btn = document.createElement("button");
+    const btn = document.createElement("input");
     btn.type = "button";
-    btn.className = "small danger";
-    btn.textContent = "Удалить";
+    btn.className = btnClass("danger");
+    btn.value = "Удалить";
     btn.addEventListener("click", () => triggerService("removekey", { api_key: k.key }));
     tr.lastChild.appendChild(btn);
     tbody.appendChild(tr);
@@ -370,10 +418,10 @@ function renderPolicies(policies) {
       "</td><td>" +
       (r.proto || "tcp") +
       "</td><td></td>";
-    const btn = document.createElement("button");
+    const btn = document.createElement("input");
     btn.type = "button";
-    btn.className = "small danger";
-    btn.textContent = "×";
+    btn.className = btnClass("danger");
+    btn.value = "×";
     btn.addEventListener("click", () => {
       policiesCache.rules.splice(idx, 1);
       renderPolicies(policiesCache);
@@ -538,7 +586,7 @@ async function refreshAll() {
 }
 
 function bind() {
-  document.querySelectorAll(".tab").forEach((t) =>
+  document.querySelectorAll(".ss-tab").forEach((t) =>
     t.addEventListener("click", () => switchTab(t.dataset.tab))
   );
 
@@ -696,7 +744,7 @@ function setBackupStatus(text, cls) {
   const el = $("backupStatus");
   if (!el) return;
   el.textContent = text || "";
-  el.className = "hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
+  el.className = "ss-hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
   if (cls === "ok") setMsg(text, "ok");
   if (cls === "err") setMsg(text, "err");
 }
@@ -747,10 +795,10 @@ function renderBackups(list) {
       "</td><td>" +
       (b.version || "—") +
       "</td><td></td>";
-    const btn = document.createElement("button");
+    const btn = document.createElement("input");
     btn.type = "button";
-    btn.className = "small secondary";
-    btn.textContent = "Restore";
+    btn.className = btnClass("secondary");
+    btn.value = "Restore";
     btn.addEventListener("click", () => {
       const file = b.file || b.path;
       if (!confirm("Восстановить настройки из\n" + file + "?\n\nТекущий конфиг будет сохранён в auto-backup, VPN остановится."))
@@ -818,16 +866,14 @@ bind();
 refreshAll();
 loadBackups();
 setTimeout(loadLogPreview, 300);
-// Soft re-check: only if version.json is older than 6h (avoids form submit every open)
+// Passive version display only — do NOT auto form-submit checkupdate on page open.
+// Auto submit previously hit Merlin start_apply on every visit; cron still runs
+// `stealthsurf check-update` every 12h. User can press «Проверить версию».
 setTimeout(async () => {
   try {
     const v = await fetchJson(EXT + "/version.json");
     renderVersion(v);
-    const age = Date.now() / 1000 - Number(v.checked_at || 0);
-    if (!v.checked_at || age > 6 * 3600) {
-      triggerService("checkupdate", {});
-    }
   } catch (_) {
-    /* offline / first install — user can press «Проверить версию» */
+    /* offline / first install */
   }
 }, 800);

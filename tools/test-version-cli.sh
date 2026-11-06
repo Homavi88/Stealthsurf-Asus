@@ -51,8 +51,24 @@ ss_version_write "1.0.6" "1.0.6" "v1.0.6" "https://example/rel" "" "https://exam
 assert_eq "$(jq -r '.update_available' "$SS_VERSION_FILE")" "false" "uptodate"
 
 # CLI help / aliases present in source
-grep -q 'uninstall | remove | purge | un | rm' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall aliases" || {
+grep -q 'uninstall | remove | purge | un)' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall aliases" || {
   echo "FAIL uninstall aliases"
+  fail=$((fail + 1))
+}
+grep -q 'uninstall refuses without confirmation' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall confirm" || {
+  echo "FAIL uninstall confirm"
+  fail=$((fail + 1))
+}
+grep -q 'ss_doctor' "$ROOT/src/backend/mount.sh" && echo "OK  doctor" || {
+  echo "FAIL doctor"
+  fail=$((fail + 1))
+}
+grep -q 'live addon untouched' "$ROOT/src/backend/backup.sh" && echo "OK  atomic update" || {
+  echo "FAIL atomic update"
+  fail=$((fail + 1))
+}
+grep -q 'do NOT auto form-submit checkupdate' "$ROOT/src/ui/app.js" && echo "OK  no auto checkupdate submit" || {
+  echo "FAIL no auto checkupdate submit"
   fail=$((fail + 1))
 }
 grep -q 'force-update | update-force | uf' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  force-update" || {

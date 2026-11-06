@@ -20,6 +20,23 @@ JFFS custom scripts должны быть включены.
 
 `stealthsurf stop` и `uninstall` чистят цепочки `STEALTHSURF` и `ip rule`. Если интернет пропал — перезапустите firewall роутера (`service restart_firewall`) или reboot.
 
+## Пропала вкладка VPN → StealthSurf и/или команда `ssurf`
+
+Частые причины:
+
+1. **Неудачное обновление** (старые версии удаляли файлы до проверки архива) — с v1.0.12 update атомарный.
+2. **Entware на USB** временно не смонтирован → `/opt/bin/ssurf` «не найден», хотя скрипт на JFFS жив.
+3. Случайный `ssurf rm` / `uninstall` в старых версиях (алиас `rm` убран; нужен `ssurf un --yes`).
+
+Восстановление:
+
+```sh
+/jffs/scripts/stealthsurf doctor
+# если скрипта тоже нет — переустановите one-liner из README
+```
+
+Затем выйти из WebUI и зайти снова.
+
 ## Протокол «недоступен» / apply не работает
 
 - **vless / trojan / ss / openflux / http / socks5 / wg** — через Xray (часто из `connection_url`; OpenFlux — proxy outbound в `xray_config`)

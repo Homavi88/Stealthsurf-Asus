@@ -49,7 +49,9 @@ ss_mount_ui() {
   umount /www/require/modules/menuTree.js 2>/dev/null
   mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
 
+  # Recreate CLI symlinks every mount — /opt (Entware USB) may remount without them
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+  ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
   ln -sf "$ADDON_JFFS_ADN_DIR/app.js" "$ADDON_WEB_DIR/app.js"
   ln -sf "$SS_CACHE_CONFIGS" "$ADDON_WEB_DIR/configs.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/locations.json" 2>/dev/null || true
@@ -108,4 +110,37 @@ ss_unmount_ui() {
     mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
   fi
   ss_ok "UI unmounted"
+}
+
+ss_doctor() {
+  # Recover after Entware remount, broken symlinks, or failed partial update
+  ss_info "Doctor: checking StealthSurf install…"
+  local ok=1
+  if [ ! -f "$ADDON_SCRIPT" ]; then
+    ss_error "Missing $ADDON_SCRIPT — reinstall via one-liner"
+    return 1
+  fi
+  chmod 0755 "$ADDON_SCRIPT" 2>/dev/null || true
+  if [ ! -f "$ADDON_JFFS_ADN_DIR/index.asp" ] || [ ! -f "$ADDON_JFFS_ADN_DIR/app.js" ]; then
+    ss_error "UI files missing under $ADDON_JFFS_ADN_DIR — run: $ADDON_SCRIPT update -f  (or reinstall)"
+    ok=0
+  fi
+  ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || ss_warn "Cannot link /opt/bin/$ADDON_TAG (Entware up?)"
+  ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || ss_warn "Cannot link /opt/bin/ssurf (Entware up?)"
+  ss_hook_scripts 2>/dev/null || true
+  ss_install_service_event_hook 2>/dev/null || true
+  ss_install_cron 2>/dev/null || true
+  if ! ss_mount_ui; then
+    ss_error "mount_ui failed"
+    ok=0
+  fi
+  ss_write_state 2>/dev/null || true
+  ss_version_local >/dev/null 2>&1 || true
+  if [ "$ok" = "1" ]; then
+    ss_ok "Doctor: hooks, CLI symlinks and WebUI remounted. Re-login to WebUI if tab missing."
+    ss_info "CLI: /jffs/scripts/stealthsurf  ·  ssurf  ·  stealthsurf"
+    return 0
+  fi
+  ss_error "Doctor: some checks failed — see messages above"
+  return 1
 }
