@@ -254,6 +254,7 @@ ss_update_self() {
   # Atomic self-update: never delete the live addon until the new package is validated.
   # A failed download/extract previously wiped /jffs/addons/stealthsurf and left the UI gone.
   # Optional $1 = pinned download URL (used for install-version / rollback — no latest fallback).
+  # Progress/status → stderr via ss_progress_* when interactive (SSH TTY / SS_PROGRESS=1).
   local tmp="/tmp/asuswrt-merlin-stealthsurf.tar.gz"
   local url=""
   local pinned="${1:-}"
@@ -261,8 +262,13 @@ ss_update_self() {
   local stage="/tmp/stealthsurf-update-stage.$$"
   local bak="/tmp/stealthsurf-update-bak.$$"
   local new_script=""
+
+  ss_progress_begin "StealthSurf update" 7
+
+  ss_progress_step "Backup before update"
   ss_backup_auto "pre-update" || true
 
+  ss_progress_step "Checking GitHub / resolving download URL"
   if [ -n "$pinned" ] && [ "$pinned" != "null" ]; then
     url="$pinned"
   else
@@ -272,38 +278,46 @@ ss_update_self() {
       url="$ADDON_RELEASE_TGZ"
     fi
     # If version.json is stale, refresh so we pick the release asset URL
+    # Keep stderr free for progress (do not redirect 2>&1)
     if [ ! -f "$SS_VERSION_FILE" ] || ! jq -e '.download_url' "$SS_VERSION_FILE" >/dev/null 2>&1; then
-      ss_version_check >/dev/null 2>&1 || true
+      ss_version_check >/dev/null || true
       url=$(ss_version_download_url 2>/dev/null || echo "$ADDON_RELEASE_TGZ")
     fi
   fi
+  ss_info "Download URL: $url"
 
+  ss_progress_step "Downloading release"
   ss_info "Downloading release from $url …"
   ss_activity "update.start" "from=$url"
-  if ! curl -fsSL -L -o "$tmp" "$url"; then
+  if ! ss_curl_download "$url" "$tmp"; then
     if [ -n "$pinned" ]; then
       # Pinned tag/rollback must not silently install latest
       ss_error "Could not download pinned release tarball: $url"
       ss_activity "update.fail" "pinned download failed"
+      ss_progress_end "update FAILED"
       return 1
     fi
     # Fallback to canonical latest/download URL
     ss_warn "Primary download failed, trying $ADDON_RELEASE_TGZ"
-    if ! curl -fsSL -L -o "$tmp" "$ADDON_RELEASE_TGZ"; then
+    if ! ss_curl_download "$ADDON_RELEASE_TGZ" "$tmp"; then
       ss_error "Could not download release tarball"
       ss_activity "update.fail" "download failed"
+      ss_progress_end "update FAILED"
       return 1
     fi
   fi
 
+  ss_progress_step "Validating archive"
   # Reject HTML error pages / empty files before touching live addon files
   if [ ! -s "$tmp" ] || ! tar -tzf "$tmp" >/dev/null 2>&1; then
     ss_error "Downloaded file is not a valid release archive (refusing to replace addon)"
     ss_activity "update.fail" "invalid archive"
     rm -f "$tmp"
+    ss_progress_end "update FAILED"
     return 1
   fi
 
+  ss_progress_step "Extracting and installing files"
   rm -rf "$stage" "$bak"
   mkdir -p "$stage" /jffs/addons /jffs/scripts
   if ! tar -xzf "$tmp" -C "$stage"; then
@@ -311,6 +325,7 @@ ss_update_self() {
     ss_activity "update.fail" "extract failed"
     rm -rf "$stage"
     rm -f "$tmp"
+    ss_progress_end "update FAILED"
     return 1
   fi
 
@@ -319,6 +334,7 @@ ss_update_self() {
     ss_activity "update.fail" "bad archive"
     rm -rf "$stage"
     rm -f "$tmp"
+    ss_progress_end "update FAILED"
     return 1
   fi
 
@@ -336,6 +352,7 @@ ss_update_self() {
     [ -f "$bak/stealthsurf" ] && cp -a "$bak/stealthsurf" "$ADDON_SCRIPT" 2>/dev/null || true
     rm -rf "$stage" "$bak"
     rm -f "$tmp"
+    ss_progress_end "update FAILED"
     return 1
   fi
 
@@ -348,6 +365,7 @@ ss_update_self() {
     [ -f "$bak/stealthsurf" ] && cp -a "$bak/stealthsurf" "$ADDON_SCRIPT" 2>/dev/null || true
     rm -rf "$stage" "$bak"
     rm -f "$tmp"
+    ss_progress_end "update FAILED"
     return 1
   fi
   chmod 0755 "$ADDON_SCRIPT"
@@ -358,16 +376,21 @@ ss_update_self() {
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
   ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
 
+  ss_progress_step "Remounting UI / rewriting hooks"
   # Re-run install with NEW script (hooks, deps, mount UI, version.json)
   if ! sh "$ADDON_SCRIPT" install; then
     ss_warn "Post-update install reported errors — run: $ADDON_SCRIPT doctor"
   fi
+
+  ss_progress_step "Refreshing version.json"
   # Refresh version after install (new ADDON_VERSION is inside new script; this shell still has old)
-  sh "$ADDON_SCRIPT" version >/dev/null 2>&1 || true
-  sh "$ADDON_SCRIPT" check-update >/dev/null 2>&1 || true
+  # Silence JSON on stdout; keep stderr for nested status if TTY
+  sh "$ADDON_SCRIPT" version >/dev/null || true
+  sh "$ADDON_SCRIPT" check-update >/dev/null || true
   new_ver=$(jq -r '.installed // empty' "$SS_VERSION_FILE" 2>/dev/null)
   ss_activity "update.done" "installed=${new_ver:-ok}"
   ss_ok "Updated addon from GitHub Releases (now ${new_ver:-unknown}) — refresh WebUI / re-login"
+  ss_progress_end "done — now ${new_ver:-unknown}"
 }
 
 ss_install_cron() {

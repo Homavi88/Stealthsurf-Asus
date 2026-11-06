@@ -1,6 +1,6 @@
 {
   "name": "asuswrt-merlin-stealthsurf",
-  "version": "1.0.29",
+  "version": "1.0.30",
   "private": true,
   "description": "StealthSurf VPN control panel for Asuswrt-Merlin routers",
   "type": "module",

@@ -162,7 +162,8 @@ ss_cli_dispatch() {
     --force | -f | force | 1) force=1 ;;
     esac
     if [ "$force" = "1" ]; then
-      ss_version_check >/dev/null 2>&1 || true
+      # Silence JSON on stdout; keep stderr for progress/status
+      ss_version_check >/dev/null || true
       ss_update_self || return 1
     else
       ss_version_update_if_available 0
@@ -171,7 +172,7 @@ ss_cli_dispatch() {
     fi
     ;;
   force-update | update-force | uf)
-    ss_version_check >/dev/null 2>&1 || true
+    ss_version_check >/dev/null || true
     ss_update_self || return 1
     ;;
   update-if-newer)

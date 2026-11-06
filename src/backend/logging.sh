@@ -39,6 +39,10 @@ ss_log() {
   mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null
   ss_log_rotate_one "$SS_ADDON_LOG"
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$msg" >>"$SS_ADDON_LOG" 2>/dev/null
+  # Mirror to stderr on interactive TTY (ss_console from _helper.sh)
+  if type ss_console >/dev/null 2>&1; then
+    ss_console "$msg"
+  fi
 }
 
 ss_ok() { ss_log "OK: $1"; }
