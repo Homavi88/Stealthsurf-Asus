@@ -16,18 +16,63 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 (URL обычно `http://192.168.1.1/user1.asp`). Страница использует нативную оболочку Merlin
 (меню, `FormTitle` / `FormTable`, `button_gen`) — как у XrayUI.
 
-Короткий CLI: **`ssurf`** (полное имя `stealthsurf` тоже работает).
+## Быстрые команды CLI
+
+Короткий CLI: **`ssurf`** (полное имя `stealthsurf` тоже работает).  
+Справка: `ssurf h` · Меню: `ssurf m`
+
+### Старт за минуту
 
 ```sh
-ssurf key 'stlth_…'
-ssurf sy && ssurf ls
-ssurf ap <id> && ssurf mode redirect && ssurf up
-ssurf st
-ssurf h          # справка
-ssurf m          # меню
+ssurf key 'stlth_…'          # API-ключ
+ssurf sy && ssurf ls         # sync + список конфигов
+ssurf ap <id>                # apply конфиг
+ssurf mode redirect          # transparent (или tproxy)
+ssurf up                     # старт
+ssurf st                     # статус
 ```
 
-Подробнее: [docs/INSTALL.md](./docs/INSTALL.md) · [docs/CLI.md](./docs/CLI.md)
+### Шпаргалка
+
+| Команда | Действие |
+| --- | --- |
+| `ssurf up` / `on` | Старт VPN |
+| `ssurf dn` / `off` | Стоп |
+| `ssurf re` / `rs` | Рестарт |
+| `ssurf st` | Статус (JSON) |
+| `ssurf sy` | Sync с сайта |
+| `ssurf ls` | Список конфигов |
+| `ssurf ap <id>` | Apply конфиг |
+| `ssurf en <id>` / `dis <id>` | Enable / disable outbound |
+| `ssurf def <tag>` | Default outbound (`ss-101`, `direct`, …) |
+| `ssurf key <stlth_…>` | Сохранить API-ключ |
+| `ssurf mode proxy\|redirect\|tproxy` | Режим dataplane |
+| `ssurf dns OFF\|BYPASS\|REDIRECT` | DNS-режим |
+| `ssurf rb` | Пересобрать dataplane |
+| `ssurf d` | Диагностика |
+| `ssurf p` | Матрица протоколов |
+| `ssurf log [src] [n]` | Логи (`activity`, `errors`, …) |
+| `ssurf bak` / `baks` | Backup / список бэкапов |
+| `ssurf cl` / `dev` | Клиенты LAN / устройства |
+| `ssurf conn` | Проверка связи |
+| `ssurf cu` && `ssurf upd` | Проверить и обновить с GitHub |
+| `ssurf uf` | Force-update |
+| `ssurf xray` / `geo` | Установить Xray / geodata |
+| `ssurf doctor` | Восстановить UI / CLI / хуки |
+| `ssurf un --yes` | Полное удаление |
+| `ssurf m` | Интерактивное меню |
+
+Если пропал интернет после transparent-режима:
+
+```sh
+ssurf mode proxy && ssurf dn
+# или
+ssurf doctor
+```
+
+Не запускайте StealthSurf, пока работает **XrayUI** (оба transparent proxy ломают LAN).
+
+Подробнее: [docs/INSTALL.md](./docs/INSTALL.md) · [docs/CLI.md](./docs/CLI.md) · [docs/FAQ.md](./docs/FAQ.md)
 
 ## Как это устроено
 
