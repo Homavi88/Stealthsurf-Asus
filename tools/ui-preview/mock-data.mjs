@@ -10,7 +10,7 @@ export const state = {
   http_port: 10809,
   tproxy_port: 10810,
   redirect_port: 10811,
-  version: "1.0.16",
+  version: "1.0.18",
   xrayui: { installed: true, running: false, conflict: null, message: null },
   conflict: null,
   conflict_message: null,
@@ -74,30 +74,83 @@ export const api_keys = [
 ];
 
 export const outbounds = { enabled: [101, 205], default: "ss-101" };
+
+/** Example rules for GitHub screenshots of the rule builder */
 export const routing = {
   domainStrategy: "AsIs",
   default_outbound: "ss-101",
+  preset: "",
   rules: [
-    { type: "field", domain: ["geosite:category-ads-all"], outboundTag: "block" },
-    { type: "field", domain: ["geosite:google"], outboundTag: "ss-101" },
+    {
+      name: "ads",
+      type: "geosite",
+      matcher: "category-ads-all",
+      outbound: "block",
+      priority: 5,
+    },
+    {
+      name: "private",
+      type: "geoip",
+      matcher: "private",
+      outbound: "direct",
+      priority: 10,
+    },
+    {
+      name: "ru-direct",
+      type: "geoip",
+      matcher: "ru",
+      outbound: "direct",
+      priority: 20,
+    },
+    {
+      name: "youtube",
+      type: "geosite",
+      matcher: "youtube",
+      outbound: "ss-101",
+      priority: 30,
+    },
+    {
+      name: "telegram",
+      type: "domain",
+      matcher: "telegram.org",
+      outbound: "ss-101",
+      priority: 40,
+    },
+    {
+      name: "netflix",
+      type: "geosite",
+      matcher: "netflix",
+      outbound: "ss-205",
+      priority: 50,
+    },
+    {
+      name: "openai",
+      type: "domain",
+      matcher: "openai.com",
+      outbound: "ss-101",
+      priority: 60,
+    },
   ],
-  preset: "balanced",
 };
+
 export const policies = {
   catchall: true,
-  rules: [{ mac: "AA:BB:CC:DD:EE:01", action: "proxy", note: "Notebook" }],
+  rules: [{ mac: "AA:BB:CC:DD:EE:01", mode: "bypass", name: "Notebook" }],
 };
+
 export const version = {
-  installed: "1.0.16",
-  latest: "1.0.16",
+  installed: "1.0.18",
+  latest: "1.0.18",
   update_available: false,
-  tag: "v1.0.16",
+  tag: "v1.0.18",
 };
+
 export const protocols = {
   vless: { runtime: "xray", supported: true, status: "ready" },
   hysteria2: { runtime: "hysteria", supported: true, status: "ready" },
   trojan: { runtime: "xray", supported: true, status: "ready" },
 };
+
 export const response = {
   status: true,
   message: "ok",

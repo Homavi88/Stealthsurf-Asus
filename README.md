@@ -24,7 +24,17 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 | --- | --- |
 | ![Статус running](./docs/screenshots/01-status-running.png) | ![Каталог](./docs/screenshots/02-catalog.png) |
 
-| Routing | Режим / DNS |
+### Конструктор routing-правил (с примерами)
+
+YouTube / Telegram / Netflix → VPN из API (`ss-101`, `ss-205`), ads → block, RU/private → direct:
+
+![Конструктор правил](./docs/screenshots/06-routing-builder.png)
+
+Автоподсказки при вводе домена (`you` → youtube.com / youtu.be):
+
+![Подсказки доменов](./docs/screenshots/07-routing-suggest.png)
+
+| Routing (обзор) | Режим / DNS |
 | --- | --- |
 | ![Routing](./docs/screenshots/03-routing.png) | ![Режим DNS](./docs/screenshots/04-mode-dns.png) |
 
