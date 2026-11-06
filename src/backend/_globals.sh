@@ -8,7 +8,7 @@ unset LD_LIBRARY_PATH
 ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
-ADDON_VERSION="1.0.13"
+ADDON_VERSION="1.0.14"
 SS_STARTUP_DELAY="8"
 SS_BACKUP_KEEP="10"
 SS_AUTO_BACKUP="1"
@@ -62,18 +62,22 @@ SS_HTTP_PORT="10809"
 SS_TPROXY_PORT="10810"
 SS_REDIRECT_PORT="10811"
 SS_DNS_PORT="5353"
-SS_MODE="proxy" # proxy | redirect | tproxy
+SS_MODE="proxy" # proxy | redirect | tproxy — default proxy so install cannot blackhole LAN
 SS_DNS_MODE="OFF" # OFF | BYPASS | REDIRECT
-SS_PROXY_MODE="redirect" # redirect | tproxy — dataplane mode when SS_MODE!=proxy
+SS_PROXY_MODE="proxy" # mirrors SS_MODE; transparent only after explicit set-mode
 SS_AUTO_START="1"
 SS_WATCHDOG="1"
 SS_FALLBACK_OUTBOUND="direct"
 
-# Firewall / TPROXY marks
-SS_TPROXY_MARK="0x10000"
-SS_TPROXY_MASK="0x10000"
-SS_TPROXY_TABLE="77"
+# Firewall / TPROXY marks — MUST differ from xrayui (0x10000 / table 77)
+# otherwise both addons fight over the same policy-routing table.
+SS_TPROXY_MARK="0x20000"
+SS_TPROXY_MASK="0x20000"
+SS_TPROXY_TABLE="78"
 SS_FW_CHAIN="STEALTHSURF"
+# Prefer firmware iptables over Entware (Entware iptables can break Merlin NAT)
+SS_IPTABLES="${SS_IPTABLES:-}"
+SS_IP6TABLES="${SS_IP6TABLES:-}"
 SS_IPSET_PROXY_V4="ss_proxy_v4"
 SS_IPSET_PROXY_V6="ss_proxy_v6"
 SS_IPSET_BYPASS_V4="ss_bypass_v4"

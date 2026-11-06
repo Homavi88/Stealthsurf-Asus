@@ -29,35 +29,54 @@ ss_fw_detect_mode() {
 }
 
 ss_fw_ipt() {
-  # ss_fw_ipt <table> <args...>
+  # ss_fw_ipt <table> <args...> — always firmware iptables, never Entware-shadowed
   local tbl="$1"
   shift
-  iptables -w -t "$tbl" "$@" 2>/dev/null
+  ss_iptables_init
+  "$SS_IPTABLES" -w -t "$tbl" "$@" 2>/dev/null
 }
 
 ss_fw_ip6() {
   local tbl="$1"
   shift
-  ip6tables -w -t "$tbl" "$@" 2>/dev/null || true
+  ss_iptables_init
+  "$SS_IP6TABLES" -w -t "$tbl" "$@" 2>/dev/null || true
 }
 
 ss_fw_ensure_chain() {
   local tbl="$1"
   local chain="$2"
   ss_fw_ipt "$tbl" -N "$chain" 2>/dev/null || ss_fw_ipt "$tbl" -F "$chain"
-  ss_fw_ip6 "$tbl" -N "$chain" 2>/dev/null || ss_fw_ip6 "$tbl" -F "$chain"
+  # Only touch ip6 nat if the table exists (many Merlin builds lack ip6table_nat)
+  if [ "$tbl" = "nat" ]; then
+    ss_iptables_init
+    if "$SS_IP6TABLES" -w -t nat -L -n >/dev/null 2>&1; then
+      ss_fw_ip6 "$tbl" -N "$chain" 2>/dev/null || ss_fw_ip6 "$tbl" -F "$chain"
+    fi
+  else
+    ss_fw_ip6 "$tbl" -N "$chain" 2>/dev/null || ss_fw_ip6 "$tbl" -F "$chain"
+  fi
 }
 
 ss_fw_link_chain() {
-  # Insert jump to STEALTHSURF at head of parent if missing
+  # Append jump (xrayui pattern) — never -I 1, so Merlin's own PREROUTING stays intact
   local tbl="$1"
   local parent="$2"
   local chain="$3"
   if ! ss_fw_ipt "$tbl" -C "$parent" -j "$chain" 2>/dev/null; then
-    ss_fw_ipt "$tbl" -I "$parent" 1 -j "$chain"
+    ss_fw_ipt "$tbl" -A "$parent" -j "$chain"
   fi
-  if ! ss_fw_ip6 "$tbl" -C "$parent" -j "$chain" 2>/dev/null; then
-    ss_fw_ip6 "$tbl" -I "$parent" 1 -j "$chain"
+  if [ "$tbl" = "nat" ]; then
+    ss_iptables_init
+    if "$SS_IP6TABLES" -w -t nat -L -n >/dev/null 2>&1; then
+      if ! ss_fw_ip6 "$tbl" -C "$parent" -j "$chain" 2>/dev/null; then
+        ss_fw_ip6 "$tbl" -A "$parent" -j "$chain"
+      fi
+    fi
+  else
+    if ! ss_fw_ip6 "$tbl" -C "$parent" -j "$chain" 2>/dev/null; then
+      ss_fw_ip6 "$tbl" -A "$parent" -j "$chain"
+    fi
   fi
 }
 
@@ -85,40 +104,71 @@ ss_fw_exclude_wan_ifaces() {
   for wan_if in $(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' |
     grep -E '^(ppp|pppoe|wan|wwan|lte|l2tp|tun|wg)[0-9]*' | sed 's/@.*//'); do
     [ -n "$wan_if" ] || continue
-    ss_fw_ipt "$tbl" -I "$chain" 1 -i "$wan_if" -j RETURN
+    ss_fw_ipt "$tbl" -C "$chain" -i "$wan_if" -j RETURN 2>/dev/null ||
+      ss_fw_ipt "$tbl" -I "$chain" 1 -i "$wan_if" -j RETURN
   done
-  # Common Merlin WAN ifnames from nvram
+  # Common Merlin WAN ifnames from nvram (often eth0/vlanX — not matched above)
   for wan_if in "$(nvram get wan0_ifname 2>/dev/null)" "$(nvram get wan1_ifname 2>/dev/null)" \
-    "$(nvram get wan0_gw_ifname 2>/dev/null)"; do
+    "$(nvram get wan0_gw_ifname 2>/dev/null)" "$(nvram get wan0_pppoe_ifname 2>/dev/null)"; do
     [ -n "$wan_if" ] || continue
     ss_fw_ipt "$tbl" -C "$chain" -i "$wan_if" -j RETURN 2>/dev/null ||
       ss_fw_ipt "$tbl" -I "$chain" 1 -i "$wan_if" -j RETURN
   done
 }
 
-ss_fw_exclude_private() {
+ss_fw_exclude_safe_traffic() {
+  # xrayui-aligned exclusions so transparent mode cannot break LAN/DHCP/VPN/port-forwards
   local tbl="$1"
   local chain="$2"
-  local cidr
+  local cidr rip doko
+
   # First: never process WAN ingress
   ss_fw_exclude_wan_ifaces "$tbl" "$chain"
-  for cidr in 0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4; do
+
+  # Local/router traffic (packets to/from the router itself)
+  ss_fw_ipt "$tbl" -C "$chain" -m addrtype --src-type LOCAL -j RETURN 2>/dev/null ||
+    ss_fw_ipt "$tbl" -I "$chain" 1 -m addrtype --src-type LOCAL -j RETURN
+  ss_fw_ipt "$tbl" -C "$chain" -m addrtype --dst-type LOCAL -j RETURN 2>/dev/null ||
+    ss_fw_ipt "$tbl" -I "$chain" 1 -m addrtype --dst-type LOCAL -j RETURN
+
+  # Private / reserved destinations stay direct
+  for cidr in 0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 239.0.0.0/8 240.0.0.0/4; do
     ss_fw_ipt "$tbl" -A "$chain" -d "$cidr" -j RETURN
   done
-  # Router itself
-  local rip
   rip=$(ss_router_ip)
   [ -n "$rip" ] && ss_fw_ipt "$tbl" -A "$chain" -d "$rip" -j RETURN
+
+  # Broadcast
+  ss_fw_ipt "$tbl" -A "$chain" -m addrtype --dst-type BROADCAST -j RETURN 2>/dev/null || true
+
+  # DHCP / NTP / IKE / WireGuard / GlobalProtect — never hijack (esp. TPROXY UDP)
+  ss_fw_ipt "$tbl" -A "$chain" -p udp -m multiport --dports 67,68,123,500,4500,4501,51820 -j RETURN 2>/dev/null || true
+
+  # Inbound port-forwards already DNATed by Merlin
+  ss_fw_ipt "$tbl" -A "$chain" -m conntrack --ctstate DNAT -j RETURN 2>/dev/null || true
+
+  # Do not re-hijack packets already aimed at our dokodemo ports
+  doko="${SS_REDIRECT_PORT:-10811}"
+  ss_fw_ipt "$tbl" -A "$chain" -p tcp --dport "$doko" -j RETURN 2>/dev/null || true
+  doko="${SS_TPROXY_PORT:-10810}"
+  ss_fw_ipt "$tbl" -A "$chain" -p tcp --dport "$doko" -j RETURN 2>/dev/null || true
+  ss_fw_ipt "$tbl" -A "$chain" -p udp --dport "$doko" -j RETURN 2>/dev/null || true
+}
+
+# Back-compat alias
+ss_fw_exclude_private() {
+  ss_fw_exclude_safe_traffic "$@"
 }
 
 ss_firewall_is_configured() {
   local chain="$SS_FW_CHAIN"
+  ss_iptables_init
   case "$(ss_fw_detect_mode)" in
   tproxy)
-    iptables -w -t mangle -L "$chain" -n >/dev/null 2>&1
+    "$SS_IPTABLES" -w -t mangle -L "$chain" -n >/dev/null 2>&1
     ;;
   redirect)
-    iptables -w -t nat -L "$chain" -n >/dev/null 2>&1
+    "$SS_IPTABLES" -w -t nat -L "$chain" -n >/dev/null 2>&1
     ;;
   *)
     return 0
@@ -215,10 +265,19 @@ ss_fw_apply_client_policies() {
 }
 
 ss_fw_tcpmss_clamp() {
-  # Clamp MSS on SYN to avoid PMTU blackholes through tunnels
-  if ! ss_fw_ipt mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; then
-    ss_fw_ipt mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
+  # Clamp MSS on SYN to avoid PMTU blackholes through tunnels.
+  # Mark with comment so cleanup can remove only our rule.
+  if ! ss_fw_ipt mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -m comment --comment "STEALTHSURF_TCPMSS" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; then
+    # Prefer commented rule; fall back without comment module
+    ss_fw_ipt mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -m comment --comment "STEALTHSURF_TCPMSS" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null ||
+      ss_fw_ipt mangle -A FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
   fi
+}
+
+ss_fw_tcpmss_cleanup() {
+  while ss_fw_ipt mangle -C FORWARD -p tcp --tcp-flags SYN,RST SYN -m comment --comment "STEALTHSURF_TCPMSS" -j TCPMSS --clamp-mss-to-pmtu 2>/dev/null; do
+    ss_fw_ipt mangle -D FORWARD -p tcp --tcp-flags SYN,RST SYN -m comment --comment "STEALTHSURF_TCPMSS" -j TCPMSS --clamp-mss-to-pmtu
+  done
 }
 
 ss_configure_firewall_redirect() {
@@ -286,8 +345,9 @@ ss_configure_firewall_tproxy() {
     ss_fw_ipt mangle -I PREROUTING 1 -p udp -m socket --transparent -j "$divert" || true
   fi
   # Accept marked packets in filter
-  if ! iptables -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; then
-    iptables -w -I INPUT 1 -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || true
+  ss_iptables_init
+  if ! "$SS_IPTABLES" -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; then
+    "$SS_IPTABLES" -w -I INPUT 1 -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || true
   fi
 
   ss_fw_ensure_chain mangle "$chain"
@@ -329,11 +389,25 @@ ss_configure_firewall() {
   mode=$(ss_fw_detect_mode)
   case "$mode" in
   proxy)
-    ss_info "Mode=proxy — skipping transparent firewall"
+    ss_info "Mode=proxy — skipping transparent firewall (LAN internet stays direct)"
+    ss_cleanup_firewall 2>/dev/null || true
     return 0
     ;;
-  tproxy)
-    ss_configure_firewall_tproxy
+  tproxy | redirect)
+    # Never blackhole LAN: require Xray + dokodemo port before hijacking
+    if ! ss_xray_running 2>/dev/null; then
+      ss_warn "Skip transparent firewall — Xray not running"
+      return 1
+    fi
+    if ! ss_dokodemo_listening 2>/dev/null; then
+      ss_warn "Skip transparent firewall — dokodemo port not listening (would kill internet)"
+      return 1
+    fi
+    if [ "$mode" = "tproxy" ]; then
+      ss_configure_firewall_tproxy
+    else
+      ss_configure_firewall_redirect
+    fi
     ;;
   *)
     ss_configure_firewall_redirect
@@ -346,6 +420,7 @@ ss_cleanup_firewall() {
   local divert="${SS_FW_CHAIN}_DIVERT"
   local mark="$SS_TPROXY_MARK"
   local mask="$SS_TPROXY_MASK"
+  ss_iptables_init
   ss_activity "firewall.cleanup" "chain=$chain"
   # Remove divert jumps
   while ss_fw_ipt mangle -C PREROUTING -p tcp -m socket --transparent -j "$divert" 2>/dev/null; do
@@ -354,8 +429,8 @@ ss_cleanup_firewall() {
   while ss_fw_ipt mangle -C PREROUTING -p udp -m socket --transparent -j "$divert" 2>/dev/null; do
     ss_fw_ipt mangle -D PREROUTING -p udp -m socket --transparent -j "$divert"
   done
-  while iptables -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; do
-    iptables -w -D INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || break
+  while "$SS_IPTABLES" -w -C INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null; do
+    "$SS_IPTABLES" -w -D INPUT -m mark --mark "${mark}/${mask}" -j ACCEPT 2>/dev/null || break
   done
 
   ss_fw_unlink_chain nat PREROUTING "$chain"
@@ -371,8 +446,10 @@ ss_cleanup_firewall() {
   ss_fw_ip6 mangle -F "$chain" 2>/dev/null
   ss_fw_ip6 mangle -X "$chain" 2>/dev/null
 
+  # Only our policy-routing table (78) — never touch xrayui table 77
   ip rule del fwmark "$SS_TPROXY_MARK" lookup "$SS_TPROXY_TABLE" 2>/dev/null || true
   ip route flush table "$SS_TPROXY_TABLE" 2>/dev/null || true
+  ss_fw_tcpmss_cleanup 2>/dev/null || true
 
   ss_ok "Firewall cleaned up"
 }

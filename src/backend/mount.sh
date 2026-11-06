@@ -162,6 +162,19 @@ ss_doctor() {
     ss_error "mount_ui failed"
     ok=0
   fi
+  # If Xray is down but transparent rules remain — restore internet
+  if ! ss_xray_running 2>/dev/null && ss_firewall_is_configured 2>/dev/null; then
+    ss_warn "Doctor: orphan transparent firewall rules found — cleaning to restore internet"
+    ss_cleanup_firewall 2>/dev/null || true
+  fi
+  # Hint if stuck in redirect/tproxy without working VPN
+  case "${SS_MODE:-proxy}" in
+  redirect | tproxy)
+    if ! ss_xray_running 2>/dev/null; then
+      ss_warn "Mode is $SS_MODE but Xray is stopped. To restore direct internet: ssurf mode proxy"
+    fi
+    ;;
+  esac
   ss_write_state 2>/dev/null || true
   ss_version_local >/dev/null 2>&1 || true
   if [ "$ok" = "1" ]; then

@@ -97,10 +97,17 @@ ss_install_deps() {
   ss_install_opkg jq 1 || return 1
   ss_install_opkg ca-certificates 1 || return 1
 
-  # Dataplane helpers used by firewall / DNS / TPROXY
-  for pkg in flock iptables ipset unzip coreutils-base64 openssl-util findutils; do
+  # Dataplane helpers. Do NOT install Entware `iptables` when firmware already
+  # has one — Entware's binary in PATH breaks Merlin's own NAT/firewall.
+  for pkg in flock ipset unzip coreutils-base64 openssl-util findutils; do
     ss_install_opkg "$pkg" 0
   done
+  if ! ss_resolve_system_iptables >/dev/null 2>&1; then
+    ss_warn "No system iptables found — installing Entware iptables as last resort"
+    ss_install_opkg iptables 0
+  else
+    ss_info "Using firmware iptables ($(ss_resolve_system_iptables)) — skipping Entware iptables"
+  fi
   # Optional quality-of-life
   for pkg in logrotate net-tools-netstat; do
     ss_install_opkg "$pkg" 0
@@ -176,11 +183,27 @@ ss_install() {
   if [ ! -f "$SS_CONF_FILE" ]; then
     SS_API_KEY=""
     SS_ACTIVE_CONFIG_ID=""
-    SS_MODE="redirect"
-    SS_PROXY_MODE="redirect"
+    # Safe default: proxy only (SOCKS/HTTP). Transparent redirect/tproxy is opt-in
+    # via UI/CLI — installing must never hijack LAN and kill internet.
+    SS_MODE="proxy"
+    SS_PROXY_MODE="proxy"
     SS_DNS_MODE="OFF"
     SS_AUTO_START="1"
     ss_save_conf
+  fi
+
+  # Older builds defaulted to redirect even with no outbounds — that blackholes LAN.
+  # On upgrade/reinstall with nothing applied yet, force safe proxy + clear leftover rules.
+  if [ -z "${SS_ENABLED_OUTBOUNDS:-}" ] && [ -z "${SS_ACTIVE_CONFIG_ID:-}" ]; then
+    case "${SS_MODE:-proxy}" in
+    redirect | tproxy)
+      ss_warn "No outbounds configured but mode=$SS_MODE — switching to proxy to protect internet"
+      SS_MODE="proxy"
+      SS_PROXY_MODE="proxy"
+      ss_save_conf
+      ss_cleanup_firewall 2>/dev/null || true
+      ;;
+    esac
   fi
 
   ss_policies_init

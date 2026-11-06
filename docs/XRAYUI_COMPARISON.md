@@ -14,7 +14,10 @@
 | JFFS scripts check | `ss_check_jffs_ready` |
 | deps: curl jq iptables ipset flock | ставятся при install |
 | WAN iface RETURN | `ss_fw_exclude_wan_ifaces` |
-| TPROXY mark + local table + DIVERT/socket | есть |
+| TPROXY mark + local table + DIVERT/socket | есть (**свой** mark `0x20000` / table `78`, не `0x10000`/`77` xrayui) |
+| LOCAL / DHCP / DNAT exclusions | есть (v1.0.14+) |
+| Firmware iptables (не Entware) | предпочитаем `/usr/sbin/iptables` |
+| Default mode after install | `proxy` (transparent opt-in; xrayui стартует по UI) |
 | TCPMSS clamp | есть |
 | desired-state для watchdog | `/tmp/stealthsurf.desired` |
 | autostart delay / wait network | `SS_STARTUP_DELAY` |
