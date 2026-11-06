@@ -316,17 +316,44 @@ ss_version_update_if_available() {
   # when it already marks update_available (e.g. prior cron check).
   # Progress/status → stderr when interactive; captured JSON stays on stdout.
   local force="${1:-0}"
-  local info
+  local info check_rc=0 err="" latest=""
+  if type ss_cli_force_progress >/dev/null 2>&1; then
+    ss_cli_force_progress
+  fi
   ss_info "Checking whether an update is available…"
-  info=$(ss_version_check) || true
+  if type ss_cli_echo >/dev/null 2>&1; then
+    ss_cli_echo "→ Checking GitHub for updates (installed=$ADDON_VERSION)…"
+  fi
+  info=$(ss_version_check) || check_rc=$?
   if [ "$force" != "1" ] && ! printf '%s' "$info" | jq -e '.update_available == true' >/dev/null 2>&1; then
     if [ -f "$SS_VERSION_FILE" ] && jq -e '.update_available == true' "$SS_VERSION_FILE" >/dev/null 2>&1; then
       info=$(cat "$SS_VERSION_FILE")
     else
-      ss_info "No newer release to install (installed=$ADDON_VERSION)"
+      err=$(printf '%s' "$info" | jq -r '.error // empty' 2>/dev/null || true)
+      latest=$(printf '%s' "$info" | jq -r '.latest // empty' 2>/dev/null || true)
+      if [ "$check_rc" -ne 0 ] || [ -n "$err" ]; then
+        if type ss_cli_echo >/dev/null 2>&1; then
+          ss_cli_echo "✗ Version check failed${err:+: $err}"
+          ss_cli_echo "  Retry later, or force download:  ssurf uf"
+        else
+          ss_warn "Version check failed${err:+: $err} — try: ssurf uf"
+        fi
+        printf '%s\n' "$info"
+        return 1
+      fi
+      if type ss_cli_echo >/dev/null 2>&1; then
+        ss_cli_echo "✓ Already up to date ($ADDON_VERSION)${latest:+, GitHub latest=$latest}"
+        ss_cli_echo "  Force reinstall latest:  ssurf uf   or   ssurf upd -f"
+      else
+        ss_info "No newer release to install (installed=$ADDON_VERSION)"
+      fi
       printf '%s\n' "$info"
       return 2
     fi
+  fi
+  if type ss_cli_echo >/dev/null 2>&1; then
+    latest=$(printf '%s' "$info" | jq -r '.latest // empty' 2>/dev/null || true)
+    ss_cli_echo "→ Update available: $ADDON_VERSION → ${latest:-latest}. Starting download…"
   fi
   ss_update_self
 }

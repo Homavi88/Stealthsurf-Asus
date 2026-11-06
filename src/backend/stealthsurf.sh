@@ -163,25 +163,34 @@ ss_cli_dispatch() {
     ss_version_check || return 1
     ;;
   update | upgrade | upd)
+    # Always show terminal stages unless user set SS_PROGRESS=0
+    ss_cli_force_progress
     force=0
     case "${2:-}" in
     --force | -f | force | 1) force=1 ;;
     esac
     if [ "$force" = "1" ]; then
+      ss_cli_echo "→ Force update: downloading latest release…"
       # Silence JSON on stdout; keep stderr for progress/status
       ss_version_check >/dev/null || true
       ss_update_self || return 1
+      ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
     else
       ss_version_update_if_available 0
       rc=$?
       [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+      [ "$rc" = "0" ] && ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
     fi
     ;;
   force-update | update-force | uf)
+    ss_cli_force_progress
+    ss_cli_echo "→ Force update: downloading latest release…"
     ss_version_check >/dev/null || true
     ss_update_self || return 1
+    ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
     ;;
   update-if-newer)
+    ss_cli_force_progress
     ss_version_update_if_available "${2:-0}"
     rc=$?
     [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
@@ -196,6 +205,7 @@ ss_cli_dispatch() {
     fi
     ;;
   install-version | switch-version | rollback | roll | iv)
+    ss_cli_force_progress
     tag="${2:-}"
     force_tag=0
     case "${3:-}" in
@@ -211,12 +221,14 @@ ss_cli_dispatch() {
       echo "usage: ssurf iv <tag>   e.g. ssurf iv v1.0.16"
       return 1
     }
+    ss_cli_echo "→ Installing version $tag…"
     SS_FORCE_TAG="$force_tag"
     export SS_FORCE_TAG
     ss_version_install_tag "$tag"
     rc=$?
     unset SS_FORCE_TAG
     [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+    [ "$rc" = "0" ] && ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
     ;;
   install)
     ss_install || return 1

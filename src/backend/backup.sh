@@ -265,7 +265,13 @@ ss_update_self() {
   local bak="/tmp/stealthsurf-update-bak.$$"
   local new_script=""
 
+  if type ss_cli_force_progress >/dev/null 2>&1; then
+    ss_cli_force_progress
+  fi
   ss_progress_begin "StealthSurf update" 7
+  if type ss_cli_echo >/dev/null 2>&1; then
+    ss_cli_echo "Stages: backup → resolve URL → download → validate → install → remount → version"
+  fi
 
   ss_progress_step "Backup before update"
   ss_backup_auto "pre-update" || true

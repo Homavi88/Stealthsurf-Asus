@@ -17,12 +17,18 @@ CLI="$ROOT/src/backend/stealthsurf.sh"
 
 # --- Source markers ---
 grep -q 'ss_console_enabled' "$HELPER" && ok "ss_console_enabled helper" || bad "ss_console_enabled"
+grep -q 'ss_cli_force_progress' "$HELPER" && ok "ss_cli_force_progress" || bad "ss_cli_force_progress"
+grep -q 'ss_cli_echo' "$HELPER" && ok "ss_cli_echo" || bad "ss_cli_echo"
+grep -q 'ss_progress_log_file' "$HELPER" && ok "ss_progress_log_file" || bad "ss_progress_log_file"
 grep -q 'ss_progress_begin' "$HELPER" && ok "ss_progress_begin" || bad "ss_progress_begin"
 grep -q 'ss_progress_step' "$HELPER" && ok "ss_progress_step" || bad "ss_progress_step"
 grep -q 'ss_progress_end' "$HELPER" && ok "ss_progress_end" || bad "ss_progress_end"
 grep -q 'ss_curl_download' "$HELPER" && ok "ss_curl_download" || bad "ss_curl_download"
 grep -q -- '--progress-bar' "$HELPER" && ok "curl progress-bar flag" || bad "curl progress-bar"
 grep -q 'ss_console' "$LOGGING" && ok "logging mirrors to console" || bad "logging console"
+grep -q 'ss_cli_force_progress' "$CLI" && ok "CLI forces progress on update" || bad "CLI forces progress on update"
+grep -q 'Already up to date' "$VERSION" && ok "uptodate message" || bad "uptodate message"
+grep -q 'ssurf uf' "$VERSION" && ok "force hint in version.sh" || bad "force hint in version.sh"
 
 grep -q 'ss_progress_begin "StealthSurf update"' "$BACKUP" && ok "update banner" || bad "update banner"
 grep -q 'Checking GitHub / resolving download URL' "$BACKUP" && ok "stage: github" || bad "stage github"
@@ -108,6 +114,22 @@ if [ -s "$err" ]; then
 else
   ok "SS_PROGRESS=0 silences console"
 fi
+# but still writes activity log
+grep -q 'action=progress.begin' "$ADDON_LOGS_DIR/activity.log" && ok "progress.begin logged even if quiet" || bad "progress.begin logged even if quiet"
+grep -q 'action=progress.step' "$ADDON_LOGS_DIR/activity.log" && ok "progress.step logged even if quiet" || bad "progress.step logged even if quiet"
+
+# ss_cli_force_progress turns auto → 1
+SS_PROGRESS=auto
+ss_cli_force_progress
+[ "$SS_PROGRESS" = "1" ] && ok "force_progress sets SS_PROGRESS=1" || bad "force_progress sets SS_PROGRESS=1"
+SS_PROGRESS=0
+ss_cli_force_progress
+[ "$SS_PROGRESS" = "0" ] && ok "force_progress respects explicit 0" || bad "force_progress respects explicit 0"
+
+# ss_cli_echo always writes stderr
+: >"$err"
+ss_cli_echo "always visible" 2>"$err"
+grep -q 'always visible' "$err" && ok "ss_cli_echo always stderr" || bad "ss_cli_echo always stderr"
 
 # ss_info goes to stderr when progress forced on
 SS_PROGRESS=1
@@ -116,6 +138,9 @@ SS_PROGRESS=1
 ss_info "hello status" >"$out" 2>"$err"
 grep -q 'INFO: hello status' "$err" && ok "ss_info on stderr" || bad "ss_info on stderr"
 [ ! -s "$out" ] && ok "ss_info not on stdout" || bad "ss_info leaked stdout"
+
+# CI should also run this file
+grep -q 'test-update-progress.sh' "$ROOT/.github/workflows/release.yml" && ok "CI runs update-progress test" || bad "CI runs update-progress test"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail"

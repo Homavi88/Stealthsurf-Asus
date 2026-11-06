@@ -1,13 +1,27 @@
 #!/bin/sh
 
-# Human status on stderr when interactive (SSH TTY). Never on stdout —
+# Human status on stderr when interactive. Never on stdout —
 # service-event / jq captures must stay clean. Override: SS_PROGRESS=0|1.
+# Merlin/Entware SSH often has stderr not marked as TTY — also accept
+# stdin/stdout TTY, and CLI update paths force SS_PROGRESS=1.
 ss_console_enabled() {
   case "${SS_PROGRESS:-auto}" in
   0 | off | no | false) return 1 ;;
   1 | on | yes | true) return 0 ;;
   esac
-  [ -t 2 ] 2>/dev/null
+  [ -t 2 ] 2>/dev/null && return 0
+  [ -t 1 ] 2>/dev/null && return 0
+  [ -t 0 ] 2>/dev/null && return 0
+  return 1
+}
+
+# Force visible progress for update/install-version CLI (unless user set SS_PROGRESS=0).
+ss_cli_force_progress() {
+  case "${SS_PROGRESS:-auto}" in
+  0 | off | no | false) return 0 ;;
+  esac
+  SS_PROGRESS=1
+  export SS_PROGRESS
 }
 
 ss_console() {
@@ -15,11 +29,28 @@ ss_console() {
   printf '%s\n' "$1" >&2
 }
 
+# Always print to stderr (even without TTY) — for critical update status.
+ss_cli_echo() {
+  printf '%s\n' "$1" >&2
+}
+
+ss_progress_log_file() {
+  # Always persist progress breadcrumbs (TTY or not)
+  local kind="$1"
+  local msg="$2"
+  [ -n "${ADDON_LOGS_DIR:-}" ] || return 0
+  mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null || true
+  printf '%s action=progress.%s %s\n' \
+    "$(date '+%Y-%m-%d %H:%M:%S')" "$kind" "$msg" \
+    >>"$ADDON_LOGS_DIR/activity.log" 2>/dev/null || true
+}
+
 ss_progress_begin() {
   # ss_progress_begin <title> [total_steps]
   SS_PROGRESS_TITLE="${1:-StealthSurf update}"
   SS_PROGRESS_TOTAL="${2:-7}"
   SS_PROGRESS_STEP=0
+  ss_progress_log_file "begin" "title=$SS_PROGRESS_TITLE total=$SS_PROGRESS_TOTAL"
   ss_console_enabled || return 0
   printf '\n======== %s ========\n' "$SS_PROGRESS_TITLE" >&2
 }
@@ -37,13 +68,7 @@ ss_progress_step() {
     pct=0
   fi
   [ "$pct" -gt 100 ] 2>/dev/null && pct=100
-  # File-only breadcrumb (avoid ss_activity → ss_log double console lines)
-  if [ -n "${ADDON_LOGS_DIR:-}" ]; then
-    mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null
-    printf '%s action=progress.step step=%s/%s pct=%s %s\n' \
-      "$(date '+%Y-%m-%d %H:%M:%S')" "$n" "$t" "$pct" "$msg" \
-      >>"$ADDON_LOGS_DIR/activity.log" 2>/dev/null || true
-  fi
+  ss_progress_log_file "step" "step=$n/$t pct=$pct $msg"
   ss_console_enabled || return 0
   printf '[%d/%d] (%3d%%) %s\n' "$n" "$t" "$pct" "$msg" >&2
 }
@@ -51,6 +76,7 @@ ss_progress_step() {
 ss_progress_end() {
   # ss_progress_end <final message>
   local msg="${1:-done}"
+  ss_progress_log_file "end" "$msg"
   ss_console_enabled || return 0
   printf '======== %s ========\n\n' "$msg" >&2
 }
