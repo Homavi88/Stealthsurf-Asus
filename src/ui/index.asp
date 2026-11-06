@@ -56,36 +56,15 @@ function initial() {
 }
 </script>
 <style type="text/css">
+  /* Layout/buttons aligned with XrayUI (Asuswrt-Merlin FormTable patterns) */
   #Loading, #overDiv { z-index: 9999; }
+  .FormTitle { position: relative; }
   .FormTitle .formfonttitle { text-align: left; }
-  .ss-section-tabs {
-    margin: 8px 0 12px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-  }
-  .ss-section-tabs .ss-tab {
-    display: inline-block;
-    padding: 4px 12px;
-    margin: 0;
-    border: 1px solid #6b757b;
-    background: #4d595d;
-    color: #fff;
-    font-weight: bold;
-    font-size: 12px;
-    cursor: pointer;
-    border-radius: 3px;
-  }
-  .ss-section-tabs .ss-tab:hover { background: #596e74; }
-  .ss-section-tabs .ss-tab.active {
-    background: #222;
-    border-color: #fc0;
-    color: #fc0;
-  }
-  .ss-panel { display: none; }
-  .ss-panel.active { display: block; }
+  .formfontdesc { margin-left: 0; }
+  .ss-panel { display: block; margin: 0; }
+  .ss-section-tabs { display: none !important; }
   .ss-hint {
-    color: #ffcc00;
+    color: #fc0;
     font-size: 12px;
     margin: 6px 0;
   }
@@ -94,7 +73,7 @@ function initial() {
   .ss-msg {
     min-height: 18px;
     margin: 10px 0 4px;
-    color: #ffcc00;
+    color: #fc0;
     white-space: pre-wrap;
     font-size: 13px;
   }
@@ -104,7 +83,7 @@ function initial() {
     background: #2f3a3e;
     border: 1px solid #6b757b;
     color: #fff;
-    font-family: Consolas, "Courier New", monospace;
+    font-family: "Courier New", Courier, monospace;
     font-size: 11px;
     max-height: 280px;
     overflow: auto;
@@ -112,35 +91,48 @@ function initial() {
     padding: 8px;
     margin-top: 6px;
   }
-  .ss-row-buttons { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; vertical-align: middle; }
-  .ss-row-buttons .button_gen,
-  .ss-row-buttons .button_gen_small { margin: 2px 0; }
+  .FormTable {
+    margin-bottom: 14px;
+  }
+  .FormTable td,
+  .FormTable th {
+    vertical-align: middle;
+  }
   .FormTable td span.label {
     color: #fff;
-    padding: 3px 6px;
-    border-radius: 3px;
-    margin: 2px 4px 2px 0;
+    padding: 3px 5px;
+    border-radius: 4px;
+    margin: 4px 4px 0 0;
     font-weight: bold;
     display: inline-block;
   }
   .FormTable td span.label-success { background-color: green; }
   .FormTable td span.label-error { background-color: red; }
-  .FormTable td span.label-warning { background-color: #fc0; color: #333; }
+  .FormTable td span.label-warning { background-color: #fc0; color: #596e74; }
   .FormTable td span.label-muted { background-color: #6b757b; }
   .FormTable input[type="text"],
   .FormTable input[type="password"],
+  .FormTable input[type="number"],
   .FormTable select,
   .FormTable textarea {
     background: #596e74;
     border: 1px solid #929ea1;
     color: #fff;
     padding: 3px 6px;
+    outline: none;
+  }
+  .FormTable input::placeholder,
+  .FormTable textarea::placeholder {
+    color: #fc0;
+    font-weight: bold;
+    opacity: 0.5;
+    font-style: italic;
   }
   .FormTable textarea {
     width: 98%;
     min-height: 100px;
-    font-family: Consolas, "Courier New", monospace;
-    font-size: 12px;
+    font-family: "Courier New", Courier, monospace;
+    font-size: 13px;
   }
   .FormTable input.input_25_table { width: 240px; }
   .FormTable input.input_32_table { width: 320px; }
@@ -150,6 +142,64 @@ function initial() {
     padding: 1px 4px;
     border-radius: 2px;
     font-size: 11px;
+  }
+  .row-buttons,
+  .ss-row-buttons {
+    float: right;
+  }
+  .row-buttons label,
+  .ss-row-buttons label {
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  .button_gen_small {
+    min-width: auto !important;
+    border-radius: 4px !important;
+    padding: 3px 5px 5px 5px !important;
+    margin: 2px !important;
+    font-weight: normal !important;
+    height: auto !important;
+    font-size: 11px !important;
+    color: #fff !important;
+    text-decoration: none !important;
+  }
+  .button_info {
+    background: #fc0 !important;
+    color: #333 !important;
+    font-weight: bold !important;
+    border-radius: 10px !important;
+    padding: 3px 8px 5px 8px !important;
+  }
+  .apply_gen {
+    margin: 12px 0 10px;
+    text-align: center;
+  }
+  .apply_gen .button_gen {
+    min-width: 120px;
+  }
+  .ss-version {
+    padding-top: 10px;
+    min-height: 22px;
+    position: relative;
+  }
+  .ss-version a {
+    text-decoration: underline;
+    font-size: 10px;
+    color: #fc0;
+    font-weight: bold;
+    position: absolute;
+    bottom: 0;
+    right: 5px;
+  }
+  .ss-meta-inline {
+    color: #cfd8dc;
+    font-size: 12px;
+  }
+  .ss-core-ver {
+    float: right;
+    color: #fc0;
+    font-weight: bold;
+    font-size: 12px;
   }
   #updateBanner {
     display: none;
@@ -381,9 +431,9 @@ function initial() {
               <tr bgcolor="#4D595D">
                 <td valign="top">
                   <div>&nbsp;</div>
-                  <div class="formfonttitle">StealthSurf UI <span id="titleVer"></span></div>
-                  <div class="formfontdesc">
-                    VPN-провайдер StealthSurf — каталог конфигов, transparent proxy, routing и политики устройств на роутере.
+                  <div class="formfonttitle" style="text-align:left">StealthSurf UI <span id="titleVer"></span></div>
+                  <div id="formfontdesc" class="formfontdesc">
+                    Управление каталогом конфигов StealthSurf, transparent proxy, routing и политиками устройств на роутере.
                     После изменений на сайте нажмите <b>Синхронизировать</b>.
                   </div>
                   <div style="margin:10px 0 10px 5px;" class="splitLine"></div>
@@ -393,7 +443,7 @@ function initial() {
                       Доступна новая версия: <b id="bannerLatest">—</b>
                       (установлена <span id="bannerInstalled">—</span>)
                     </div>
-                    <div class="ss-row-buttons">
+                    <div class="row-buttons">
                       <input id="btnBannerChangelog" class="button_gen button_gen_small" type="button" value="Что нового">
                       <input id="btnBannerUpdate" class="button_gen button_gen_small" type="button" value="Установить обновление">
                     </div>
@@ -473,7 +523,7 @@ function initial() {
                           </div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <input id="setBackupNote" class="input_25_table" type="text" placeholder="заметка (опц.)" maxlength="64">
-                            <span class="ss-row-buttons">
+                            <span class="row-buttons">
                               <input id="btnSettingsBackup" class="button_gen button_gen_small" type="button" value="Создать backup">
                               <input id="btnSettingsBackupList" class="button_gen button_gen_small" type="button" value="Список backup">
                             </span>
@@ -523,65 +573,80 @@ function initial() {
                     </div>
                   </div>
 
-                  <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                  <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-config">
                     <thead>
-                      <tr><td colspan="2">Состояние сервиса</td></tr>
+                      <tr>
+                        <td colspan="2">
+                          Configuration
+                          <span class="ss-core-ver" id="installedVer">—</span>
+                        </td>
+                      </tr>
                     </thead>
                     <tbody>
                       <tr>
-                        <th width="30%">Статус</th>
+                        <th width="30%">Connection status</th>
                         <td>
                           <span id="runState" class="label label-error">stopped</span>
                           <span id="conflictPill" class="label label-error" style="display:none">XrayUI конфликт</span>
                           <span id="xrayuiPill" class="label label-warning" style="display:none">XrayUI установлен</span>
-                          <span id="activeCfg" class="label label-muted">active: —</span>
-                          <span id="modePill" class="label label-muted">mode: —</span>
-                          <span id="ports" class="label label-muted">ports: —</span>
-                          <span id="defaultPill" class="label label-muted">default: —</span>
-                          <span id="installedVer" class="label label-muted">версия: —</span>
-                          <span id="latestVer" class="label label-muted">GitHub: —</span>
-                          <span id="updatePill" class="label label-warning" style="display:none">есть обновление</span>
+                          <span class="row-buttons">
+                            <input id="btnStart" class="button_gen button_gen_small" type="button" value="start">
+                            <input id="btnRestart" class="button_gen button_gen_small" type="button" value="restart" style="display:none">
+                            <input id="btnStop" class="button_gen button_gen_small" type="button" value="stop" style="display:none">
+                            <input id="btnRefresh" class="button_gen button_gen_small" type="button" value="refresh">
+                          </span>
+                          <div class="ss-meta-inline" style="clear:both;margin-top:6px">
+                            <span id="activeCfg">active: —</span>
+                            · <span id="modePill">mode: —</span>
+                            · <span id="ports">ports: —</span>
+                            · <span id="defaultPill">default: —</span>
+                            · <span id="latestVer">GitHub: —</span>
+                            <span id="updatePill" class="label label-warning" style="display:none">update</span>
+                          </div>
                         </td>
                       </tr>
                       <tr>
-                        <th>Управление</th>
+                        <th>Sync с сайта</th>
                         <td>
-                          <span class="ss-row-buttons">
-                            <input id="btnStart" class="button_gen button_gen_small" type="button" value="Старт">
-                            <input id="btnStop" class="button_gen button_gen_small" type="button" value="Стоп">
-                            <input id="btnRestart" class="button_gen button_gen_small" type="button" value="Рестарт">
-                            <input id="btnSync" class="button_gen button_gen_small" type="button" value="Синхронизировать">
-                            <input id="btnRefresh" class="button_gen button_gen_small" type="button" value="Обновить UI">
-                            <input id="btnSettings" class="button_gen button_gen_small" type="button" value="Настройки">
-                            <input id="btnCheckUpdate" class="button_gen button_gen_small" type="button" value="Проверить версию">
-                            <input id="btnUpdate" class="button_gen button_gen_small" type="button" value="Установить с GitHub" style="display:none">
+                          <span class="ss-meta-inline">Подтянуть конфиги / ключи с api.stealthsurf.net</span>
+                          <span class="row-buttons">
+                            <input id="btnSync" class="button_gen button_gen_small" type="button" value="sync">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>General options</th>
+                        <td>
+                          <span class="ss-meta-inline">Автостарт, reboot по плану, backup, geoip/geosite</span>
+                          <span class="row-buttons">
+                            <input id="btnSettings" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th>Update</th>
+                        <td>
+                          <span class="ss-meta-inline" id="verDetail">—</span>
+                          <span class="row-buttons">
+                            <input id="btnCheckUpdate" class="button_gen button_gen_small" type="button" value="check">
+                            <input id="btnUpdate" class="button_gen button_gen_small" type="button" value="install" style="display:none">
                           </span>
                         </td>
                       </tr>
                     </tbody>
                   </table>
 
-                  <div class="ss-section-tabs" id="ssTabs">
-                    <button class="ss-tab active" data-tab="keys" type="button">Ключи / Sync</button>
-                    <button class="ss-tab" data-tab="catalog" type="button">Мои подключения</button>
-                    <button class="ss-tab" data-tab="routing" type="button">Routing</button>
-                    <button class="ss-tab" data-tab="policies" type="button">Политики MAC</button>
-                    <button class="ss-tab" data-tab="general" type="button">Режим / DNS</button>
-                    <button class="ss-tab" data-tab="backup" type="button">Backup / Логи</button>
-                    <button class="ss-tab" data-tab="diag" type="button">Диагностика</button>
-                  </div>
-
                   <!-- Keys -->
-                  <div class="ss-panel active" id="tab-keys">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">API-ключи StealthSurf</td></tr></thead>
+                  <div class="ss-panel" id="tab-keys">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">API keys</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Добавить ключ</th>
                           <td>
                             <input id="apiKey" class="input_32_table" type="password" maxlength="128" placeholder="stlth_........_........................" autocomplete="off">
                             <input id="apiKeyLabel" class="input_15_table" type="text" maxlength="64" placeholder="метка (опц.)" style="margin-left:6px">
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnSaveKey" class="button_gen button_gen_small" type="button" value="Сохранить и проверить">
                               <input id="btnAddKey" class="button_gen button_gen_small" type="button" value="Добавить ещё ключ">
                             </span>
@@ -602,16 +667,16 @@ function initial() {
                   </div>
 
                   <!-- Catalog -->
-                  <div class="ss-panel" id="tab-catalog">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Каталог подключений</td></tr></thead>
+                  <div class="ss-panel" id="tab-catalog" data-sec="catalog">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Outbounds / catalog</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Фильтр / default</th>
                           <td>
                             <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
                             <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnSetDefault" class="button_gen button_gen_small" type="button" value="Назначить default">
                               <input id="btnRebuild" class="button_gen button_gen_small" type="button" value="Пересобрать Xray">
                             </span>
@@ -648,7 +713,7 @@ function initial() {
                               <label><input type="checkbox" id="optUseSalamander"> use_salamander</label>
                               <label><input type="checkbox" id="optDisableReality"> disable_reality</label>
                             </div>
-                            <div class="ss-row-buttons" style="margin-top:8px">
+                            <div class="row-buttons" style="margin-top:8px">
                               <input id="btnUpdateSettings" class="button_gen button_gen_small" type="button" value="PATCH на StealthSurf">
                               <input id="btnApplySole" class="button_gen button_gen_small" type="button" value="Apply как единственный">
                             </div>
@@ -669,9 +734,9 @@ function initial() {
                   </div>
 
                   <!-- Routing -->
-                  <div class="ss-panel" id="tab-routing">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Правила: домен / geo → VPN из каталога</td></tr></thead>
+                  <div class="ss-panel" id="tab-routing" data-sec="routing">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Routing</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Пресет</th>
@@ -713,7 +778,7 @@ function initial() {
                             <div id="ruleSuggestHint" class="ss-hint">
                               Начните вводить домен — подсказки из списка популярных сайтов. Для geosite/geoip — категории из репозитория geodata.
                             </div>
-                            <div class="ss-row-buttons" style="margin-top:6px">
+                            <div class="row-buttons" style="margin-top:6px">
                               <input id="btnAddRule" class="button_gen button_gen_small" type="button" value="Добавить в список">
                               <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing + Apply">
                               <input id="btnGeodata" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite">
@@ -753,9 +818,9 @@ function initial() {
                   </div>
 
                   <!-- Policies -->
-                  <div class="ss-panel" id="tab-policies">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Bypass / Redirect по MAC</td></tr></thead>
+                  <div class="ss-panel" id="tab-policies" data-sec="policies">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Clients / MAC policies</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Правила</th>
@@ -780,7 +845,7 @@ function initial() {
                               <option value="tcp">tcp</option>
                               <option value="udp">udp</option>
                             </select>
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnAddPolicy" class="button_gen button_gen_small" type="button" value="Добавить">
                               <input id="btnSavePolicies" class="button_gen button_gen_small" type="button" value="Apply политики">
                             </span>
@@ -800,9 +865,9 @@ function initial() {
                   </div>
 
                   <!-- General -->
-                  <div class="ss-panel" id="tab-general">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Режим transparent proxy и DNS</td></tr></thead>
+                  <div class="ss-panel" id="tab-general" data-sec="general">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Mode / DNS</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Dataplane mode</th>
@@ -830,7 +895,7 @@ function initial() {
                           <th>Версия аддона</th>
                           <td>
                             <span id="verDetail" class="label label-muted">—</span>
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnCheckUpdate2" class="button_gen button_gen_small" type="button" value="Проверить на GitHub">
                               <input id="btnForceUpdate" class="button_gen button_gen_small" type="button" value="Установить latest с GitHub">
                             </span>
@@ -852,9 +917,9 @@ function initial() {
                   </div>
 
                   <!-- Backup -->
-                  <div class="ss-panel" id="tab-backup">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Backup конфигураций</td></tr></thead>
+                  <div class="ss-panel" id="tab-backup" data-sec="backup">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Backup / Logs</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Создать</th>
@@ -864,7 +929,7 @@ function initial() {
                               Ночной backup в 03:00. Файлы: <code>/opt/share/stealthsurf/backups/</code>
                             </div>
                             <input id="backupNote" class="input_25_table" type="text" placeholder="заметка (опц.)">
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnBackup" class="button_gen button_gen_small" type="button" value="Создать backup">
                               <input id="btnBackupList" class="button_gen button_gen_small" type="button" value="Обновить список">
                             </span>
@@ -891,7 +956,7 @@ function initial() {
                               <option value="access">xray access</option>
                               <option value="xray-error">xray error</option>
                             </select>
-                            <span class="ss-row-buttons" style="margin-left:6px">
+                            <span class="row-buttons" style="margin-left:6px">
                               <input id="btnLogs" class="button_gen button_gen_small" type="button" value="Показать логи">
                               <input id="btnDevicesSnap" class="button_gen button_gen_small" type="button" value="Снимок устройств LAN">
                               <input id="btnClearLogs" class="button_gen button_gen_small" type="button" value="Очистить логи">
@@ -905,14 +970,14 @@ function initial() {
                   </div>
 
                   <!-- Diag -->
-                  <div class="ss-panel" id="tab-diag">
-                    <table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Диагностика</td></tr></thead>
+                  <div class="ss-panel" id="tab-diag" data-sec="diag">
+                    <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Diagnostics</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%">Действия</th>
                           <td>
-                            <span class="ss-row-buttons">
+                            <span class="row-buttons">
                               <input id="btnDiag" class="button_gen button_gen_small" type="button" value="Снять diag dump">
                               <input id="btnTestCfg" class="button_gen button_gen_small" type="button" value="Тест xray.json">
                               <input id="btnConnSocks" class="button_gen button_gen_small" type="button" value="IP через SOCKS">
@@ -927,6 +992,13 @@ function initial() {
                         </tr>
                       </tbody>
                     </table>
+                  </div>
+
+                  <div class="apply_gen">
+                    <input id="btnApplyAll" class="button_gen" type="button" value="Apply">
+                  </div>
+                  <div class="ss-version">
+                    <a href="#" id="btnVersionFooter" title="Проверить обновление">STEALTHSURF <span id="footerVer">v—</span></a>
                   </div>
 
                   <div id="msg" class="ss-msg"></div>

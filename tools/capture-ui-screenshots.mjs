@@ -165,14 +165,15 @@ const browser = await puppeteer.default.launch({
 });
 
 const shots = [
-  { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running", height: 1000 },
-  { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running", height: 1000 },
+  { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running", height: 1100, scroll: "sec-config" },
+  { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running", height: 1100, scroll: "tab-catalog" },
   {
     file: "03-routing.png",
     path: "/?tab=routing",
     wait: 1100,
     state: "running",
     height: 1200,
+    scroll: "tab-routing",
     prepare: "routing-examples",
   },
   {
@@ -181,6 +182,7 @@ const shots = [
     wait: 1100,
     state: "running",
     height: 1200,
+    scroll: "tab-routing",
     prepare: "routing-examples",
   },
   {
@@ -189,16 +191,18 @@ const shots = [
     wait: 900,
     state: "running",
     height: 1100,
+    scroll: "tab-routing",
     prepare: "routing-suggest",
   },
-  { file: "04-mode-dns.png", path: "/?tab=general", wait: 1000, state: "running", height: 1000 },
-  { file: "05-xrayui-conflict.png", path: "/?tab=keys", wait: 1100, state: "conflict", height: 1000 },
+  { file: "04-mode-dns.png", path: "/?tab=general", wait: 1000, state: "running", height: 1000, scroll: "tab-general" },
+  { file: "05-xrayui-conflict.png", path: "/?tab=keys", wait: 1100, state: "conflict", height: 1100, scroll: "sec-config" },
   {
     file: "08-settings-modal.png",
     path: "/?tab=keys",
     wait: 900,
     state: "running",
     height: 1100,
+    scroll: "sec-config",
     prepare: "settings-modal",
   },
 ];
@@ -279,7 +283,16 @@ for (const shot of shots) {
     await page.evaluate((t) => {
       if (typeof switchTab === "function") switchTab(t);
     }, tab);
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((r) => setTimeout(r, 350));
+  }
+  if (shot.scroll) {
+    await page.evaluate((id) => {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
+      // Keep Merlin chrome visible for top shots
+      if (id === "sec-config" || id === "tab-keys") window.scrollTo(0, 0);
+    }, shot.scroll);
+    await new Promise((r) => setTimeout(r, 200));
   }
   if (shot.prepare) await prepareShot(page, shot.prepare);
   const out = path.join(OUT, shot.file);

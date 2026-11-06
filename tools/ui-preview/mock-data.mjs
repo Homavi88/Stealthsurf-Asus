@@ -10,7 +10,7 @@ export const state = {
   http_port: 10809,
   tproxy_port: 10810,
   redirect_port: 10811,
-  version: "1.0.19",
+  version: "1.0.20",
   xrayui: { installed: true, running: false, conflict: null, message: null },
   conflict: null,
   conflict_message: null,
@@ -139,10 +139,10 @@ export const policies = {
 };
 
 export const version = {
-  installed: "1.0.19",
-  latest: "1.0.19",
+  installed: "1.0.20",
+  latest: "1.0.20",
   update_available: false,
-  tag: "v1.0.19",
+  tag: "v1.0.20",
 };
 
 export const settings = {
@@ -156,7 +156,7 @@ export const settings = {
   geodata_auto: true,
   geodata_schedule: "weekly",
   geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
-  version: "1.0.19",
+  version: "1.0.20",
 };
 
 export const protocols = {

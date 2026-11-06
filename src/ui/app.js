@@ -128,11 +128,13 @@ function triggerService(action, payload, opts) {
 }
 
 function switchTab(name) {
+  // XrayUI-style: all sections stacked; ?tab= just scrolls into view
+  const panel = $("tab-" + name) || document.getElementById("sec-" + name);
+  if (panel && typeof panel.scrollIntoView === "function") {
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   document.querySelectorAll(".ss-tab").forEach((t) => {
     t.classList.toggle("active", t.dataset.tab === name);
-  });
-  document.querySelectorAll(".ss-panel[id^='tab-']").forEach((p) => {
-    p.classList.toggle("active", p.id === "tab-" + name);
   });
 }
 
@@ -208,12 +210,14 @@ function renderState(state) {
   stateCache = state;
   const running = !!state.running;
   const pill = $("runState");
-  pill.textContent = running ? "running" : "stopped";
+  pill.textContent = running ? "StealthSurf is running" : "StealthSurf is stopped";
   pill.className = labelClass(running ? "on" : "off");
+  // XrayUI pattern: start XOR restart+stop
+  if ($("btnStart")) $("btnStart").style.display = running ? "none" : "inline-block";
+  if ($("btnRestart")) $("btnRestart").style.display = running ? "inline-block" : "none";
+  if ($("btnStop")) $("btnStop").style.display = running ? "inline-block" : "none";
   $("activeCfg").textContent = "active: " + (state.active_config_id ?? "—");
-  $("activeCfg").className = labelClass("muted");
   $("modePill").textContent = "mode: " + (state.proxy_mode || state.mode || "—");
-  $("modePill").className = labelClass("muted");
   $("ports").textContent =
     "socks :" +
     (state.socks_port || "—") +
@@ -221,14 +225,13 @@ function renderState(state) {
     (state.http_port || "—") +
     " / tp :" +
     (state.tproxy_port || state.redirect_port || "—");
-  $("ports").className = labelClass("muted");
   $("defaultPill").textContent = "default: " + (state.default_outbound || "—");
-  $("defaultPill").className = labelClass("muted");
-  if (state.mode) $("modeSelect").value = state.mode;
-  if (state.dns_mode) $("dnsModeSelect").value = state.dns_mode;
+  if (state.mode && $("modeSelect")) $("modeSelect").value = state.mode;
+  if (state.dns_mode && $("dnsModeSelect")) $("dnsModeSelect").value = state.dns_mode;
   if (state.version) {
-    $("installedVer").textContent = "версия: " + state.version;
+    if ($("installedVer")) $("installedVer").textContent = "v" + state.version;
     if ($("titleVer")) $("titleVer").textContent = "v" + state.version;
+    if ($("footerVer")) $("footerVer").textContent = "v" + state.version;
   }
   renderConflict(state);
 }
@@ -318,11 +321,15 @@ function renderVersion(info) {
   const latest = info.latest || null;
   const upd = !!info.update_available;
 
-  $("installedVer").textContent = "версия: " + installed;
-  $("installedVer").className = labelClass(upd ? "warn" : "on");
-  $("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
-  $("latestVer").className = labelClass(upd ? "warn" : "muted");
+  if ($("installedVer")) {
+    $("installedVer").textContent = installed && installed !== "—" ? "v" + installed : "—";
+    $("installedVer").style.color = upd ? "#fc0" : "#fc0";
+  }
+  if ($("latestVer")) {
+    $("latestVer").textContent = latest ? "GitHub: " + latest : "GitHub: —";
+  }
   if ($("titleVer") && installed && installed !== "—") $("titleVer").textContent = "v" + installed;
+  if ($("footerVer") && installed && installed !== "—") $("footerVer").textContent = "v" + installed;
 
   const pill = $("updatePill");
   const banner = $("updateBanner");
@@ -983,6 +990,22 @@ function bind() {
   $("btnUpdate").addEventListener("click", () => {
     openUpdateModal(versionCache, { keepSeen: true });
   });
+  if ($("btnApplyAll")) {
+    $("btnApplyAll").addEventListener("click", () => {
+      // Like XrayUI Apply — rebuild dataplane from current settings
+      triggerService("rebuild", {}, { wait: 20 });
+    });
+  }
+  if ($("btnVersionFooter")) {
+    $("btnVersionFooter").addEventListener("click", (e) => {
+      e.preventDefault();
+      if (versionCache && versionCache.update_available) {
+        openUpdateModal(versionCache, { keepSeen: true });
+      } else {
+        triggerService("checkupdate", {});
+      }
+    });
+  }
   if ($("btnBannerUpdate")) {
     $("btnBannerUpdate").addEventListener("click", () => {
       if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
