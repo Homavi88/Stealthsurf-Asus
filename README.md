@@ -20,6 +20,7 @@
   <a href="#установка"><strong>Установка</strong></a> ·
   <a href="#возможности"><strong>Возможности</strong></a> ·
   <a href="#веб-интерфейс"><strong>WebUI</strong></a> ·
+  <a href="#telegram-бот"><strong>Telegram</strong></a> ·
   <a href="#cli-за-минуту"><strong>CLI</strong></a> ·
   <a href="#документация"><strong>Документация</strong></a>
 </p>
@@ -48,6 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 | **Routing** | domain / geosite / geoip → `ss-<id>`, пресеты, автоподсказки |
 | **Политики MAC** | bypass / redirect по устройствам |
 | **Надёжность** | автостарт, watchdog, плановый reboot, backup, auto geoip/geosite |
+| **Telegram-бот** | включение / выключение / рестарт / обновление аддона и правила routing с телефона |
 | **Безопасный dataplane** | отдельный mark/table от XrayUI; старт блокируется при конфликте |
 | **CLI** | короткий `ssurf` + меню `ssurf m` |
 
@@ -83,6 +85,36 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 4. По желанию: routing / MAC-политики / настройки
 5. **start** — устройства в Wi‑Fi идут через StealthSurf без системного VPN
 
+## Telegram-бот
+
+Удалённое управление аддоном из Telegram: старт/стоп VPN, рестарт, обновление и дописывание routing-правил к уже включённым VPN.
+
+### Настройка
+
+1. Создайте бота у [@BotFather](https://t.me/BotFather) → скопируйте **Bot Token**
+2. WebUI → **VPN → StealthSurf** → **Настройки** → блок **Telegram-бот**
+3. Вставьте token → **Проверить соединение** (вызов `getMe` к api.telegram.org)
+4. Включите бота → **В очередь** → **Применить**
+5. Напишите боту `/whoami` → скопируйте `chat_id` в whitelist → снова **Применить**
+
+Без whitelist команды управления недоступны (`/whoami` отвечает всегда, чтобы узнать id). Token в WebUI маскируется.
+
+### Команды бота
+
+| Команда | Действие |
+| --- | --- |
+| `/on` `/off` `/restart` | включить / выключить / перезапустить VPN |
+| `/update` | обновить аддон с GitHub |
+| `/status` `/list` | статус и каталог VPN |
+| `/rules` | текущие правила routing |
+| `/ruleadd` `<type> <matcher> <outbound> [name]` | дописать правило (`ss-<id>` / id / `direct` / `block`) |
+| `/whoami` | ваш `chat_id` |
+| `/help` | справка |
+
+Пример: `/ruleadd domain youtube.com 101`
+
+CLI: `ssurf tg` · `ssurf tg-test` · `ssurf tg-start` · `ssurf tg-stop`. Подробнее: [FAQ → Telegram-бот](./docs/FAQ.md#telegram-бот).
+
 ## CLI за минуту
 
 ```sh
@@ -100,6 +132,7 @@ ssurf up && ssurf st
 | `ssurf mode` · `dns` · `rb` | dataplane · DNS · rebuild |
 | `ssurf bak` · `cu` · `upd` | backup · check-update · update |
 | `ssurf lv` · `iv v1.0.16` | list versions · install / rollback |
+| `ssurf tg` · `tg-test` · `tg-start` | статус / проверка API / запуск бота |
 | `ssurf doctor` · `un --yes` | восстановление · удаление |
 | `ssurf h` · `ssurf m` | справка · меню |
 
