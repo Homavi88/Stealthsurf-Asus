@@ -57,7 +57,9 @@ function initial() {
 </script>
 <style type="text/css">
   /* Layout/buttons aligned with XrayUI (Asuswrt-Merlin FormTable patterns) */
-  #Loading, #overDiv { z-index: 9999; }
+  /* overDiv must sit above .ss-modal (10050) or Merlin overlib tips vanish inside Manage windows */
+  #overDiv { z-index: 11050; }
+  #Loading { z-index: 12000; }
   .FormTitle .formfonttitle { text-align: left; }
   .formfontdesc { margin-left: 0; }
   .ss-panel { display: block; margin: 0; }
@@ -477,7 +479,7 @@ function initial() {
   #ssHelpTip {
     display: none;
     position: fixed;
-    z-index: 11000;
+    z-index: 11060;
     max-width: min(380px, 92vw);
     padding: 10px 12px;
     background: #2f3a3e;
