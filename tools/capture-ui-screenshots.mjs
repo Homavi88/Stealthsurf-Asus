@@ -101,6 +101,7 @@ writeJson("configs.json", mock.configs);
 writeJson("locations.json", mock.locations);
 writeJson("subscriptions.json", mock.subscriptions);
 writeJson("api_keys.json", mock.api_keys);
+writeJson("balances.json", mock.balances);
 writeJson("outbounds.json", mock.outbounds);
 writeJson("routing.json", mock.routing);
 writeJson("policies.json", mock.policies);

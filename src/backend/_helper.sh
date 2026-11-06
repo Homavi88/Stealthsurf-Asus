@@ -22,6 +22,7 @@ ss_ensure_dirs() {
   [ -f "$SS_CACHE_KEYS" ] || echo '[]' >"$SS_CACHE_KEYS"
   [ -f "$SS_CACHE_SUBSCRIPTIONS" ] || echo '[]' >"$SS_CACHE_SUBSCRIPTIONS"
   [ -f "$SS_CACHE_CONFIGS" ] || echo '[]' >"$SS_CACHE_CONFIGS"
+  [ -f "$SS_CACHE_BALANCES" ] || echo '{"fetched_at":0,"keys":[],"total_balance":0,"total_referral":0,"currency":"RUB"}' >"$SS_CACHE_BALANCES"
   [ -f "$SS_ENDPOINTS_FILE" ] || echo '[]' >"$SS_ENDPOINTS_FILE"
 }
 

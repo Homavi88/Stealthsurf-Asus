@@ -338,3 +338,180 @@ ss_api_friendly_error() {
     ;;
   esac
 }
+
+ss_mask_email() {
+  # Mask local-part for UI cache (never log full addresses with keys)
+  local email="$1"
+  local local_part domain
+  case "$email" in
+  *@*)
+    local_part="${email%%@*}"
+    domain="${email#*@}"
+    if [ "${#local_part}" -le 2 ]; then
+      printf '%s@%s' "*" "$domain"
+    else
+      printf '%s***%s@%s' "$(printf '%s' "$local_part" | cut -c1-2)" "$(printf '%s' "$local_part" | tail -c 1)" "$domain"
+    fi
+    ;;
+  *)
+    printf '%s' "${email:-}"
+    ;;
+  esac
+}
+
+ss_api_key_meta() {
+  # Resolve label / fingerprint / tail for a stored API key (no full key echoed)
+  local key="$1"
+  local label key_fp key_tail
+  key_fp=$(printf '%s' "$key" | awk -F_ '{print $2}')
+  key_tail=$(printf '%s' "$key" | tail -c 8)
+  label=""
+  if [ -f "$SS_CACHE_KEYS" ]; then
+    label=$(jq -r --arg k "$key" '
+      (map(select(.key == $k)) | first | .label // empty) // empty
+    ' "$SS_CACHE_KEYS" 2>/dev/null)
+  fi
+  [ -n "$label" ] || {
+    if [ "$key" = "$SS_API_KEY" ]; then
+      label="primary"
+    else
+      label=""
+    fi
+  }
+  jq -nc \
+    --arg label "$label" \
+    --arg key_fp "${key_fp:-}" \
+    --arg key_tail "${key_tail:-}" \
+    '{label:$label, key_fp:$key_fp, key_tail:$key_tail}'
+}
+
+ss_api_balance_one() {
+  # Fetch balance fields for one API key via GET /profile. Never prints the key.
+  # stdout: single JSON object {ok, label, key_fp, key_tail, user_id, email, balance, referral_balance, currency, error}
+  local key="$1"
+  local meta resp data err_msg balance referral email uid
+  meta=$(ss_api_key_meta "$key")
+  err_msg=""
+  # Capture both stdout (error body may be printed on HTTP fail) and suppress noisy stderr
+  if ! resp=$(ss_api_with_key "$key" GET /profile 2>/dev/null); then
+    err_msg=$(printf '%s' "$resp" | jq -r '.message // .errorCode // .error // empty' 2>/dev/null)
+    [ -n "$err_msg" ] || err_msg="API request failed"
+    err_msg=$(ss_api_friendly_error "$err_msg")
+    # Never echo raw API key / token fragments into the cache
+    err_msg=$(printf '%s' "$err_msg" | sed 's/stlth_[A-Za-z0-9_]*/stlth_***/g' | cut -c1-160)
+    jq -nc \
+      --argjson meta "$meta" \
+      --arg error "$err_msg" \
+      '$meta + {ok:false, user_id:null, email:null, balance:null, referral_balance:null, currency:"RUB", error:$error}'
+    return 1
+  fi
+  data=$(printf '%s' "$resp" | jq -c '.data // {}')
+  # Refresh primary profile cache only for the active primary key
+  if [ "$key" = "$SS_API_KEY" ]; then
+    printf '%s' "$data" >"$SS_CACHE_PROFILE"
+  fi
+  balance=$(printf '%s' "$data" | jq -r '.balance // empty')
+  referral=$(printf '%s' "$data" | jq -r '.referral_balance // empty')
+  email=$(printf '%s' "$data" | jq -r '.email // empty')
+  uid=$(printf '%s' "$data" | jq -r '.id // empty')
+  if [ -z "$balance" ] && [ -z "$referral" ] && [ -z "$uid" ]; then
+    jq -nc \
+      --argjson meta "$meta" \
+      --arg error "Профиль без поля balance" \
+      '$meta + {ok:false, user_id:null, email:null, balance:null, referral_balance:null, currency:"RUB", error:$error}'
+    return 1
+  fi
+  email=$(ss_mask_email "$email")
+  jq -nc \
+    --argjson meta "$meta" \
+    --argjson balance "${balance:-0}" \
+    --argjson referral "${referral:-0}" \
+    --arg email "$email" \
+    --argjson uid "${uid:-null}" \
+    '$meta + {
+      ok:true,
+      user_id: $uid,
+      email: (if $email == "" then null else $email end),
+      balance: $balance,
+      referral_balance: $referral,
+      currency: "RUB",
+      error: null
+    }'
+  return 0
+}
+
+ss_api_fetch_balances() {
+  # Refresh balances.json for every configured StealthSurf API key (GET /profile).
+  # Cache never stores full API keys — only label / fingerprint / tail + amounts.
+  local key tmp entry any=0 ok_n=0 fail_n=0
+  local force="${1:-0}"
+  local now age
+  ss_ensure_dirs
+  now=$(date +%s)
+
+  # Soft cache: skip network if fresh (<120s) unless force=1
+  if [ "$force" != "1" ] && [ -f "$SS_CACHE_BALANCES" ]; then
+    age=$(jq -r --argjson now "$now" '($now - (.fetched_at // 0))' "$SS_CACHE_BALANCES" 2>/dev/null || echo 99999)
+    if [ -n "$age" ] && [ "$age" -lt 120 ] 2>/dev/null; then
+      ss_info "Balances cache fresh (${age}s) — skip refresh"
+      cat "$SS_CACHE_BALANCES"
+      return 0
+    fi
+  fi
+
+  tmp="$ADDON_TMP_DIR/balances.merge.$$"
+  echo '[]' >"$tmp"
+  for key in $(ss_all_api_keys); do
+    [ -n "$key" ] || continue
+    any=1
+    if entry=$(ss_api_balance_one "$key"); then
+      ok_n=$((ok_n + 1))
+    else
+      fail_n=$((fail_n + 1))
+      # ss_api_balance_one still prints a JSON error object on failure
+      [ -n "$entry" ] || entry='{"ok":false,"error":"unknown","currency":"RUB"}'
+    fi
+    jq --argjson add "$entry" '. + [$add]' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
+  done
+
+  if [ "$any" -ne 1 ]; then
+    jq -nc --argjson ts "$now" \
+      '{fetched_at:$ts, keys:[], total_balance:0, total_referral:0, currency:"RUB", ok:0, fail:0, message:"Нет сохранённых API-ключей"}' \
+      >"$SS_CACHE_BALANCES"
+    ln -sf "$SS_CACHE_BALANCES" "$ADDON_WEB_DIR/balances.json" 2>/dev/null || true
+    cat "$SS_CACHE_BALANCES"
+    return 0
+  fi
+
+  jq -nc \
+    --argjson ts "$now" \
+    --slurpfile keys "$tmp" \
+    --argjson ok "$ok_n" \
+    --argjson fail "$fail_n" '
+      ($keys[0] // []) as $k |
+      {
+        fetched_at: $ts,
+        keys: $k,
+        total_balance: ([ $k[] | select(.ok == true) | (.balance // 0) ] | add // 0),
+        total_referral: ([ $k[] | select(.ok == true) | (.referral_balance // 0) ] | add // 0),
+        currency: "RUB",
+        ok: $ok,
+        fail: $fail,
+        message: (
+          if $fail == 0 then "Баланс обновлён"
+          elif $ok == 0 then "Не удалось получить баланс"
+          else "Баланс частично обновлён"
+          end
+        )
+      }
+    ' >"$SS_CACHE_BALANCES"
+  rm -f "$tmp" "$tmp.n"
+  ln -sf "$SS_CACHE_BALANCES" "$ADDON_WEB_DIR/balances.json" 2>/dev/null || true
+  if [ "$ok_n" -gt 0 ]; then
+    ss_ok "Balances: ok=$ok_n fail=$fail_n total=$(jq -r '.total_balance' "$SS_CACHE_BALANCES")₽"
+  else
+    ss_warn "Balances: all keys failed ($fail_n)"
+  fi
+  cat "$SS_CACHE_BALANCES"
+  [ "$ok_n" -gt 0 ]
+}

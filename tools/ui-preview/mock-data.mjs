@@ -73,6 +73,30 @@ export const api_keys = [
   { label: "main", key: "stlth_abcd1234_xxxxxxxxxxxxxxxxxxxx", tail: "…xxxx" },
 ];
 
+export const balances = {
+  fetched_at: Math.floor(Date.now() / 1000) - 30,
+  keys: [
+    {
+      label: "main",
+      key_fp: "abcd1234",
+      key_tail: "xxxxxxxx",
+      ok: true,
+      user_id: 101,
+      email: "us***r@example.com",
+      balance: 500,
+      referral_balance: 25,
+      currency: "RUB",
+      error: null,
+    },
+  ],
+  total_balance: 500,
+  total_referral: 25,
+  currency: "RUB",
+  ok: 1,
+  fail: 0,
+  message: "Баланс обновлён",
+};
+
 export const outbounds = { enabled: [101, 205], default: "ss-101" };
 
 /** Example rules for GitHub screenshots of the rule builder */

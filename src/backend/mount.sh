@@ -110,6 +110,7 @@ ss_mount_ui() {
   ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/locations.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_SUBSCRIPTIONS" "$ADDON_WEB_DIR/subscriptions.json" 2>/dev/null || true
   ln -sf "$SS_CACHE_KEYS" "$ADDON_WEB_DIR/api_keys.json" 2>/dev/null || true
+  ln -sf "$SS_CACHE_BALANCES" "$ADDON_WEB_DIR/balances.json" 2>/dev/null || true
   ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
   ln -sf "$SS_OUTBOUNDS_FILE" "$ADDON_WEB_DIR/outbounds.json" 2>/dev/null || true
   ln -sf "$SS_ROUTING_FILE" "$ADDON_WEB_DIR/routing.json" 2>/dev/null || true
