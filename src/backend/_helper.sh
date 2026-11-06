@@ -1,9 +1,82 @@
 #!/bin/sh
 
+# Human status on stderr when interactive (SSH TTY). Never on stdout —
+# service-event / jq captures must stay clean. Override: SS_PROGRESS=0|1.
+ss_console_enabled() {
+  case "${SS_PROGRESS:-auto}" in
+  0 | off | no | false) return 1 ;;
+  1 | on | yes | true) return 0 ;;
+  esac
+  [ -t 2 ] 2>/dev/null
+}
+
+ss_console() {
+  ss_console_enabled || return 0
+  printf '%s\n' "$1" >&2
+}
+
+ss_progress_begin() {
+  # ss_progress_begin <title> [total_steps]
+  SS_PROGRESS_TITLE="${1:-StealthSurf update}"
+  SS_PROGRESS_TOTAL="${2:-7}"
+  SS_PROGRESS_STEP=0
+  ss_console_enabled || return 0
+  printf '\n======== %s ========\n' "$SS_PROGRESS_TITLE" >&2
+}
+
+ss_progress_step() {
+  # ss_progress_step <message>
+  local msg="$1"
+  local n t pct
+  SS_PROGRESS_STEP=$((${SS_PROGRESS_STEP:-0} + 1))
+  n="$SS_PROGRESS_STEP"
+  t="${SS_PROGRESS_TOTAL:-7}"
+  if [ "$t" -gt 0 ] 2>/dev/null; then
+    pct=$((n * 100 / t))
+  else
+    pct=0
+  fi
+  [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+  # File-only breadcrumb (avoid ss_activity → ss_log double console lines)
+  if [ -n "${ADDON_LOGS_DIR:-}" ]; then
+    mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null
+    printf '%s action=progress.step step=%s/%s pct=%s %s\n' \
+      "$(date '+%Y-%m-%d %H:%M:%S')" "$n" "$t" "$pct" "$msg" \
+      >>"$ADDON_LOGS_DIR/activity.log" 2>/dev/null || true
+  fi
+  ss_console_enabled || return 0
+  printf '[%d/%d] (%3d%%) %s\n' "$n" "$t" "$pct" "$msg" >&2
+}
+
+ss_progress_end() {
+  # ss_progress_end <final message>
+  local msg="${1:-done}"
+  ss_console_enabled || return 0
+  printf '======== %s ========\n\n' "$msg" >&2
+}
+
+ss_curl_download() {
+  # ss_curl_download <url> <outfile> — progress bar on TTY, silent otherwise
+  local url="$1"
+  local out="$2"
+  if ss_console_enabled; then
+    # --progress-bar → stderr meter (stdout stays clean for callers)
+    if curl -fL --connect-timeout 15 --max-time 300 --progress-bar -o "$out" "$url"; then
+      return 0
+    fi
+    # Some firmware curls lack --progress-bar; retry with -# then silent
+    if curl -fL --connect-timeout 15 --max-time 300 -# -o "$out" "$url"; then
+      return 0
+    fi
+  fi
+  curl -fsSL --connect-timeout 15 --max-time 300 -o "$out" "$url"
+}
+
 ss_log() {
   logger -t "$ADDON_TAG" "$1"
   mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null
   printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >>"$ADDON_LOGS_DIR/addon.log" 2>/dev/null
+  ss_console "$1"
 }
 
 ss_ok() { ss_log "OK: $1"; }

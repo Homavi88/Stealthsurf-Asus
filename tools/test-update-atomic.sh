@@ -12,6 +12,8 @@ bad() { echo "FAIL $1"; fail=$((fail + 1)); }
 # Source markers in backup.sh / install.sh / UI
 grep -q 'stealthsurf-update-stage' "$ROOT/src/backend/backup.sh" && ok "staged extract" || bad "staged extract"
 grep -q 'refusing to replace addon\|live addon untouched' "$ROOT/src/backend/backup.sh" && ok "refuse bad archive" || bad "refuse bad archive"
+grep -q 'ss_progress_begin' "$ROOT/src/backend/backup.sh" && ok "update progress stages" || bad "update progress stages"
+grep -q 'ss_curl_download' "$ROOT/src/backend/backup.sh" && ok "download with progress helper" || bad "download progress helper"
 grep -q 'stealthsurf-install-stage' "$ROOT/install.sh" && ok "installer staged" || bad "installer staged"
 grep -q 'установленный аддон не тронут\|отказ трогать установленный аддон' "$ROOT/install.sh" && ok "installer refuse" || bad "installer refuse"
 

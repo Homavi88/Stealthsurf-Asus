@@ -237,8 +237,10 @@ ss_version_local() {
 
 ss_version_check() {
   # Query GitHub latest release; update version.json + human changelog
+  # Status messages → stderr (ss_info/ss_ok); JSON result → stdout only.
   local resp tag latest url http_code tmp err="" asset="" body name notes
   ss_ensure_dirs
+  ss_info "Checking GitHub for latest release ($ADDON_REPO)…"
   ss_activity "version.check" "repo=$ADDON_REPO installed=$ADDON_VERSION"
   tmp="$ADDON_TMP_DIR/gh-release.$$"
   http_code=$(curl -sS -o "$tmp" -w '%{http_code}' \
@@ -312,8 +314,10 @@ ss_version_update_if_available() {
   # Exit 2 = already up to date (no download); 0 = installed; 1 = failure.
   # Prefer a successful live check; if GitHub is blocked, still honor version.json
   # when it already marks update_available (e.g. prior cron check).
+  # Progress/status → stderr when interactive; captured JSON stays on stdout.
   local force="${1:-0}"
   local info
+  ss_info "Checking whether an update is available…"
   info=$(ss_version_check) || true
   if [ "$force" != "1" ] && ! printf '%s' "$info" | jq -e '.update_available == true' >/dev/null 2>&1; then
     if [ -f "$SS_VERSION_FILE" ] && jq -e '.update_available == true' "$SS_VERSION_FILE" >/dev/null 2>&1; then
