@@ -365,15 +365,84 @@ function triggerService(action, payload, opts) {
   setTimeout(() => refreshAll(), Math.max(3000, wait * 1000 - 1000));
 }
 
+const SS_SECTION_MODALS = {
+  keys: "keysModal",
+  catalog: "catalogModal",
+  routing: "routingModal",
+  policies: "policiesModal",
+  general: "generalModal",
+  backup: "backupModal",
+  diag: "diagModal",
+  settings: "settingsModal",
+  versions: "versionsModal",
+};
+
+function openSsModal(id) {
+  const modal = byId(id);
+  if (!modal) return;
+  // One section modal at a time (keep update banner modals independent)
+  Object.values(SS_SECTION_MODALS).forEach((mid) => {
+    if (mid === id) return;
+    if (mid === "settingsModal" || mid === "versionsModal") return;
+    const el = byId(mid);
+    if (el) el.classList.remove("show");
+  });
+  modal.classList.add("show");
+}
+
+function closeSsModal(id) {
+  const modal = byId(id);
+  if (modal) modal.classList.remove("show");
+}
+
 function switchTab(name) {
-  // XrayUI-style: all sections stacked; ?tab= just scrolls into view
+  // XrayUI-style: sections open in dedicated modals (not a long stacked page)
+  document.querySelectorAll(".ss-tab").forEach((t) => {
+    t.classList.toggle("active", t.dataset.tab === name);
+  });
+  const modalId = SS_SECTION_MODALS[name];
+  if (modalId === "settingsModal") {
+    openSettingsModal();
+    return;
+  }
+  if (modalId === "versionsModal") {
+    openVersionsModal(versionsCache);
+    requestVersionsList(false);
+    return;
+  }
+  if (modalId) {
+    openSsModal(modalId);
+    return;
+  }
   const panel = byId("tab-" + name) || document.getElementById("sec-" + name);
   if (panel && typeof panel.scrollIntoView === "function") {
     panel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  document.querySelectorAll(".ss-tab").forEach((t) => {
-    t.classList.toggle("active", t.dataset.tab === name);
-  });
+}
+
+function updateSectionSummaries() {
+  const set = (id, text) => {
+    const el = byId(id);
+    if (el) el.textContent = text;
+  };
+  const keysN = (byId("keysTable") && byId("keysTable").children.length) || 0;
+  set("sumKeys", "ключей: " + keysN);
+  const cfgN = (configsCache || []).length;
+  const enN = enabledSet().size;
+  set("sumCatalog", "конфигов: " + cfgN + " · outbound: " + enN);
+  const rulesN =
+    (routingCache && Array.isArray(routingCache.rules) && routingCache.rules.length) ||
+    (byId("rulesTable") && byId("rulesTable").children.length) ||
+    0;
+  set("sumRouting", "правил: " + rulesN);
+  const polN =
+    (policiesCache && Array.isArray(policiesCache.rules) && policiesCache.rules.length) ||
+    (byId("policiesTable") && byId("policiesTable").children.length) ||
+    0;
+  set("sumPolicies", "политик: " + polN);
+  const mode = (stateCache && (stateCache.proxy_mode || stateCache.mode)) || "—";
+  const dns = (stateCache && stateCache.dns_mode) || "—";
+  set("sumGeneral", "mode: " + mode + " · dns: " + dns);
 }
 
 function btnClass(kind) {
@@ -1089,11 +1158,11 @@ function renderConfigs(configs) {
       "</td><td>" +
       (c.protocol || "—") +
       protoBadge(c.protocol) +
-      "</td><td>" +
+      '</td><td class="ss-col-hide-sm">' +
       (c.location_id ?? "—") +
-      "</td><td>" +
+      '</td><td class="ss-col-hide-sm">' +
       (c.is_online ? "yes" : "no") +
-      "</td><td>" +
+      '</td><td class="ss-col-hide-sm">' +
       (c.expires_at || "—") +
       "</td><td>" +
       (enabled ? '<span class="label label-success">ss-' + c.id + "</span>" : "—") +
@@ -1103,7 +1172,8 @@ function renderConfigs(configs) {
       const btn = document.createElement("input");
       btn.type = "button";
       btn.className = btnClass(enabled ? "secondary" : "");
-      btn.value = enabled ? "Выкл" : "Вкл outbound";
+      btn.value = enabled ? "Выкл" : "Вкл";
+      btn.title = enabled ? "Выключить outbound" : "Включить outbound";
       btn.addEventListener("click", () =>
         triggerService(enabled ? "disableoutbound" : "enableoutbound", { config_id: Number(c.id) })
       );
@@ -1365,6 +1435,7 @@ async function refreshAll() {
     renderKeys(Array.isArray(keys) ? keys : []);
     renderRouting(routing);
     renderPolicies(policies);
+    updateSectionSummaries();
     if (response && response.message) {
       setMsg(response.message, response.status ? "ok" : "err");
       const data = response.data;
@@ -1749,6 +1820,39 @@ function bind() {
   if (byId("btnSettingsClose")) {
     byId("btnSettingsClose").addEventListener("click", () => closeSettingsModal());
   }
+
+  // Section manage buttons → XrayUI-style modals
+  const manageMap = [
+    ["btnManageKeys", "keysModal"],
+    ["btnManageCatalog", "catalogModal"],
+    ["btnManageRouting", "routingModal"],
+    ["btnManagePolicies", "policiesModal"],
+    ["btnManageGeneral", "generalModal"],
+    ["btnManageBackup", "backupModal"],
+    ["btnManageDiag", "diagModal"],
+  ];
+  manageMap.forEach(([btnId, modalId]) => {
+    const btn = byId(btnId);
+    if (!btn) return;
+    btn.addEventListener("click", () => openSsModal(modalId));
+    const closeBtn = byId("btnClose_" + modalId);
+    if (closeBtn) closeBtn.addEventListener("click", () => closeSsModal(modalId));
+    const modal = byId(modalId);
+    if (modal) {
+      modal.addEventListener("click", (ev) => {
+        if (ev.target === modal) closeSsModal(modalId);
+      });
+    }
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key !== "Escape") return;
+    Object.values(SS_SECTION_MODALS).forEach((mid) => {
+      if (mid === "settingsModal") return;
+      if (mid === "versionsModal") return;
+      const el = byId(mid);
+      if (el && el.classList.contains("show")) closeSsModal(mid);
+    });
+  });
   if (byId("btnSettingsSave")) {
     byId("btnSettingsSave").addEventListener("click", () => saveSettingsFromModal());
   }

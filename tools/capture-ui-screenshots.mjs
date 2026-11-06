@@ -165,6 +165,8 @@ const browser = await puppeteer.default.launch({
 });
 
 const shots = [
+  { file: "00-main-menu.png", path: "/", wait: 900, state: "running", height: 1100, scroll: "sec-menu" },
+
   { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running", height: 1100, scroll: "sec-config" },
   { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running", height: 1100, scroll: "tab-catalog" },
   {

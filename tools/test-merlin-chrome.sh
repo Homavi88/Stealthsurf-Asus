@@ -29,7 +29,8 @@ grep -q 'function byId' "$APP" && ok "byId helper" || bad "byId helper"
 grep -q 'id="mainMenu"' "$ASP" && ok "mainMenu placeholder" || bad "mainMenu placeholder"
 grep -q 'typeof show_menu' "$ASP" && ok "show_menu call site" || bad "show_menu call site"
 grep -q 'try { initial(); }' "$ASP" && ok "early initial() before app.js" || bad "early initial() before app.js"
-# Must keep Merlin .content at 998px — width:100% leaves a black void next to FormTitle
+# Must keep Merlin .content at 998px — a top-level width:100% leaves a black void next to FormTitle.
+# Mobile @media may still style FormTitle; never stretch table.content itself.
 if grep -Eq 'table\.content[[:space:]]*\{[^}]*width:[[:space:]]*100%' "$ASP"; then
   bad "index.asp overrides .content to 100%"
 else
