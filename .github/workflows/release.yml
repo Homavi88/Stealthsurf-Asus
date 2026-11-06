@@ -27,6 +27,7 @@ jobs:
           sh tools/test-protocols.sh
           sh tools/test-version-cli.sh
           sh tools/test-sync-fingerprint.sh
+          sh tools/test-xrayui-detect.sh
 
       - name: Build and pack
         run: |
