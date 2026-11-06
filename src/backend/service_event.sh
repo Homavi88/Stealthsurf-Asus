@@ -269,6 +269,19 @@ ss_service_event() {
     fi
     ss_restart && ss_json_response true "restarted" "$(cat "$SS_STATE_FILE")" || ss_json_response false "restart failed" "$(ss_jq_file_or "$SS_STATE_FILE" 'null')"
     ;;
+  rebuild)
+    if ss_xrayui_running; then
+      ss_write_state
+      ss_json_response false "$(ss_xrayui_conflict_message)" "$(cat "$SS_STATE_FILE")"
+      return 1
+    fi
+    if ss_rebuild_and_restart; then
+      ss_json_response true "rebuilt" "$(cat "$SS_STATE_FILE")"
+    else
+      ss_json_response false "rebuild failed" "$(ss_jq_file_or "$SS_STATE_FILE" 'null')"
+      return 1
+    fi
+    ;;
   status)
     ss_status >/dev/null
     ss_json_response true "status" "$(cat "$SS_STATE_FILE")"

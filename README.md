@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 ## Скриншоты WebUI
 
-Превью страницы **VPN → StealthSurf** (нативная оболочка Merlin). Снято с локального UI-preview; на живом роутере выглядит так же.
+Превью страницы **VPN → StealthSurf** (нативная оболочка Merlin, layout как у XrayUI: FormTable-секции, `row-buttons` справа, Apply / version footer). Снято с локального UI-preview.
 
 | Статус / ключи | Каталог подключений |
 | --- | --- |
