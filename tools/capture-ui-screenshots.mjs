@@ -86,8 +86,11 @@ window.addEventListener("DOMContentLoaded", function () {
 <div class="preview-badge">GitHub preview · not live router</div>
 `;
   html = html.replace("</head>", inject + "\n</head>");
-  // Copy app.js
   fs.copyFileSync(path.join(ROOT, "src/ui/app.js"), path.join(EXT, "app.js"));
+  fs.copyFileSync(
+    path.join(ROOT, "src/ui/routing-suggest.js"),
+    path.join(EXT, "routing-suggest.js")
+  );
   fs.writeFileSync(path.join(PREVIEW, "index.html"), html);
   return variant;
 }
@@ -156,39 +159,111 @@ const puppeteer = await loadPuppeteer();
 const browser = await puppeteer.default.launch({
   executablePath: "/usr/local/bin/google-chrome",
   headless: "new",
-  args: ["--no-sandbox", "--disable-gpu", "--window-size=1400,1000"],
-  defaultViewport: { width: 1400, height: 1000, deviceScaleFactor: 1 },
+  args: ["--no-sandbox", "--disable-gpu", "--window-size=1400,1200"],
+  defaultViewport: { width: 1400, height: 1200, deviceScaleFactor: 1 },
 });
 
 const shots = [
-  { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running" },
-  { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running" },
-  { file: "03-routing.png", path: "/?tab=routing", wait: 1000, state: "running" },
-  { file: "04-mode-dns.png", path: "/?tab=general", wait: 1000, state: "running" },
-  { file: "05-xrayui-conflict.png", path: "/?tab=keys", wait: 1100, state: "conflict" },
+  { file: "01-status-running.png", path: "/?tab=keys", wait: 900, state: "running", height: 1000 },
+  { file: "02-catalog.png", path: "/?tab=catalog", wait: 1000, state: "running", height: 1000 },
+  {
+    file: "03-routing.png",
+    path: "/?tab=routing",
+    wait: 1100,
+    state: "running",
+    height: 1200,
+    prepare: "routing-examples",
+  },
+  {
+    file: "06-routing-builder.png",
+    path: "/?tab=routing",
+    wait: 1100,
+    state: "running",
+    height: 1200,
+    prepare: "routing-examples",
+  },
+  {
+    file: "07-routing-suggest.png",
+    path: "/?tab=routing",
+    wait: 900,
+    state: "running",
+    height: 1100,
+    prepare: "routing-suggest",
+  },
+  { file: "04-mode-dns.png", path: "/?tab=general", wait: 1000, state: "running", height: 1000 },
+  { file: "05-xrayui-conflict.png", path: "/?tab=keys", wait: 1100, state: "conflict", height: 1000 },
 ];
+
+async function prepareShot(page, kind) {
+  if (kind === "routing-examples") {
+    await page.evaluate(() => {
+      if (typeof switchTab === "function") switchTab("routing");
+      const type = document.getElementById("ruleType");
+      const matcher = document.getElementById("ruleMatcher");
+      const outbound = document.getElementById("ruleOutbound");
+      const name = document.getElementById("ruleName");
+      const prio = document.getElementById("rulePriority");
+      if (type) type.value = "geosite";
+      if (matcher) matcher.value = "youtube";
+      if (name) name.value = "youtube";
+      if (prio) prio.value = "30";
+      if (outbound) {
+        outbound.value = "ss-101";
+        if (!outbound.value) outbound.selectedIndex = Math.min(2, outbound.options.length - 1);
+      }
+      if (typeof renderRouting === "function" && window.routingCache) {
+        /* keep mock rules */
+      }
+      const hint = document.getElementById("ruleSuggestHint");
+      if (hint) {
+        hint.textContent = "Есть в списке подсказок ✓  ·  пример: geosite youtube → ss-101";
+        hint.className = "ss-hint ok";
+      }
+    });
+    return;
+  }
+  if (kind === "routing-suggest") {
+    await page.evaluate(() => {
+      if (typeof switchTab === "function") switchTab("routing");
+      const type = document.getElementById("ruleType");
+      const matcher = document.getElementById("ruleMatcher");
+      const outbound = document.getElementById("ruleOutbound");
+      if (type) type.value = "domain";
+      if (outbound) outbound.value = "ss-101";
+      if (matcher) {
+        matcher.focus();
+        matcher.value = "you";
+        matcher.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (typeof showRuleSuggest === "function") showRuleSuggest();
+    });
+    await new Promise((r) => setTimeout(r, 400));
+  }
+}
 
 const page = await browser.newPage();
 for (const shot of shots) {
   writeJson("state.json", shot.state === "conflict" ? mock.stateConflict : mock.state);
+  if (shot.height) {
+    await page.setViewport({ width: 1400, height: shot.height, deviceScaleFactor: 1 });
+  }
   const url = `http://127.0.0.1:${PORT}${shot.path}`;
   console.log("Capture", shot.file, url);
   await page.goto(url, { waitUntil: "networkidle0", timeout: 30000 });
   await page.waitForSelector("#runState", { timeout: 10000 });
   await new Promise((r) => setTimeout(r, shot.wait));
-  // Ensure requested tab is active even if refresh raced
   const tab = new URL(url).searchParams.get("tab");
   if (tab) {
     await page.evaluate((t) => {
       if (typeof switchTab === "function") switchTab(t);
     }, tab);
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 250));
   }
+  if (shot.prepare) await prepareShot(page, shot.prepare);
   const out = path.join(OUT, shot.file);
   await page.screenshot({ path: out, fullPage: false });
   console.log("Wrote", out, fs.statSync(out).size, "bytes");
 }
-// restore running mock
 writeJson("state.json", mock.state);
 
 await browser.close();
