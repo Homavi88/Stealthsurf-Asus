@@ -265,6 +265,41 @@ function initial() {
   .ss-version-badge.newer { border-color: #8bc34a; color: #8bc34a; }
   .ss-version-badge.older { border-color: #ff9800; color: #ff9800; }
   .ss-version-badge.same { border-color: #fc0; color: #fc0; }
+  .ss-versions-status {
+    display: none;
+    margin: 0 0 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    border: 1px solid #6b8fa3;
+    background: rgba(0, 0, 0, 0.18);
+    color: #cfd8dc;
+  }
+  .ss-versions-status.loading { border-color: #fc0; color: #fc0; }
+  .ss-versions-status.warn { border-color: #ff9800; color: #ff9800; }
+  .ss-versions-status.error { border-color: #f44336; color: #ff8a80; }
+  .ss-version-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 14px;
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(0, 0, 0, 0.18), rgba(0, 0, 0, 0.05));
+    border: 1px solid #222;
+    border-left: 3px solid #6b7a7f;
+  }
+  .ss-version-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    background: #2f3a3e;
+    border: 1px solid #222;
+    font-family: "Courier New", Courier, monospace;
+    font-weight: bold;
+    font-size: 12px;
+    color: #fff;
+  }
+  .ss-version-pill.latest { border-color: #fc0; color: #fc0; }
   .ss-settings-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -504,10 +539,15 @@ function initial() {
                   <div id="versionsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="versionsTitle">
                     <div class="ss-modal-card ss-versions-card">
                       <div class="ss-modal-head" id="versionsTitle">Версии аддона</div>
+                      <div class="ss-version-status-row">
+                        <span class="ss-version-pill" id="versionsInstalled">—</span>
+                        <span class="ss-meta-inline">Список с GitHub · без Apply / %</span>
+                      </div>
                       <p class="ss-modal-summary">
-                        Выберите свежую или более старую версию. Ниже — изменения выбранного релиза.
-                        Сейчас установлена <b id="versionsInstalled">—</b>.
+                        Выберите свежую или более старую версию. Список загружается прямо из GitHub API
+                        (как в XrayUI) — без экрана «применение настроек».
                       </p>
+                      <div id="versionsStatus" class="ss-versions-status" role="status" aria-live="polite"></div>
                       <div class="ss-version-select-row">
                         <select id="versionSelect" class="input_25_table">
                           <option value="">Загрузка списка с GitHub…</option>
