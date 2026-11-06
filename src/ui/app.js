@@ -230,6 +230,84 @@ function renderState(state) {
   renderConflict(state);
 }
 
+function fillModalList(ulId, boxId, items) {
+  const ul = $(ulId);
+  const box = $(boxId);
+  if (!ul || !box) return;
+  ul.innerHTML = "";
+  const list = Array.isArray(items) ? items.filter(Boolean) : [];
+  if (!list.length) {
+    box.style.display = "none";
+    return;
+  }
+  list.forEach((text) => {
+    const li = document.createElement("li");
+    li.textContent = text;
+    ul.appendChild(li);
+  });
+  box.style.display = "block";
+}
+
+function changelogKey(info) {
+  return "ss_changelog_seen_" + String((info && (info.tag || info.latest)) || "");
+}
+
+function openUpdateModal(info, opts) {
+  const data = info || versionCache || {};
+  const modal = $("updateModal");
+  if (!modal) return;
+  const options = opts || {};
+  const cl = data.changelog || {};
+  const latest = data.latest || data.tag || "—";
+  const installed = data.installed || "—";
+
+  if ($("modalLatest")) $("modalLatest").textContent = latest;
+  if ($("modalSummary")) {
+    $("modalSummary").textContent =
+      cl.summary ||
+      cl.headline ||
+      ("Сейчас установлена " + installed + ". На GitHub есть " + latest + ".");
+  }
+  fillModalList("modalFeatures", "modalFeatBox", cl.features);
+  fillModalList("modalFixes", "modalFixBox", cl.fixes);
+  fillModalList("modalOther", "modalOtherBox", cl.other);
+
+  const link = $("modalGhLink");
+  if (link) {
+    if (data.release_url) {
+      link.href = data.release_url;
+      link.style.display = "inline";
+    } else if (data.repo) {
+      link.href = "https://github.com/" + data.repo + "/releases/latest";
+      link.style.display = "inline";
+    } else {
+      link.href = "#";
+      link.style.display = "none";
+    }
+  }
+
+  modal.classList.add("show");
+  if (!options.keepSeen) {
+    try {
+      sessionStorage.setItem(changelogKey(data), "1");
+    } catch (_) {}
+  }
+}
+
+function closeUpdateModal() {
+  const modal = $("updateModal");
+  if (modal) modal.classList.remove("show");
+}
+
+function maybeAutoOpenChangelog(info) {
+  if (!info || !info.update_available) return;
+  if (!info.changelog) return;
+  try {
+    if (sessionStorage.getItem(changelogKey(info)) === "1") return;
+  } catch (_) {}
+  openUpdateModal(info);
+}
+
 function renderVersion(info) {
   if (!info) return;
   versionCache = info;
@@ -254,10 +332,12 @@ function renderVersion(info) {
     $("bannerLatest").textContent = latest + (info.tag ? " (" + info.tag + ")" : "");
     $("bannerInstalled").textContent = installed;
     btnUpdate.style.display = "inline-block";
+    maybeAutoOpenChangelog(info);
   } else {
     pill.style.display = "none";
     banner.classList.remove("show");
     btnUpdate.style.display = "none";
+    closeUpdateModal();
   }
 
   const detail = $("verDetail");
@@ -267,6 +347,7 @@ function renderVersion(info) {
     if (info.error) t += " · ошибка проверки: " + info.error;
     else if (upd) t += " · доступно обновление";
     else if (latest) t += " · актуально";
+    if (upd && info.changelog && info.changelog.headline) t += " · " + info.changelog.headline;
     detail.textContent = t;
     detail.className = labelClass(upd ? "warn" : latest ? "on" : "muted");
   }
@@ -593,7 +674,10 @@ async function refreshAll() {
       if (/version checked|updated|already up to date/i.test(response.message)) {
         if (data && data.installed) renderVersion(data);
         fetchJson(EXT + "/version.json")
-          .then((v) => renderVersion(v))
+          .then((v) => {
+            renderVersion(v);
+            if (v && v.update_available) openUpdateModal(v, { keepSeen: true });
+          })
           .catch(() => {});
       }
       if (/^updated$/i.test(response.message)) {
@@ -681,13 +765,29 @@ function bind() {
   $("btnRefresh").addEventListener("click", () => refreshAll());
   $("btnCheckUpdate").addEventListener("click", () => triggerService("checkupdate", {}));
   $("btnUpdate").addEventListener("click", () => {
-    if (!confirm("Установить новую версию с GitHub Releases?")) return;
-    triggerService("update", { force: "0" });
+    openUpdateModal(versionCache, { keepSeen: true });
   });
   if ($("btnBannerUpdate")) {
     $("btnBannerUpdate").addEventListener("click", () => {
       if (!confirm("Установить обновление " + (versionCache.latest || "") + "?")) return;
       triggerService("update", { force: "0" });
+    });
+  }
+  if ($("btnBannerChangelog")) {
+    $("btnBannerChangelog").addEventListener("click", () => openUpdateModal(versionCache, { keepSeen: true }));
+  }
+  if ($("btnModalClose")) $("btnModalClose").addEventListener("click", () => closeUpdateModal());
+  if ($("btnModalLater")) $("btnModalLater").addEventListener("click", () => closeUpdateModal());
+  if ($("btnModalUpdate")) {
+    $("btnModalUpdate").addEventListener("click", () => {
+      if (!confirm("Установить обновление " + (versionCache.latest || "") + " с GitHub?")) return;
+      closeUpdateModal();
+      triggerService("update", { force: "0" });
+    });
+  }
+  if ($("updateModal")) {
+    $("updateModal").addEventListener("click", (e) => {
+      if (e.target === $("updateModal")) closeUpdateModal();
     });
   }
   if ($("btnCheckUpdate2")) {

@@ -50,6 +50,35 @@ assert_eq "$(ss_version_download_url)" "https://example/dl.tgz" "download_url ge
 ss_version_write "1.0.6" "1.0.6" "v1.0.6" "https://example/rel" "" "https://example/dl.tgz" >/dev/null
 assert_eq "$(jq -r '.update_available' "$SS_VERSION_FILE")" "false" "uptodate"
 
+# Human changelog from GitHub-style body
+notes=$(ss_version_humanize_notes "$(printf '%s\n' \
+  '## Whats Changed' \
+  '* Fix firewall blackhole by @a in #14' \
+  '* Add update changelog modal by @a in #20' \
+  '* docs: CLI cheatsheet by @a in #16')" "v1.0.17" "Release")
+assert_eq "$(printf '%s' "$notes" | jq -r '.headline')" "Новые возможности и исправления ошибок" "humanize headline"
+assert_eq "$(printf '%s' "$notes" | jq -r '.fixes|length')" "1" "humanize fixes"
+feat_n=$(printf '%s' "$notes" | jq -r '.features|length')
+[ "$feat_n" -ge 1 ] && echo "OK  humanize features" || {
+  echo "FAIL humanize features (got $feat_n)"
+  fail=$((fail + 1))
+}
+printf '%s' "$notes" | jq -e 'has("summary") and has("features") and has("fixes")' >/dev/null && echo "OK  humanize json shape" || {
+  echo "FAIL humanize json shape"
+  fail=$((fail + 1))
+}
+ss_version_write "1.0.16" "1.0.17" "v1.0.17" "https://example/rel" "" "https://example/dl.tgz" "$notes" >/dev/null
+assert_eq "$(jq -r '.changelog.headline' "$SS_VERSION_FILE")" "Новые возможности и исправления ошибок" "changelog persisted"
+
+grep -q 'openUpdateModal' "$ROOT/src/ui/app.js" && echo "OK  UI changelog modal" || {
+  echo "FAIL UI changelog modal"
+  fail=$((fail + 1))
+}
+grep -q 'updateModal' "$ROOT/src/ui/index.asp" && echo "OK  ASP update modal" || {
+  echo "FAIL ASP update modal"
+  fail=$((fail + 1))
+}
+
 # CLI help / aliases present in source
 grep -q 'uninstall | remove | purge | un)' "$ROOT/src/backend/stealthsurf.sh" && echo "OK  uninstall aliases" || {
   echo "FAIL uninstall aliases"
