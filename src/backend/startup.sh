@@ -114,6 +114,10 @@ ss_startup() {
     ss_info "Autostart skipped (SS_AUTO_START=${SS_AUTO_START:-1} or no config)"
   fi
 
+  if type ss_telegram_ensure >/dev/null 2>&1; then
+    ss_telegram_ensure 2>/dev/null || true
+  fi
+
   rm -f "$SS_STARTUP_LOCK"
   ss_activity "startup.done" "ok"
 }
