@@ -93,11 +93,12 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 1. Создайте бота у [@BotFather](https://t.me/BotFather) → скопируйте **Bot Token**
 2. WebUI → **VPN → StealthSurf** → **Настройки** → блок **Telegram-бот**
-3. Вставьте token → **Проверить соединение** (вызов `getMe` к api.telegram.org)
-4. Включите бота → **В очередь** → **Применить**
-5. Напишите боту `/whoami` → скопируйте `chat_id` в whitelist → снова **Применить**
+3. Вставьте token → **Проверить и в очередь** (проверка к api.telegram.org **без** экрана Apply Merlin)
+4. Включите бота при необходимости → **В очередь** → на главной **Применить**
+5. Напишите боту `/whoami` → вставьте `chat_id` в whitelist → снова **В очередь** → **Применить**
 
-Без whitelist команды управления недоступны (`/whoami` отвечает всегда, чтобы узнать id). Token в WebUI маскируется.
+Как и остальные настройки, Telegram сохраняется на роутер только после **«Применить»** внизу страницы ([правило Deferred Apply](./docs/DEFERRED_APPLY.md)).  
+Без whitelist команды управления недоступны (`/whoami` отвечает всегда). Token в WebUI маскируется.
 
 ### Команды бота
 
@@ -164,6 +165,7 @@ LAN / Wi‑Fi ──► iptables REDIRECT | TPROXY ──► Xray
 | [ROUTING](./docs/ROUTING.md) · [POLICIES](./docs/POLICIES.md) | правила и MAC |
 | [PROTOCOLS](./docs/PROTOCOLS.md) | протоколы и sync |
 | [FAQ](./docs/FAQ.md) · [BACKUP](./docs/BACKUP_AND_LOGS.md) | типовые проблемы |
+| [DEFERRED_APPLY](./docs/DEFERRED_APPLY.md) | правило «Применить» для настроек |
 | [ROADMAP](./ROADMAP.md) | план |
 
 Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net) · [API](https://docs.stealthsurf.net/api)

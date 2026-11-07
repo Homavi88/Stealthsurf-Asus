@@ -460,8 +460,22 @@ function triggerService(action, payload, opts) {
 }
 
 // ---------------------------------------------------------------------------
-// Deferred Apply — queue config edits client-side; Merlin wait only on «Применить».
-// Operational actions (start/stop/sync/update/backup/diag/…) stay immediate.
+// RULE: Deferred Apply (обязательно для любых НОВЫХ настроек)
+// ---------------------------------------------------------------------------
+// Config / settings edits MUST go through queuePending(...) and only hit the
+// router when the user presses «Применить» on the main page (applypending).
+// Never call triggerService() for saving settings — Merlin shows «Apply /
+// Подождите» and the value often is NOT what the user expected to persist.
+//
+// Register every new config action in SS_PENDING_CONFIG_ACTIONS below.
+// Use queuePending(slot, action, payload, label) from button handlers.
+//
+// Immediate triggerService() is ONLY for operational actions:
+//   start/stop/restart/sync/update/backup/restore/geodata/diag/logs/
+//   connectivity/testconfig/installxray/clients/devicesnapshot/…
+// Read-only soft paths (no Merlin overlay): checkupdate, balances (browser fetch).
+//
+// See docs/DEFERRED_APPLY.md — tools/test-deferred-apply.sh enforces this.
 // ---------------------------------------------------------------------------
 const SS_PENDING_STORAGE_KEY = "ss_pending_ops_v1";
 const SS_PENDING_CONFIG_ACTIONS = {
@@ -2420,14 +2434,15 @@ function bind() {
     queuePending("setdefault", "setdefault", { outbound: outbound }, "Default outbound → " + outbound);
   });
   byId("btnRebuild").addEventListener("click", () => {
-    // Explicit rebuild from current outbound selection — immediate (operational)
-    triggerService(
+    // Outbound selection is config — queue; dataplane rebuild happens on «Применить»
+    queuePending(
+      "setoutbounds",
       "setoutbounds",
       {
         enabled: outboundsCache.enabled || [],
         default: outboundsCache.default || byId("defaultOutbound").value,
       },
-      { wait: 20 }
+      "Outbounds / rebuild dataplane"
     );
   });
 
@@ -2746,22 +2761,123 @@ function applyTelegramTestResult(ok, data, message) {
   setMsg("Telegram: " + err, "err");
 }
 
-function testTelegramFromModal() {
+function queueSettingsFromModal(label) {
+  // Merge into existing pending "settings" slot so Telegram + other toggles share one Apply.
+  const payload = collectSettingsPayload();
+  const prev = pendingOps.settings && pendingOps.settings.payload;
+  let merged = payload;
+  if (prev && typeof prev === "object") {
+    merged = Object.assign({}, prev, payload);
+    if (prev.telegram || payload.telegram) {
+      merged.telegram = Object.assign({}, prev.telegram || {}, payload.telegram || {});
+      const curTok = merged.telegram.bot_token;
+      const prevTok = prev.telegram && prev.telegram.bot_token;
+      if ((!curTok || curTok === "********") && prevTok && prevTok !== "********") {
+        merged.telegram.bot_token = prevTok;
+      }
+    }
+  }
+  queuePending(
+    "settings",
+    "setsettings",
+    merged,
+    label || "Настройки аддона (автозапуск / watchdog / backup / telegram / geodata)"
+  );
+  return merged;
+}
+
+async function testTelegramFromModal() {
+  // RULE: never Merlin-submit from this button. Queue settings; probe API in-browser.
   const tokEl = byId("setTgBotToken");
   const raw = tokEl ? tokEl.value.trim() : "";
   const placeholderSet = tokEl && /сохранён/.test(tokEl.placeholder || "");
   if (!raw && !placeholderSet) {
-    setTgTestStatus("Укажите Bot Token или сначала сохраните его", "err");
+    setTgTestStatus("Введите Bot Token", "err");
     setMsg("Нет Bot Token для проверки", "err");
     return;
   }
-  const payload = {
-    bot_token: raw && raw !== "********" ? raw : "********",
-    chat_ids: (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "",
-  };
+  if (raw && raw !== "********" && !/^\d+:[A-Za-z0-9_-]+$/.test(raw)) {
+    setTgTestStatus("Неверный формат token (ожидается 123456:ABC…)", "err");
+    setMsg("Проверьте Bot Token от @BotFather", "err");
+    return;
+  }
+
+  queueSettingsFromModal("Настройки аддона (Telegram token / chat_id)");
+  setSettingsStatus("В очереди — нажмите «Применить» внизу");
+
+  if (!raw || raw === "********") {
+    setTgTestStatus(
+      "Настройки в очереди. Для live-проверки введите token в поле или после «Применить» напишите боту /whoami",
+      ""
+    );
+    return;
+  }
+
   setTgTestStatus("Проверяю api.telegram.org…", "");
-  setSettingsStatus("Проверка Telegram…");
-  triggerService("testtelegram", payload, { wait: 15 });
+  try {
+    const meRes = await fetchWithTimeout(
+      "https://api.telegram.org/bot" + raw + "/getMe",
+      { cache: "no-store", headers: { Accept: "application/json" } },
+      12000
+    );
+    let meBody = null;
+    try {
+      meBody = await meRes.json();
+    } catch (_) {
+      meBody = null;
+    }
+    if (!meRes.ok || !meBody || meBody.ok !== true) {
+      const err =
+        (meBody && (meBody.description || meBody.error_code)) ||
+        "HTTP " + meRes.status;
+      applyTelegramTestResult(false, { ok: false, error: String(err) });
+      setTgTestStatus("Ошибка API — исправьте token. В очереди не применяйте, пока не ОК OK", "err");
+      return;
+    }
+    const result = {
+      ok: true,
+      username: meBody.result && meBody.result.username,
+      bot_id: meBody.result && meBody.result.id,
+      first_name: meBody.result && meBody.result.first_name,
+      chat_ok: false,
+      chat_id: null,
+      error: null,
+    };
+    const chats = (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "";
+    const firstChat = chats.split(/[,;\s]+/).filter(Boolean)[0];
+    if (firstChat) {
+      try {
+        const chRes = await fetchWithTimeout(
+          "https://api.telegram.org/bot" + raw + "/getChat?chat_id=" + encodeURIComponent(firstChat),
+          { cache: "no-store", headers: { Accept: "application/json" } },
+          10000
+        );
+        const chBody = await chRes.json().catch(() => null);
+        result.chat_id = firstChat;
+        result.chat_ok = !!(chBody && chBody.ok);
+        if (!result.chat_ok) {
+          result.error =
+            (chBody && chBody.description) ||
+            "chat недоступен — напишите боту /start или /whoami";
+        }
+      } catch (_) {
+        result.chat_id = firstChat;
+        result.chat_ok = false;
+        result.error = "не удалось проверить chat_id";
+      }
+    }
+    applyTelegramTestResult(true, result);
+    const el = byId("setTgTestStatus");
+    if (el && el.textContent) el.textContent = el.textContent + " · в очереди → «Применить»";
+    setMsg("Telegram OK — нажмите «Применить» внизу, чтобы сохранить на роутере", "ok");
+  } catch (e) {
+    // CORS / offline: settings still queued for deferred Apply
+    setTgTestStatus(
+      "Токен в очереди. Браузер не достучался до Telegram — после «Применить» напишите боту /whoami",
+      ""
+    );
+    setMsg("Telegram в очереди. Нажмите «Применить» внизу страницы.", "ok");
+  }
 }
 
 function syncRebootCronVisibility() {
@@ -2886,7 +3002,6 @@ function saveSettingsFromModal() {
   }
   if (payload.telegram && payload.telegram.enabled) {
     const tok = payload.telegram.bot_token || "";
-    const ids = (payload.telegram.chat_ids || "").trim();
     const tokenLooksNew = tok && tok !== "********";
     const tokenPlaceholderSet =
       byId("setTgBotToken") &&
@@ -2896,18 +3011,12 @@ function saveSettingsFromModal() {
       setMsg("Укажите Bot Token от @BotFather", "err");
       return;
     }
-    if (!ids) {
-      setSettingsStatus("Укажите хотя бы один chat_id");
-      setMsg("Добавьте chat_id (бот ответит /whoami)", "err");
-      return;
+    // chat_ids optional on first save — get it via /whoami after Apply, then queue again
+    if (!(payload.telegram.chat_ids || "").trim()) {
+      setMsg("chat_id пока пуст — после «Применить» напишите боту /whoami и добавьте id", "");
     }
   }
-  queuePending(
-    "settings",
-    "setsettings",
-    payload,
-    "Настройки аддона (автозапуск / watchdog / backup / telegram / geodata)"
-  );
+  queueSettingsFromModal();
   setSettingsStatus("В очереди — нажмите «Применить» внизу");
   closeSettingsModal();
 }
