@@ -75,17 +75,7 @@ else
   ok "settings modal no immediate setsettings"
 fi
 
-# Telegram: must NOT Merlin-submit testtelegram (queues + browser fetch)
-if grep -n 'function testTelegramFromModal' -A80 "$APP" | grep -q 'triggerService("testtelegram"'; then
-  bad "telegram test still triggerService(testtelegram)"
-else
-  ok "telegram test no Merlin triggerService"
-fi
-if grep -n 'function testTelegramFromModal' -A40 "$APP" | grep -q 'queueSettingsFromModal\|queuePending'; then
-  ok "telegram test queues settings"
-else
-  bad "telegram test queues settings"
-fi
+grep -q 'testTelegramFromModal\|testtelegram\|setTgEnabled' "$APP" && bad "telegram UI leftovers in app.js" || ok "telegram UI removed from app.js"
 grep -q 'RULE: Deferred Apply' "$APP" && ok "deferred-apply RULE comment in app.js" || bad "deferred-apply RULE comment in app.js"
 [ -f "$ROOT/docs/DEFERRED_APPLY.md" ] && ok "docs/DEFERRED_APPLY.md present" || bad "docs/DEFERRED_APPLY.md present"
 grep -q 'queuePending' "$ROOT/docs/DEFERRED_APPLY.md" && ok "docs mention queuePending" || bad "docs mention queuePending"
