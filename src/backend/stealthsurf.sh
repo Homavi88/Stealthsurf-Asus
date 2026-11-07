@@ -14,7 +14,6 @@ import ./xray_bin.sh
 import ./diag.sh
 import ./backup.sh
 import ./settings.sh
-import ./telegram.sh
 import ./version.sh
 import ./startup.sh
 import ./control.sh
@@ -48,8 +47,6 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   dev            devices        conn [url]     connectivity
   xray           install-xray   geo            geodata
   cfg            settings       setcfg '<json>' set-settings
-  tg             telegram       tg-start/stop  бот on/off
-  tg-test        telegram-test  проверка API токена
   un --yes       uninstall      doctor         восстановить UI/CLI
   h|?            help           m|menu         интерактивное меню
 
@@ -61,8 +58,6 @@ $ADDON_TITLE $ADDON_VERSION — CLI
   set-mode set-dns-mode rebuild diag test-config connectivity
   protocols logs devices backup backups restore
   install-xray geodata settings set-settings
-  telegram telegram-start telegram-stop telegram-tick telegram-daemon
-  telegram-test [token]
 
 Примеры:
   ssurf up
@@ -399,32 +394,6 @@ ss_cli_dispatch() {
     ;;
   set-settings | setcfg)
     ss_settings_apply "${2:-{}}" || return 1
-    ;;
-  telegram | tg)
-    ss_settings_json | jq '.telegram // {}'
-    if ss_telegram_running; then
-      echo "daemon: running (pid $(cat "$SS_TG_PIDFILE" 2>/dev/null))"
-    else
-      echo "daemon: stopped"
-    fi
-    ;;
-  telegram-start | tg-start)
-    SS_TG_ENABLED=1
-    ss_telegram_start_daemon || return 1
-    ;;
-  telegram-stop | tg-stop)
-    ss_telegram_stop_daemon
-    ss_ok "Telegram bot stopped"
-    ;;
-  telegram-tick | tg-tick)
-    ss_telegram_tick || return 1
-    ;;
-  telegram-test | tg-test | test-telegram)
-    # ssurf tg-test [token] — prints JSON from getMe probe
-    ss_telegram_test_connection "${2:-}" "${3:-}" || return 1
-    ;;
-  telegram-daemon | tg-daemon)
-    ss_telegram_daemon_loop
     ;;
   protocols | p | proto)
     ss_protocol_status_matrix

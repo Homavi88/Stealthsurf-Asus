@@ -447,9 +447,6 @@ function triggerService(action, payload, opts) {
     setsettings: "Сохранение настроек…",
     getsettings: "Загрузка настроек…",
     geodata: "Обновление geoip/geosite…",
-    testtelegram: "Проверка Telegram Bot API…",
-    telegramtest: "Проверка Telegram Bot API…",
-    tgtest: "Проверка Telegram Bot API…",
     applypending: "Применение настроек…",
     batch: "Применение настроек…",
   };
@@ -2230,9 +2227,6 @@ async function refreshAll() {
         setSettingsStatus("Сохранено");
         if (/settings saved/i.test(response.message)) setMsg("Настройки сохранены", "ok");
       }
-      if (/telegram ok|telegram failed/i.test(response.message)) {
-        applyTelegramTestResult(response.status, data, response.message);
-      }
       if (data && Array.isArray(data.keys) && (/balances|balance/i.test(response.message) || data.total_balance != null)) {
         renderBalances(data);
         balanceRefreshPending = false;
@@ -2716,9 +2710,6 @@ function bind() {
       triggerService("geodata", {});
     });
   }
-  if (byId("btnTgTest")) {
-    byId("btnTgTest").addEventListener("click", () => testTelegramFromModal());
-  }
   if (byId("settingsModal")) {
     byId("settingsModal").addEventListener("click", (ev) => {
       if (ev.target === byId("settingsModal")) closeSettingsModal();
@@ -2731,153 +2722,21 @@ function setSettingsStatus(text) {
   if (el) el.textContent = text || "";
 }
 
-function setTgTestStatus(text, cls) {
-  const el = byId("setTgTestStatus");
-  if (!el) return;
-  el.textContent = text || "";
-  el.className = "ss-hint" + (cls === "ok" ? " ok" : cls === "err" ? " err" : "");
-}
-
-function applyTelegramTestResult(ok, data, message) {
-  const d = data && typeof data === "object" ? data : {};
-  if (ok && d.ok !== false) {
-    let msg = "OK";
-    if (d.username) msg += " @" + d.username;
-    else if (d.first_name) msg += " " + d.first_name;
-    if (d.bot_id != null) msg += " (id " + d.bot_id + ")";
-    if (d.latency_ms != null) msg += " · " + d.latency_ms + " мс";
-    if (d.chat_id) {
-      msg += d.chat_ok ? " · chat " + d.chat_id + " доступен" : " · chat " + d.chat_id + " недоступен";
-      if (!d.chat_ok && d.error) msg += " (" + d.error + ")";
-    }
-    setTgTestStatus(msg, "ok");
-    setSettingsStatus("Telegram: соединение есть");
-    setMsg("Telegram Bot API: соединение OK" + (d.username ? " (@" + d.username + ")" : ""), "ok");
-    return;
-  }
-  const err = (d && d.error) || message || "нет ответа";
-  setTgTestStatus("Ошибка: " + err, "err");
-  setSettingsStatus("Telegram: нет соединения");
-  setMsg("Telegram: " + err, "err");
-}
-
 function queueSettingsFromModal(label) {
-  // Merge into existing pending "settings" slot so Telegram + other toggles share one Apply.
+  // Merge into existing pending "settings" slot so toggles share one Apply.
   const payload = collectSettingsPayload();
   const prev = pendingOps.settings && pendingOps.settings.payload;
   let merged = payload;
   if (prev && typeof prev === "object") {
     merged = Object.assign({}, prev, payload);
-    if (prev.telegram || payload.telegram) {
-      merged.telegram = Object.assign({}, prev.telegram || {}, payload.telegram || {});
-      const curTok = merged.telegram.bot_token;
-      const prevTok = prev.telegram && prev.telegram.bot_token;
-      if ((!curTok || curTok === "********") && prevTok && prevTok !== "********") {
-        merged.telegram.bot_token = prevTok;
-      }
-    }
   }
   queuePending(
     "settings",
     "setsettings",
     merged,
-    label || "Настройки аддона (автозапуск / watchdog / backup / telegram / geodata)"
+    label || "Настройки аддона (автозапуск / watchdog / backup / geodata)"
   );
   return merged;
-}
-
-async function testTelegramFromModal() {
-  // RULE: never Merlin-submit from this button. Queue settings; probe API in-browser.
-  const tokEl = byId("setTgBotToken");
-  const raw = tokEl ? tokEl.value.trim() : "";
-  const placeholderSet = tokEl && /сохранён/.test(tokEl.placeholder || "");
-  if (!raw && !placeholderSet) {
-    setTgTestStatus("Введите Bot Token", "err");
-    setMsg("Нет Bot Token для проверки", "err");
-    return;
-  }
-  if (raw && raw !== "********" && !/^\d+:[A-Za-z0-9_-]+$/.test(raw)) {
-    setTgTestStatus("Неверный формат token (ожидается 123456:ABC…)", "err");
-    setMsg("Проверьте Bot Token от @BotFather", "err");
-    return;
-  }
-
-  queueSettingsFromModal("Настройки аддона (Telegram token / chat_id)");
-  setSettingsStatus("В очереди — нажмите «Применить» внизу");
-
-  if (!raw || raw === "********") {
-    setTgTestStatus(
-      "Настройки в очереди. Для live-проверки введите token в поле или после «Применить» напишите боту /whoami",
-      ""
-    );
-    return;
-  }
-
-  setTgTestStatus("Проверяю api.telegram.org…", "");
-  try {
-    const meRes = await fetchWithTimeout(
-      "https://api.telegram.org/bot" + raw + "/getMe",
-      { cache: "no-store", headers: { Accept: "application/json" } },
-      12000
-    );
-    let meBody = null;
-    try {
-      meBody = await meRes.json();
-    } catch (_) {
-      meBody = null;
-    }
-    if (!meRes.ok || !meBody || meBody.ok !== true) {
-      const err =
-        (meBody && (meBody.description || meBody.error_code)) ||
-        "HTTP " + meRes.status;
-      applyTelegramTestResult(false, { ok: false, error: String(err) });
-      setTgTestStatus("Ошибка API — исправьте token. В очереди не применяйте, пока не ОК OK", "err");
-      return;
-    }
-    const result = {
-      ok: true,
-      username: meBody.result && meBody.result.username,
-      bot_id: meBody.result && meBody.result.id,
-      first_name: meBody.result && meBody.result.first_name,
-      chat_ok: false,
-      chat_id: null,
-      error: null,
-    };
-    const chats = (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "";
-    const firstChat = chats.split(/[,;\s]+/).filter(Boolean)[0];
-    if (firstChat) {
-      try {
-        const chRes = await fetchWithTimeout(
-          "https://api.telegram.org/bot" + raw + "/getChat?chat_id=" + encodeURIComponent(firstChat),
-          { cache: "no-store", headers: { Accept: "application/json" } },
-          10000
-        );
-        const chBody = await chRes.json().catch(() => null);
-        result.chat_id = firstChat;
-        result.chat_ok = !!(chBody && chBody.ok);
-        if (!result.chat_ok) {
-          result.error =
-            (chBody && chBody.description) ||
-            "chat недоступен — напишите боту /start или /whoami";
-        }
-      } catch (_) {
-        result.chat_id = firstChat;
-        result.chat_ok = false;
-        result.error = "не удалось проверить chat_id";
-      }
-    }
-    applyTelegramTestResult(true, result);
-    const el = byId("setTgTestStatus");
-    if (el && el.textContent) el.textContent = el.textContent + " · в очереди → «Применить»";
-    setMsg("Telegram OK — нажмите «Применить» внизу, чтобы сохранить на роутере", "ok");
-  } catch (e) {
-    // CORS / offline: settings still queued for deferred Apply
-    setTgTestStatus(
-      "Токен в очереди. Браузер не достучался до Telegram — после «Применить» напишите боту /whoami",
-      ""
-    );
-    setMsg("Telegram в очереди. Нажмите «Применить» внизу страницы.", "ok");
-  }
 }
 
 function syncRebootCronVisibility() {
@@ -2903,37 +2762,10 @@ function fillSettingsForm(s) {
       data.geodata_base ||
       "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
   }
-  const tg = data.telegram || {};
-  if (byId("setTgEnabled")) byId("setTgEnabled").checked = !!tg.enabled;
-  if (byId("setTgBotToken")) {
-    // Keep password field empty when token already set (placeholder shows mask)
-    byId("setTgBotToken").value = "";
-    byId("setTgBotToken").placeholder = tg.bot_token_set
-      ? "******** (сохранён" + (tg.bot_token_hint ? ", " + tg.bot_token_hint : "") + ")"
-      : "123456:ABC…";
-  }
-  if (byId("setTgChatIds")) byId("setTgChatIds").value = tg.chat_ids || "";
-  if (byId("setTgHint")) {
-    const run = tg.running ? "бот запущен" : tg.enabled ? "бот включён, ожидает старта" : "бот выключен";
-    byId("setTgHint").textContent =
-      "Команды: /on /off /restart /update /list /rules /ruleadd … · /help · сейчас: " + run;
-  }
   syncRebootCronVisibility();
 }
 
 function collectSettingsPayload() {
-  const tgTokenEl = byId("setTgBotToken");
-  const tgTokenRaw = tgTokenEl ? tgTokenEl.value.trim() : "";
-  const telegram = {
-    enabled: !!(byId("setTgEnabled") && byId("setTgEnabled").checked),
-    chat_ids: (byId("setTgChatIds") && byId("setTgChatIds").value.trim()) || "",
-  };
-  // Empty token = keep previous; never send the UI mask "********" as a new secret
-  if (tgTokenRaw && tgTokenRaw !== "********") {
-    telegram.bot_token = tgTokenRaw;
-  } else {
-    telegram.bot_token = "********";
-  }
   return {
     auto_start: !!( byId("setAutoStart") && byId("setAutoStart").checked ),
     watchdog: !!( byId("setWatchdog") && byId("setWatchdog").checked ),
@@ -2945,7 +2777,6 @@ function collectSettingsPayload() {
     geodata_auto: !!( byId("setGeodataAuto") && byId("setGeodataAuto").checked ),
     geodata_schedule: (byId("setGeodataSchedule") && byId("setGeodataSchedule").value) || "weekly",
     geodata_base: (byId("setGeodataBase") && byId("setGeodataBase").value.trim()) || "",
-    telegram: telegram,
   };
 }
 
@@ -2963,7 +2794,6 @@ async function openSettingsModal() {
     geodata_auto: false,
     geodata_schedule: "weekly",
     geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
-    telegram: { enabled: false, bot_token_set: false, chat_ids: "", running: false },
   });
   modal.classList.add("show");
   refreshHelpHintStyles(modal);
@@ -2999,22 +2829,6 @@ function saveSettingsFromModal() {
     setSettingsStatus("URL geoip/geosite должен начинаться с http(s)://");
     setMsg("Неверный адрес geodata", "err");
     return;
-  }
-  if (payload.telegram && payload.telegram.enabled) {
-    const tok = payload.telegram.bot_token || "";
-    const tokenLooksNew = tok && tok !== "********";
-    const tokenPlaceholderSet =
-      byId("setTgBotToken") &&
-      /сохранён/.test(byId("setTgBotToken").placeholder || "");
-    if (!tokenLooksNew && !tokenPlaceholderSet) {
-      setSettingsStatus("Для Telegram нужен Bot Token");
-      setMsg("Укажите Bot Token от @BotFather", "err");
-      return;
-    }
-    // chat_ids optional on first save — get it via /whoami after Apply, then queue again
-    if (!(payload.telegram.chat_ids || "").trim()) {
-      setMsg("chat_id пока пуст — после «Применить» напишите боту /whoami и добавьте id", "");
-    }
   }
   queueSettingsFromModal();
   setSettingsStatus("В очереди — нажмите «Применить» внизу");

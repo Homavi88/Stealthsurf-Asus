@@ -29,19 +29,13 @@
 | Режим / DNS | `setmode` / `setdnsmode` |
 | Routing / policies | `setrouting` / `preset` / `setpolicies` |
 | Outbounds / apply config | `setdefault` / `setoutbounds` / `enableoutbound` / `disableoutbound` / `apply` / `updatesettings` |
-| Модалка «Настройки» (автостарт, backup prefs, geodata schedule, **Telegram token/chat**) | `setsettings` |
+| Модалка «Настройки» (автостарт, backup prefs, geodata schedule) | `setsettings` |
 
 ## Что может быть сразу (operational)
 
 `start` / `stop` / `restart` / `sync` / `update` / `backup` / `restore` / `geodata` / `diag` / `logs` / `connectivity` / `testconfig` / `installxray` / …
 
 Мягкие пути **без** Merlin-оверлея (browser fetch): `checkupdate`, баланс API-ключей.
-
-## Telegram
-
-- Token и chat_id → только через очередь (`Проверить и в очередь` / `В очередь` → **Применить**).
-- Live-проверка token идёт из браузера к `api.telegram.org` и **не** вызывает Merlin Apply.
-- `chat_id` можно добавить вторым шагом: после Apply написать боту `/whoami`.
 
 ## Анти-паттерн
 

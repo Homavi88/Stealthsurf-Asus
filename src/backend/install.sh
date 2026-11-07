@@ -241,8 +241,9 @@ ss_uninstall() {
   ss_remove_service_event_hook 2>/dev/null || true
   ss_remove_hook_scripts 2>/dev/null || true
   ss_remove_cron 2>/dev/null || true
-  if type ss_telegram_stop_daemon >/dev/null 2>&1; then
-    ss_telegram_stop_daemon 2>/dev/null || true
+  # leftover Telegram bot pid (feature removed)
+  if [ -f /var/run/stealthsurf-telegram.pid ]; then
+    kill "$(cat /var/run/stealthsurf-telegram.pid 2>/dev/null)" 2>/dev/null || true
   fi
 
   # Symlinks and addon-owned paths

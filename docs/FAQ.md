@@ -248,20 +248,3 @@ StealthSurf: ~60 запросов/мин. При HTTP 429 подождите и 
 2. **Прогресс** — в SSH должны быть этапы `[1/7] … [7/7]`. Если экран пустой на старой сборке — обновитесь (`ssurf uf`). Отключить: `SS_PROGRESS=0 ssurf upd`.
 3. **Лог** — `ssurf log activity 40` (строки `progress.begin` / `progress.step` / `progress.end`) в `/opt/share/stealthsurf/logs/activity.log`.
 4. **GitHub недоступен** — будет ошибка check; тогда тоже попробуйте `ssurf uf` позже или проверьте DNS/интернет на роутере.
-
-## Telegram-бот
-
-В **Настройки** → блок **Telegram-бот**:
-
-1. Создайте бота у [@BotFather](https://t.me/BotFather), скопируйте token
-2. Вставьте token → **Проверить и в очередь** (без экрана Apply Merlin)
-3. На главной нажмите **Применить** — только так token попадает на роутер
-4. Напишите боту `/whoami` — он ответит ваш `chat_id`
-5. Добавьте `chat_id` в whitelist → снова **В очередь** → **Применить**
-
-Нельзя ожидать сохранения от одной только кнопки проверки: настройки идут через очередь, как API-ключи и routing ([DEFERRED_APPLY](./DEFERRED_APPLY.md)).
-
-Команды: `/on` `/off` `/restart` `/update` `/list` `/rules` `/ruleadd <type> <matcher> <outbound> [name]`.  
-Правила дописываются к уже существующим и используют включённые VPN (`ss-<id>`) / `direct` / `block`.
-
-CLI: `ssurf tg` · `ssurf tg-test` · `ssurf tg-start` · `ssurf tg-stop`.
