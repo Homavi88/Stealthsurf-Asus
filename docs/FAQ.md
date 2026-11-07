@@ -242,6 +242,13 @@ StealthSurf: ~60 запросов/мин. При HTTP 429 подождите и 
 
 `stealthsurf add-key 'stlth_…' 'work'` — sync объединяет конфиги всех ключей в один каталог.
 
+## `ssurf upd` ничего не показывает / «не обновляется»
+
+1. **Уже latest** — `ssurf upd` пишет `Already up to date` и не качает пакет. Это нормально. Принудительно: `ssurf uf` или `ssurf upd -f`.
+2. **Прогресс** — в SSH должны быть этапы `[1/7] … [7/7]`. Если экран пустой на старой сборке — обновитесь (`ssurf uf`). Отключить: `SS_PROGRESS=0 ssurf upd`.
+3. **Лог** — `ssurf log activity 40` (строки `progress.begin` / `progress.step` / `progress.end`) в `/opt/share/stealthsurf/logs/activity.log`.
+4. **GitHub недоступен** — будет ошибка check; тогда тоже попробуйте `ssurf uf` позже или проверьте DNS/интернет на роутере.
+
 ## Telegram-бот
 
 В **Настройки** → блок **Telegram-бот**:
