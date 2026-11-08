@@ -66,7 +66,7 @@ ss_xray_list_versions() {
   arch=$(ss_detect_arch)
   json=$(curl -fsSL -H "Accept: application/vnd.github+json" \
     -H "User-Agent: stealthsurf-merlin/$ADDON_VERSION" \
-    "${XRAY_RELEASES_API:-https://api.github.com/repos/XTLS/Xray-core/releases?per_page=12}" 2>/dev/null) || json=""
+    "${XRAY_RELEASES_API:-https://api.github.com/repos/XTLS/Xray-core/releases?per_page=30}" 2>/dev/null) || json=""
   if [ -z "$json" ]; then
     jq -nc --arg arch "$arch" --arg err "github api unavailable" \
       '{arch:$arch, error:$err, releases:[], checked_at:(now|floor)}' |
@@ -94,7 +94,7 @@ ss_xray_list_versions() {
           )
         }
         | select(.download_url != null)
-      ][0:10]
+      ][0:20]
     }
   ' | tee "$SS_XRAY_VERSIONS_FILE"
   ln -sf "$SS_XRAY_VERSIONS_FILE" "$ADDON_WEB_DIR/xray_versions.json" 2>/dev/null || true
