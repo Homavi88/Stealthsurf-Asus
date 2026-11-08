@@ -1966,41 +1966,114 @@ function filterSuggestions(query, items) {
 }
 
 let suggestActiveIndex = -1;
+let suggestActiveField = "ruleDomains";
+let ruleEditIndex = -1;
+
+function textareaLineAtCursor(el) {
+  const val = String(el.value || "");
+  const pos = typeof el.selectionStart === "number" ? el.selectionStart : val.length;
+  const start = val.lastIndexOf("\n", pos - 1) + 1;
+  let end = val.indexOf("\n", pos);
+  if (end < 0) end = val.length;
+  return { start, end, line: val.slice(start, end), pos };
+}
+
+function replaceTextareaLine(el, nextLine) {
+  const info = textareaLineAtCursor(el);
+  const val = String(el.value || "");
+  el.value = val.slice(0, info.start) + nextLine + val.slice(info.end);
+  const caret = info.start + String(nextLine).length;
+  try {
+    el.selectionStart = el.selectionEnd = caret;
+  } catch (_) {}
+}
+
+function parseSuggestContext(line, fieldId) {
+  const raw = String(line || "");
+  const trimmed = raw.replace(/^\s+/, "");
+  const lead = raw.length - trimmed.length;
+  if (fieldId === "ruleIps") {
+    const m = trimmed.match(/^(geoip:)(.*)$/i);
+    if (m) {
+      return { kind: "geoip", prefix: m[1].toLowerCase() === "geoip:" ? "geoip:" : m[1], query: m[2], lead };
+    }
+    // Plain text on IP field → treat as geoip category search when not an IP/CIDR
+    if (/^[\d.:a-fA-F/]+$/.test(trimmed)) return null;
+    return { kind: "geoip", prefix: "geoip:", query: trimmed, lead, injectPrefix: !trimmed };
+  }
+  const pref = trimmed.match(/^(geosite:|domain:|full:|keyword:|regexp:)(.*)$/i);
+  if (pref) {
+    const p = pref[1].toLowerCase();
+    const kind = p.startsWith("geosite")
+      ? "geosite"
+      : p.startsWith("domain") || p.startsWith("full") || p.startsWith("keyword")
+        ? "domain"
+        : null;
+    return {
+      kind,
+      prefix: p,
+      query: pref[2],
+      lead,
+      noSuggest: !kind,
+    };
+  }
+  return { kind: "domain", prefix: "", query: trimmed, lead };
+}
 
 function hideRuleSuggest() {
   const box = byId("ruleSuggestBox");
-  if (box) box.classList.remove("show");
+  if (box) {
+    box.classList.remove("show");
+    box.innerHTML = "";
+  }
   suggestActiveIndex = -1;
 }
 
-function showRuleSuggest() {
-  const type = byId("ruleType") ? byId("ruleType").value : "domain";
-  const input = byId("ruleMatcher");
+function attachSuggestBoxTo(fieldId) {
+  const wrap = byId(fieldId) && byId(fieldId).closest(".ss-suggest-wrap");
+  const box = byId("ruleSuggestBox");
+  if (!wrap || !box) return;
+  if (box.parentElement !== wrap) wrap.appendChild(box);
+  suggestActiveField = fieldId;
+}
+
+function showRuleSuggest(fieldId) {
+  const fid = fieldId || suggestActiveField || "ruleDomains";
+  const input = byId(fid);
   const box = byId("ruleSuggestBox");
   const hint = byId("ruleSuggestHint");
   if (!input || !box) return;
+  attachSuggestBoxTo(fid);
 
-  const catalog = suggestCatalog(type);
-  if (!catalog.length) {
+  const { line } = textareaLineAtCursor(input);
+  const ctx = parseSuggestContext(line, fid);
+  if (!ctx || ctx.noSuggest) {
     hideRuleSuggest();
-    if (hint) {
-      hint.textContent =
-        type === "regexp" || type === "ip"
-          ? "Для этого типа подсказки не нужны — введите значение вручную."
-          : "Список подсказок пуст.";
+    if (hint && ctx && ctx.noSuggest) {
+      hint.textContent = "Для regexp: введите выражение вручную (подсказки не нужны).";
+      hint.className = "ss-hint";
     }
     return;
   }
 
-  const matches = filterSuggestions(input.value, catalog);
+  const catalog = suggestCatalog(ctx.kind);
+  if (!catalog.length) {
+    hideRuleSuggest();
+    return;
+  }
+
+  const matches = filterSuggestions(ctx.query, catalog);
   box.innerHTML = "";
   if (!matches.length) {
     const empty = document.createElement("div");
     empty.className = "ss-suggest-empty";
-    empty.textContent = "Нет совпадений в списке — можно ввести своё значение";
+    empty.textContent = "Нет совпадений — можно оставить свой ввод";
     box.appendChild(empty);
     box.classList.add("show");
-    if (hint) hint.textContent = "Домен/категория не найдены в подсказках — правило всё равно можно добавить.";
+    if (hint) {
+      hint.textContent = "Значение не из списка — правило всё равно можно добавить.";
+      hint.className = "ss-hint";
+    }
     return;
   }
 
@@ -2009,27 +2082,168 @@ function showRuleSuggest() {
     btn.type = "button";
     btn.className = "ss-suggest-item" + (idx === suggestActiveIndex ? " active" : "");
     btn.setAttribute("role", "option");
-    btn.dataset.value = it.id;
-    btn.textContent = it.label;
+    const insertPrefix = ctx.prefix || (ctx.kind === "geosite" ? "geosite:" : ctx.kind === "geoip" ? "geoip:" : "");
+    const insertValue = insertPrefix ? insertPrefix + it.id : it.id;
+    btn.dataset.value = insertValue;
+    btn.textContent = insertPrefix ? insertPrefix + (it.label || it.id) : it.label || it.id;
     btn.addEventListener("mousedown", (e) => {
       e.preventDefault();
-      input.value = it.id;
-      hideRuleSuggest();
-      if (hint) {
-        hint.textContent = "Выбрано из списка: " + it.id + (it.label !== it.id ? " (" + it.label + ")" : "");
-        hint.className = "ss-hint ok";
-      }
+      applyRuleSuggestion(input, insertValue);
     });
     box.appendChild(btn);
   });
   box.classList.add("show");
   if (hint) {
-    const exact = catalog.some((it) => String(it.id).toLowerCase() === String(input.value).trim().toLowerCase());
-    hint.className = "ss-hint" + (exact ? " ok" : "");
-    hint.textContent = exact
-      ? "Есть в списке подсказок ✓"
-      : "Подсказки из списка (домены / geosite / geoip). Выберите пункт или оставьте свой ввод.";
+    hint.className = "ss-hint";
+    hint.textContent =
+      "Подсказки по текущей строке (" +
+      (ctx.kind === "geosite" ? "geosite" : ctx.kind === "geoip" ? "geoip" : "домены") +
+      "). Enter/Tab — выбрать, Esc — закрыть.";
   }
+}
+
+function applyRuleSuggestion(input, value) {
+  if (!input) return;
+  const info = textareaLineAtCursor(input);
+  const lead = info.line.match(/^\s*/)[0] || "";
+  replaceTextareaLine(input, lead + value);
+  hideRuleSuggest();
+  const hint = byId("ruleSuggestHint");
+  if (hint) {
+    hint.textContent = "Выбрано: " + value;
+    hint.className = "ss-hint ok";
+  }
+  try {
+    input.focus();
+  } catch (_) {}
+}
+
+function appendRulePrefix(targetId, prefix) {
+  const el = byId(targetId);
+  if (!el) return;
+  const val = String(el.value || "");
+  el.value = val && !/\n$/.test(val) ? val + "\n" + prefix : val + prefix;
+  try {
+    el.focus();
+    el.selectionStart = el.selectionEnd = el.value.length;
+  } catch (_) {}
+  suggestActiveIndex = -1;
+  showRuleSuggest(targetId);
+}
+
+function splitRuleLines(text) {
+  return String(text || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+}
+
+function normalizeDomainEntry(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  const pref = s.match(/^(geosite:|domain:|full:|keyword:|regexp:|ext:)(.*)$/i);
+  if (pref) {
+    const p = pref[1].toLowerCase();
+    let rest = pref[2].trim();
+    if (p === "domain:" || p === "full:") {
+      rest = rest.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+    }
+    return rest ? p + rest : "";
+  }
+  s = s.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
+  if (!s) return "";
+  return "domain:" + s;
+}
+
+function normalizeIpEntry(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "";
+  if (/^geoip:/i.test(s)) {
+    const rest = s.slice(6).trim();
+    return rest ? "geoip:" + rest : "";
+  }
+  if (/^[\d.]+(\/\d{1,2})?$/.test(s) || /^[0-9a-fA-F:]+(\/\d{1,3})?$/.test(s)) return s;
+  // bare country / category → geoip:
+  return "geoip:" + s;
+}
+
+function ruleDomainList(r) {
+  if (!r) return [];
+  if (Array.isArray(r.domain) && r.domain.length) return r.domain.map(String);
+  const t = r.type || "domain";
+  const m = r.matcher || r.value || "";
+  if (!m) return [];
+  if (t === "geoip" || t === "ip" || t === "cidr") return [];
+  if (t === "geosite") return ["geosite:" + m];
+  if (t === "full") return ["full:" + m];
+  if (t === "keyword") return ["keyword:" + m];
+  if (t === "regexp") return ["regexp:" + m];
+  return ["domain:" + m];
+}
+
+function ruleIpList(r) {
+  if (!r) return [];
+  if (Array.isArray(r.ip) && r.ip.length) return r.ip.map(String);
+  const t = r.type || "";
+  const m = r.matcher || r.value || "";
+  if (!m) return [];
+  if (t === "geoip") return ["geoip:" + m];
+  if (t === "ip" || t === "cidr") return [m];
+  return [];
+}
+
+function summarizeMatchers(arr, limit) {
+  const list = arr || [];
+  if (!list.length) return "";
+  const n = limit || 3;
+  return list.length > n ? list.slice(0, n).join(", ") + " …" : list.join(", ");
+}
+
+function ruleSummary(r) {
+  const name = (r && r.name) || "";
+  const domains = ruleDomainList(r);
+  const ips = ruleIpList(r);
+  const parts = [];
+  if (domains.length) parts.push("dmns: " + summarizeMatchers(domains));
+  if (ips.length) parts.push("ips: " + summarizeMatchers(ips));
+  const body = parts.length ? parts.join(" · ") : "—";
+  return name ? name + " · " + body : body;
+}
+
+function escapeHtml(s) {
+  return String(s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function clearRuleForm() {
+  ruleEditIndex = -1;
+  if (byId("ruleDomains")) byId("ruleDomains").value = "";
+  if (byId("ruleIps")) byId("ruleIps").value = "";
+  if (byId("ruleName")) byId("ruleName").value = "";
+  if (byId("rulePriority")) byId("rulePriority").value = "";
+  if (byId("btnAddRule")) byId("btnAddRule").value = "Добавить в список";
+  hideRuleSuggest();
+}
+
+function loadRuleIntoForm(idx) {
+  const r = (routingCache.rules || [])[idx];
+  if (!r) return;
+  ruleEditIndex = idx;
+  fillOutboundSelects();
+  if (byId("ruleOutbound") && r.outbound) byId("ruleOutbound").value = r.outbound;
+  if (byId("ruleName")) byId("ruleName").value = r.name || "";
+  if (byId("rulePriority")) byId("rulePriority").value = r.priority != null ? String(r.priority) : "";
+  if (byId("ruleDomains")) byId("ruleDomains").value = ruleDomainList(r).join("\n");
+  if (byId("ruleIps")) byId("ruleIps").value = ruleIpList(r).join("\n");
+  if (byId("btnAddRule")) byId("btnAddRule").value = "Сохранить правило";
+  hideRuleSuggest();
+  setMsg("Редактирование правила #" + (idx + 1) + " — измените список и нажмите «Сохранить правило».", "ok");
+  try {
+    byId("ruleDomains") && byId("ruleDomains").focus();
+  } catch (_) {}
 }
 
 function syncRulesJsonFromCache() {
@@ -2045,26 +2259,32 @@ function renderRulesTable() {
   const rules = routingCache.rules || [];
   if (!rules.length) {
     const tr = document.createElement("tr");
-    tr.innerHTML = '<td colspan="7" style="color:#9ab">Правил пока нет — добавьте выше или примените пресет</td>';
+    tr.innerHTML = '<td colspan="5" style="color:#9ab">Правил пока нет — добавьте выше или примените пресет</td>';
     tbody.appendChild(tr);
     return;
   }
   rules.forEach((r, idx) => {
     const tr = document.createElement("tr");
+    const sum = ruleSummary(r);
     tr.innerHTML =
       "<td>" +
       (idx + 1) +
+      '</td><td title="' +
+      escapeHtml(sum) +
+      '">' +
+      escapeHtml(sum) +
       "</td><td>" +
-      (r.name || "—") +
+      escapeHtml(r.outbound || "—") +
       "</td><td>" +
-      (r.type || "—") +
-      "</td><td><code>" +
-      (r.matcher || r.value || "—") +
-      "</code></td><td>" +
-      (r.outbound || "—") +
-      "</td><td>" +
-      (r.priority ?? "—") +
+      escapeHtml(r.priority ?? "—") +
       "</td><td></td>";
+    const actions = tr.lastChild;
+    const edit = document.createElement("input");
+    edit.type = "button";
+    edit.className = btnClass("");
+    edit.value = "e";
+    edit.title = "Редактировать";
+    edit.addEventListener("click", () => loadRuleIntoForm(idx));
     const btn = document.createElement("input");
     btn.type = "button";
     btn.className = btnClass("danger");
@@ -2072,9 +2292,12 @@ function renderRulesTable() {
     btn.title = "Удалить";
     btn.addEventListener("click", () => {
       routingCache.rules.splice(idx, 1);
+      if (ruleEditIndex === idx) clearRuleForm();
+      else if (ruleEditIndex > idx) ruleEditIndex -= 1;
       renderRouting(routingCache);
     });
-    tr.lastChild.appendChild(btn);
+    actions.appendChild(edit);
+    actions.appendChild(btn);
     tbody.appendChild(tr);
   });
 }
@@ -2334,39 +2557,58 @@ function renderRouting(routing) {
 }
 
 function addRoutingRuleFromForm() {
-  const type = (byId("ruleType") && byId("ruleType").value) || "domain";
-  let matcher = (byId("ruleMatcher") && byId("ruleMatcher").value.trim()) || "";
   const outbound = (byId("ruleOutbound") && byId("ruleOutbound").value) || "direct";
   const name = (byId("ruleName") && byId("ruleName").value.trim()) || "";
   const prioRaw = byId("rulePriority") && byId("rulePriority").value;
-  const priority = prioRaw ? Number(prioRaw) : (routingCache.rules || []).length + 1;
+  const domain = splitRuleLines(byId("ruleDomains") && byId("ruleDomains").value)
+    .map(normalizeDomainEntry)
+    .filter(Boolean);
+  const ip = splitRuleLines(byId("ruleIps") && byId("ruleIps").value)
+    .map(normalizeIpEntry)
+    .filter(Boolean);
+  const priority =
+    prioRaw !== "" && prioRaw != null
+      ? Number(prioRaw)
+      : ruleEditIndex >= 0 && routingCache.rules[ruleEditIndex]
+        ? routingCache.rules[ruleEditIndex].priority
+        : (routingCache.rules || []).length + 1;
 
-  if (!matcher) {
-    setMsg("Укажите домен / geosite / geoip matcher", "err");
+  if (!domain.length && !ip.length) {
+    setMsg("Укажите хотя бы один домен / geosite или IP / geoip (по одному на строку)", "err");
     return;
   }
-  if (type === "domain" || type === "full") {
-    matcher = matcher.replace(/^https?:\/\//i, "").replace(/\/.*$/, "").toLowerCase();
-  }
-  if (type === "ip" && matcher.indexOf("/") >= 0) {
-    // treat as cidr
-  }
-  const ruleType = type === "ip" && matcher.indexOf("/") >= 0 ? "cidr" : type;
+
+  const autoName =
+    name ||
+    (domain[0] ? domain[0].replace(/^(geosite|domain|full|keyword|regexp):/i, "") : "") ||
+    (ip[0] ? ip[0].replace(/^geoip:/i, "") : "") ||
+    "rule";
+
   const rule = {
-    name: name || matcher,
-    type: ruleType,
-    matcher,
+    name: autoName,
     outbound,
     priority: Number.isFinite(priority) ? priority : 100,
+    domain,
+    ip,
   };
+
   routingCache.rules = routingCache.rules || [];
-  routingCache.rules.push(rule);
+  if (ruleEditIndex >= 0 && ruleEditIndex < routingCache.rules.length) {
+    routingCache.rules[ruleEditIndex] = rule;
+  } else {
+    routingCache.rules.push(rule);
+  }
   routingCache.rules.sort((a, b) => (a.priority || 9999) - (b.priority || 9999));
-  if (byId("ruleMatcher")) byId("ruleMatcher").value = "";
-  if (byId("ruleName")) byId("ruleName").value = "";
-  hideRuleSuggest();
+  clearRuleForm();
   renderRouting(routingCache);
-  setMsg("Правило добавлено в список. Нажмите «Сохранить routing», затем «Применить» внизу.", "ok");
+  setMsg(
+    "Правило в списке (" +
+      domain.length +
+      " dmns / " +
+      ip.length +
+      " ips). Нажмите «Сохранить routing», затем «Применить» внизу.",
+    "ok"
+  );
 }
 
 function renderPolicies(policies) {
@@ -3053,56 +3295,65 @@ function bind() {
   if (byId("btnAddRule")) {
     byId("btnAddRule").addEventListener("click", () => addRoutingRuleFromForm());
   }
-  if (byId("ruleType")) {
-    byId("ruleType").addEventListener("change", () => {
-      hideRuleSuggest();
-      if (byId("ruleMatcher")) byId("ruleMatcher").placeholder =
-        byId("ruleType").value === "geosite"
-          ? "например youtube, category-ru…"
-          : byId("ruleType").value === "geoip"
-            ? "например private, ru, cn…"
-            : "например youtube.com";
-      showRuleSuggest();
+  if (byId("btnClearRuleForm")) {
+    byId("btnClearRuleForm").addEventListener("click", () => {
+      clearRuleForm();
+      setMsg("Форма правила очищена", "ok");
     });
   }
-  if (byId("ruleMatcher")) {
-    byId("ruleMatcher").addEventListener("input", () => {
+  document.querySelectorAll(".ss-prefix-tag").forEach((tag) => {
+    tag.addEventListener("click", (e) => {
+      e.preventDefault();
+      appendRulePrefix(tag.getAttribute("data-target"), tag.getAttribute("data-prefix") || "");
+    });
+  });
+
+  function bindRuleTextarea(fieldId) {
+    const el = byId(fieldId);
+    if (!el) return;
+    el.addEventListener("input", () => {
       suggestActiveIndex = -1;
-      showRuleSuggest();
+      showRuleSuggest(fieldId);
     });
-    byId("ruleMatcher").addEventListener("focus", () => showRuleSuggest());
-    byId("ruleMatcher").addEventListener("blur", () => setTimeout(hideRuleSuggest, 180));
-    byId("ruleMatcher").addEventListener("keydown", (e) => {
+    el.addEventListener("click", () => showRuleSuggest(fieldId));
+    el.addEventListener("keyup", () => showRuleSuggest(fieldId));
+    el.addEventListener("focus", () => showRuleSuggest(fieldId));
+    el.addEventListener("blur", () => setTimeout(hideRuleSuggest, 180));
+    el.addEventListener("keydown", (e) => {
       const box = byId("ruleSuggestBox");
-      if (!box || !box.classList.contains("show")) {
-        if (e.key === "Enter") {
+      const open = box && box.classList.contains("show");
+      const items = open ? Array.from(box.querySelectorAll(".ss-suggest-item")) : [];
+      if (open && items.length) {
+        if (e.key === "ArrowDown") {
           e.preventDefault();
-          addRoutingRuleFromForm();
+          suggestActiveIndex = Math.min(items.length - 1, suggestActiveIndex + 1);
+          items.forEach((node, i) => node.classList.toggle("active", i === suggestActiveIndex));
+          return;
         }
-        return;
-      }
-      const items = Array.from(box.querySelectorAll(".ss-suggest-item"));
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        suggestActiveIndex = Math.min(items.length - 1, suggestActiveIndex + 1);
-        items.forEach((el, i) => el.classList.toggle("active", i === suggestActiveIndex));
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault();
-        suggestActiveIndex = Math.max(0, suggestActiveIndex - 1);
-        items.forEach((el, i) => el.classList.toggle("active", i === suggestActiveIndex));
-      } else if (e.key === "Enter") {
-        e.preventDefault();
-        if (suggestActiveIndex >= 0 && items[suggestActiveIndex]) {
-          byId("ruleMatcher").value = items[suggestActiveIndex].dataset.value;
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          suggestActiveIndex = Math.max(0, suggestActiveIndex - 1);
+          items.forEach((node, i) => node.classList.toggle("active", i === suggestActiveIndex));
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          if (suggestActiveIndex < 0) suggestActiveIndex = 0;
+          if (items[suggestActiveIndex]) {
+            e.preventDefault();
+            applyRuleSuggestion(el, items[suggestActiveIndex].dataset.value);
+            return;
+          }
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
           hideRuleSuggest();
-        } else {
-          addRoutingRuleFromForm();
+          return;
         }
-      } else if (e.key === "Escape") {
-        hideRuleSuggest();
       }
     });
   }
+  bindRuleTextarea("ruleDomains");
+  bindRuleTextarea("ruleIps");
   byId("btnSaveRouting").addEventListener("click", () => {
     let rules;
     try {

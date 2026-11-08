@@ -46,12 +46,23 @@ ss_dnsmasq_build_ipset_conf() {
       else
         setname="$SS_IPSET_PROXY_V4"
       fi
-      # Domains from routing rules that are plain domain/full
+      # Domains from routing rules: legacy type+matcher and Xray-style domain[] arrays
       if [ -f "$SS_ROUTING_FILE" ]; then
-        jq -r --arg mode "$SS_DNS_MODE" '
+        jq -r '
           (.rules // [])[] |
-          select((.type // "domain") == "domain" or (.type // "") == "full") |
-          .matcher // empty
+          (
+            if ((.domain // []) | type) == "array" and ((.domain // []) | length) > 0 then
+              .domain[]
+            elif ((.type // "domain") == "domain" or (.type // "") == "full") then
+              (.matcher // .value // empty)
+            else empty end
+          ) |
+          tostring |
+          select(length > 0) |
+          if test("^(domain|full):"; "i") then sub("^(domain|full):"; ""; "i")
+          elif test("^(geosite|keyword|regexp|ext):"; "i") then empty
+          else . end |
+          select(length > 0)
         ' "$SS_ROUTING_FILE" 2>/dev/null | while read -r domain; do
           [ -n "$domain" ] || continue
           printf 'ipset=/%s/%s\n' "$domain" "$setname"

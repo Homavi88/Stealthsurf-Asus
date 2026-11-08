@@ -320,22 +320,43 @@ ss_build_routing_rules_json() {
   fi
 
   jq -nc --slurpfile rt "$SS_ROUTING_FILE" --slurpfile ep "$SS_ENDPOINTS_FILE" --arg def "$default_tag" '
-    def rule_from(r):
+    def normalize_domains:
+      map(tostring) | map(select(length > 0));
+    def normalize_ips:
+      map(tostring) | map(
+        if test("^geoip:"; "i") then ("geoip:" + (sub("^geoip:"; ""; "i")))
+        elif test("^[0-9.]+(/[0-9]+)?$") or test("^[0-9a-fA-F:]+(/[0-9]+)?$") then .
+        else ("geoip:" + .)
+        end
+      ) | map(select(length > 0));
+    def legacy_from(r):
       (r.type // "domain") as $t |
       (r.matcher // r.value // "") as $m |
+      if ($m | tostring | length) == 0 then {domain:[], ip:[]}
+      elif $t == "geoip" then {domain:[], ip:["geoip:"+$m]}
+      elif $t == "ip" or $t == "cidr" then {domain:[], ip:[$m]}
+      elif $t == "geosite" then {domain:["geosite:"+$m], ip:[]}
+      elif $t == "full" then {domain:["full:"+$m], ip:[]}
+      elif $t == "keyword" then {domain:["keyword:"+$m], ip:[]}
+      elif $t == "regexp" then {domain:["regexp:"+$m], ip:[]}
+      else {domain:["domain:"+$m], ip:[]}
+      end;
+    def rule_from(r):
       (r.outbound // $def) as $o |
-      if $t == "geoip" or $t == "ip" or $t == "cidr" then
-        {type:"field", outboundTag:$o, ip: (if $t=="geoip" then ["geoip:"+$m] else [$m] end)}
-      elif $t == "geosite" then
-        {type:"field", outboundTag:$o, domain: ["geosite:"+$m]}
-      elif $t == "full" then
-        {type:"field", outboundTag:$o, domain: ["full:"+$m]}
-      elif $t == "keyword" then
-        {type:"field", outboundTag:$o, domain: ["keyword:"+$m]}
-      elif $t == "regexp" then
-        {type:"field", outboundTag:$o, domain: ["regexp:"+$m]}
+      (
+        if ((r.domain != null) or (r.ip != null)) then
+          {
+            domain: ((r.domain // []) | normalize_domains),
+            ip: ((r.ip // []) | normalize_ips)
+          }
+        else legacy_from(r)
+        end
+      ) as $m |
+      if (($m.domain|length) == 0) and (($m.ip|length) == 0) then empty
       else
-        {type:"field", outboundTag:$o, domain: ["domain:"+$m]}
+        {type:"field", outboundTag:$o}
+        + (if ($m.domain|length) > 0 then {domain:$m.domain} else {} end)
+        + (if ($m.ip|length) > 0 then {ip:$m.ip} else {} end)
       end;
 
     [
