@@ -29,7 +29,7 @@
                   {{ opt }}
                 </option>
               </select>
-              <span class="hint-color" v-if="file.tag">ext:xrayui:{{ file.tag ?? '{tag}' }}</span>
+              <span class="hint-color" v-if="file.tag">ext:stealthsurf:{{ file.tag ?? '{tag}' }}</span>
             </td>
           </tr>
         </tbody>

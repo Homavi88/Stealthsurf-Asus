@@ -7,7 +7,7 @@ tun_table=250
 tun_rule_priority_local=49 # Local traffic stays local
 tun_rule_priority_tun=51   # Other LAN traffic goes to TUN table
 
-tun_routing_marker="/tmp/xrayui-tun-routing-owned"
+tun_routing_marker="/tmp/stealthsurf-tun-routing-owned"
 
 tun_routing_mode() {
     case "${tun_routing:-full}" in
@@ -50,7 +50,7 @@ migrate_tun_inbounds_config() {
 
     log_info "Migrating legacy TUN inbound settings to the Xray-core field names..."
 
-    local migrated="/tmp/xrayui-tun-migrate.$$"
+    local migrated="/tmp/stealthsurf-tun-migrate.$$"
     if ! jq '
         if (.inbounds | type) == "array" then
             .inbounds |= map(
@@ -92,7 +92,7 @@ configure_tun_inbounds() {
 
     log_info "Scanning for TUN inbounds..."
 
-    local tun_inbounds_file="/tmp/xrayui-tun-inbounds.$$"
+    local tun_inbounds_file="/tmp/stealthsurf-tun-inbounds.$$"
     jq -c '
         .inbounds[]
         | select(.protocol == "tun"

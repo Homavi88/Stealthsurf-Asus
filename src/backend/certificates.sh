@@ -2,7 +2,7 @@
 # shellcheck disable=SC2034  # codacy:Unused variables
 
 regenerate_ssl_certificates() {
-    local cert_dir="/opt/etc/xray/cert"
+    local cert_dir="$XRAY_CONFIG_DIR/cert"
     local cert_file="$cert_dir/xray-cert.crt"
     local key_file="$cert_dir/xray-key.pem"
 

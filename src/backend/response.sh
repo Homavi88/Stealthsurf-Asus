@@ -83,7 +83,7 @@ initial_response() {
 
     local profiles
     profiles=$(
-        for f in /opt/etc/xray/*.json; do
+        for f in "$XRAY_CONFIG_DIR"/*.json; do
             [ -f "$f" ] && printf '%s\n' "${f##*/}"
         done | jq -R -s -c 'split("\n")[:-1]' 2>/dev/null
     )
@@ -262,7 +262,7 @@ apply_config() {
     load_xrayui_config
 
     local temp_config="/tmp/xray_server_config_new.json"
-    local backup_config="/opt/etc/xray/$(basename $XRAY_CONFIG_FILE)-temp.bak"
+    local backup_config="$XRAY_CONFIG_DIR/$(basename $XRAY_CONFIG_FILE)-temp.bak"
 
     local incoming_config=$(reconstruct_payload)
 
@@ -415,17 +415,17 @@ rules_to_dns_domains() {
 }
 
 toggle_startup() {
-    local xray_startup=$(am_settings_get xray_startup)
-    if [ -z "$xray_startup" ]; then
-        am_settings_set xray_startup "y"
-        log_warn "xray_startup was empty. Set to 'enabled'."
+    local stealthsurf_startup=$(am_settings_get stealthsurf_startup)
+    if [ -z "$stealthsurf_startup" ]; then
+        am_settings_set stealthsurf_startup "y"
+        log_warn "stealthsurf_startup was empty. Set to 'enabled'."
     else
-        if [ "$xray_startup" = "y" ]; then
-            am_settings_set xray_startup "n"
-            log_ok "xray_startup was 'enabled'. Set to 'disabled'."
+        if [ "$stealthsurf_startup" = "y" ]; then
+            am_settings_set stealthsurf_startup "n"
+            log_ok "stealthsurf_startup was 'enabled'. Set to 'disabled'."
         else
-            am_settings_set xray_startup "y"
-            log_ok "xray_startup was 'disabled'. Set to 'enabled'."
+            am_settings_set stealthsurf_startup "y"
+            log_ok "stealthsurf_startup was 'disabled'. Set to 'enabled'."
         fi
     fi
 }

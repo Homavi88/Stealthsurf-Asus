@@ -3,7 +3,7 @@
 
 api_get_current_config() {
   local xray_config_name=$(basename "$XRAY_CONFIG_FILE")
-  echo "/opt/etc/xray/xrayui/${xray_config_name%.json}-api.json"
+  echo "$XRAY_CONFIG_DIR/${xray_config_name%.json}-api.json"
 }
 
 # Get the gRPC API listen address from the API config file.
@@ -71,7 +71,7 @@ api_swap_outbound() {
 
 api_write_config() {
   log_info "Writing API configuration..."
-  mkdir -p /opt/etc/xray/xrayui
+  mkdir -p "$XRAY_CONFIG_DIR"
 
   local xray_api_config=$(api_get_current_config)
   local observatory_probe_url
@@ -264,7 +264,7 @@ api_write_observatory_config() {
   local xray_api_config selectors observatory_probe_url observatory_probe_interval
 
   log_info "Writing observatory configuration for balancers..."
-  mkdir -p /opt/etc/xray/xrayui
+  mkdir -p "$XRAY_CONFIG_DIR"
 
   xray_api_config=$(api_get_current_config)
   selectors=$(api_balancer_selectors) || return 1

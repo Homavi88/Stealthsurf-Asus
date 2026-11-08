@@ -66,8 +66,8 @@ subscription_body_has_links() {
 process_subscriptions() {
     local config_file="$1"
     local idx url proto tag hp rep
-    local body_file="/tmp/xrayui_surl.$$"
-    local dec_file="/tmp/xrayui_surl_dec.$$"
+    local body_file="/tmp/stealthsurf_surl.$$"
+    local dec_file="/tmp/stealthsurf_surl_dec.$$"
     local cfg_file="$config_file.subs.$$"
     local new_file="$config_file.subs.new.$$"
 
@@ -177,7 +177,7 @@ subscription_outbound_is_unusable() {
 }
 
 subscription_pick_from_list() {
-    local lines_file="/tmp/xrayui_pick.$$"
+    local lines_file="/tmp/stealthsurf_pick.$$"
     local rc
     awk -v p="$2" '
         {
@@ -941,12 +941,12 @@ subscription_fetch_protocols() {
     local mode="$1"
     local payload="" links url key rc line line_count
     local cache_dir="$ADDON_SHARE_DIR/subcache"
-    local tmp_urls="/tmp/xrayui_proto_urls.$$"
-    local tmp_keys="/tmp/xrayui_proto_keys.$$"
-    local tmp_lines="/tmp/xrayui_proto_links.$$"
-    local tmp_pairs="/tmp/xrayui_proto_pairs.$$"
-    local tmpc="/tmp/xrayui_proto_c.$$"
-    local tmpd="/tmp/xrayui_proto_d.$$"
+    local tmp_urls="/tmp/stealthsurf_proto_urls.$$"
+    local tmp_keys="/tmp/stealthsurf_proto_keys.$$"
+    local tmp_lines="/tmp/stealthsurf_proto_links.$$"
+    local tmp_pairs="/tmp/stealthsurf_proto_pairs.$$"
+    local tmpc="/tmp/stealthsurf_proto_c.$$"
+    local tmpd="/tmp/stealthsurf_proto_d.$$"
     local tmp_json="$XRAYUI_SUBSCRIPTIONS_FILE.tmp.$$"
 
     load_xrayui_config

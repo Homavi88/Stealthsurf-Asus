@@ -3,7 +3,7 @@
 
 startup() {
     # Use a lock file to prevent concurrent startup executions
-    local STARTUP_LOCK="/tmp/xrayui_startup.lock"
+    local STARTUP_LOCK="/tmp/stealthsurf_startup.lock"
 
     # Check if startup is already in progress
     if [ -f "$STARTUP_LOCK" ]; then
@@ -32,7 +32,7 @@ startup() {
 
     local xray_pid=$(get_xray_daemon_pid)
 
-    if [ "$(am_settings_get xray_startup)" = "y" ]; then
+    if [ "$(am_settings_get stealthsurf_startup)" = "y" ]; then
         log_ok "Xray service is enabled by XRAYUI. Starting Xray service..."
 
         if [ "$skipwait" = "false" ]; then

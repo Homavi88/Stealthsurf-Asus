@@ -10,8 +10,8 @@ diagnostics_env() {
     [ "$1" = "collect" ] && COLLECT=1
 
     TS=$(date +%Y%m%d_%H%M%S)
-    TMPLOG=/tmp/xrayui_diag_$TS.log
-    TARBALL=/tmp/xrayui_diag_$TS.tgz
+    TMPLOG=/tmp/stealthsurf_diag_$TS.log
+    TARBALL=/tmp/stealthsurf_diag_$TS.tgz
 
     # if collect → duplicate output into $TMPLOG
     if [ "$COLLECT" -eq 1 ]; then
@@ -98,13 +98,13 @@ diagnostics_iptables() {
     log_info "--------------------------------------------------------"
     log_info
 
-    log_info $(diagnostics_hdr "iptables -t nat -nvL XRAYUI:")
-    iptables -w -t nat -nvL XRAYUI --line-numbers 2>&1
+    log_info $(diagnostics_hdr "iptables -t nat -nvL $FW_CHAIN:")
+    iptables -w -t nat -nvL "$FW_CHAIN" --line-numbers 2>&1
     log_info "--------------------------------------------------------"
     log_info
 
-    log_info $(diagnostics_hdr "iptables -t filter -nvL XRAYUI:")
-    iptables -w -t filter -nvL XRAYUI --line-numbers 2>&1
+    log_info $(diagnostics_hdr "iptables -t filter -nvL $FW_CHAIN:")
+    iptables -w -t filter -nvL "$FW_CHAIN" --line-numbers 2>&1
     log_info "--------------------------------------------------------"
     log_info
 
@@ -113,8 +113,8 @@ diagnostics_iptables() {
     log_info "--------------------------------------------------------"
     log_info
 
-    log_info $(diagnostics_hdr "iptables -t mangle -nvL XRAYUI:")
-    iptables -w -t mangle -nvL XRAYUI --line-numbers 2>&1
+    log_info $(diagnostics_hdr "iptables -t mangle -nvL $FW_CHAIN:")
+    iptables -w -t mangle -nvL "$FW_CHAIN" --line-numbers 2>&1
     log_info "--------------------------------------------------------"
     log_info
 
@@ -123,17 +123,17 @@ diagnostics_iptables() {
     log_info "--------------------------------------------------------"
     log_info
 
-    log_info $(diagnostics_hdr "iptables -t mangle -L XRAYUI --line-numbers:")
-    iptables -w -t mangle -L XRAYUI --line-numbers 2>&1
+    log_info $(diagnostics_hdr "iptables -t mangle -L $FW_CHAIN --line-numbers:")
+    iptables -w -t mangle -L "$FW_CHAIN" --line-numbers 2>&1
     log_info "--------------------------------------------------------"
     log_info
 
     log_info $(diagnostics_hdr "PREROUTING INPUT FORWARD OUTPUT:")
     for tbl in mangle filter; do
         for ch in PREROUTING INPUT FORWARD OUTPUT; do
-            if iptables -w -t "$tbl" -C "$ch" -j XRAYUI 2>/dev/null; then
+            if iptables -w -t "$tbl" -C "$ch" -j "$FW_CHAIN" 2>/dev/null; then
                 stats=$(iptables -w -t "$tbl" -nvL "$ch" |
-                    awk '$3=="XRAYUI" {p+=$1; b+=$2; n++} END {printf "refs=%d pkts=%d bytes=%d", n+0, p+0, b+0}')
+                    awk -v c="$FW_CHAIN" '$3==c' {p+=$1; b+=$2; n++} END {printf "refs=%d pkts=%d bytes=%d", n+0, p+0, b+0}')
                 echo "$tbl/$ch  $stats"
             fi
         done
@@ -156,7 +156,7 @@ diagnostics_iptables() {
     log_info
 
     log_info $(diagnostics_hdr "ip rule-lookup for 8.8.8.8:")
-    ip route get 8.8.8.8 mark 0x10000
+    ip route get 8.8.8.8 mark $tproxy_mark
     log_info --------------------------------------------------------
     log_info
 
@@ -167,23 +167,23 @@ diagnostics_iptables() {
         log_info "--------------------------------------------------------"
         log_info
 
-        log_info $(diagnostics_hdr "ip6tables -t nat -nvL XRAYUI:")
-        ip6tables -w -t nat -nvL XRAYUI --line-numbers 2>&1
+        log_info $(diagnostics_hdr "ip6tables -t nat -nvL $FW_CHAIN:")
+        ip6tables -w -t nat -nvL "$FW_CHAIN" --line-numbers 2>&1
         log_info "--------------------------------------------------------"
         log_info
 
-        log_info $(diagnostics_hdr "ip6tables -t filter -nvL XRAYUI:")
-        ip6tables -w -t filter -nvL XRAYUI --line-numbers 2>&1
+        log_info $(diagnostics_hdr "ip6tables -t filter -nvL $FW_CHAIN:")
+        ip6tables -w -t filter -nvL "$FW_CHAIN" --line-numbers 2>&1
         log_info "--------------------------------------------------------"
         log_info
 
-        log_info $(diagnostics_hdr "ip6tables -t mangle -nvL XRAYUI:")
-        ip6tables -w -t mangle -nvL XRAYUI --line-numbers 2>&1
+        log_info $(diagnostics_hdr "ip6tables -t mangle -nvL $FW_CHAIN:")
+        ip6tables -w -t mangle -nvL "$FW_CHAIN" --line-numbers 2>&1
         log_info "--------------------------------------------------------"
         log_info
 
-        log_info $(diagnostics_hdr "ip6tables -t mangle -L XRAYUI --line-numbers:")
-        ip6tables -w -t mangle -L XRAYUI --line-numbers 2>&1
+        log_info $(diagnostics_hdr "ip6tables -t mangle -L $FW_CHAIN --line-numbers:")
+        ip6tables -w -t mangle -L "$FW_CHAIN" --line-numbers 2>&1
         log_info "--------------------------------------------------------"
         log_info
     fi

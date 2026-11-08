@@ -227,7 +227,7 @@
         transportModal,
         sniffingModal,
         unapplied,
-        version: window.xray.custom_settings.xray_version,
+        version: window.xray.custom_settings.stealthsurf_version,
         page: window.location.pathname.substring(1),
         mode,
         isAdvanced,

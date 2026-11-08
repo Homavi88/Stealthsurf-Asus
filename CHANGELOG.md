@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1] - 2026-11-08
+
+### Isolation from stock XrayUI
+
+- Own Xray profile tree: `/opt/etc/xray/stealthsurf/` (no longer shares `config.json` with XrayUI)
+- Own Merlin custom_settings keys: `stealthsurf_*` (payload/startup/version); UI submits only those keys
+- Own PID `/var/run/stealthsurf-xray.pid`; process matching requires our `-c` config path
+- Firewall chains `STEALTHSURF*` / mark `0x20000` / table `78` (stock XrayUI keeps `XRAYUI` / `0x10000` / `77`)
+- Custom geodata output `/opt/sbin/stealthsurf` + `ext:stealthsurf:`; sanitize `data/` junk (`outbound-ss-*`) that caused `invalid attribute: ss-…`; geodata recompile is non-fatal on install
+
+---
+
 ## [1.1.0] - 2026-11-08
 
 ### Beta — platform rebuild

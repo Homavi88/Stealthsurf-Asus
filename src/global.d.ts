@@ -6,14 +6,14 @@ export {};
 
 export interface XrayUiCustomSettings {
   [key: string]: string;
-  xray_page: string;
-  xray_version: string;
-  xray_startup: string;
+  stealthsurf_page: string;
+  stealthsurf_version: string;
+  stealthsurf_startup: string;
 }
 
 export interface XrayUiServer {
   isRunning: boolean;
-  xray_version_latest: string;
+  stealthsurf_version_latest: string;
   b4sni_isRunning: boolean;
 }
 

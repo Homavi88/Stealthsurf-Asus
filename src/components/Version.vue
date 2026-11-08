@@ -84,7 +84,7 @@
       const ui = inject<Ref<EngineResponseConfig>>('uiResponse');
       const withPatch = (version?: string) => (version && version.split('.').length === 2 ? `${version}.0` : (version ?? ''));
 
-      const current_version = computed(() => withPatch(window.xray.custom_settings.xray_version || ui?.value?.xray?.ui_version));
+      const current_version = computed(() => withPatch(window.xray.custom_settings.stealthsurf_version || ui?.value?.xray?.ui_version));
       const latest_version = ref<string>();
       const updateModal = ref();
       const hasUpdate = ref(false);
@@ -130,7 +130,7 @@
           selected_version.value = latestRelease.version;
           hasUpdate.value = !!current_version.value && vCompare(latest_version.value, current_version.value) === 1;
           if (hasUpdate.value === true) {
-            window.xray.server.xray_version_latest = latest_version.value;
+            window.xray.server.stealthsurf_version_latest = latest_version.value;
             if (refusedToUpdateVersion.value != latest_version.value) {
               updateModal.value.show();
             }
@@ -169,7 +169,7 @@
       };
 
       const dont_want_update = () => {
-        engine.setCookie(COOKIE_NAME, window.xray.server.xray_version_latest);
+        engine.setCookie(COOKIE_NAME, window.xray.server.stealthsurf_version_latest);
         updateModal.value.close();
       };
 

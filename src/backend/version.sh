@@ -7,22 +7,22 @@ show_version() {
     log_ok "XRAYUI: $XRAYUI_VERSION, XRAY-CORE: ${XRAY_VERSION:-$XRAYUI_CORE_ERR}"
 }
 
-switch_xray_version() {
+switch_stealthsurf_version() {
     update_loading_progress "Switching Xray version..." 0
 
     mkdir -p "$ADDON_TMP_DIR" 2>/dev/null
     local xray_tmp_dir="$ADDON_TMP_DIR/xray"
 
-    local xray_version="$1"
+    local stealthsurf_version="$1"
 
-    if [ -n "$xray_version" ] && [ "$xray_version" != "latest" ]; then
-        case $xray_version in
+    if [ -n "$stealthsurf_version" ] && [ "$stealthsurf_version" != "latest" ]; then
+        case $stealthsurf_version in
         v*) : ;;
-        *) xray_version="v$xray_version" ;;
+        *) stealthsurf_version="v$stealthsurf_version" ;;
         esac
     fi
 
-    if [ -z "$xray_version" ]; then
+    if [ -z "$stealthsurf_version" ]; then
 
         log_info "Switching Xray version using payload"
         local payload=$(reconstruct_payload)
@@ -44,11 +44,11 @@ switch_xray_version() {
             return 1
         fi
     else
-        log_info "Switching Xray version to $xray_version"
-        if [ "$xray_version" = "latest" ]; then
+        log_info "Switching Xray version to $stealthsurf_version"
+        if [ "$stealthsurf_version" = "latest" ]; then
             local release_url="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
         else
-            local release_url="https://api.github.com/repos/XTLS/Xray-core/releases/tags/$xray_version"
+            local release_url="https://api.github.com/repos/XTLS/Xray-core/releases/tags/$stealthsurf_version"
         fi
         if [ -z "$release_url" ]; then
             log_error "Error: release URL is empty"

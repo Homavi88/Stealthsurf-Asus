@@ -194,7 +194,7 @@ tlsping_fetch() {
     fi
     log_info "Probing TLS certificates of $target${dial_ip:+ via $dial_ip}"
 
-    outfile="/tmp/xrayui-tlsping.$$"
+    outfile="/tmp/stealthsurf-tlsping.$$"
     tlsping_run "$target" "$dial_ip" "$outfile"
     rc=$?
 

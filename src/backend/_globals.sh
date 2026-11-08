@@ -11,9 +11,8 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.1.0"
-# Xray-core version fresh installs get: the one this XRAYUI release was tested with.
-# Raise it together with tools/xray-schema/schema.json, see tools/xray-schema/README.md.
+XRAYUI_VERSION="1.1.1"
+# Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
 ADDON_WEB_DIR="/www/user/$ADDON_TAG"
@@ -36,9 +35,13 @@ XRAYUI_CONNECTION_STATUS_FILE="$ADDON_SHARE_DIR/xray_connection_status.json"
 XRAYUI_SUBSCRIPTIONS_FILE="$ADDON_SHARE_DIR/xray_subscriptions.json"
 XRAYUI_GEOTAGS_FILE="$ADDON_SHARE_DIR/geodata_tags.json"
 XRAYUI_FAILOVER_STATE_FILE="$ADDON_SHARE_DIR/xray_failover_state.json"
+
+# Isolated from stock XrayUI (/opt/etc/xray/config.json)
+XRAY_CONFIG_DIR="/opt/etc/xray/$ADDON_TAG"
 DEFAULT_XRAY_PROFILE_NAME="config.json"
 DEFAULT_GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 DEFAULT_GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+CUSTOM_GEODATA_NAME="$ADDON_TAG"
 
 XRAYUI_CONFIG_FILE="/opt/etc/$ADDON_TAG.conf"
 
@@ -59,13 +62,24 @@ ADDON_REPO="Homavi88/Stealthsurf-Asus"
 XRAY_VERSION="0.0"
 XRAYUI_CORE_VER_CACHE=""
 XRAYUI_CORE_ERR=""
-XRAY_PIDFILE=/var/run/xray.pid
+# Own pidfile — never share /var/run/xray.pid with stock XrayUI
+XRAY_PIDFILE=/var/run/stealthsurf-xray.pid
 XRAY_RESTART_LOCKFILE=/tmp/$ADDON_TAG.restart.lock
 XRAY_RESTART_LOCK_FD=387
-XRAY_CONFIG_FILE="/opt/etc/xray/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
+XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
 
 POST_RESTART_DNSMASQ="false"
 FIREWALL_FROM_HOOK="false"
+
+# Firewall — MUST differ from stock XrayUI (chains XRAYUI, mark 0x10000, table 77)
+FW_CHAIN="$ADDON_TAG_UPPER"
+FW_DNS_LOCK_CHAIN="${ADDON_TAG_UPPER}_DNS_LOCK"
+FW_DNS_OWNERPROBE_CHAIN="${ADDON_TAG_UPPER}_DNS_OWNERPROBE"
+FW_DIVERT_CHAIN="${ADDON_TAG_UPPER}_DIVERT"
+tproxy_mark=0x20000
+tproxy_mask=0x20000
+tproxy_table=78
+XRAYUI_FIREWALL_LOCKFILE=/tmp/$ADDON_TAG.firewall.lock
 
 IPSET_BYPASS_V4="${ADDON_TAG_UPPER}_BYPASS4"
 IPSET_BYPASS_V6="${ADDON_TAG_UPPER}_BYPASS6"
@@ -86,6 +100,5 @@ if [ -f "$XRAYUI_CONFIG_FILE" ]; then
     . "$XRAYUI_CONFIG_FILE"
 fi
 
-if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-    XRAY_CONFIG_FILE="/opt/etc/xray/config.json"
-fi
+# Recompute after sourcing conf (profile may override)
+XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"

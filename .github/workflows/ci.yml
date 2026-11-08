@@ -34,7 +34,9 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.0"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.1"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAY_CONFIG_DIR="/opt/etc/xray/$ADDON_TAG"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'tproxy_mark=0x20000' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_fetch_balances' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
-          grep -qE 'ssSetKey|api.stealthsurf.net' /tmp/ss-ci-pkg/stealthsurf/app.js
+          grep -qE 'ssSetKey|api.stealthsurf.net|ownCustomSettings|ext:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp

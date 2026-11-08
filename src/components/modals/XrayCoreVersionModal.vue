@@ -17,7 +17,7 @@
                 <option>{{ $t('com.XrayCoreVersionModal.loading') }}</option>
               </select>
               <select v-else class="input_option" v-model="selected_url">
-                <option v-for="opt in xray_versions" :key="opt.version" :value="opt.url">
+                <option v-for="opt in stealthsurf_versions" :key="opt.version" :value="opt.url">
                   {{ opt.version }}{{ opt.prerelease ? ` ${$t('com.XrayCoreVersionModal.prerelease_suffix')}` : '' }}
                 </option>
                 <option disabled value="">────────────</option>
@@ -97,13 +97,13 @@
       const custom_version = ref<string>('');
       const isLoading = ref(false);
 
-      const xray_versions = ref<XrayVersion[]>([]);
+      const stealthsurf_versions = ref<XrayVersion[]>([]);
 
       const isCustom = computed(() => selected_url.value === CUSTOM_VALUE);
 
       const selectedIsPrerelease = computed(() => {
         if (isCustom.value) return false;
-        return xray_versions.value.find((v) => v.url === selected_url.value)?.prerelease ?? false;
+        return stealthsurf_versions.value.find((v) => v.url === selected_url.value)?.prerelease ?? false;
       });
 
       const canSwitch = computed(() => {
@@ -112,13 +112,13 @@
         return !!selected_url.value;
       });
 
-      const load_xray_versions = async () => {
+      const load_stealthsurf_versions = async () => {
         try {
           const releases = await engine.fetchGithubJson<any[]>(
             'https://api.github.com/repos/XTLS/Xray-core/releases?per_page=30',
             ui?.value?.xray?.github_proxy
           );
-          xray_versions.value = releases
+          stealthsurf_versions.value = releases
             .filter((release: any) => !release.draft)
             .slice(0, VERSIONS_TO_SHOW)
             .map((release: any) => ({
@@ -137,12 +137,12 @@
         isLoading.value = true;
         modal.value?.show();
         try {
-          await load_xray_versions();
+          await load_stealthsurf_versions();
         } finally {
           isLoading.value = false;
         }
-        const found = xray_versions.value.find((x) => x.version === props.currentVersion);
-        selected_url.value = found ? found.url : xray_versions.value[0]?.url || '';
+        const found = stealthsurf_versions.value.find((x) => x.version === props.currentVersion);
+        selected_url.value = found ? found.url : stealthsurf_versions.value[0]?.url || '';
       };
 
       const switch_version = async () => {
@@ -175,7 +175,7 @@
         switch_version,
         selected_url,
         custom_version,
-        xray_versions,
+        stealthsurf_versions,
         isLoading,
         isCustom,
         selectedIsPrerelease,

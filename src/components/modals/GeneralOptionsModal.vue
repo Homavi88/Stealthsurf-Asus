@@ -549,7 +549,7 @@
 
   const updatestartup = async () => {
     await engine.submit(SubmitActions.toggleStartupOption);
-    window.xray.custom_settings.xray_startup = window.xray.custom_settings.xray_startup === 'y' ? 'n' : 'y';
+    window.xray.custom_settings.stealthsurf_startup = window.xray.custom_settings.stealthsurf_startup === 'y' ? 'n' : 'y';
   };
 
   const validateCheckConOption = () => {

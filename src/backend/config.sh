@@ -6,8 +6,9 @@ load_xrayui_config() {
         . "$XRAYUI_CONFIG_FILE"
     fi
 
-    # override default values with environment variables
-    XRAY_CONFIG_FILE="/opt/etc/xray/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
+    # Isolated profile tree — never fall back to stock XrayUI /opt/etc/xray/config.json
+    mkdir -p "$XRAY_CONFIG_DIR" 2>/dev/null
+    XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
 
 }
 
@@ -22,7 +23,7 @@ update_xrayui_config() {
         # Additionally escape for sed replacement string
         local sed_safe
         sed_safe=$(printf '%s' "$sh_safe" | sed 's/[|&\\]/\\&/g')
-        sed "s|^${key}=.*|${key}=\"${sed_safe}\"|" "$XRAYUI_CONFIG_FILE" >"/tmp/xrayui_config.$$" && mv "/tmp/xrayui_config.$$" "$XRAYUI_CONFIG_FILE"
+        sed "s|^${key}=.*|${key}=\"${sed_safe}\"|" "$XRAYUI_CONFIG_FILE" >"/tmp/stealthsurf_config.$$" && mv "/tmp/stealthsurf_config.$$" "$XRAYUI_CONFIG_FILE"
     else
         printf '%s="%s"\n' "$key" "$sh_safe" >>"$XRAYUI_CONFIG_FILE"
     fi
@@ -32,7 +33,7 @@ generate_xray_config() {
     # Validate base configuration
     if [ ! -f "$XRAY_CONFIG_FILE" ]; then
         log_warn "Base configuration file not found. Creating a default config..."
-        mkdir -p /opt/etc/xray
+        mkdir -p "$XRAY_CONFIG_DIR"
         cat >$XRAY_CONFIG_FILE <<EOF
 {
     "log": {

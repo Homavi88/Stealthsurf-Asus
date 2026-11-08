@@ -46,7 +46,7 @@ delete_config_profile() {
     *) profile="${profile}.json" ;;
     esac
 
-    local profile_path="/opt/etc/xray/$profile"
+    local profile_path="$XRAY_CONFIG_DIR/$profile"
 
     if [ -f "$profile_path" ]; then
         rm -f "$profile_path"
