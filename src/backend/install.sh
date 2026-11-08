@@ -88,9 +88,30 @@ ss_install_opkg() {
 }
 
 ss_install_deps() {
+  local need_opkg_update=0
+  local pkg
   ss_require_entware || return 1
   ss_info "Using opkg: ${SS_OPKG}"
-  "$SS_OPKG" update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
+
+  # Addon self-update / remount: skip slow "opkg update" when critical pkgs exist.
+  # Fresh install or missing packages still refresh the index.
+  if [ "${SS_INSTALL_SKIP_OPKG_UPDATE:-0}" = "1" ]; then
+    need_opkg_update=0
+  elif [ "${SS_FORCE_OPKG_UPDATE:-0}" = "1" ]; then
+    need_opkg_update=1
+  else
+    for pkg in curl jq ca-certificates; do
+      if ! "$SS_OPKG" list-installed 2>/dev/null | grep -q "^${pkg} "; then
+        need_opkg_update=1
+        break
+      fi
+    done
+  fi
+  if [ "$need_opkg_update" = "1" ]; then
+    "$SS_OPKG" update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
+  else
+    ss_info "Critical opkg packages present — skipping opkg update"
+  fi
 
   # Critical — same baseline as xrayui dataplane
   ss_install_opkg curl 1 || return 1
@@ -174,11 +195,44 @@ ss_remove_hook_scripts() {
 }
 
 ss_install() {
+  # Addon-only remount (post ss_update_self): SS_INSTALL_REMOUNT=1 skips geoip refresh,
+  # opkg index update, and a redundant GitHub version check. Fresh `ssurf install` is unchanged.
+  local remount="${SS_INSTALL_REMOUNT:-0}"
   ss_check_jffs_ready || return 1
   ss_ensure_dirs
+  if [ "$remount" = "1" ]; then
+    SS_INSTALL_SKIP_OPKG_UPDATE=1
+    export SS_INSTALL_SKIP_OPKG_UPDATE
+  fi
   ss_install_deps || return 1
-  ss_ensure_xray || ss_warn "Xray not installed yet — run: stealthsurf install-xray"
-  ss_geodata_update || true
+
+  if [ "$remount" = "1" ]; then
+    # Keep existing Xray binary — do not re-download from GitHub during addon update.
+    if ss_xray_resolve_bin; then
+      ss_xray_status_json >/dev/null 2>&1 || true
+    else
+      ss_warn "Xray not found after addon update — run: ssurf xray"
+    fi
+  else
+    ss_ensure_xray || ss_warn "Xray not installed yet — run: stealthsurf install-xray"
+  fi
+
+  # Geodata is separate from the addon package. Refresh only when missing/forced,
+  # or on a full fresh install. Explicit: ssurf geo / UI «Обновить geoip/geosite».
+  if [ "${SS_FORCE_GEODATA:-0}" = "1" ]; then
+    ss_geodata_update || true
+  elif [ "$remount" = "1" ]; then
+    if [ -s "${GEOIP_DAT:-}" ] && [ -s "${GEOSITE_DAT:-}" ]; then
+      ss_info "Keeping existing geoip/geosite (addon update) — refresh: ssurf geo"
+    else
+      ss_warn "Geodata missing after addon update — fetching once"
+      ss_geodata_update || true
+    fi
+  elif [ -s "${GEOIP_DAT:-}" ] && [ -s "${GEOSITE_DAT:-}" ]; then
+    ss_info "Keeping existing geoip/geosite — refresh: ssurf geo"
+  else
+    ss_geodata_update || true
+  fi
 
   if [ ! -f "$SS_CONF_FILE" ]; then
     SS_API_KEY=""
@@ -220,7 +274,10 @@ ss_install() {
   ss_mount_ui
   ss_write_state full
   ss_version_local >/dev/null 2>&1 || true
-  ss_version_check >/dev/null 2>&1 || true
+  # Remount path refreshes version.json in ss_update_self — skip extra GitHub round-trip here.
+  if [ "$remount" != "1" ]; then
+    ss_version_check >/dev/null 2>&1 || true
+  fi
   ss_ok "$ADDON_TITLE $ADDON_VERSION installed. Open VPN → StealthSurf after re-login."
   ss_info "Hooks: services-start, post-mount, nat-start, firewall-start, wan-start, dnsmasq.postconf, service-event"
 }

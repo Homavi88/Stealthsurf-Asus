@@ -1367,7 +1367,7 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Какая версия StealthSurf стоит сейчас и что есть на GitHub. Можно проверить обновление или выбрать другую версию.">Версия аддона</th>
+                          <th data-ss-hint="Обновление ставит только пакет StealthSurf (UI/CLI/хуки). Geoip/geosite и бинарь Xray не перекачиваются — для них отдельные кнопки / ssurf geo / ssurf xray.">Версия аддона</th>
                           <td>
                             <span id="verDetailAdvanced" class="label label-muted">—</span>
                             <span class="row-buttons" style="margin-left:6px">
@@ -1377,7 +1377,7 @@ function initial() {
                             </span>
                             <div class="ss-hint">
                               CLI: <code>ssurf cu</code> / <code>ssurf upd</code> / <code>ssurf lv</code> / <code>ssurf iv v1.0.16</code>.
-                              Ядро Xray ставится в разделе <b>Xray core</b>.
+                              Обновление аддона не трогает geoip — отдельно: <b>Обновить geoip/geosite</b> / <code>ssurf geo</code>. Ядро Xray — раздел <b>Xray core</b>.
                             </div>
                           </td>
                         </tr>
