@@ -78,6 +78,15 @@ else
 fi
 
 grep -q 'testTelegramFromModal\|testtelegram\|setTgEnabled' "$APP" && bad "telegram UI leftovers in app.js" || ok "telegram UI removed from app.js"
+
+# Clients/MAC must soft-load — never Merlin start_apply from loadClientsList
+if awk '/function loadClientsList/,/^function /' "$APP" | grep -q 'triggerService("clients"'; then
+  bad "loadClientsList still triggerService(clients)"
+else
+  ok "loadClientsList has no triggerService(clients)"
+fi
+grep -q 'get_clientlist' "$APP" && ok "clients soft path uses get_clientlist" || bad "clients soft path uses get_clientlist"
+grep -q 'appGet.cgi' "$APP" && ok "clients soft path uses appGet.cgi" || bad "clients soft path uses appGet.cgi"
 grep -q 'RULE: Deferred Apply' "$APP" && ok "deferred-apply RULE comment in app.js" || bad "deferred-apply RULE comment in app.js"
 [ -f "$ROOT/docs/DEFERRED_APPLY.md" ] && ok "docs/DEFERRED_APPLY.md present" || bad "docs/DEFERRED_APPLY.md present"
 grep -q 'queuePending' "$ROOT/docs/DEFERRED_APPLY.md" && ok "docs mention queuePending" || bad "docs mention queuePending"

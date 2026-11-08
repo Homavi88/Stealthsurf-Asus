@@ -469,8 +469,9 @@ function triggerService(action, payload, opts) {
 //
 // Immediate triggerService() is ONLY for operational actions:
 //   start/stop/restart/sync/update/backup/restore/geodata/diag/logs/
-//   connectivity/testconfig/installxray/clients/devicesnapshot/…
-// Read-only soft paths (no Merlin overlay): checkupdate, balances (browser fetch).
+//   connectivity/testconfig/installxray/devicesnapshot/…
+// Read-only soft paths (no Merlin overlay): checkupdate, balances,
+//   Clients/MAC device list (appGet.cgi get_clientlist / httpApi — NEVER clients service-event).
 //
 // See docs/DEFERRED_APPLY.md — tools/test-deferred-apply.sh enforces this.
 // ---------------------------------------------------------------------------
@@ -945,45 +946,234 @@ function setClientsStatus(text, kind) {
   el.className = "ss-hint" + (kind === "err" ? " err" : kind === "ok" ? " ok" : "");
 }
 
-function loadClientsList(force) {
-  // Soft path: prefer clients.json. Merlin submit only on force or empty cache.
-  const afterMerlin = () => {
-    setTimeout(() => {
-      clientsLoadPending = false;
-      fetchJson(EXT + "/clients.json", 4000)
-        .then((list) => {
-          if (Array.isArray(list)) {
-            renderClients(list);
-            setClientsStatus(
-              list.length ? "Устройств: " + list.length : "Устройства не найдены (пусто в DHCP/ARP)",
-              list.length ? "ok" : ""
-            );
-          }
-        })
-        .catch(() => setClientsStatus("Не удалось прочитать clients.json", "err"));
-    }, 7000);
+function normalizeMerlinClientEntry(mac, obj) {
+  if (!obj || typeof obj !== "object") return null;
+  const m = String(obj.mac || mac || "")
+    .toUpperCase()
+    .replace(/-/g, ":");
+  if (!m || m.indexOf(":") < 0 || m.length < 11) return null;
+  const name = obj.nickName || obj.name || obj.hostname || "";
+  const ip = obj.ip && obj.ip !== "offline" ? obj.ip : obj.ipaddr || "";
+  const online =
+    obj.isOnline === "1" ||
+    obj.isOnline === 1 ||
+    obj.online === true ||
+    obj.online === "1" ||
+    obj.online === 1;
+  return {
+    mac: m,
+    name: name || "",
+    ip: ip || "",
+    online: !!online,
+    source: "merlin",
   };
-  const kickMerlin = () => {
-    if (clientsLoadPending) return;
-    clientsLoadPending = true;
-    setClientsStatus(force ? "Обновляю список устройств…" : "Загружаю устройства с роутера…", "");
-    triggerService("clients", {});
-    afterMerlin();
+}
+
+function normalizeMerlinClientList(raw) {
+  const out = [];
+  const seen = {};
+  const push = (mac, obj) => {
+    const row = normalizeMerlinClientEntry(mac, obj);
+    if (!row || seen[row.mac]) return;
+    seen[row.mac] = 1;
+    out.push(row);
   };
-  if (force) {
-    kickMerlin();
-    return;
+
+  if (!raw) return out;
+
+  // Shape A: { get_clientlist: { "AA:..": {...}, maclist: [...] } }
+  let root = raw;
+  if (raw.get_clientlist && typeof raw.get_clientlist === "object") root = raw.get_clientlist;
+  else if (raw.data && raw.data.get_clientlist) root = raw.data.get_clientlist;
+
+  if (Array.isArray(root)) {
+    root.forEach((c) => push(c && c.mac, c));
+    return out.sort((a, b) => Number(b.online) - Number(a.online) || (a.name || "").localeCompare(b.name || ""));
   }
-  fetchJson(EXT + "/clients.json", 4000)
-    .then((list) => {
-      if (Array.isArray(list) && list.length) {
-        renderClients(list);
-        setClientsStatus("Устройств: " + list.length, "ok");
+
+  if (root && typeof root === "object") {
+    // Merlin global clientList: array-like — clientList[i] is MAC, clientList[MAC] is object
+    if (typeof root.length === "number" && root.length > 0 && typeof root[0] === "string") {
+      for (let i = 0; i < root.length; i++) {
+        const mac = root[i];
+        push(mac, root[mac] || { mac: mac });
+      }
+      return out.sort((a, b) => Number(b.online) - Number(a.online) || (a.name || "").localeCompare(b.name || ""));
+    }
+    Object.keys(root).forEach((k) => {
+      if (k === "maclist" || k === "ClientAPILevel" || k === "ClientList") return;
+      const v = root[k];
+      if (!v || typeof v !== "object") return;
+      push(k, v);
+    });
+    if (Array.isArray(root.maclist)) {
+      root.maclist.forEach((mac) => push(mac, root[mac] || { mac: mac }));
+    }
+  }
+
+  return out.sort((a, b) => Number(b.online) - Number(a.online) || (a.name || "").localeCompare(b.name || ""));
+}
+
+function readGlobalMerlinClientList() {
+  try {
+    if (typeof clientList !== "undefined" && clientList) {
+      const list = normalizeMerlinClientList(clientList);
+      if (list.length) return list;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function fetchClientsViaHttpApi() {
+  return new Promise((resolve, reject) => {
+    try {
+      if (typeof httpApi === "undefined" || !httpApi) {
+        reject(new Error("httpApi missing"));
         return;
       }
-      kickMerlin();
+      // Prefer async hook when available (newer firmware); else sync hookGet.
+      if (typeof httpApi.hookGet === "function") {
+        const data = httpApi.hookGet("get_clientlist()");
+        const list = normalizeMerlinClientList(data);
+        if (list.length) {
+          resolve(list);
+          return;
+        }
+      }
+      if (typeof httpApi.nvramGetAsync === "function" && typeof httpApi.hookGet === "function") {
+        // Some builds expose only sync hookGet above; fall through to CGI.
+      }
+      reject(new Error("httpApi empty"));
+    } catch (e) {
+      reject(e);
+    }
+  });
+}
+
+function fetchClientsViaAppGet() {
+  // Read-only Merlin CGI — no start_apply / «Подождите».
+  const tryParse = (text) => {
+    let data = text;
+    if (typeof text === "string") {
+      try {
+        data = JSON.parse(text);
+      } catch (_) {
+        return [];
+      }
+    }
+    return normalizeMerlinClientList(data);
+  };
+
+  // GET first (works on many Merlin builds when already logged in)
+  return fetch("/appGet.cgi?hook=get_clientlist()", {
+    cache: "no-store",
+    credentials: "same-origin",
+  })
+    .then((res) => {
+      if (!res.ok) throw new Error("appGet HTTP " + res.status);
+      return res.text();
     })
-    .catch(() => kickMerlin());
+    .then((text) => {
+      const list = tryParse(text);
+      if (list.length) return list;
+      // POST form-urlencoded fallback
+      return fetch("/appGet.cgi", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "hook=get_clientlist()",
+      }).then((res) => {
+        if (!res.ok) throw new Error("appGet POST HTTP " + res.status);
+        return res.text();
+      }).then((t2) => tryParse(t2));
+    });
+}
+
+/**
+ * Soft-load LAN devices for Clients / MAC policies.
+ * NEVER uses triggerService / start_apply — that shows Merlin «Подождите».
+ */
+function loadClientsList(force) {
+  if (clientsLoadPending) return;
+  clientsLoadPending = true;
+  setClientsStatus(force ? "Обновляю список устройств…" : "Загружаю устройства…", "");
+
+  const done = (list, via) => {
+    clientsLoadPending = false;
+    const rows = Array.isArray(list) ? list : [];
+    renderClients(rows);
+    setClientsStatus(
+      rows.length
+        ? "Устройств: " + rows.length + (via ? " (" + via + ")" : "")
+        : "Устройства не найдены",
+      rows.length ? "ok" : ""
+    );
+  };
+  const fail = (err) => {
+    clientsLoadPending = false;
+    setClientsStatus(
+      "Не удалось загрузить устройства: " + (err && err.message ? err.message : String(err || "")),
+      "err"
+    );
+  };
+
+  // 1) Instant: already in page memory (networkmap / client_function.js)
+  if (!force) {
+    const cached = readGlobalMerlinClientList();
+    if (cached && cached.length) {
+      done(cached, "networkmap");
+      // Still refresh quietly in background
+      fetchClientsViaAppGet()
+        .then((list) => {
+          if (list && list.length) done(list, "appGet");
+        })
+        .catch(() => {});
+      return;
+    }
+  }
+
+  // 2) httpApi.hookGet (same-origin, no overlay)
+  fetchClientsViaHttpApi()
+    .then((list) => {
+      if (list && list.length) {
+        done(list, "httpApi");
+        return null;
+      }
+      return fetchClientsViaAppGet();
+    })
+    .then((list) => {
+      if (list == null) return;
+      if (list && list.length) {
+        done(list, "appGet");
+        return null;
+      }
+      // 3) Last soft fallback: previously published clients.json (CLI / older runs)
+      return fetchJson(EXT + "/clients.json", 4000).then((cached) => {
+        if (Array.isArray(cached) && cached.length) done(cached, "кэш");
+        else done([], "");
+      });
+    })
+    .catch(() => {
+      fetchClientsViaAppGet()
+        .then((list) => {
+          if (list && list.length) done(list, "appGet");
+          else {
+            return fetchJson(EXT + "/clients.json", 4000).then((cached) => {
+              if (Array.isArray(cached) && cached.length) done(cached, "кэш");
+              else done([], "");
+            });
+          }
+        })
+        .catch((e) => {
+          fetchJson(EXT + "/clients.json", 4000)
+            .then((cached) => {
+              if (Array.isArray(cached) && cached.length) done(cached, "кэш");
+              else fail(e);
+            })
+            .catch(() => fail(e));
+        });
+    });
 }
 
 function btnClass(kind) {

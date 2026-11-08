@@ -35,7 +35,7 @@
 
 `start` / `stop` / `restart` / `sync` / `update` / `backup` / `restore` / `geodata` / `diag` / `logs` / `connectivity` / `testconfig` / `installxray` / …
 
-Мягкие пути **без** Merlin-оверлея (browser fetch): `checkupdate`, баланс API-ключей.
+Мягкие пути **без** Merlin-оверлея (browser fetch): `checkupdate`, баланс API-ключей, список устройств Clients/MAC (`appGet.cgi get_clientlist` / `httpApi` — **не** `triggerService("clients")`).
 
 ## Анти-паттерн
 

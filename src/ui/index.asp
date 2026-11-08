@@ -1293,8 +1293,8 @@ function initial() {
                           <td>
                             <div class="ss-hint">Нет правил → весь LAN в VPN. Есть правила → нужен catch-all redirect, иначе «дыра».</div>
                             <label style="color:#fff" data-ss-hint="Если есть правила для отдельных устройств, включите это: все остальные устройства дома тоже пойдут через VPN. Иначе устройства «без правила» могут уйти в интернет напрямую — получится дыра."><input id="policyCatchall" type="checkbox"> Catch-all redirect для остальных</label>
-                            <input id="btnLoadClients" class="button_gen button_gen_small" type="button" value="Обновить устройства" style="margin-left:8px">
-                            <div id="clientsStatus" class="ss-hint">Устройства загружаются…</div>
+                            <input id="btnLoadClients" class="button_gen button_gen_small" type="button" value="Обновить" style="margin-left:8px" title="Обновить список без Apply (appGet)">
+                            <div id="clientsStatus" class="ss-hint">Устройства загружаются автоматически…</div>
                           </td>
                         </tr>
                         <tr>
