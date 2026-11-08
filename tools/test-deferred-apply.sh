@@ -20,6 +20,8 @@ grep -q 'SS_PENDING_STORAGE_KEY' "$APP" && ok "sessionStorage pending key" || ba
 grep -q 'applyPendingChanges()' "$APP" && ok "btnApplyAll calls applyPendingChanges" || bad "btnApplyAll calls applyPendingChanges"
 
 grep -q 'value="Применить"' "$ASP" && ok "ASP Apply button RU" || bad "ASP Apply button RU"
+grep -q 'id="btnCancelAll"' "$ASP" && ok "ASP Cancel button" || bad "ASP Cancel button"
+grep -q 'function cancelPendingChanges' "$APP" && ok "cancelPendingChanges helper" || bad "cancelPendingChanges helper"
 grep -q 'pendingChangesList' "$ASP" && ok "ASP pendingChangesList" || bad "ASP pendingChangesList"
 grep -q 'Нет изменений' "$ASP" && ok "ASP empty pending text" || bad "ASP empty pending text"
 grep -q 'ss-pending' "$ASP" && ok "ASP pending CSS class" || bad "ASP pending CSS class"

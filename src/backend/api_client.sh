@@ -284,7 +284,10 @@ ss_api_sync_all() {
   fi
   ss_api_sync_locations >/dev/null || true
   ss_api_sync_subscriptions >/dev/null || true
-  ss_activity "sync.done" "configs=$(jq 'length' "$SS_CACHE_CONFIGS" 2>/dev/null || echo 0) subs=$(jq 'length' "$SS_CACHE_SUBSCRIPTIONS" 2>/dev/null || echo 0)"
+  SS_LAST_SYNC=$(date +%s)
+  ss_save_conf
+  ss_write_state 2>/dev/null || true
+  ss_activity "sync.done" "configs=$(jq 'length' "$SS_CACHE_CONFIGS" 2>/dev/null || echo 0) subs=$(jq 'length' "$SS_CACHE_SUBSCRIPTIONS" 2>/dev/null || echo 0) ts=$SS_LAST_SYNC"
   ss_ok "Full sync complete"
 }
 

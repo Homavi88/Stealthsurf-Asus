@@ -14,6 +14,7 @@ ss_settings_defaults() {
   SS_GEODATA_AUTO="${SS_GEODATA_AUTO:-0}"
   SS_GEODATA_SCHEDULE="${SS_GEODATA_SCHEDULE:-weekly}" # daily|every3d|weekly|monthly
   SS_GEODATA_BASE="${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}"
+  SS_GEODATA_PRESET="${SS_GEODATA_PRESET:-loyalsoldier}"
 }
 
 ss_settings_apply_geodata_base() {
@@ -50,6 +51,7 @@ ss_settings_json() {
     --arg geodata_auto "$SS_GEODATA_AUTO" \
     --arg geodata_schedule "$SS_GEODATA_SCHEDULE" \
     --arg geodata_base "$GEODATA_BASE" \
+    --arg geodata_preset "${SS_GEODATA_PRESET:-loyalsoldier}" \
     --arg version "$ADDON_VERSION" \
     '{
       auto_start: ($auto_start == "1"),
@@ -62,6 +64,7 @@ ss_settings_json() {
       geodata_auto: ($geodata_auto == "1"),
       geodata_schedule: $geodata_schedule,
       geodata_base: $geodata_base,
+      geodata_preset: $geodata_preset,
       version: $version
     }'
 }
@@ -169,11 +172,23 @@ ss_settings_apply() {
   [ -n "$v" ] && SS_GEODATA_AUTO="$v" || true
   v=$(printf '%s' "$payload" | jq -r '.geodata_schedule // empty' 2>/dev/null || true)
   [ -n "$v" ] && SS_GEODATA_SCHEDULE="$v" || true
+  v=$(printf '%s' "$payload" | jq -r '.geodata_preset // empty' 2>/dev/null || true)
+  if [ -n "$v" ] && type ss_geodata_apply_preset >/dev/null 2>&1; then
+    ss_geodata_apply_preset "$v" || true
+  fi
   v=$(printf '%s' "$payload" | jq -r '.geodata_base // empty' 2>/dev/null || true)
   if [ -n "$v" ]; then
     case "$v" in
     http://* | https://*)
       SS_GEODATA_BASE="${v%/}"
+      GEODATA_BASE="$SS_GEODATA_BASE"
+      # Custom URL → mark preset custom unless a known preset already matched
+      if [ "${SS_GEODATA_PRESET:-}" != "custom" ]; then
+        known=$(ss_geodata_preset_base "${SS_GEODATA_PRESET:-loyalsoldier}" 2>/dev/null || true)
+        if [ "$known" != "$SS_GEODATA_BASE" ]; then
+          SS_GEODATA_PRESET="custom"
+        fi
+      fi
       ;;
     *)
       ss_warn "Ignoring invalid geodata_base URL"

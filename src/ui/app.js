@@ -393,9 +393,9 @@ function triggerService(action, payload, opts) {
   let wait = Number(options.wait || 0);
   if (!wait) {
     if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
-    else if (action === "installxray" || action === "sync") wait = 20;
-    else if (action === "backup" || action === "restore") wait = 15;
-    else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs") wait = 12;
+    else if (action === "installxray" || action === "sync" || action === "xrayversions") wait = 20;
+    else if (action === "backup" || action === "restore" || action === "clients" || action === "diag") wait = 15;
+    else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs" || action === "testconfig" || action === "connectivity") wait = 12;
     else wait = 10;
   }
 
@@ -529,14 +529,21 @@ function getPendingList() {
 
 function renderPendingPanel() {
   const btn = byId("btnApplyAll");
+  const cancel = byId("btnCancelAll");
   const list = byId("pendingChangesList");
   const ops = getPendingList();
   if (btn) {
     btn.disabled = ops.length === 0;
-    btn.value = "Применить";
+    btn.value = ops.length ? "Применить (" + ops.length + ")" : "Применить";
     btn.title = ops.length
-      ? "Применить " + ops.length + " изменений"
+      ? "Записать на роутер " + ops.length + " изменений"
       : "Нет изменений для применения";
+  }
+  if (cancel) {
+    cancel.disabled = ops.length === 0;
+    cancel.title = ops.length
+      ? "Отменить очередь из " + ops.length + " изменений (на роутер не уйдёт)"
+      : "Нет изменений для отмены";
   }
   if (!list) return;
   if (!ops.length) {
@@ -547,8 +554,19 @@ function renderPendingPanel() {
   list.className = "ss-pending-list";
   list.innerHTML =
     "<ul>" +
-    ops.map((o) => "<li>" + escapePendingHtml(o.label || o.action) + "</li>").join("") +
+    ops.map((o, i) => "<li>" + (i + 1) + ". " + escapePendingHtml(o.label || o.action) + "</li>").join("") +
     "</ul>";
+}
+
+function cancelPendingChanges() {
+  const n = getPendingList().length;
+  if (!n) {
+    setMsg("Нет изменений для отмены", "");
+    renderPendingPanel();
+    return;
+  }
+  clearPending();
+  setMsg("Отменено изменений: " + n + " (на роутер ничего не отправлено)", "ok");
 }
 
 function queuePending(slot, action, payload, label) {
@@ -608,10 +626,20 @@ const SS_SECTION_MODALS = {
   routing: "routingModal",
   policies: "policiesModal",
   general: "generalModal",
+  xray: "xrayModal",
   backup: "backupModal",
+  logs: "logsModal",
   diag: "diagModal",
   settings: "settingsModal",
   versions: "versionsModal",
+};
+
+const SS_GEODATA_PRESETS = {
+  loyalsoldier: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
+  runetfreedom: "https://github.com/runetfreedom/russia-v2ray-rules-dat/releases/latest/download",
+  nidelon: "https://github.com/Nidelon/ru-block-v2ray-rules/releases/latest/download",
+  dustinwin: "https://github.com/DustinWin/ruleset_geodata/releases/latest/download",
+  chocolate4u: "https://github.com/chocolate4u/Iran-v2ray-rules/releases/latest/download",
 };
 
 function openSsModal(id) {
@@ -794,6 +822,168 @@ function updateSectionSummaries() {
   const mode = (stateCache && (stateCache.proxy_mode || stateCache.mode)) || "—";
   const dns = (stateCache && stateCache.dns_mode) || "—";
   set("sumGeneral", "mode: " + mode + " · dns: " + dns);
+  const xr = (stateCache && stateCache.xray) || xrayInfoCache || {};
+  set(
+    "sumXray",
+    xr.installed
+      ? "ядро: " + (shortXrayVersion(xr.version) || "есть")
+      : "ядро: не найдено"
+  );
+}
+
+function shortXrayVersion(ver) {
+  if (!ver) return "";
+  const m = String(ver).match(/(\d+\.\d+\.\d+)/);
+  return m ? m[1] : String(ver).slice(0, 40);
+}
+
+function formatLastSync(ts) {
+  const n = Number(ts);
+  if (!n || !Number.isFinite(n)) return "ещё не было";
+  try {
+    const d = new Date(n * 1000);
+    const pad = (x) => (x < 10 ? "0" + x : String(x));
+    return (
+      pad(d.getDate()) +
+      "." +
+      pad(d.getMonth() + 1) +
+      "." +
+      d.getFullYear() +
+      " " +
+      pad(d.getHours()) +
+      ":" +
+      pad(d.getMinutes())
+    );
+  } catch (_) {
+    return String(ts);
+  }
+}
+
+function renderLastSync(ts) {
+  const el = byId("lastSyncLabel");
+  if (!el) return;
+  el.textContent = "Последняя синхронизация: " + formatLastSync(ts);
+}
+
+let xrayInfoCache = {};
+let xrayVersionsCache = { releases: [] };
+let clientsLoadPending = false;
+
+function renderXrayStatus(info) {
+  xrayInfoCache = info || xrayInfoCache || {};
+  const box = byId("xrayStatusBox");
+  const data = xrayInfoCache;
+  if (box) {
+    if (!data || !data.installed) {
+      box.innerHTML =
+        "<b>Не установлен</b>. Нажмите «Установить / найти Xray» — аддон возьмёт бинарь из opkg или с " +
+        '<a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a>.';
+    } else {
+      box.innerHTML =
+        "<b>Установлен:</b> " +
+        escapePendingHtml(data.version || "версия неизвестна") +
+        "<br><b>Путь:</b> <code>" +
+        escapePendingHtml(data.path || "—") +
+        "</code>" +
+        "<br><b>Архитектура:</b> " +
+        escapePendingHtml(data.arch || "—") +
+        "<br><b>geoip.dat:</b> " +
+        (data.geoip ? "есть" : "нет") +
+        " · <b>geosite.dat:</b> " +
+        (data.geosite ? "есть" : "нет");
+    }
+  }
+  updateSectionSummaries();
+}
+
+function renderXrayVersions(payload) {
+  xrayVersionsCache = payload || xrayVersionsCache || { releases: [] };
+  const tbody = byId("xrayVersionsTable");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  const list = (xrayVersionsCache && xrayVersionsCache.releases) || [];
+  if (xrayVersionsCache.error && !list.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='3'>" + escapePendingHtml(xrayVersionsCache.error) + "</td>";
+    tbody.appendChild(tr);
+    return;
+  }
+  if (!list.length) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = "<td colspan='3'>Нет подходящих релизов для этой архитектуры</td>";
+    tbody.appendChild(tr);
+    return;
+  }
+  list.forEach((rel) => {
+    const tr = document.createElement("tr");
+    const when = rel.published_at ? String(rel.published_at).slice(0, 10) : "—";
+    tr.innerHTML =
+      "<td>" +
+      escapePendingHtml(rel.tag || rel.name || "—") +
+      (rel.prerelease ? " <span class='label label-warning'>pre</span>" : "") +
+      "</td><td>" +
+      escapePendingHtml(when) +
+      "</td><td></td>";
+    const btn = document.createElement("input");
+    btn.type = "button";
+    btn.className = btnClass("");
+    btn.value = "Установить";
+    btn.addEventListener("click", () => {
+      if (!confirm("Установить Xray " + (rel.tag || "") + " с GitHub?")) return;
+      setMsg("Установка Xray " + (rel.tag || "") + "…", "");
+      triggerService("installxray", { tag: rel.tag }, { wait: 45 });
+    });
+    tr.lastChild.appendChild(btn);
+    tbody.appendChild(tr);
+  });
+}
+
+function setClientsStatus(text, kind) {
+  const el = byId("clientsStatus");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = "ss-hint" + (kind === "err" ? " err" : kind === "ok" ? " ok" : "");
+}
+
+function loadClientsList(force) {
+  // Soft path: prefer clients.json. Merlin submit only on force or empty cache.
+  const afterMerlin = () => {
+    setTimeout(() => {
+      clientsLoadPending = false;
+      fetchJson(EXT + "/clients.json", 4000)
+        .then((list) => {
+          if (Array.isArray(list)) {
+            renderClients(list);
+            setClientsStatus(
+              list.length ? "Устройств: " + list.length : "Устройства не найдены (пусто в DHCP/ARP)",
+              list.length ? "ok" : ""
+            );
+          }
+        })
+        .catch(() => setClientsStatus("Не удалось прочитать clients.json", "err"));
+    }, 7000);
+  };
+  const kickMerlin = () => {
+    if (clientsLoadPending) return;
+    clientsLoadPending = true;
+    setClientsStatus(force ? "Обновляю список устройств…" : "Загружаю устройства с роутера…", "");
+    triggerService("clients", {});
+    afterMerlin();
+  };
+  if (force) {
+    kickMerlin();
+    return;
+  }
+  fetchJson(EXT + "/clients.json", 4000)
+    .then((list) => {
+      if (Array.isArray(list) && list.length) {
+        renderClients(list);
+        setClientsStatus("Устройств: " + list.length, "ok");
+        return;
+      }
+      kickMerlin();
+    })
+    .catch(() => kickMerlin());
 }
 
 function btnClass(kind) {
@@ -884,6 +1074,8 @@ function renderState(state) {
     " / tp :" +
     (state.tproxy_port || state.redirect_port || "—");
   byId("defaultPill").textContent = "default: " + (state.default_outbound || "—");
+  renderLastSync(state.last_sync);
+  if (state.xray) renderXrayStatus(state.xray);
   if (state.mode && byId("modeSelect")) byId("modeSelect").value = state.mode;
   if (state.dns_mode && byId("dnsModeSelect")) byId("dnsModeSelect").value = state.dns_mode;
   // Prefer version.json (versionCache) — do not clobber a fresher installed label with state.version
@@ -1634,7 +1826,9 @@ function renderConfigs(configs) {
         tog.type = "button";
         tog.className = btnClass(enabled ? "secondary" : "");
         tog.value = enabled ? "x" : "+";
-        tog.title = enabled ? "Выключить outbound" : "Включить outbound";
+        tog.title = enabled
+          ? "Выключить outbound (конфиг перестанет использоваться на роутере)"
+          : "Включить как outbound — использовать этот конфиг на роутере";
         tog.addEventListener("click", () => {
           const id = Number(c.id);
           const nextEnable = !enabled;
@@ -1844,14 +2038,30 @@ function renderPolicies(policies) {
 function renderClients(clients) {
   clientsCache = clients || [];
   const sel = byId("clientSelect");
+  if (!sel) return;
   sel.innerHTML = "";
+  if (!clientsCache.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "— устройств не найдено —";
+    sel.appendChild(opt);
+    setClientsStatus("Устройства не найдены (DHCP/ARP пусты)", "");
+    return;
+  }
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "— выберите устройство (" + clientsCache.length + ") —";
+  sel.appendChild(placeholder);
   clientsCache.forEach((c) => {
+    if (!c || !c.mac) return;
     const opt = document.createElement("option");
     opt.value = c.mac;
-    opt.textContent = (c.name || c.ip || c.mac) + " [" + c.mac + "]" + (c.online ? " ●" : "");
+    opt.textContent =
+      (c.name || c.ip || c.mac) + " [" + c.mac + "]" + (c.online ? " ● online" : "");
     opt.dataset.name = c.name || "";
     sel.appendChild(opt);
   });
+  setClientsStatus("Устройств: " + clientsCache.length, "ok");
 }
 
 function parseXraySettingsFlags(raw) {
@@ -2197,18 +2407,39 @@ async function refreshAll() {
         if (data && data.installed) renderVersion(data);
         setTimeout(() => hardReloadUi(), 1500);
       }
+      // sync timestamp
+      if (/^synced$/i.test(response.message)) {
+        const ts = (data && data.last_sync) || (data && data.state && data.state.last_sync) || Date.now() / 1000;
+        renderLastSync(ts);
+      }
       // clients → array
       if (Array.isArray(data) && /clients/i.test(response.message)) {
         renderClients(data);
+        clientsLoadPending = false;
       }
       // diag dump
-      if (data && (data.firewall || data.xray || data.protocols) && /diag/i.test(response.message)) {
-        byId("diagBox").textContent = JSON.stringify(data, null, 2);
+      if (/^diag$/i.test(response.message) || (data && data.firewall && data.protocols)) {
+        showDiagResult(data, response.message);
+      }
+      // testconfig
+      if (/config ok|config test failed/i.test(response.message)) {
+        const log = (data && data.log) || response.message;
+        showDiagResult(
+          { ok: !!(data && data.ok) || /config ok/i.test(response.message), log: log },
+          response.message
+        );
       }
       // connectivity
       if (data && (data.ip != null || data.via != null) && /connectivity/i.test(response.message)) {
-        byId("diagBox").textContent =
-          "IP: " + (data.ip || "—") + "\nvia: " + (data.via || "—") + "\nok: " + String(!!data.ok);
+        showDiagResult(data, response.message);
+      }
+      // xray install / status / versions
+      if (data && /xray ready|xray status|xray install/i.test(response.message)) {
+        renderXrayStatus(data);
+        setMsg(response.message + (data.version ? ": " + data.version : ""), response.status ? "ok" : "err");
+      }
+      if (data && Array.isArray(data.releases) && /xray versions/i.test(response.message)) {
+        renderXrayVersions(data);
       }
       // backups list embedded in backup/backuplist responses
       if (data && Array.isArray(data.backups)) {
@@ -2314,6 +2545,11 @@ function bind() {
     byId("btnApplyAll").addEventListener("click", () => {
       // Deferred Apply: one Merlin submit for all queued config edits
       applyPendingChanges();
+    });
+  }
+  if (byId("btnCancelAll")) {
+    byId("btnCancelAll").addEventListener("click", () => {
+      cancelPendingChanges();
     });
   }
   if (byId("btnVersionFooter")) {
@@ -2539,7 +2775,7 @@ function bind() {
   });
   byId("btnGeodata").addEventListener("click", () => triggerService("geodata", {}));
 
-  byId("btnLoadClients").addEventListener("click", () => triggerService("clients", {}));
+  byId("btnLoadClients").addEventListener("click", () => loadClientsList(true));
   byId("btnAddPolicy").addEventListener("click", () => {
     const mac = byId("clientSelect").value;
     if (!mac) return;
@@ -2585,7 +2821,33 @@ function bind() {
     const dns_mode = byId("dnsModeSelect").value;
     queuePending("dns", "setdnsmode", { dns_mode: dns_mode }, "DNS mode → " + dns_mode);
   });
-  byId("btnInstallXray").addEventListener("click", () => triggerService("installxray", {}));
+  if (byId("btnInstallXray")) {
+    byId("btnInstallXray").addEventListener("click", () => {
+      setMsg("Ищу / устанавливаю Xray…", "");
+      triggerService("installxray", {}, { wait: 45 });
+    });
+  }
+  if (byId("btnXrayRefresh")) {
+    byId("btnXrayRefresh").addEventListener("click", () => {
+      triggerService("xraystatus", {});
+      setTimeout(() => {
+        fetchJson(EXT + "/xray_info.json", 4000)
+          .then((info) => renderXrayStatus(info))
+          .catch(() => {});
+      }, 5000);
+    });
+  }
+  if (byId("btnXrayVersions")) {
+    byId("btnXrayVersions").addEventListener("click", () => {
+      setMsg("Загружаю релизы Xray-core с GitHub…", "");
+      triggerService("xrayversions", {}, { wait: 20 });
+      setTimeout(() => {
+        fetchJson(EXT + "/xray_versions.json", 5000)
+          .then((v) => renderXrayVersions(v))
+          .catch(() => {});
+      }, 8000);
+    });
+  }
   byId("btnBackup").addEventListener("click", () => {
     setBackupStatus("Создаю backup…", "");
     triggerService("backup", { note: byId("backupNote").value.trim() || "manual" });
@@ -2597,12 +2859,27 @@ function bind() {
     setTimeout(loadBackups, 9000);
   });
 
-  byId("btnDiag").addEventListener("click", () => triggerService("diag", {}));
-  byId("btnTestCfg").addEventListener("click", () => triggerService("testconfig", {}));
-  byId("btnConnSocks").addEventListener("click", () => triggerService("connectivity", { via: "socks" }));
-  byId("btnConnDirect").addEventListener("click", () =>
-    triggerService("connectivity", { via: "direct" })
-  );
+  byId("btnDiag").addEventListener("click", () => {
+    showDiagResult("Снимаю diag dump…", "diag");
+    triggerService("diag", {}, { wait: 15 });
+    setTimeout(() => {
+      fetchJson(EXT + "/diag.json", 5000)
+        .then((d) => showDiagResult(d, "diag"))
+        .catch(() => {});
+    }, 6000);
+  });
+  byId("btnTestCfg").addEventListener("click", () => {
+    showDiagResult("Тест xray.json…", "testconfig");
+    triggerService("testconfig", {}, { wait: 15 });
+  });
+  byId("btnConnSocks").addEventListener("click", () => {
+    showDiagResult("Проверка IP через SOCKS…", "connectivity");
+    triggerService("connectivity", { via: "socks" }, { wait: 20 });
+  });
+  byId("btnConnDirect").addEventListener("click", () => {
+    showDiagResult("Проверка IP напрямую…", "connectivity");
+    triggerService("connectivity", { via: "direct" }, { wait: 15 });
+  });
   byId("btnLogs").addEventListener("click", () => {
     const kind = byId("logKind").value;
     setLogMeta("Загрузка «" + kind + "»…");
@@ -2634,7 +2911,9 @@ function bind() {
     ["btnManageRouting", "routingModal"],
     ["btnManagePolicies", "policiesModal"],
     ["btnManageGeneral", "generalModal"],
+    ["btnManageXray", "xrayModal"],
     ["btnManageBackup", "backupModal"],
+    ["btnManageLogs", "logsModal"],
     ["btnManageDiag", "diagModal"],
   ];
   manageMap.forEach(([btnId, modalId]) => {
@@ -2646,9 +2925,34 @@ function bind() {
       if (modalId === "routingModal" || modalId === "policiesModal") {
         refreshSecondary().catch(() => {});
       }
+      if (modalId === "policiesModal") {
+        // Auto-load LAN devices so the select is not empty
+        loadClientsList(false);
+      }
       if (modalId === "backupModal") {
         loadBackups();
+      }
+      if (modalId === "logsModal") {
         loadLogPreview();
+      }
+      if (modalId === "xrayModal") {
+        fetchJson(EXT + "/xray_info.json", 4000)
+          .then((info) => renderXrayStatus(info))
+          .catch(() => {
+            if (stateCache && stateCache.xray) renderXrayStatus(stateCache.xray);
+          });
+        fetchJson(EXT + "/xray_versions.json", 4000)
+          .then((v) => {
+            if (v && Array.isArray(v.releases) && v.releases.length) renderXrayVersions(v);
+          })
+          .catch(() => {});
+      }
+      if (modalId === "diagModal") {
+        fetchJson(EXT + "/diag.json", 3000)
+          .then((d) => {
+            if (d && typeof d === "object") showDiagResult(d, "кэш diag.json");
+          })
+          .catch(() => {});
       }
       if (modalId === "keysModal") {
         // Cache first, then quiet live refresh — never Merlin start_apply / «Подождите».
@@ -2685,6 +2989,24 @@ function bind() {
   }
   if (byId("setRebootSchedule")) {
     byId("setRebootSchedule").addEventListener("change", () => syncRebootCronVisibility());
+  }
+  if (byId("setGeodataPreset")) {
+    byId("setGeodataPreset").addEventListener("change", () => {
+      const preset = byId("setGeodataPreset").value;
+      if (preset !== "custom" && SS_GEODATA_PRESETS[preset] && byId("setGeodataBase")) {
+        byId("setGeodataBase").value = SS_GEODATA_PRESETS[preset];
+      }
+    });
+  }
+  if (byId("setGeodataBase")) {
+    byId("setGeodataBase").addEventListener("input", () => {
+      if (!byId("setGeodataPreset")) return;
+      const base = String(byId("setGeodataBase").value || "").replace(/\/$/, "");
+      const match = Object.keys(SS_GEODATA_PRESETS).find(
+        (k) => SS_GEODATA_PRESETS[k].replace(/\/$/, "") === base
+      );
+      byId("setGeodataPreset").value = match || "custom";
+    });
   }
   if (byId("btnSettingsBackup")) {
     byId("btnSettingsBackup").addEventListener("click", () => {
@@ -2762,6 +3084,18 @@ function fillSettingsForm(s) {
       data.geodata_base ||
       "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
   }
+  if (byId("setGeodataPreset")) {
+    let preset = data.geodata_preset || "";
+    if (!preset) {
+      const base = String(byId("setGeodataBase").value || "").replace(/\/$/, "");
+      preset =
+        Object.keys(SS_GEODATA_PRESETS).find(
+          (k) => SS_GEODATA_PRESETS[k].replace(/\/$/, "") === base
+        ) || "custom";
+    }
+    if (![...byId("setGeodataPreset").options].some((o) => o.value === preset)) preset = "custom";
+    byId("setGeodataPreset").value = preset;
+  }
   syncRebootCronVisibility();
 }
 
@@ -2776,6 +3110,7 @@ function collectSettingsPayload() {
     reboot_cron: (byId("setRebootCron") && byId("setRebootCron").value.trim()) || "",
     geodata_auto: !!( byId("setGeodataAuto") && byId("setGeodataAuto").checked ),
     geodata_schedule: (byId("setGeodataSchedule") && byId("setGeodataSchedule").value) || "weekly",
+    geodata_preset: (byId("setGeodataPreset") && byId("setGeodataPreset").value) || "loyalsoldier",
     geodata_base: (byId("setGeodataBase") && byId("setGeodataBase").value.trim()) || "",
   };
 }
@@ -2793,6 +3128,7 @@ async function openSettingsModal() {
     reboot_schedule: "off",
     geodata_auto: false,
     geodata_schedule: "weekly",
+    geodata_preset: "loyalsoldier",
     geodata_base: "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download",
   });
   modal.classList.add("show");
@@ -2863,6 +3199,40 @@ function showLogText(text, kind) {
       " · " +
       new Date().toLocaleTimeString()
   );
+}
+
+function showDiagResult(data, title) {
+  const box = byId("diagBox");
+  if (!box) return;
+  let text = "";
+  if (typeof data === "string") {
+    text = data;
+  } else if (data && typeof data === "object") {
+    if (data.ip != null || data.via != null) {
+      text =
+        "IP: " +
+        (data.ip || "—") +
+        "\nvia: " +
+        (data.via || "—") +
+        "\nok: " +
+        String(!!data.ok) +
+        (title ? "\n(" + title + ")" : "");
+    } else if (data.log != null) {
+      text =
+        (data.ok === false ? "FAIL\n" : data.ok ? "OK\n" : "") +
+        String(data.log) +
+        (title ? "\n\n—" + title + "—" : "");
+    } else {
+      try {
+        text = JSON.stringify(data, null, 2);
+      } catch (_) {
+        text = String(data);
+      }
+    }
+  } else {
+    text = String(data || "(пусто)");
+  }
+  box.textContent = text;
 }
 
 function renderBackups(list) {

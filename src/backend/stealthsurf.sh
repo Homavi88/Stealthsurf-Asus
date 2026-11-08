@@ -383,7 +383,18 @@ ss_cli_dispatch() {
     ss_restore "$2" || return 1
     ;;
   install-xray | xray)
-    ss_ensure_xray || return 1
+    if [ -n "${2:-}" ]; then
+      ss_xray_download "$2" || return 1
+    else
+      ss_ensure_xray || return 1
+    fi
+    ss_xray_status_json
+    ;;
+  xray-versions | xv)
+    ss_xray_list_versions || return 1
+    ;;
+  xray-status | xs)
+    ss_xray_status_json
     ;;
   geodata | geo)
     ss_geodata_update || return 1

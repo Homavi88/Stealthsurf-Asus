@@ -6,58 +6,103 @@ ss_policies_init() {
   [ -f "$SS_POLICIES_FILE" ] || echo '{"catchall":true,"rules":[]}' >"$SS_POLICIES_FILE"
 }
 
+# Build LAN device list from Merlin sources into one JSON array (no pipe/jq races).
 ss_clientlist_json() {
-  # Merlin clientlist from custom_clientlist / dhcp / arp
-  local tmp="$ADDON_TMP_DIR/clients.$$"
-  echo '[]' >"$tmp"
+  ss_ensure_dirs
+  local raw leases neigh lines line name mac ip hostname state tmp
+  tmp="$ADDON_TMP_DIR/clients_build.$$"
+  : >"$tmp.raw"
 
-  # Prefer nvram custom_clientlist (name>mac>...)
-  local raw
   raw=$(nvram get custom_clientlist 2>/dev/null || true)
   if [ -n "$raw" ]; then
     printf '%s' "$raw" | tr '<' '\n' | while IFS= read -r line; do
       [ -z "$line" ] && continue
       name=$(printf '%s' "$line" | cut -d'>' -f1)
       mac=$(printf '%s' "$line" | cut -d'>' -f2 | tr 'a-z' 'A-Z')
-      [ -n "$mac" ] || continue
-      jq --arg name "$name" --arg mac "$mac" --arg src "custom_clientlist" \
-        '. + [{name:$name, mac:$mac, source:$src, online:false}]' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
-    done
-  fi
-
-  # Merge DHCP leases
-  if [ -f /var/lib/misc/dnsmasq.leases ]; then
-    while read -r _exp mac ip hostname _; do
-      mac=$(printf '%s' "$mac" | tr 'a-z' 'A-Z')
-      [ -n "$mac" ] || continue
-      jq --arg name "${hostname:-}" --arg mac "$mac" --arg ip "$ip" --arg src "dhcp" \
-        '
-        ($mac) as $m |
-        if any(.[]; .mac == $m) then
-          map(if .mac == $m then .ip = $ip | .online = true | (if (.name|length)==0 and ($name|length)>0 then .name = $name else . end) else . end)
-        else
-          . + [{name:$name, mac:$mac, ip:$ip, source:$src, online:true}]
-        end
-        ' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
-    done </var/lib/misc/dnsmasq.leases
-  fi
-
-  # ARP online flag
-  if command -v ip >/dev/null 2>&1; then
-    ip -4 neigh show 2>/dev/null | while read -r ip _dev _lladdr mac state; do
       case "$mac" in
-      *:*:*)
-        mac=$(printf '%s' "$mac" | tr 'a-z' 'A-Z')
-        jq --arg mac "$mac" --arg ip "$ip" '
-          map(if .mac == $mac then .online = true | .ip = $ip else . end)
-        ' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
-        ;;
+      *:*:*) printf 'C\t%s\t%s\t\n' "$mac" "$name" >>"$tmp.raw" ;;
       esac
     done
   fi
 
-  cat "$tmp"
-  rm -f "$tmp" "$tmp.n"
+  leases="/var/lib/misc/dnsmasq.leases"
+  [ -f "$leases" ] || leases="/tmp/var/lib/misc/dnsmasq.leases"
+  if [ -f "$leases" ]; then
+    while read -r _exp mac ip hostname _; do
+      mac=$(printf '%s' "$mac" | tr 'a-z' 'A-Z')
+      case "$mac" in
+      *:*:*)
+        [ "$hostname" = "*" ] && hostname=""
+        printf 'D\t%s\t%s\t%s\n' "$mac" "${hostname:-}" "$ip" >>"$tmp.raw"
+        ;;
+      esac
+    done <"$leases"
+  fi
+
+  if command -v ip >/dev/null 2>&1; then
+    ip -4 neigh show 2>/dev/null | while read -r ip _dev _lladdr mac state rest; do
+      case "$mac" in
+      *:*:*)
+        mac=$(printf '%s' "$mac" | tr 'a-z' 'A-Z')
+        case "$state" in
+        REACHABLE | STALE | DELAY | PROBE | PERMANENT | NOARP)
+          printf 'A\t%s\t\t%s\n' "$mac" "$ip" >>"$tmp.raw"
+          ;;
+        esac
+        ;;
+      esac
+    done
+  elif [ -f /proc/net/arp ]; then
+    # skip header
+    tail -n +2 /proc/net/arp 2>/dev/null | while read -r ip _hw _flags mac _mask _dev; do
+      mac=$(printf '%s' "$mac" | tr 'a-z' 'A-Z')
+      case "$mac" in
+      00:00:00:00:00:00 | *:*:*) ;;
+      esac
+      case "$mac" in
+      00:00:00:00:00:00) continue ;;
+      *:*:*) printf 'A\t%s\t\t%s\n' "$mac" "$ip" >>"$tmp.raw" ;;
+      esac
+    done
+  fi
+
+  # Merge in jq once (stable, no concurrent rewrite races)
+  jq -Rn '
+    reduce inputs as $line ({};
+      ($line | split("\t")) as $p |
+      if ($p|length) < 2 then . else
+        ($p[1] | ascii_upcase) as $mac |
+        ($p[0]) as $src |
+        ($p[2] // "") as $name |
+        ($p[3] // "") as $ip |
+        .[$mac] = (
+          (.[$mac] // {mac:$mac, name:"", ip:"", online:false, source:"unknown"})
+          | .mac = $mac
+          | (if ($name|length) > 0 then .name = $name else . end)
+          | (if ($ip|length) > 0 then .ip = $ip else . end)
+          | (if $src == "D" or $src == "A" then .online = true else . end)
+          | (if $src == "C" then .source = "custom_clientlist"
+             elif $src == "D" then .source = "dhcp"
+             elif $src == "A" then .source = (if .source == "unknown" then "arp" else .source end)
+             else . end)
+        )
+      end
+    )
+    | [.[]]
+    | sort_by(.online|not, (.name // ""), (.ip // ""), .mac)
+  ' "$tmp.raw" >"$tmp.json" 2>/dev/null || echo '[]' >"$tmp.json"
+
+  # Always publish for WebUI soft-load
+  cp -f "$tmp.json" "$SS_CACHE_CLIENTS" 2>/dev/null || true
+  ln -sf "$SS_CACHE_CLIENTS" "$ADDON_WEB_DIR/clients.json" 2>/dev/null || true
+
+  cat "$tmp.json"
+  rm -f "$tmp.raw" "$tmp.json"
+}
+
+ss_clients_publish() {
+  ss_clientlist_json >/dev/null
+  ss_jq_file_or "$SS_CACHE_CLIENTS" '[]'
 }
 
 ss_policies_set() {

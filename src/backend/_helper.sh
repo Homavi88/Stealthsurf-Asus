@@ -122,6 +122,7 @@ ss_ensure_dirs() {
   [ -f "$SS_CACHE_SUBSCRIPTIONS" ] || echo '[]' >"$SS_CACHE_SUBSCRIPTIONS"
   [ -f "$SS_CACHE_CONFIGS" ] || echo '[]' >"$SS_CACHE_CONFIGS"
   [ -f "$SS_CACHE_BALANCES" ] || echo '{"fetched_at":0,"keys":[],"total_balance":0,"total_referral":0,"currency":"RUB"}' >"$SS_CACHE_BALANCES"
+  [ -f "$SS_CACHE_CLIENTS" ] || echo '[]' >"$SS_CACHE_CLIENTS"
   [ -f "$SS_ENDPOINTS_FILE" ] || echo '[]' >"$SS_ENDPOINTS_FILE"
 }
 
@@ -160,6 +161,8 @@ SS_REBOOT_CRON='${SS_REBOOT_CRON:-}'
 SS_GEODATA_AUTO='${SS_GEODATA_AUTO:-0}'
 SS_GEODATA_SCHEDULE='${SS_GEODATA_SCHEDULE:-weekly}'
 SS_GEODATA_BASE='${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}'
+SS_GEODATA_PRESET='${SS_GEODATA_PRESET:-loyalsoldier}'
+SS_LAST_SYNC='${SS_LAST_SYNC:-}'
 EOF
   chmod 600 "$SS_CONF_FILE"
   if type ss_settings_publish >/dev/null 2>&1; then

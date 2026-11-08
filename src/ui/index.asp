@@ -854,12 +854,25 @@ function initial() {
                           </div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <div class="ss-settings-field" style="flex:1 1 100%">
-                              <span data-ss-hint="Откуда скачивать файлы списков. Обычно ссылка на GitHub Loyalsoldier. Меняйте, только если вам дали другой адрес.">Адрес загрузки (без имени файла)</span>
+                              <span data-ss-hint="Готовые наборы geodata как в XrayUI. Выбор подставляет URL для geoip.dat и geosite.dat. Для своего зеркала выберите «Свой URL».">Репозиторий geodata</span>
+                              <select id="setGeodataPreset" class="input_32_table">
+                                <option value="loyalsoldier">Loyalsoldier (общий, по умолчанию)</option>
+                                <option value="runetfreedom">RUNET Freedom (RU bypass)</option>
+                                <option value="nidelon">Nidelon (RU blocks)</option>
+                                <option value="dustinwin">DustinWin (CN rules)</option>
+                                <option value="chocolate4u">Chocolate4U (Iran rules)</option>
+                                <option value="custom">Свой URL…</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div class="ss-settings-row" style="margin-top:6px">
+                            <div class="ss-settings-field" style="flex:1 1 100%">
+                              <span data-ss-hint="Базовый URL без имени файла. С него скачиваются geoip.dat и geosite.dat. При выборе пресета заполняется автоматически.">Адрес загрузки (без имени файла)</span>
                               <input id="setGeodataBase" class="input_32_table" type="text" maxlength="256"
                                 placeholder="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download">
                             </div>
                           </div>
-                          <div class="ss-hint">Скачиваются <code>geoip.dat</code> и <code>geosite.dat</code> с указанного URL.</div>
+                          <div class="ss-hint">Источники как в <a href="https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/general-options" target="_blank" rel="noopener">XrayUI Geodata</a>. Скачиваются <code>geoip.dat</code> и <code>geosite.dat</code>.</div>
                           <div class="ss-settings-row" style="margin-top:6px">
                             <input id="btnSettingsGeodataNow" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite сейчас">
                           </div>
@@ -916,7 +929,7 @@ function initial() {
                       <tr>
                         <th data-ss-hint="Скачивает с сайта StealthSurf ваши актуальные серверы и настройки по API-ключу. Нажимайте после изменений в личном кабинете на сайте.">Sync с сайта</th>
                         <td>
-                          <span class="ss-meta-inline">Подтянуть конфиги / ключи с api.stealthsurf.net</span>
+                          <span class="ss-meta-inline" id="lastSyncLabel">Последняя синхронизация: ещё не было</span>
                           <span class="row-buttons">
                             <input id="btnSync" class="button_gen button_gen_small" type="button" value="sync">
                           </span>
@@ -942,11 +955,20 @@ function initial() {
                         </td>
                       </tr>
                       <tr>
-                        <th data-ss-hint="Запасная копия настроек «на всякий случай» и журнал того, что происходило (ошибки, действия). Manage открывает окно со списком копий и логов.">Backup / Logs</th>
+                        <th data-ss-hint="Запасная копия настроек «на всякий случай». Manage открывает список копий и восстановление.">Backup</th>
                         <td>
-                          <span class="ss-menu-summary" id="sumBackup">backup и логи аддона</span>
+                          <span class="ss-menu-summary" id="sumBackup">резервные копии настроек</span>
                           <span class="row-buttons">
                             <input id="btnManageBackup" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th data-ss-hint="Журнал работы аддона: действия, ошибки, устройства, логи Xray. Отдельный раздел — сюда пишется всё по программе.">Logs</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumLogs">activity / errors / xray</span>
+                          <span class="row-buttons">
+                            <input id="btnManageLogs" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
                         </td>
                       </tr>
@@ -964,14 +986,26 @@ function initial() {
                     </tbody>
                   </table>
 
-                  <!-- Outbounds: XrayUI-style compact list; edit opens modal -->
+                  <!-- Outbounds: catalog from StealthSurf API keys; + enables as Xray outbound -->
                   <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable" id="sec-outbounds">
                     <thead>
-                      <tr><td colspan="2" data-ss-hint="Список ваших серверов. Зелёная/красная точка — доступен ли сервер. Кнопка e — настройки. + включить сервер в работу, x — выключить.">Outbounds / catalog <span class="ss-menu-summary" id="sumCatalog" style="float:right;font-weight:normal"></span></td></tr>
+                      <tr><td colspan="2" data-ss-hint="Каталог конфигов, загруженных по API-ключам. Точка — online у провайдера. «+» — использовать как outbound на роутере, «x» — выключить, «e» — сменить локацию/протокол.">Outbounds / catalog <span class="ss-menu-summary" id="sumCatalog" style="float:right;font-weight:normal"></span></td></tr>
                     </thead>
                     <tbody id="outboundListBody">
                       <tr>
-                        <th width="30%" data-ss-hint="Поиск по списку серверов. Default — сервер «по умолчанию», через который идёт обычный интернет. «Пересобрать Xray» заново собирает рабочую конфигурацию на роутере.">Фильтр / default</th>
+                        <th width="30%" data-ss-hint="Как пользоваться каталогом">Как пользоваться</th>
+                        <td>
+                          <div class="ss-hint" style="margin:0">
+                            Это конфиги с сайта StealthSurf (после Sync по API-ключам).<br>
+                            <b>●</b> зелёная — сервер online сейчас; без точки / красная — offline.<br>
+                            <b>+</b> — включить как <b>outbound</b> (туннель на роутере, можно несколько).<br>
+                            <b>x</b> — выключить outbound · <b>e</b> — настройки локации/протокола.<br>
+                            <b>Default</b> — куда идёт трафик без отдельного routing-правила.
+                          </div>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th data-ss-hint="Поиск по списку серверов. Default — сервер «по умолчанию». «Пересобрать Xray» заново собирает рабочую конфигурацию на роутере.">Фильтр / default</th>
                         <td>
                           <input id="catalogFilter" class="input_25_table" type="text" placeholder="название / протокол / id">
                           <select id="defaultOutbound" class="input_15_table" style="margin-left:6px"></select>
@@ -1021,6 +1055,15 @@ function initial() {
                           <span class="ss-menu-summary" id="sumGeneral">mode: —</span>
                           <span class="row-buttons">
                             <input id="btnManageGeneral" class="button_gen button_gen_small" type="button" value="manage">
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <th data-ss-hint="Ядро Xray — программа, которая реально гоняет VPN-трафик. Здесь видно установленную версию, репозиторий релизов и можно скачать/обновить бинарь под архитектуру роутера.">Xray core</th>
+                        <td>
+                          <span class="ss-menu-summary" id="sumXray">ядро: —</span>
+                          <span class="row-buttons">
+                            <input id="btnManageXray" class="button_gen button_gen_small" type="button" value="manage">
                           </span>
                         </td>
                       </tr>
@@ -1239,7 +1282,7 @@ function initial() {
                   <div id="policiesModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="policiesModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="policiesModalTitle">Clients / MAC policies</div>
-                      <p class="ss-modal-summary">Bypass / redirect по MAC. Без правил весь LAN идёт в VPN.</p>
+                      <p class="ss-modal-summary">Bypass / redirect по MAC. Список устройств подгружается автоматически при открытии.</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-policies">
 <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
@@ -1250,13 +1293,14 @@ function initial() {
                           <td>
                             <div class="ss-hint">Нет правил → весь LAN в VPN. Есть правила → нужен catch-all redirect, иначе «дыра».</div>
                             <label style="color:#fff" data-ss-hint="Если есть правила для отдельных устройств, включите это: все остальные устройства дома тоже пойдут через VPN. Иначе устройства «без правила» могут уйти в интернет напрямую — получится дыра."><input id="policyCatchall" type="checkbox"> Catch-all redirect для остальных</label>
-                            <input id="btnLoadClients" class="button_gen button_gen_small" type="button" value="Загрузить устройства" style="margin-left:8px">
+                            <input id="btnLoadClients" class="button_gen button_gen_small" type="button" value="Обновить устройства" style="margin-left:8px">
+                            <div id="clientsStatus" class="ss-hint">Устройства загружаются…</div>
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Выберите устройство из списка (или загрузите устройства), режим bypass/redirect, при желании ограничьте порты. Затем «Добавить» и «Apply политики».">Добавить</th>
+                          <th data-ss-hint="Выберите устройство из списка, режим bypass/redirect, при желании ограничьте порты. Затем «Добавить» и «Сохранить политики», после — «Применить» внизу.">Добавить</th>
                           <td>
-                            <select id="clientSelect" class="input_25_table"></select>
+                            <select id="clientSelect" class="input_25_table"><option value="">— загрузка устройств —</option></select>
                             <select id="policyMode" class="input_15_table" style="margin-left:6px">
                               <option value="bypass">bypass</option>
                               <option value="redirect">redirect</option>
@@ -1293,7 +1337,7 @@ function initial() {
                   <div id="generalModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="generalModalTitle">
                     <div class="ss-modal-card ss-wide-card">
                       <div class="ss-modal-head" id="generalModalTitle">Mode / DNS</div>
-                      <p class="ss-modal-summary">Dataplane mode, DNS hijack и быстрые действия по версии / Xray binary.</p>
+                      <p class="ss-modal-summary">Только dataplane mode и DNS. Ядро Xray — отдельный раздел «Xray core».</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-general">
 <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
@@ -1307,7 +1351,8 @@ function initial() {
                               <option value="redirect">redirect (TCP transparent)</option>
                               <option value="tproxy">tproxy (TCP+UDP, нужен xt_TPROXY)</option>
                             </select>
-                            <input id="btnSetMode" class="button_gen button_gen_small" type="button" value="Применить режим" style="margin-left:6px">
+                            <input id="btnSetMode" class="button_gen button_gen_small" type="button" value="В очередь" style="margin-left:6px">
+                            <div class="ss-hint">После смены нажмите «Применить» внизу страницы.</div>
                           </td>
                         </tr>
                         <tr>
@@ -1318,7 +1363,7 @@ function initial() {
                               <option value="BYPASS">BYPASS (ipset bypass)</option>
                               <option value="REDIRECT">REDIRECT (hijack :53 → Xray)</option>
                             </select>
-                            <input id="btnSetDns" class="button_gen button_gen_small" type="button" value="Применить DNS" style="margin-left:6px">
+                            <input id="btnSetDns" class="button_gen button_gen_small" type="button" value="В очередь" style="margin-left:6px">
                           </td>
                         </tr>
                         <tr>
@@ -1332,16 +1377,8 @@ function initial() {
                             </span>
                             <div class="ss-hint">
                               CLI: <code>ssurf cu</code> / <code>ssurf upd</code> / <code>ssurf lv</code> / <code>ssurf iv v1.0.16</code>.
-                              В окне версий видно changelog выбранного релиза перед установкой или откатом.
-                              Автопроверка при открытии UI (если старше 6 ч) и каждые 12 часов (cron).
+                              Ядро Xray ставится в разделе <b>Xray core</b>.
                             </div>
-                          </td>
-                        </tr>
-                        <tr>
-                          <th data-ss-hint="Установить или найти программу Xray на роутере — это «движок», который реально гоняет трафик. Без него аддон не сможет работать.">Xray binary</th>
-                          <td>
-                            <input id="btnInstallXray" class="button_gen button_gen_small" type="button" value="Установить / найти Xray">
-                            <div class="ss-hint">Backup и просмотр логов — вкладка <b>Backup / Логи</b>.</div>
                           </td>
                         </tr>
                       </tbody>
@@ -1353,14 +1390,56 @@ function initial() {
                       </div>
                     </div>
                   </div>
+                  <div id="xrayModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="xrayModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="xrayModalTitle">Xray core</div>
+                      <p class="ss-modal-summary">Ядро Xray — движок VPN на роутере. Без него конфиги StealthSurf не поднимутся. Релизы: GitHub XTLS/Xray-core (как в XrayUI).</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-xray">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Xray core</td></tr></thead>
+                      <tbody>
+                        <tr>
+                          <th width="30%" data-ss-hint="Что сейчас установлено на роутере: путь к бинарю и версия, которую отдаёт сам xray version.">Установлено</th>
+                          <td>
+                            <div id="xrayStatusBox" class="ss-hint">Проверяю…</div>
+                            <span class="row-buttons" style="margin-top:6px">
+                              <input id="btnXrayRefresh" class="button_gen button_gen_small" type="button" value="Обновить статус">
+                              <input id="btnInstallXray" class="button_gen button_gen_small" type="button" value="Установить / найти Xray">
+                            </span>
+                            <div class="ss-hint">Сначала opkg, если нет — скачивание zip с GitHub под архитектуру роутера.</div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <th data-ss-hint="Список релизов Xray-core с GitHub. Можно поставить конкретную версию, совместимую с вашей архитектурой.">Релизы GitHub</th>
+                          <td>
+                            <div class="ss-hint">Репозиторий: <a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a></div>
+                            <span class="row-buttons" style="margin:6px 0">
+                              <input id="btnXrayVersions" class="button_gen button_gen_small" type="button" value="Загрузить список версий">
+                            </span>
+                            <div class="ss-table-scroll"><table class="ss-data-table">
+                              <thead><tr><th>Версия</th><th>Дата</th><th></th></tr></thead>
+                              <tbody id="xrayVersionsTable"><tr><td colspan="3">Нажмите «Загрузить список версий»</td></tr></tbody>
+                            </table></div>
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_xrayModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
+                  </div>
                   <div id="backupModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="backupModalTitle">
                     <div class="ss-modal-card ss-wide-card">
-                      <div class="ss-modal-head" id="backupModalTitle">Backup / Logs</div>
-                      <p class="ss-modal-summary">Резервные копии conf/routing и просмотр логов аддона.</p>
+                      <div class="ss-modal-head" id="backupModalTitle">Backup</div>
+                      <p class="ss-modal-summary">Резервные копии conf / routing / policies. Логи аддона — отдельный раздел Logs.</p>
                       <div class="ss-modal-body">
                         <div class="ss-panel" id="tab-backup">
 <table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
-                      <thead><tr><td colspan="2">Backup / Logs</td></tr></thead>
+                      <thead><tr><td colspan="2">Backup</td></tr></thead>
                       <tbody>
                         <tr>
                           <th width="30%" data-ss-hint="Сделать снимок текущих настроек (конфиг, правила, ключи). Можно добавить короткую заметку. Ночной backup создаётся сам, если включён в General options.">Создать</th>
@@ -1386,8 +1465,26 @@ function initial() {
                             </table></div>
                           </td>
                         </tr>
+                      </tbody>
+                    </table>
+                        </div>
+                      </div>
+                      <div class="ss-modal-actions">
+                        <input id="btnClose_backupModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                      </div>
+                    </div>
+                  </div>
+                  <div id="logsModal" class="ss-modal" role="dialog" aria-modal="true" aria-labelledby="logsModalTitle">
+                    <div class="ss-modal-card ss-wide-card">
+                      <div class="ss-modal-head" id="logsModalTitle">Logs</div>
+                      <p class="ss-modal-summary">Журнал работы аддона: действия, ошибки, устройства LAN и логи Xray.</p>
+                      <div class="ss-modal-body">
+                        <div class="ss-panel" id="tab-logs">
+<table width="100%" border="0" align="center" cellpadding="4" cellspacing="0" class="FormTable">
+                      <thead><tr><td colspan="2">Logs</td></tr></thead>
+                      <tbody>
                         <tr>
-                          <th data-ss-hint="Текстовый журнал: что делал аддон, ошибки, список устройств. Помогает понять, почему что-то не работает. Можно очистить, если лог разросся.">Логи аддона</th>
+                          <th width="30%" data-ss-hint="Текстовый журнал: что делал аддон, ошибки, список устройств. Помогает понять, почему что-то не работает.">Просмотр</th>
                           <td>
                             <select id="logKind" class="input_25_table">
                               <option value="activity">activity (действия)</option>
@@ -1402,7 +1499,7 @@ function initial() {
                               <input id="btnDevicesSnap" class="button_gen button_gen_small" type="button" value="Снимок устройств LAN">
                               <input id="btnClearLogs" class="button_gen button_gen_small" type="button" value="Очистить логи">
                             </span>
-                            <div id="logMeta" class="ss-hint">Выберите тип лога и нажмите «Показать логи».</div>
+                            <div id="logMeta" class="ss-hint">Выберите тип лога — при открытии окна подгружается activity.</div>
                             <div id="logBox" class="ss-logbox">(логи ещё не загружены)</div>
                           </td>
                         </tr>
@@ -1411,7 +1508,7 @@ function initial() {
                         </div>
                       </div>
                       <div class="ss-modal-actions">
-                        <input id="btnClose_backupModal" class="button_gen button_gen_small" type="button" value="Закрыть">
+                        <input id="btnClose_logsModal" class="button_gen button_gen_small" type="button" value="Закрыть">
                       </div>
                     </div>
                   </div>
@@ -1433,12 +1530,12 @@ function initial() {
                               <input id="btnConnSocks" class="button_gen button_gen_small" type="button" value="IP через SOCKS">
                               <input id="btnConnDirect" class="button_gen button_gen_small" type="button" value="IP напрямую">
                             </span>
-                            <div class="ss-hint">Логи и backup — на вкладке <b>Backup / Логи</b>.</div>
+                            <div class="ss-hint">Результаты появляются ниже. Логи программы — раздел <b>Logs</b>.</div>
                           </td>
                         </tr>
                         <tr>
                           <th data-ss-hint="Сюда выводится ответ после нажатия кнопок диагностики.">Результат</th>
-                          <td><div id="diagBox" class="ss-logbox">(пусто)</div></td>
+                          <td><div id="diagBox" class="ss-logbox">Нажмите одну из кнопок выше — сюда придёт ответ с роутера.</div></td>
                         </tr>
                       </tbody>
                     </table>
@@ -1451,8 +1548,9 @@ function initial() {
                   </div>
                   <div class="apply_gen">
                     <input id="btnApplyAll" class="button_gen" type="button" value="Применить" disabled>
+                    <input id="btnCancelAll" class="button_gen" type="button" value="Отменить" disabled style="margin-left:8px">
                     <div id="pendingChangesPanel" class="ss-pending">
-                      <div class="ss-pending-title">Изменения к применению</div>
+                      <div class="ss-pending-title">Изменения к применению / откату</div>
                       <div id="pendingChangesList" class="ss-pending-list empty"><div class="ss-pending-empty">Нет изменений</div></div>
                     </div>
                   </div>

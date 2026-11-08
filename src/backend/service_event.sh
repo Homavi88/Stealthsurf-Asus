@@ -211,7 +211,8 @@ ss_service_event() {
         --slurpfile subs "$SS_CACHE_SUBSCRIPTIONS" \
         --slurpfile state "$SS_STATE_FILE" \
         --slurpfile balances "$SS_CACHE_BALANCES" \
-        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {}), balances: ($balances[0] // {})}')"
+        --argjson last_sync "${SS_LAST_SYNC:-0}" \
+        '{configs: ($configs[0] // []), locations: ($locations[0] // []), subscriptions: ($subs[0] // []), state: ($state[0] // {}), balances: ($balances[0] // {}), last_sync:(if $last_sync==0 then null else $last_sync end)}')"
     else
       ss_json_response false "sync failed" null
       return 1
@@ -315,6 +316,7 @@ ss_service_event() {
     fi
     ;;
   clients)
+    # Always refresh + publish clients.json for WebUI soft-load
     ss_json_response true "clients" "$(ss_clientlist_json)"
     ;;
   setmode)
@@ -393,10 +395,15 @@ ss_service_event() {
     ss_json_response true "diag" "$(ss_diag_dump)"
     ;;
   testconfig)
-    if ss_test_xray_config >/dev/null; then
-      ss_json_response true "config ok" null
+    local test_log test_ok=false
+    test_log=""
+    if ss_test_xray_config >/dev/null 2>&1; then
+      test_ok=true
+      test_log=$(cat /tmp/stealthsurf-xray-test.log 2>/dev/null || echo "OK")
+      ss_json_response true "config ok" "$(jq -nc --arg log "$test_log" --argjson ok true '{ok:$ok, log:$log}')"
     else
-      ss_json_response false "config test failed" null
+      test_log=$(cat /tmp/stealthsurf-xray-test.log 2>/dev/null || echo "test failed")
+      ss_json_response false "config test failed" "$(jq -nc --arg log "$test_log" --argjson ok false '{ok:$ok, log:$log}')"
     fi
     ;;
   connectivity)
@@ -547,7 +554,7 @@ ss_service_event() {
       act=$(printf '%s' "$ops" | jq -r --argjson i "$i" '.[$i].action // empty')
       op_payload=$(printf '%s' "$ops" | jq -c --argjson i "$i" '.[$i].payload // {}')
       case "$act" in
-      "" | applypending | batch | uninstall | remove | purge | update | upgrade | installversion | switchversion | rollback | start | stop | restart | rebuild | sync | backup | restore | geodata | installxray | diag | logs | clearlogs | connectivity | testconfig | devicesnapshot | backuplist | clients | checkupdate | listversions | versions | balances | refreshbalances | balance | getsettings | settings | status | doctor | heal | fix)
+      "" | applypending | batch | uninstall | remove | purge | update | upgrade | installversion | switchversion | rollback | start | stop | restart | rebuild | sync | backup | restore | geodata | installxray | xraystatus | xrayinfo | xrayversions | listxray | diag | logs | clearlogs | connectivity | testconfig | devicesnapshot | backuplist | clients | checkupdate | listversions | versions | balances | refreshbalances | balance | getsettings | settings | status | doctor | heal | fix)
         ss_warn "applypending: skip non-config action '$act'"
         skip_n=$((skip_n + 1))
         ;;
@@ -579,7 +586,32 @@ ss_service_event() {
     fi
     ;;
   installxray)
-    ss_ensure_xray && ss_json_response true "xray ready" null || ss_json_response false "xray install failed" null
+    local tag
+    tag=$(printf '%s' "$payload" | jq -r '.tag // .version // empty' 2>/dev/null || true)
+    if [ -n "$tag" ]; then
+      if ss_xray_download "$tag"; then
+        ss_json_response true "xray ready" "$(ss_xray_status_json)"
+      else
+        ss_json_response false "xray install failed" "$(ss_xray_status_json 2>/dev/null || echo '{}')"
+        return 1
+      fi
+    elif ss_ensure_xray; then
+      ss_json_response true "xray ready" "$(ss_xray_status_json)"
+    else
+      ss_json_response false "xray install failed" "$(ss_xray_status_json 2>/dev/null || echo '{}')"
+      return 1
+    fi
+    ;;
+  xraystatus | xrayinfo)
+    ss_json_response true "xray status" "$(ss_xray_status_json)"
+    ;;
+  xrayversions | listxray)
+    if ss_xray_list_versions >/dev/null; then
+      ss_json_response true "xray versions" "$(ss_jq_file_or "$SS_XRAY_VERSIONS_FILE" '{}')"
+    else
+      ss_json_response false "xray versions failed" "$(ss_jq_file_or "$SS_XRAY_VERSIONS_FILE" '{}')"
+      return 1
+    fi
     ;;
   *)
     ss_json_response false "unknown action: $action" null

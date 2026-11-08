@@ -118,6 +118,9 @@ ss_mount_ui() {
   ln -sf "$SS_ROUTING_FILE" "$ADDON_WEB_DIR/routing.json" 2>/dev/null || true
   ln -sf "$SS_POLICIES_FILE" "$ADDON_WEB_DIR/policies.json" 2>/dev/null || true
   ln -sf "$SS_DIAG_FILE" "$ADDON_WEB_DIR/diag.json" 2>/dev/null || true
+  ln -sf "$SS_CACHE_CLIENTS" "$ADDON_WEB_DIR/clients.json" 2>/dev/null || true
+  ln -sf "$SS_XRAY_INFO_FILE" "$ADDON_WEB_DIR/xray_info.json" 2>/dev/null || true
+  ln -sf "$SS_XRAY_VERSIONS_FILE" "$ADDON_WEB_DIR/xray_versions.json" 2>/dev/null || true
   ln -sf "$ADDON_LOGS_DIR/addon.log" "$ADDON_WEB_DIR/addon.log" 2>/dev/null || true
   ln -sf "$ADDON_LOGS_DIR/activity.log" "$ADDON_WEB_DIR/activity.log" 2>/dev/null || true
   ln -sf "$ADDON_LOGS_DIR/errors.log" "$ADDON_WEB_DIR/errors.log" 2>/dev/null || true

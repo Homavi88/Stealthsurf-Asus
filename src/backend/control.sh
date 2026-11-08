@@ -22,6 +22,11 @@ ss_write_state() {
   *) mode="proxy" ;;
   esac
   xrayui_json=$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')
+  xray_json=$(ss_xray_status_json 2>/dev/null || true)
+  case "$xray_json" in
+  \{*) ;;
+  *) xray_json='{}' ;;
+  esac
   jq -nc \
     --arg active "${SS_ACTIVE_CONFIG_ID}" \
     --arg mode "${SS_MODE}" \
@@ -35,7 +40,9 @@ ss_write_state() {
     --arg tproxy "${SS_TPROXY_PORT}" \
     --arg redirect "${SS_REDIRECT_PORT}" \
     --arg version "$ADDON_VERSION" \
+    --arg last_sync "${SS_LAST_SYNC:-}" \
     --argjson xrayui "$xrayui_json" \
+    --argjson xray "$xray_json" \
     '{
       active_config_id: (if $active == "" then null else ($active|tonumber?) // $active end),
       mode: $mode,
@@ -49,6 +56,8 @@ ss_write_state() {
       tproxy_port: ($tproxy|tonumber),
       redirect_port: ($redirect|tonumber),
       version: $version,
+      last_sync: (if $last_sync == "" then null else ($last_sync|tonumber?) // $last_sync end),
+      xray: $xray,
       xrayui: $xrayui,
       conflict: $xrayui.conflict,
       conflict_message: $xrayui.message
