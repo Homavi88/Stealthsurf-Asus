@@ -35,6 +35,7 @@ jobs:
           sh tools/test-update-atomic.sh
           sh tools/test-merlin-chrome.sh
           sh tools/test-service-event-hook.sh
+          sh tools/test-xray-versions-ui.sh
 
       - name: Build and pack
         run: |
