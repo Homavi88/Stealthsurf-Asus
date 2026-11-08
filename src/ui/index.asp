@@ -1411,15 +1411,15 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Список релизов Xray-core с GitHub. Можно поставить конкретную версию, совместимую с вашей архитектурой.">Релизы GitHub</th>
+                          <th data-ss-hint="Список релизов Xray-core автоматически загружается с GitHub (api.github.com/repos/XTLS/Xray-core/releases), как в XrayUI. Можно поставить конкретную версию под архитектуру роутера.">Релизы GitHub</th>
                           <td>
-                            <div class="ss-hint">Репозиторий: <a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a></div>
+                            <div class="ss-hint">Репозиторий: <a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a> — список подтягивается сам при открытии раздела.</div>
                             <span class="row-buttons" style="margin:6px 0">
-                              <input id="btnXrayVersions" class="button_gen button_gen_small" type="button" value="Загрузить список версий">
+                              <input id="btnXrayVersions" class="button_gen button_gen_small" type="button" value="Обновить список">
                             </span>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead><tr><th>Версия</th><th>Дата</th><th></th></tr></thead>
-                              <tbody id="xrayVersionsTable"><tr><td colspan="3">Нажмите «Загрузить список версий»</td></tr></tbody>
+                              <tbody id="xrayVersionsTable"><tr><td colspan="3">Загрузка релизов Xray-core с GitHub…</td></tr></tbody>
                             </table></div>
                           </td>
                         </tr>

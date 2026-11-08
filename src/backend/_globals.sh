@@ -106,7 +106,8 @@ SS_PROTO_OPENFLUX="openflux"
 SS_PROTO_SUB="http socks5"
 
 XRAY_RELEASE_API="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
-XRAY_RELEASES_API="https://api.github.com/repos/XTLS/Xray-core/releases?per_page=12"
+# Match XrayUI XrayCoreVersionModal (per_page=30, show ~20) for CLI / cache fallback.
+XRAY_RELEASES_API="https://api.github.com/repos/XTLS/Xray-core/releases?per_page=30"
 XRAY_REPO_URL="https://github.com/XTLS/Xray-core/releases"
 GEODATA_BASE="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download"
 # Well-known geodata bases (XrayUI-compatible). Files: geoip.dat + geosite.dat

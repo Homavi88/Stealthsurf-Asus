@@ -7,6 +7,10 @@ const SS_GH_RELEASES_API = "https://api.github.com/repos/" + SS_GH_REPO + "/rele
 const SS_GH_LATEST_API = SS_GH_RELEASES_API + "/latest";
 const SS_RELEASE_ASSET = "asuswrt-merlin-stealthsurf.tar.gz";
 const SS_RELEASES_TO_SHOW = 15;
+// XrayUI XrayCoreVersionModal: browser GET XTLS/Xray-core releases — never start_apply for the list.
+const XRAY_GH_REPO = "XTLS/Xray-core";
+const XRAY_GH_RELEASES_API = "https://api.github.com/repos/" + XRAY_GH_REPO + "/releases";
+const XRAY_RELEASES_TO_SHOW = 20;
 const SS_API_BASE = "https://api.stealthsurf.net";
 const SS_BALANCE_CACHE_TTL_SEC = 120;
 
@@ -384,6 +388,11 @@ function triggerService(action, payload, opts) {
     requestVersionsList(true);
     return;
   }
+  // Xray-core release list: same as XrayUI — browser GET api.github.com, not start_apply.
+  if (action === "xrayversions" || action === "listxray") {
+    requestXrayVersionsList({ quiet: false });
+    return;
+  }
   if (action === "balances" || action === "refreshbalances" || action === "balance") {
     const force = data.force === "1" || data.force === 1 || data.force === true;
     requestBalancesRefresh(force);
@@ -393,7 +402,7 @@ function triggerService(action, payload, opts) {
   let wait = Number(options.wait || 0);
   if (!wait) {
     if (action === "update" || action === "upgrade" || action === "installversion" || action === "switchversion" || action === "rollback") wait = 40;
-    else if (action === "installxray" || action === "sync" || action === "xrayversions") wait = 20;
+    else if (action === "installxray" || action === "sync") wait = 20;
     else if (action === "backup" || action === "restore" || action === "clients" || action === "diag") wait = 15;
     else if (action === "logs" || action === "devicesnapshot" || action === "clearlogs" || action === "testconfig" || action === "connectivity") wait = 12;
     else wait = 10;
@@ -897,6 +906,64 @@ function renderXrayStatus(info) {
   updateSectionSummaries();
 }
 
+function xrayArchHint() {
+  return (
+    (xrayInfoCache && xrayInfoCache.arch) ||
+    (stateCache && stateCache.xray && stateCache.xray.arch) ||
+    (xrayVersionsCache && xrayVersionsCache.arch) ||
+    ""
+  );
+}
+
+function setXrayVersionsLoading(on) {
+  const btn = byId("btnXrayVersions");
+  if (btn) {
+    btn.disabled = !!on;
+    btn.value = on ? "Загрузка…" : "Обновить список";
+  }
+  const tbody = byId("xrayVersionsTable");
+  if (on && tbody) {
+    tbody.innerHTML = "<tr><td colspan='3'>Загрузка релизов Xray-core с GitHub…</td></tr>";
+  }
+}
+
+function buildXrayVersionsFromGithubList(list, arch) {
+  // Mirror XrayUI XrayCoreVersionModal + backend ss_xray_list_versions:
+  // drafts out, prefer releases that ship Xray-linux-<arch>.zip when arch is known.
+  const wantArch = String(arch || "").trim();
+  const releases = [];
+  (Array.isArray(list) ? list : []).forEach((rel) => {
+    if (!rel || rel.draft) return;
+    const tag = rel.tag_name || rel.tag || "";
+    if (!tag) return;
+    const assets = Array.isArray(rel.assets) ? rel.assets : [];
+    let download_url = null;
+    if (wantArch) {
+      const match = assets.find((a) => a && a.name === "Xray-linux-" + wantArch + ".zip");
+      if (match && match.browser_download_url) download_url = match.browser_download_url;
+      else return;
+    } else {
+      const anyLinux = assets.find((a) => a && /^Xray-linux-.*\.zip$/i.test(a.name || ""));
+      if (anyLinux && anyLinux.browser_download_url) download_url = anyLinux.browser_download_url;
+    }
+    releases.push({
+      tag: tag,
+      name: rel.name || tag,
+      prerelease: !!rel.prerelease,
+      published_at: rel.published_at || rel.created_at || null,
+      html_url: rel.html_url || null,
+      download_url: download_url,
+    });
+  });
+  return {
+    arch: wantArch || null,
+    error: null,
+    checked_at: Math.floor(Date.now() / 1000),
+    repo: "https://github.com/" + XRAY_GH_REPO + "/releases",
+    releases: releases.slice(0, XRAY_RELEASES_TO_SHOW),
+  };
+}
+
 function renderXrayVersions(payload) {
   xrayVersionsCache = payload || xrayVersionsCache || { releases: [] };
   const tbody = byId("xrayVersionsTable");
@@ -937,6 +1004,59 @@ function renderXrayVersions(payload) {
     tr.lastChild.appendChild(btn);
     tbody.appendChild(tr);
   });
+}
+
+async function requestXrayVersionsList(opts) {
+  // XrayUI-style: list XTLS/Xray-core releases in the browser — never Merlin start_apply for the list.
+  const options = opts || {};
+  const quiet = !!options.quiet;
+  setXrayVersionsLoading(true);
+  if (!quiet) setMsg("Загружаю релизы Xray-core с GitHub…", "");
+  const arch = xrayArchHint();
+  try {
+    const list = await fetchGithubJson(
+      XRAY_GH_RELEASES_API + "?per_page=" + (XRAY_RELEASES_TO_SHOW + 10),
+      6000
+    );
+    if (!Array.isArray(list)) throw new Error("unexpected releases response");
+    let data = buildXrayVersionsFromGithubList(list, arch);
+    // If arch filter emptied the list (unknown/mismatched arch), show unfiltered tags like XrayUI.
+    if (!data.releases.length && arch) {
+      data = buildXrayVersionsFromGithubList(list, "");
+      data.arch = arch;
+    }
+    if (!data.releases.length) throw new Error("пустой список релизов");
+    renderXrayVersions(data);
+    if (!quiet) setMsg("Загружено релизов Xray-core: " + data.releases.length, "ok");
+    return data;
+  } catch (err) {
+    // Soft fallback: cached /ext JSON written by CLI / prior router fetch — still no apply form.
+    try {
+      const cached = await fetchJson(EXT + "/xray_versions.json", 4000);
+      if (cached && Array.isArray(cached.releases) && cached.releases.length) {
+        renderXrayVersions(cached);
+        if (!quiet) {
+          setMsg(
+            "GitHub из браузера недоступен — показан кэш xray_versions.json",
+            "warn"
+          );
+        }
+        return cached;
+      }
+    } catch (_) {}
+    const msg = err && err.message ? err.message : String(err);
+    renderXrayVersions({
+      arch: arch || null,
+      error: msg,
+      checked_at: Math.floor(Date.now() / 1000),
+      repo: "https://github.com/" + XRAY_GH_REPO + "/releases",
+      releases: (xrayVersionsCache && xrayVersionsCache.releases) || [],
+    });
+    if (!quiet) setMsg("Не удалось загрузить релизы Xray-core: " + msg, "err");
+    return null;
+  } finally {
+    setXrayVersionsLoading(false);
+  }
 }
 
 function setClientsStatus(text, kind) {
@@ -3029,13 +3149,7 @@ function bind() {
   }
   if (byId("btnXrayVersions")) {
     byId("btnXrayVersions").addEventListener("click", () => {
-      setMsg("Загружаю релизы Xray-core с GitHub…", "");
-      triggerService("xrayversions", {}, { wait: 20 });
-      setTimeout(() => {
-        fetchJson(EXT + "/xray_versions.json", 5000)
-          .then((v) => renderXrayVersions(v))
-          .catch(() => {});
-      }, 8000);
+      requestXrayVersionsList({ quiet: false }).catch(() => {});
     });
   }
   byId("btnBackup").addEventListener("click", () => {
@@ -3131,11 +3245,8 @@ function bind() {
           .catch(() => {
             if (stateCache && stateCache.xray) renderXrayStatus(stateCache.xray);
           });
-        fetchJson(EXT + "/xray_versions.json", 4000)
-          .then((v) => {
-            if (v && Array.isArray(v.releases) && v.releases.length) renderXrayVersions(v);
-          })
-          .catch(() => {});
+        // Auto-load available Xray-core versions from GitHub (same as XrayUI modal).
+        requestXrayVersionsList({ quiet: true }).catch(() => {});
       }
       if (modalId === "diagModal") {
         fetchJson(EXT + "/diag.json", 3000)
