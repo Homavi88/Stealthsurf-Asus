@@ -1,0 +1,1126 @@
+# Changelog
+
+## [1.1.0] - 2026-11-08
+
+### Beta — platform rebuild
+
+- Rebased the addon on [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) **v0.71.0** (Vue 3 WebUI + shell backend).
+- StealthSurf branding: menu tab, paths `/jffs/addons/stealthsurf`, CLI `stealthsurf`/`ssurf`, package `asuswrt-merlin-stealthsurf.tar.gz`.
+- StealthSurf API control plane: multi-key store, balance/referral (RUB), catalog sync (configs/locations/custom subscriptions), import selected configs into Xray outbounds as `ss-<id>`.
+- Upgrade path from 1.0.x: same release asset name; migrates API keys from `/opt/etc/stealthsurf.conf` when the new store is empty.
+- Companion tools (datbuilder, v2dat, rtls-scanner, b4sni) still download from upstream XrayUI / DanielLavrushin releases.
+
+---
+
+# XRAYUI Changelog
+
+## [0.71.0] - 2026-11-04
+
+- ADDED: The **X-RAY Core** version shows **newer than tested** when the installed Xray-core is newer than the version this XRAYUI release was tested with. ([#451](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/451))
+- ADDED: Each new Xray-core release is now checked automatically for config settings it renamed or dropped, before XRAYUI is tested with it. ([#450](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/450))
+- ADDED: TCP transport has **Header obfuscation** with **Request path** and **Host**. gRPC outbounds have **Authority** and **Multi mode**.
+- ADDED: The update dialog lists recent XRAYUI releases, so you can install an older one (downgrade) or reinstall the current one. A downgrade asks for confirmation first, because an older version may not understand settings saved by a newer one. ([#409](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/409))
+- ADDED: **TCP keepalive idle** and **TCP keepalive interval** in an inbound's or outbound's **Transport** → **Sockopt** settings. Xray leaves keepalive off on inbound connections, so a client that vanished without closing its connection, for example a phone that lost signal, kept it open for hours and the router slowly ran out of memory. With, for example, 300 and 30 such connections are closed in under 10 minutes. Keepalive values already set in `config.json` are now shown in the UI too. ([#427](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/427))
+- ADDED: **Manage Balancers** has an **Observatory type**: the observatory XRAYUI sets up from **Check connection to xray server**, or **burstObservatory** with its own probe address, network check, interval, sampling and timeout. A `burstObservatory` written into the Xray configuration by hand loads into the page and is kept on save. Auto-fallback does not run with burstObservatory, because it reports no probe times. ([#416](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/416))
+- ADDED: **Auto-restart Xray if it stops** in **General Options**. When Xray stops unexpectedly, XRAYUI restarts it within the chosen **Watchdog check interval** and reapplies the firewall rules. The wait between attempts doubles up to an hour, and it gives up after **Max restart attempts** (0 means no limit). A stop from the page or the command line is respected, and each automatic restart is written to the system log. ([#424](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/424))
+- ADDED: **Auto-refresh subscriptions** can run **Every 30 minutes** or **Every hour**. Its hint now says what a refresh updates: outbounds in the **Auto-fallback pool** only while **Auto-fallback** is on, and outbounds with a **Subscription URL** only when Xray starts. ([#439](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/439))
+- ADDED: **Apply** stops with a message naming the outbound when a VLESS or Trojan outbound has no TLS or REALITY and its server address is public, because Xray 26.9.9 and later refuse to start with it. For VLESS, VLESS Encryption is enough. Since Xray 26.10.31 only 10.x, 172.16–31.x, 192.168.x, fc00::/7, loopback and link-local addresses count as private, so a CGNAT address such as Tailscale's 100.x needs TLS or REALITY too. Local names such as `nas` or `router.lan` are allowed. ([#447](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/447))
+- ADDED: **Use the router's CA store** in an outbound's TLS settings, with Xray 26.10.21 and later. Since that version Xray checks server certificates against its own built-in set of root CAs instead of the router's, so a server whose certificate comes from a CA only the router trusts, such as a private CA, stops connecting after a core update. This option brings the old behaviour back. ([#448](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/448))
+- ADDED: In **Manage routing rules** each rule's outbound or balancer can be changed in its row, without opening the rule. **Reassign…** changes many rules in one step, disabled rules included: it moves all rules from one outbound or balancer to another, or replaces one inbound with another. It can also remove an inbound from the rules before you delete it; a rule that lists only that inbound is left unchanged, because without it the rule would apply to traffic from every inbound. Deleting an outbound or inbound that rules still use now points to **Reassign…**. ([#464](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/464))
+- FIXED: Renaming an outbound or inbound changed the routing rules with every key pressed, so a tag typed on the way to the new name could merge another outbound's rules into it. The rules are now updated once, when the editor closes, and a new tag that another outbound or inbound already uses is changed back to the old one. Disabled rules, a balancer's fallback outbound and the **Dealer Proxy** of outbounds chained through the renamed one are now renamed too. An outbound that another outbound uses as its **Dealer Proxy** can no longer be deleted, as that outbound would stop connecting. ([#464](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/464))
+- FIXED: TCP outbounds with HTTP header obfuscation (`headerType=http`) lost the header on import and save, so the server reset every connection. ([#417](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/417))
+- FIXED: **Accept PROXY protocol** on TCP inbounds was not saved.
+- FIXED: Imported gRPC links lost their **Service name**, and HTTPUpgrade links their path and host. ([#423](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/423))
+- FIXED: A `burstObservatory` added to the Xray configuration by hand ran next to the observatory XRAYUI adds for **Check connection to xray server**, so balancers could use the wrong results.
+- FIXED: **Stop** could leave a second copy of Xray running, such as one started at boot by an old Entware Xray package, so the page still showed Xray as running.
+- FIXED: A stopped Xray could start again by itself when a subscription update or auto-fallback changed a server in the **Auto-fallback pool**.
+- FIXED: With **Check clients online status** turned on, the page could show a stopped Xray as running.
+- FIXED: Xray ignored the XHTTP padding obfuscation, **Uplink HTTP method**, session, sequence and uplink data settings whenever another option such as **Uplink/Downlink Separation**, **XMUX Settings** or **Performance Tuning** was set. With Xray 26.6.22 and later, **Session ID placement** was ignored in every case. ([#421](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/421))
+- FIXED: Split XHTTP connections with **Uplink/Downlink Separation** failed against servers that require padding obfuscation, because padding could not be set for the download connection. An empty **Download Server Port** made Xray connect to port 0. ([#420](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/420))
+- FIXED: **Transfer Mode** offered no **packet-up**, so GET as **Uplink HTTP method** could stop Xray from starting. ([#421](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/421))
+- FIXED: Port hopping (**Enable UDP Hop**) on Hysteria outbounds did nothing with Xray-core 26.3.23 and later: it was saved where only older cores read it, and Xray ignored it. It is now saved where the installed core reads it, as the `udphop` finalmask from 26.9.9 on, and existing settings move there on the next **Apply**. Importing a `hy2://` link keeps its port range. Inbounds no longer show the option, since it never did anything on a server. ([#441](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/441))
+- FIXED: Choosing **xicmp** as the finalmask type saved nothing. It now has **Unprivileged ICMP Socket** and **IP Addresses**, the settings Xray-core 26.6.1 and later read; entries that are not IP addresses are flagged and left out, because Xray does not start with them. ([#443](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/443))
+- FIXED: The **xdns** finalmask saved a `domain`, which Xray-core 26.4.13 and later refuse to start with. It is offered only for older cores now. ([#443](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/443))
+- FIXED: Finalmasks set in `config.json` by hand that XRAYUI has no editor for, such as `realm` or `filter`, were removed on save. They are now kept as they are.
+- FIXED: Xray 26.7.11 and later do not start with a Shadowsocks outbound set to `none` or `plain`. These methods are now offered only with older Xray, an outbound that still uses one shows a warning, and **Apply** stops with a message naming it. Share links and subscription servers without encryption are refused with a message, and auto-fallback and **Subscription URL** outbounds skip them. ([#442](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/442))
+- FIXED: Shadowsocks inbound clients could be added with `none` or `plain`, which Xray never accepts for inbound clients, so Xray did not start. These methods are no longer offered there, and **Apply** stops with a message naming the inbound and the client. ([#442](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/442))
+- FIXED: A VMess outbound set to `none` or `zero` silently used `auto` on Xray 26.7.11 and later, and one with no security chosen, or imported from a link without one, was saved as `none`, which turned encryption off on older Xray. An empty security now means `auto` on every version. With Xray 26.7.11 and later, `none` and `zero` are no longer offered and are saved as `auto`. ([#442](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/442))
+- FIXED: WireGuard settings that Xray no longer reads looked active but did nothing. On WireGuard inbounds, **KERNEL Mode** is replaced by **No kernel TUN**, as on outbounds; an inbound with kernel mode turned off keeps it off. **Workers** is removed from WireGuard outbounds, and their **Domain strategy** is shown only with Xray older than 26.9.30. The next **Apply** writes the keys Xray reads. ([#444](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/444))
+- FIXED: With **Check clients online status** on and **Check connection to xray server** off, Xray sent a health check through every outbound at each probe interval, though nothing used the results. Idle and reserve outbounds kept connecting to their servers. Now only the outbounds that balancers need are checked, and none if no balancer needs it. ([#466](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/466))
+- FIXED: Deleting the last outbound a balancer selects was allowed. Without a fallback outbound, Xray then sends that balancer's traffic through the first outbound in the list, which may be `direct`. Deleting such an outbound is now refused with a message. **Apply** asks for confirmation when a balancer selects no outbound and has no fallback outbound, for example because of a typo in its selector. ([#467](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/467))
+- REMOVED: Settings that Xray no longer reads, so changing them had no effect: inbound **port allocation**, **Domain matcher** in routing and in routing rules, and **TCP No Delay** in Sockopt. **ECH Force Query** in TLS settings and **UDP over TCP** on Shadowsocks outbounds are shown only with Xray older than 26.6.22. The next **Apply** drops these keys from the Xray configuration. ([#445](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/445))
+- CHANGED: When auto-fallback finds no working server in the pool, it can fetch the subscription sources again after 15 minutes instead of an hour, so a server the provider replaced after a ban is picked up sooner. ([#439](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/439))
+- CHANGED: XHTTP settings that Xray ignored before take effect after the first **Apply** on this version. **Apply** stops with a message naming the inbound or outbound when an XHTTP setting cannot work in its **Transfer Mode**, such as GET without packet-up.
+- CHANGED: A fresh install gets Xray-core 26.9.9, the version this XRAYUI release was tested with, instead of the newest release. Newer Xray-core releases often rename or drop settings, and Xray ignores those without an error. `xrayui update xray latest` and the **X-RAY Core** version dialog still install any release. ([#451](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/451))
+- IMPROVED: Importing a link keeps the XHTTP settings from its `extra` parameter. Most **Performance Tuning** fields accept a range such as `1000-2000`.
+- IMPROVED: The system log warns when the firmware's **Parental Control** or **Network Services Filter** is on. Neither applies to devices whose traffic goes through Xray, because their rules are in the `FORWARD` chain, which redirected traffic never passes. The Bypass/Redirect Policy documentation explains how to keep a schedule working. ([#415](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/415))
+- IMPROVED: When auto-fallback or a scheduled subscription update skips a server that the installed Xray rejects, the system log now gives Xray's reason, such as a VLESS server without TLS. ([#447](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/447))
+
+## [0.70.2] - 2026-09-28
+
+- ADDED: The **Outbounds** list marks in purple the outbound a balancer sends new connections to, and the balancer list and routing rules show it too. For **random** and **roundRobin** balancers, which spread connections, every outbound taking part is marked. Requires **Check connection to xray server**.
+- FIXED: Xray did not start with a **leastPing** or **leastLoad** balancer, or with any balancer that has a fallback outbound, while **Check connection to xray server** and **Check clients online status** were both off. The configuration check also reported an error for such balancers even while Xray ran fine.
+- FIXED: The outbound status dots kept showing the last result after Xray stopped outside the page, for example after a crash.
+- FIXED: A failed Xray core update could leave Xray stopped while still reporting success. The new version is now checked before anything is replaced, and an error is shown when the update fails or Xray does not start with it.
+- FIXED: The Xray core version showed as 0.0.0 when the core was missing or could not run. It now shows **not installed** or **not working**, with the reason on hover and in the system log. ([#411](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/411))
+- FIXED: Installation reported success even when the Xray core could not be downloaded. It now says the core is missing and how to install it.
+- FIXED: When the core version could not be detected, pressing **Apply** could save settings that newer Xray versions refuse to start with.
+
+## [0.70.1] - 2026-09-27
+
+- FIXED: With several **Redirect/Bypass policies** for all devices, only the first one worked, so traffic from the others skipped Xray and routing rules seemed to stop working after updating to 0.70.0. All such policies now apply together. A policy for all devices with a different mode than the first one is skipped and noted in the log.
+- FIXED: A custom geodata list (`ext:xrayui:`) could be saved in a rule's target or source IP list, where it never matches anything and fills the Xray error log with `ignore invalid IP byte slice` lines. Such rules are now refused on save, since custom lists hold domains only.
+
+## [0.70.0] - 2026-09-26
+
+- FIXED: Backups could be downloaded from the router's web address without logging in. A login is now required, and downloading a backup no longer fails after a router restart.
+- FIXED: Crafted text could run page code in the log viewer's **raw** view, in release notes from a GitHub proxy mirror, and in the DNS server rules list. Raw views and release notes now show plain text.
+- FIXED: A custom geodata list name could point outside its folder, so saving or deleting a list could write or remove other files on the router.
+- FIXED: With IPv6 enabled, a server inbound's port was opened on every device in the LAN, not only on the router.
+- FIXED: **Hide sensitive data** in the configuration viewer missed several private details, such as the full server links of outbounds in the **Auto-fallback pool** and proxy addresses repeated in routing rules. With it turned off, the viewer showed stray program code.
+- FIXED: Auto-fallback only worked while the XRAYUI page was open, and stopped for good after its first Xray restart. It now runs on its own, and pressing **Apply** on a page opened before a switch no longer puts the dead server back.
+- FIXED: Auto-fallback switched blindly to the next server, including dead ones, fake "expired" or "traffic left" entries and links the installed Xray cannot use. Servers are now checked before and after a switch, and recently failed ones are skipped.
+- FIXED: With several outbounds in the **Auto-fallback pool**, two could end up on the same server, and every switch wiped settings such as Mux and Send through. ([#343](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/343))
+- FIXED: Auto-fallback and **Subscription URL** outbounds could pick a subscription entry pointing back at the router itself, which could use up all memory and freeze the router.
+- FIXED: A failed subscription update emptied the server list, and a **Subscription URL** outbound could stop Xray from starting when its subscription was unreachable, or get a fake "expired" entry. The last good list and working server are now kept.
+- FIXED: **Subscription URL** outbounds were not updated from large subscriptions (about 400 servers or more) or with a large configuration, and auto-fallback did not work when one server type had that many.
+- FIXED: On some routers, most subscriptions returned no servers, and VMess and some Shadowsocks servers were skipped or imported broken. ([#405](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/405))
+- FIXED: Several kinds of subscription links were imported incorrectly or could not be used, including Hysteria, mKCP, Trojan with TLS, gRPC, HTTPUpgrade, IPv6 addresses, and names or passwords with special characters.
+- FIXED: Rotation filters did not work on the router: a single keyword was ignored, and matching missed different letter case and non-Latin names.
+- IMPROVED: Scheduled subscription updates now apply a provider's changed server keys or addresses to outbounds in the **Auto-fallback pool**.
+- IMPROVED: Offline outbounds now show a red dot instead of a yellow one, and hovering over it shows the delay or the error. The outbound editor shows which subscription server is in use and warns when auto-fallback is turned off in **General Options**.
+- FIXED: Proxy rules could vanish after the router reconnected or rebuilt its firewall (most often with IPv6 enabled), so LAN traffic skipped the proxy until the next Xray restart.
+- FIXED: A transparent inbound set to TCP only broke all UDP traffic of LAN devices, such as games and calls. UDP now goes direct in that case.
+- FIXED: With a server inbound on port 443, HTTPS from LAN devices bypassed the proxy.
+- FIXED: Bypass and redirect policies did not always work as described: a device redirected with excluded ports lost its other TCP traffic, a single-device policy switched off an "all devices" policy, a bypassed device still had its UDP proxied, and policies with more than 15 ports were ignored.
+- FIXED: The device list in **Redirect/Bypass policies** showed devices that had left the network as online, so **Show all** changed nothing, and Wi-Fi devices were never marked.
+- FIXED: **Block QUIC** also blocked incoming UDP port 443, breaking QUIC-based server inbounds and port forwards on that port. It now affects only traffic going through Xray.
+- FIXED: An inbound listening on `127.0.0.1` got no traffic when another transparent inbound was listed after it, and one listening on `::` got no IPv4 traffic.
+- FIXED: With **DNS bypass (ipset)** set to redirect, sites from proxy rules often went direct for a long time after a restart, reboot or reconnect. Known addresses are now kept, and sites listed in rules are looked up right after a restart. ([#282](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/282))
+- FIXED: With **DNS bypass (ipset)**, a domain with non-Latin letters in a rule or a geosite list stopped the router's DNS from starting.
+- FIXED: With **DNS bypass (ipset)**, large country lists such as `geoip:us`, some geosite sites and custom `ext:` entries were silently skipped, and a direct outbound lost its fragment, noises or bound interface settings. Unsupported entries such as `regexp:` are now listed in the log.
+- IMPROVED: DNS restarts less often and comes back within a second or two instead of about ten when the rules have not changed.
+- FIXED: Automatic geodata updates stopped after their first run, and the nightly update restarted Xray even when nothing had changed. A failed download could replace the geodata files with an error page, or keep other changed **General Options** from being applied.
+- FIXED: The XRAYUI page could open as a blank white screen because of certain network devices (such as some IP cameras), quotes or backslashes in device names or other add-ons' settings, or a missing add-on settings file.
+- FIXED: Certain server, certificate or website names seen in the logs could freeze the router's whole web interface for several minutes while the XRAYUI page, the log viewer or the SNI log was open.
+- FIXED: With a large configuration, updating XRAYUI, saving **General Options** or pressing **Apply** could empty the Xray configuration file, so Xray no longer started. Very large configurations and custom geodata lists also could not be saved, and **Check connection to xray server** could not be turned on.
+- FIXED: On some routers, **Apply** failed with an upload error, saving **General Options** reset every option while still reporting success, and the **Profile manager**, backup and custom geodata lists stayed empty. ([#405](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/405))
+- FIXED: In rare cases, saving from a page opened as another action finished erased the settings of all add-ons and stopped Xray from starting with the router. A scheduled subscription update running during **Apply** or Save could also swallow the change.
+- IMPROVED: A note under **Apply** shows changes that have not been applied yet, and **Start**, **Restart**, **Stop** and leaving the page ask first instead of silently dropping them.
+- FIXED: In simple mode, **Apply** removed device policies and other routing settings when both domain lists were empty.
+- FIXED: The loading screen could stay forever when **Apply** failed, and errors at the end of **Apply** or a **General Options** save disappeared before they could be read.
+- FIXED: After servers were loaded from a long subscription list, TLS ping and generating ECH or WireGuard keys could fail until the page was reloaded.
+- FIXED: mKCP with both a packet header and a seed did not connect on Xray-core 26.6.22 and newer, including servers from subscriptions. A configuration saved earlier needs **Apply** once, and when both ends use XRAYUI, both need updating.
+- FIXED: Clearing an mKCP number field such as **MTU** stopped Xray from starting. On Xray-core 26.4.13 and newer, mKCP settings now show the options that version actually uses.
+
+## [0.69.1] - 2026-09-01
+
+- FIXED: IPv6 addresses could not be typed into the inbound **Listen** field, the SOCKS **Local IP address** field or the DNS **Client IP** field — the inputs only accepted IPv4 and cut off at 15 characters. All three now accept IPv6, with or without square brackets. Thanks to [@xxhhlk](https://github.com/xxhhlk). ([#386](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/386))
+- ADDED: New **TUN routing** option in General Options, shown once a TUN inbound exists. **Full** works as before — the interface is set up and LAN traffic is routed through the tunnel. **Interface only** creates the interface and leaves routing untouched, for setups where another tool (such as [B4](https://docs.b4core.app/)) decides what goes into the tunnel.
+- CHANGED: TUN inbound settings now match what Xray itself offers. **IP addresses** and **Routes** were renamed, and **DNS servers**, **Outbound interface binding**, **Interface description** and **User level** were added. Existing settings are moved over automatically on the next start, after a backup.
+- FIXED: **Routes** on a TUN inbound sent those networks around the tunnel instead of into it — the opposite of what its help text described. Renamed to **Auto system routes**, it now behaves as documented.
+- REMOVED: The **Enable GSO** checkbox on TUN inbounds. Xray never offered that setting, so it had no effect.
+- FIXED: Stopping Xray left TUN routing rules behind on the router, where they accumulated over time.
+- FIXED: A TUN interface named anything other than `xray0` stayed up after Xray stopped.
+- FIXED: Restarting Xray sometimes left you without a working connection, even though the page reported success. Restarts are now reliable, and pressing Restart or Apply several times in a row no longer causes trouble. ([#384](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/384))
+- FIXED: Custom headers set on an **XHTTP** transport were quietly ignored by Xray as soon as you also changed any of its performance or xmux settings. Your headers are now always applied.
+- CHANGED: The **splithttp** transport is no longer offered. Xray renamed it to **xhttp** a while ago and the two have been the same thing ever since, so it was the same transport listed twice — and picking it showed an empty settings page. If you were using it, your settings move over to **xhttp** on their own; there is nothing you need to do.
+- FIXED: The web panel was shipping its script uncompressed — about 3 MB instead of 1.7 MB.
+- CHANGED: General housekeeping under the hood: unused code removed and automatic checks added so problems get caught before a release. Nothing changes in how XRAYUI works.
+- FIXED: Subscription links from providers that always send their answer compressed came back empty, so the outbound's subscription selector had nothing to offer. Those subscriptions are now read correctly. ([#396](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/396))
+- FIXED: Turning off only one of the two Xray logs (access or error) broke log rotation completely: the rotation rule was written with the word `none` in place of the disabled log's path, so the remaining log was never rotated and the router log filled up with a rotation failure every 15 minutes. Disabled logs are now simply left out, and if both are off the rotation job is removed instead. ([#389](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/389))
+- FIXED: When log rotation did fail, the router log said `logrotate failed with exit code 0`, which made no sense and hid the real cause. It now reports the real exit code together with logrotate's own explanation. ([#389](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/389))
+- ADDED: A **Fetch from server** button next to the pinned certificate box in the TLS settings. XRAYUI connects to the server, reads its certificate chain and lets you pick which certificate to pin, instead of you having to find and paste the hash by hand. ([#391](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/391))
+- FIXED: Restoring a backup did not switch to the configuration profile saved in it. The profile name was restored and shown as selected, but the page kept showing the previously active profile's rules and outbounds, and Xray kept running it — you had to switch profiles back and forth to get it right. Restoring now applies the saved profile and restarts Xray with it. ([#378](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/378))
+- FIXED: In DNS → Servers → Advanced, the routing rules you tick for a server were thrown away every time you pressed Apply, so the association never stuck. Rules attached to a DNS server are now kept, and the ticked boxes show up again when you reopen the server.
+- FIXED: Opening **Advanced** to add a new DNS server right after editing an existing one could overwrite the server you had just edited.
+- FIXED: A DNS server attached to a routing rule that was later disabled or deleted quietly turned into a catch-all resolver answering every lookup. Such a server is now left out of the generated configuration instead.
+- FIXED: Nodes that use the new **VLESS Encryption** never connected when they came from a subscription, or when their link was pasted into an outbound's **Subscription URL** field. While rebuilding the outbound on the router, XRAYUI threw the encryption key away and replaced it with `none`, so the server refused the connection. The key is now kept. ([#383](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/383))
+- FIXED: Opening a VLESS client for editing on an outbound also erased its **VLESS Encryption** key, so a node that worked right after import stopped working on the next Apply.
+- FIXED: A **TLS** node taken from a subscription lost its server name, fingerprint and ALPN. Only Reality nodes kept theirs, which left TLS nodes connecting with the wrong details or not at all. Those settings are now carried over too.
+- FIXED: Subscription links whose settings contained an `=` sign were cut short when read on the router.
+
+## [0.68.2] - 2026-07-07
+
+- FIXED: Deleting an outbound that a balancer used as its fallback silently left the deleted tag in the generated config, quietly breaking routing. XRAYUI now warns you which balancers still use the outbound as a fallback and asks you to update them first, just like it already does for routing rules. ([#357](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/357))
+
+## [0.68.1] - 2026-07-07
+
+- CHANGED: GitHub release notes now automatically include the "What's Changed" section — the list of merged pull requests, linked issues and contributors — in addition to the usual changelog summary.
+- FIXED: The DNS leaks guide described a **Route DNS through** selector that doesn't actually exist in the UI. The guide now correctly explains that DNS queries automatically travel through your first proxy outbound, and that you can reorder outbounds to pick a different tunnel.
+- FIXED: The new **DNS leak protection** switch and its hints showed up in English no matter which interface language was selected. They are now translated into Russian, Ukrainian, Chinese and German.
+- REMOVED: Leftover texts from the old manual DNS-leak setup were cleaned out of the interface translations.
+- ADDED: New **DNS leak protection** switch in DNS settings. Turn it on and XRAYUI sets up everything needed so your lookups are answered by Xray instead of leaking to your provider — no more hand-building a special DNS inbound. You stay in control of the resolvers: add your DNS servers (for example send `browserleaks.com` to a DNS-over-HTTPS resolver of your choice, and keep a catch-all server as fallback), and your normal routing rules decide which tunnel they exit through. A warning shows if no fallback server is set.
+- FIXED: Clicking **Regenerate** for Reality keys did nothing — the private and public key fields stayed empty. The keys are now generated and filled in again. ([#67](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/67))
+- FIXED: With **Prevent DNS leaks** enabled, Xray could not connect to proxy nodes configured by domain name (e.g. `node.example.com`), failing with `operation not permitted` on DNS lookups. The leak rule was blocking Xray's own queries needed to resolve the node address. Xray's queries are now exempted from the lock; on routers that don't support that exemption, the lock is applied to LAN-client traffic only so node names still resolve. ([#362](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/362))
+- FIXED: With **Prevent DNS leaks** enabled, Wireguard (and other) outbounds could fail with `failed to lookup DNS` errors a few seconds after Xray started. The DNS leak firewall rule was too strict and also blocked Xray's own queries to the router's local DNS resolver. Router-local DNS traffic is now allowed; queries to upstream DNS servers are still blocked, so leak protection is unchanged.
+- ADDED: More GitHub proxy mirrors to choose from in General Options, for more reliable downloads in regions where GitHub is blocked. ([#358](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/358))
+- FIXED: The **After firewall cleanup** hook script set in General Options never ran when Xray stopped, because of a filename mismatch between what the UI saved and what the router looked for. The cleanup hook now runs as expected. Thanks to [@xxhhlk](https://github.com/xxhhlk). ([#353](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/353))
+- FIXED: Enabling **Allow insecure** on an outbound (directly or via an imported share link) stopped Xray from starting after upgrading Xray-core to 26.3.27 or newer, which removed that option. XRAYUI now hides the option when the installed Xray-core no longer supports it and no longer writes it into the configuration. ([#359](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/359))
+- FIXED: Pinned peer certificate hashes were saved in a format Xray-core does not read, so certificate pinning never actually took effect. They are now written in the format the installed Xray-core expects.
+- FIXED: The routing rules count showed all rules as enabled (e.g. "12") right after the page loaded, only correcting to the real figure (e.g. "10/12") after opening and closing the Manage dialog. The count is now correct from the start.
+- FIXED: mKCP transports (e.g. VLESS over mKCP) failed to start on newer Xray-core with "The feature mkcp header & seed has been removed and migrated to finalmask". The packet header type and seed you set in the mKCP settings are now written in the format the installed Xray-core expects, so the connection comes up again. Nothing changes in how you configure it.
+- FIXED: Importing a share link that doesn't specify a transport (most links omit it) created an outbound with an empty transport, so the entry showed up without its protocol and network labels in the outbounds list until the page was reloaded. Such links now correctly default to TCP on import. ([#369](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/369))
+- ADDED: A new **Import mode** choice in the import dialog. Besides adding the imported connection as a new one or doing a complete setup, you can now **replace an existing connection** — handy when your VPN server changes and you want to swap it via a link or QR code while keeping all your routing rules and other settings untouched. ([#370](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/370))
+- CHANGED: The default browser fingerprint is now **firefox** instead of **chrome** — the chrome fingerprint currently causes stalled or hanging connections on some networks (notably in Russia since June 2026). This applies to imported Reality links that don't specify a fingerprint and to QR codes/links generated for router clients. Links that explicitly set a fingerprint are still respected — if your connection hangs with chrome, change the fingerprint to firefox in the outbound's security settings. ([#361](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/361))
+- ADDED: A new **Observatory probe interval** setting in General Options (visible when **Check connection** is enabled). Until now Xray probed every outbound every 10 seconds; with many outbounds (for example from subscriptions) and some of them dead or unreachable, these checks could slowly eat the router's memory until it hung. The default interval is now 30 seconds, and you can raise it further on low-memory routers.
+- FIXED: With the XRAYUI panel open in the browser, connection status checks could overlap and pile up on slow or busy routers, making memory problems worse. The panel now waits for the previous check to finish before starting the next one, and a stuck check is cut off after a few seconds instead of hanging forever.
+
+## [0.67.0] - 2026-05-25
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Devices connected to a Guest WiFi network could not open websites while Xray was running. Guest WiFi now works normally. ([#336](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/336))
+- FIXED: Restarting or reconfiguring the firewall could leave behind duplicate rules that piled up over time. Rules are now cleanly replaced on every restart, and any old duplicates from earlier versions are cleaned up automatically.
+- FIXED: Wireguard outbound did not work on some routers (e.g. ASUS GT-BE98 Pro). A new **No kernel TUN** checkbox is available in the Wireguard outbound settings — enable it if Wireguard fails to start on your router.
+- FIXED: Importing some Hysteria2 share links lost part of the password (anything before a colon), so the connection failed to authenticate. Full passwords are now imported correctly.
+- FIXED: Hysteria2 speed and congestion control settings stopped taking effect after upgrading Xray to 26.3.27 or newer. Now stored where the new Xray expects them. ([#347](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/347)) **Note:** after updating, please re-enter your Hysteria2 speed (up/down) and congestion values once.
+- ADDED: Wireguard outbound settings are now fully translated into Russian, Ukrainian, German, and Simplified Chinese.
+- FIXED: Installing or updating XRAYUI could run the router out of memory on devices with limited RAM. Large downloads are now staged on the USB drive instead of router RAM.
+- FIXED: If you set a GitHub proxy in General Options, the **XRAYUI update check** and the **Xray-core version list** still went directly to GitHub and would silently fail in regions where GitHub is blocked. Both now respect the configured proxy and fall back to a direct connection if the proxy doesn't respond.
+- FIXED: Saving a large Xray configuration could fail with a "Configuration is too large to submit" error on the **Apply** button. Configurations are now compressed before being uploaded, which lets typical configurations stay on the fast single-request path even when they grow large. Truly oversized configurations transparently fall back to a multi-part upload, so there is effectively no size limit.
+
+## [0.66.5] - 2026-04-12
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: XRAYUI could slowly fill up your router's `/jffs` storage with leftover backup files in `/jffs/.asdbk/`, which over time could cause the router to run out of space. XRAYUI now automatically cleans up these files on every start, stop, restart and boot, and no longer leaves temporary files behind that the router's built-in security scanner would copy there.
+
+## [0.66.4] - 2026-04-10
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: UI stopped loading on some `Gnuton` and third-party firmware builds. The router's `httpd` exports `LD_LIBRARY_PATH` pointing to firmware libraries; Entware binaries (`jq`, `xray`, `find`, `grep` etc.) inherited this and loaded an incompatible `libc`, causing segfaults. ([#335](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/335))
+
+## [0.66.3] - 2026-04-07
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: DNS ipset `redirect` / `bypass` mode stopped working after restarting `dnsmasq` or Xray on routers that also run Diversion (or other addons that modify `dnsmasq`). Domains were no longer added to the ipset, so traffic was not routed through the proxy.
+- FIXED: Domains starting with a digit (e.g. `2ip.io`, `3com.com`) were incorrectly treated as IP addresses and ignored by the ipset feature.
+- FIXED: `Country.mmdb` download did not use the configured GitHub proxy, causing download failures or slow downloads in some regions.
+
+## [0.66.2] - 2026-04-05
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Auto-fallback and subscription refresh could switch to the wrong server (e.g. selecting a German server instead of Estonian, or JP instead of UK). The selected server is now correctly preserved across restarts and automatic updates.
+
+## [0.66.1] - 2026-04-02
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: DNS ipset mode `redirect` did not populate the IPv6 ipset (`XRAYUI_PROXY6`) for `geosite:` domains, causing all IPv6 traffic to bypass the proxy on routers with native IPv6.
+
+## [0.66.0] - 2026-04-02
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Wireguard outbound used incorrect field name `privateKey` instead of `secretKey`, causing Xray-core to reject the configuration.
+- FIXED: VLESS inbound clients with `flow: "none"` (e.g. when using XHTTP transport) were not normalized before saving, causing Xray-core to reject the configuration with _"flow doesn't support none in this version"_.
+- FIXED: `IPv6` traffic could bypass the proxy in some cases due to a missing firewall rule.
+- ADDED: `Block QUIC` option in General Settings > DNS to prevent IP address leaks through QUIC protocol.
+- ADDED: Custom backup names — optionally name your backups when creating them for easier identification later (e.g. `xrayui-20260402-143022-before-update.tar.gz`).
+- ADDED: Load balancers — distribute traffic across multiple proxy servers automatically. If a server goes down, traffic can fall back to a backup. Set up balancers in `Routing` and assign them to rules instead of a single `outbound`.
+- FIXED: QR code for VLESS clients always showed `type=tcp` regardless of the actual transport (e.g. XHTTP, WebSocket, gRPC).
+- ADDED: Hysteria2 inbound support — accept connections from Hysteria2 clients with client management, QR code sharing, and `hy2://` link generation. Includes masquerade (file/proxy/string) and UDP idle timeout settings in the Hysteria transport configuration.
+- ADDED: Full `FinalMask` support — all traffic obfuscation types from the latest Xray-core are now available, including `noise`, `fragment`, `header-custom`, `header-dns`, `xdns`, `xicmp`, `mkcp-aes128gcm`, and all legacy mKCP header types. QUIC parameters (congestion control, brutal mode, UDP port hopping, window tuning) are also supported.
+- FIXED: Inbound client normalization could fail with _"normalize is not a function"_ when loading configs with VLESS or VMess inbound clients.
+
+## [0.65.0] - 2026-02-22
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: SNI Logs redesigned with three view modes — **By Device** (collapsible cards grouping domains per LAN device), **By Domain** (aggregated table with hit counts, protocol badges, and device tags), and **Live Stream** (enhanced real-time log). Includes bulk domain selection, enhanced stats (top domain, most active device), and view-aware CSV export.
+- ADDED: Add domains directly from SNI logs to routing rules — click **+ Rule** on any domain to add it to an existing rule or create a new one, without leaving the SNI logs modal. Supports bulk selection for adding multiple domains at once.
+- FIXED: Auto-fallback now correctly detects when a proxy is down. Previously, health checks could report a dead server as reachable. Now uses Xray's built-in Observatory for reliable detection.
+- FIXED: Auto-fallback rotation now works — previously all candidate servers were rejected during probing due to a compatibility issue with the router's network tools. The system now simply switches to the next server in your subscription list and lets Observatory verify it on the next check cycle.
+- FIXED: Subscription pool settings are no longer lost after restarting Xray.
+- IMPROVED: Auto-fallback options now show a helpful message when Xray Connection Check is disabled, instead of being hidden without explanation.
+- IMPROVED: Auto-fallback now switches servers instantly using the Xray API instead of performing a full restart. This reduces downtime from ~15 seconds to near-zero. If the API is unavailable, it falls back to a full restart automatically.
+- IMPROVED: Access log viewer now filters out internal metrics traffic (`sys:metrics_in -> sys:metrics_out`) to reduce noise when Connection Check is enabled.
+- IMPROVED: When `dnsmasq` IP-to-domain resolution is enabled, the access log viewer now shows the original IP alongside the resolved domain. Click any resolved domain to toggle between domain and IP; hover to see the alternate value in a tooltip.
+- ADDED: Configurable Observatory probe URL in General Settings. Previously hardcoded to `https://www.google.com/generate_204`, it can now be changed to any endpoint that returns HTTP 204.
+- ADDED: Subscription rotation filters — type comma-separated keywords (e.g., `Canada, Denmark`) to limit auto-fallback rotation to matching subscription links only. Unmatched links are excluded from rotation. If no filters are set or nothing matches, the full subscription pool is used as before.
+- ADDED: XHTTP transport anti-detection settings (Xray-core PR #5414). New "Anti-Detection" modal lets you customize padding obfuscation (placement, method, key, header), uplink HTTP method, session/sequence placement, and uplink data placement — critical for bypassing CDN-based fingerprinting. New "Performance" and "XMUX" modals organize existing stream tuning and multiplexing settings.
+- FIXED: Unable to clear subscription sources — removing all subscription URLs and saving would silently restore the previous values. The empty string was incorrectly split into a single-element array instead of an empty array.
+- FIXED: Subscription data files (`xray_subscriptions.json`) are now cleaned up when all subscription sources are removed.
+
+## [0.64.1] - 2026-02-21
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Automatic subscription refresh — your subscription sources can now be re-fetched on a schedule (every 3, 6, or 12 hours) so your server list stays up to date without manual action.
+- ADDED: Auto-fallback when a proxy goes down — when enabled, XRAYUI periodically checks if your active proxy is reachable. If it detects that your connection is blocked, it automatically switches to the next working server from your subscription pool. Your routing rules and DNS settings stay intact.
+- ADDED: Per-outbound auto-fallback toggle — each outbound can individually opt in to auto-fallback. After selecting a server from the subscription dropdown, enable the "Auto-fallback" checkbox to link it back to the subscription pool for automatic recovery.
+- ADDED: Health check interval setting — configure how often the system checks your endpoints (every 2, 5, or 10 minutes). A built-in safety limit prevents excessive switching when all endpoints are unavailable.
+- IMPROVED: Subscription dropdown in outbound settings now loads reliably after fetching subscription sources.
+- ADDED: `Encrypted Client Hello (ECH)` support in Transport > Security > TLS settings. Generate `ECH` keys for your server directly from the UI, or configure ECH on the client side with a config list and query strategy.
+- IMPROVED: Subscription fetching now works with panels that require device identification (e.g. Remnawave, V2Board). Previously, some subscription services would reject requests silently.
+
+## [0.63.7] - 2026-02-09
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Xray not working after scheduled or manual router reboot on some slow models (e.g. RT-AX58U).
+- FIXED: `TUN` inbound now automatically loads the `TUN` kernel module if it is not already available, preventing silent failures on routers where the module is not loaded by default.
+
+## [0.63.5] - 2026-02-04
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Script files in `/jffs/scripts/` no longer lose execute permissions after update or reinstall.
+- FIXED: Firewall rules now properly configure on router reboot (was broken since 0.63.4).
+
+## [0.63.4] - 2026-01-25
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Full `TUN` inbound routing support. When you configure a TUN inbound (e.g., `xray0`), XRAYUI now automatically handles all the network setup: assigning IP addresses to the TUN interface, creating routing rules so your LAN traffic flows through the VPN tunnel, and adding bypass routes for VPN server IPs to prevent connection loops. Everything is cleaned up automatically when you stop Xray.
+- FIXED: Import URL tags now display correctly instead of showing encoded characters.
+- FIXED: `Hysteria` Salamander obfuscation now works correctly when importing subscription URLs [#275](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/275).
+- FIXED: Double starting the `XRAY` process after booting the router [#273](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/273)
+- IMPROVED: Simplified import wizard - replaced "Keep existing rules", "Unblock", and "Don't break" options with a single "Routing mode" selector.
+- REMOVED: Individual service selection (Youtube, Google, etc.) during import - replaced with automatic "Basic bypass" preset that covers common services.
+
+## [0.62.3] - 2026-01-19
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: `Hysteria` outbound now correctly saves version field and properly removes empty configuration values.
+- IMPROVED: `Hysteria` transport now supports all congestion control algorithms (`auto`, `reno`, `bbr`, `brutal`, `force-brutal`).
+- IMPROVED: Added support for Hysteria subscription links (`hysteria://`, `hy2://`, `hysteria2://`).
+- REMOVED: `Hysteria` version selector removed from UI as only Hysteria 2 is supported by Xray-core.
+- FIXED: `Shadowsocks` 2022 QR codes now work correctly with mobile apps. Previously, QR codes for multi-user setups were missing required server credentials, causing connection failures. Apps like `Hiddify` should now connect without manual edits.
+
+## [0.62.2] - 2026-01-19
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: `Shadowsocks` 2022 multi-user mode now works correctly - server method is preserved and client methods are properly cleared when using `2022-blake3-*` encryption methods.
+- FIXED: Xray version switching no longer attempts to download from invalid URLs when `github_proxy` is set to `null`.
+- ADDED: `proxy.lavrush.in` to the github proxies list.
+
+## [0.62.1] - 2026-01-17
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `TUN` inbound support. Network layer 3 interface for routing raw network traffic through Xray on router devices, enabling proxy support for applications/devices without built-in proxy capabilities.
+- ADDED: `Hysteria` outbound protocol and transport support (versions 1 and 2).
+- ADDED: `Hysteria` URL import support for `hy2://` and `hysteria://` protocols with TLS and Salamander obfuscation parsing.
+- IMPROVED: `XHTTP` transport UI now includes "Uplink/Downlink Separation" configuration option (outbound only).
+- ADDED: `TLS` security settings now support `PinnedPeerCertificateSha256` field for certificate pinning (outbound only).
+- IMPROVED: Geodata files are now automatically updated when geosite or geoip URLs are changed in general settings.
+- FIXED: Backend scripts no longer create backup files in `/jffs/.asdbk/`, preventing JFFS partition overflow over time.
+- FIXED: `Shadowsocks` inbound now includes top-level `method` and `email` fields, resolving "unsupported cipher method" errors when using Shadowsocks 2022 protocols (fixes #259).
+- FIXED: `Shadowsocks` inbound QR code generation now works correctly, generating proper Shadowsocks URI format (fixes #260).
+- IMPROVED: `Shadowsocks` inbound UI now fully supports multi-language translations (EN, RU, UK, DE, CN).
+- IMPROVED: QR code generation now includes editable server address and connection name fields, allowing customization for DDNS or custom naming (fixes #262).
+- IMPROVED: QR code modal now displays the full connection URL in a copyable text area for easier sharing without additional tools (fixes #261).
+
+## [0.61.0] - 2025-10-25
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `B4SNI` [Support](https://github.com/DanielLavrushin/b4sni). Introduce a new way of monitoring and inspecting SNI extraction.
+- FIXED: `Logrotate` no longer spams errors in `syslog` when xray-core logs are disabled.
+- FIXED: `DNSMasq logs` - IP-to-domain resolution now works correctly with custom dnsmasq log locations set via `dnsmasq.conf.add`
+- IMPROVED: `Scribe` integration check now happens earlier to avoid unnecessary warnings when disabled.
+- IMPROVED: When uninstalling, ask for removing the `/opt/etc/xrayui.conf`
+- DOCS: [Routing Rules Guide](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/routing)
+- DOCS: [Using v2dat to Inspect Geosite and GeoIP Databases](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/v2dat)
+- DOCS: [Using b4sni tool to Inspect SNI](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/b4sni)
+
+## [0.60.0] - 2025-09-08
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: support for a new `url:` prefix in custom geosite files, allowing users to specify URLs that will be fetched and included as domain lists during compilation. The backend parses and fetches these lists, integrating them into the output `ext:xrayui:` dat extension. For more details, see the [documentation](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/custom-geodata#interface-overview).
+- IMPROVED: Modified backend logic to recompile all geodata (including [custom sources](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/custom-geodata)) after updates, ensuring new remote lists are processed.
+- IMPROVED: Clarified in documentation that enabling auto-update will also recompile custom geodat files, ensuring remote sources are refreshed automatically.
+
+## [0.59.2] - 2025-09-07
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Remove `DIVERT` rules from mangle table during cleanup.
+- FIXED: when XrayUI is running in `Redirect` mode, any IP addresses defined in the routing rules are now also added into the system’s fast lookup list (`ipset`).
+
+## [0.59.0] - 2025-08-23
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `Reality TLS (REALITY) Scanner` (RTLS) under `Outbounds`. Discovers usable REALITY endpoints by probing domains, IPs, and CIDRs. [See the manual](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/rtls-scanner)
+- IMPROVED: Backups list is now sorted by file modification time with the newest first.
+- FIXED: Eliminated duplicate `IPv6` rules in `ip6tables` for the XRAYUI chain by validating existence before insert and hardening IPv4/IPv6 address handling to prevent cross-family leakage (e.g., 127.0.0.1 vs ::1).
+- FIXED: Hooks are correctly removed when the script fields are cleared. Empty or whitespace-only values (and the literal null) delete the corresponding hook files, and the UI no longer shows null after reload.
+
+## [0.58.4] - 2025-08-18
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: IPv6 TPROXY “mixed‑family” rule handling in firewall.sh — restored per‑family loopback translation (127.0.0.1↔::1) and proper v4/v6 skipping so IPv6 CIDRs aren’t sent to iptables (v4) and IPv4 tokens aren’t sent to ip6tables (v6). This eliminates invalid mask '64' / getaddrinfo errors and restores XRAY VPS connectivity on IPv6‑preferred networks again (with respect to the version `0.58.1`). #226
+- IMPROVED: Do not apply TUF/ROG styles on GNUTON firmwares.
+
+## [0.58.3] - 2025-08-17
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: DoH log entries were not correctly parsed in the access.log.
+- FIXED: When subscription enabled it was not possible to preserve sockopt object settings after applying changes.
+- IMPROVED: Display active/all rule and policy counters.
+
+## [0.58.1] - 2025-08-05
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: A new option under `General Settings` → `Logs` named `Integrate XRAYUI logs with Scribe`. Enabling this option routes XRAYUI system log output to the `Scribe` module. A separate XRAYUI log section appears in the System Log menu when `Scribe UI` is enabled. This feature is only available then `Scribe` is deployed to your a router.
+- ADDED: A **DNS leak protection** toggle at `General Options` → `DNS` → `Prevent DNS leaks`. This forces the router to send DNS only through Xray and disables alternate system resolvers. Note: this switch does not create the DNS inbound for you—configure a dedicated DNS inbound first. For setup steps, see [this guide](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/en/dns-leak).
+- IMPROVED: Device Policies routing should now covers all edge cases.
+- IMPROVED: XRAY Config is now saved to your PC instead of copied to the clipboard, making it easier to share with others.
+
+## [0.57.1] - 2025-08-01
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Domains from the rules where destination is `BLACKHOLE` are now correctly set in the IPSET when using `Redirect` mode.
+- FIXED: GeoIP subnet lists are now properly unpacked and loaded into IPSET, including large lists.
+
+## [0.57.0] - 2025-07-30
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Tag autocomplete for `Geosite`/`GeoIP` rules. While editing a rule, start typing `geosite:`, `geoip:` or `ext:xrayui:` and XRAYUI will instantly suggest matching tags, fetched on the fly from the installed geodat files.
+- ADDED: Broader rule coverage – IP ranges referenced by `geoip:` rules are now added to `IPSET` along with domains, so both domain‑based and address‑based traffic are handled consistently (both in ipset `redirect` and `bypass` modes).
+- IMPROVED: Much faster rule generation – applying the `IPSET` rules now finishes in about a second instead of nearly a minute to infinity.
+- UPDATED: The internal `v2dat` geodata util [updated to version 2.2.0](https://github.com/DanielLavrushin/v2dat/releases/tag/v2.2.0).
+
+## [0.56.2] - 2025-07-29
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Exclude blocked domains from the `IPSET` rules in `REDIRECT` mode. This should boost performance during xrayui startup when `IPSET` mode is set to `REDIRECT`.
+- IMPROVED: Devices List in the R/B Policies window.
+- FIXED: Some routers missing the `base64` util now get it installed if it’s not present.
+- FIXED: Correctly parse `Shadowsocks` subscriptrion in the `Outbounds`.
+
+## [0.56.1] - 2025-07-27
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `Subscription Sources`. A new `Subscriptions` tab has been added to `General Options`. Add subscription source links that contain one or more outbound protocol descriptors (e.g., ss://, vmess://, vless://). Links with Base64‑encoded content are also supported. After adding sources, press the `Fetch` button next to the field to load the outbound links. When finished, XRAYUI will show a drop‑down field in the Outbound modal window.
+- ADDED: Full subscription link support. XRAYUI now auto‑detects and parses JSON or Base64 subscription URLs. Supports `VLESS`, `VMess`, `Trojan`, and `Shadowsocks`. Paste the link in the Outbound modal form.
+- ADDED: It is now possible to select the Outbound tag in the Transparent Proxy (`sockopt`) window (`DealerProxy` setting).
+- FIXED: `XHTTP` Transport now correctly saves to the configuration. [#180](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/180)
+- FIXED: The `Complete setup` action in the import window was broken.
+- FIXED: Import failed when a protocol URL had incomplete parameters.
+- FIXED: Not all devices were listed in `Routing Policies`. ([#190](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/190))
+- ADDED: Introduced a new checkbox option,`Keep my rules and policies`, to retain existing routing rules during configuration imports. Updated the import logic to support this feature.
+- IMPROVED: Import window refactored. Improved file handling and parsing for configuration imports (e.g., JSON and QR code support) with better error handling and user alerts.
+- IMPROVED: Display a more accurate configuration size.
+- IMPROVED: `Sockopt` (Transparent Proxy) window translated into several languages.
+
+## [0.55.0] - 2025-07-24
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: a `Rules Filter` feature to help you quickly find a specific rule in the list. Available in the bottom-left corner of the `Routing Rules` window.
+- ADDED: Start Xray with `nice -n 19` and `ionice -c3` to minimize CPU and disk I/O contention with other system processes.
+- ADDED: A new `Time Delay` option in `General Settings`. This value in seconds delays the heavy XRAYUI settings from being applied after the XRAY service starts. The optimal delay may vary by router model; a 10–20 second delay is recommended for low/mid-range routers. Default is `10 seconds`. This delay can help to reduce the CPU spikes on XRAY start/restart.
+- CHANGED: Removed the `flow` user property from `VLESS` Outbound when set to `none`.
+- IMPROVED: Geosite File Extraction Tool: Achieved a 20x performance improvement in the [v2dat](https://github.com/DanielLavrushin/v2dat/releases/tag/v2.0.0) tool.
+- IMPROVED: Made minor improvements to the firewall settings.
+- IMPROVED: Policy Rework: Policies now exhibit smarter behavior for better network routing.
+- FIXED: Mobile Usability: Fixed an issue where checkboxes inside draggable elements were not clickable on mobile devices.
+
+## [0.54.1] - 2025-07-23
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: XRAY does not work in the `REDIRECT` mode.
+- FIXED: Unable to save network type `HTTPUpgrade` from the Transport window.
+
+## [0.54.0] - 2025-07-22
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: `iptables` rule set has been completely overhauled.
+- ADDED: New rule excludes `BROADCAST` packets from the processing chain.
+- ADDED: UDP traffic for `GlobalProtect` is now explicitly bypassed.
+- FIXED: Orphaned `MAC` addresses once forgotten by the router always show up in the routing‑policy device list, struck through in red so you can disable them—even in offline‑only view.
+- FIXED: DNS packets from certain LAN subnets are now reinjected into the chain instead of being dropped.
+- FIXED: `IPv4/IPv6` subnet ranges are parsed correctly again.
+- FIXED: Per‑device MAC‑address rules are once more inserted into iptables, restoring MAC‑based bypass/redirect behavior.
+- IMPROVED: Logs modal window has been refactored.
+
+## [0.53.2] - 2025-07-20
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Unable to save HTTPUPGRADE Transport.
+- FIXED: Check for both status native and `InstantGuard` IPSEC.
+- FIXED: `IPV6` Logs are correctly parsed.
+- IMPROVED: `IPV6` routing rules are correctly set in the iptables.
+
+## [0.53.1] - 2025-07-20
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: It is now possible to add a `subscription URL` to a specific Outbound connection. XRAYUI will fetch connection updates on every service restart. While a URL is set, certain settings are disabled because they are managed by the subscription.
+- ADDED: It is now possible to edit the hook scripts from the UI (`firewall_before_start`, `firewall_after_start`, and after `firewall_after_cleanup`) directly from the web interface. Available in `General Options` → Hooks (Triggers).
+- ADDED: Connection check per outbound.
+  > If you previously had connection check option enabled, it is recommended to turn it off and on again.
+- ADDED: Loopback RETURN rule in mangle table for `127.0.0.0/8` packets.
+- ADDED: LAN/Wi-Fi global IPv6 addresses are now excluded when configuring firewall rules.
+- ADDED: `IPsec` VPN subnet exclusion – skips subnet rule when IPsec is disabled.
+- ADDED: Numeric `startup delay` field in `General Settings` to specify the wait time before Xray starts after router reboot.
+- ADDED: It is now possible to set a XRAY start delay on router reboot (in seconds), this setting is located in General Settings.
+- FIXED: Log rotation now works: logs automatically rotate when they hit the configured size.
+- FIXED: Don't resolve log IPs when dnsmasq is disabled.
+- FIXED: Correctly resolve a device name by an ip6 in the logs.
+- FIXED: Switching inbound/outbound transport no longer retains the previous object in the config.
+- FIXED: Sort profiles alphabetically.
+- FIXED: `Wireguard` Inbound private/public key regeneration.
+- IMPROVED: prune empty config objects on save to prevent ghost entries like `settings: {}` in the final output.
+- REMOVED: General connection check. Country flags were removed.
+- REMOVED: Manual order button from the Rules modal window.
+- REMOVED: Manual order button from the Policies modal window.
+
+## [0.52.2] - 2025-07-13
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Log filters for target, inbound, and outbound now work as expected.
+- FIXED: Source-network extraction now accepts valid `IPv4`/`IPv6` CIDR notation, resolving connection issues on `PPPoE` links.
+- FIXED: Dynamic `WAN` interface detection is now handled correctly in the XRAYUI firewall configuration.
+- ADDED: Predefined `Discord` IP/port rules are included when importing a configuration.
+- ADDED: The `TPROXY` (transparent proxy) option is now enabled by default on configuration import.
+- ADDED: `Simplified-Chinese` language support — thanks to `@cdzqs`.
+- ADDED: Enhanced `IPv6` support — DNS/DHCPv6 and ICMPv6 traffic are automatically excluded.
+- IMPROVED: Faster, more stable IP-to-domain-name resolution in logs.
+- IMPROVED: Logs now show the device nickname (if set) instead of the raw hostname.
+- IMPROVED: Refactored `Clients Online` component; uses the Xray API, reports active users accurately, and reduces router CPU/RAM usage.
+- REMOVED: UDP port `80` has been dropped from the default port list in Policies Manager.
+
+## [0.52.1] - 2025-06-22
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Log filters for `target`, `inbound`, and `outbound` now work correctly.
+- FIXED: Source-network extraction now recognizes valid IPv4 and IPv6 CIDR notation, resolving connection issues on `PPPoE` connections.
+- FIXED: Add support for dynamic `WAN` interface handling in XRAYUI firewall configuration
+- ADDED: Predefined `Discord` IP/port rules are now included when importing a configuration.
+- IMPROVED: Faster and more stable IP-to-domain-name resolution in logs.
+- IMPROVED: Logs now display the device **nickname** (if defined) instead of the device name.
+- REMOVED: UDP port `80` has been removed from the default port list in the Policies Manager.
+
+## [0.51.0] - 2025-06-08
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `FakeDNS` support — create and manage xray-core FakeDNS objects. _Visible only when at least one inbound is in **tproxy** mode; shows up as a “Fake DNS” row in **DNS**._
+- ADDED: Feature to associate `DNS` servers with specific routing rules (available in `Advanced mode`) to simplify domain management - this include now the IPs from the rules.
+- ADDED: Drag-and-drop reordering for `inbounds`.
+- ADDED: Drag-and-drop reordering for `outbounds`.
+- ADDED: Drag-and-drop reordering for `device policies`.
+- REMOVED: Old sort buttons on inbounds and outbounds (replaced by drag-and-drop).
+- REMOVED: 60 seconds delay on router reboot (experemental).
+
+## [0.50.3] - 2025-06-07
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Sort `ipset` rules and remove duplicate entries.
+- FIXED: Enhance interface list generation in set_route_localnet function for improved handling of wireless interfaces
+
+## [0.50.1] - 2025-06-05
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Simple routing rules that have no domains are now automatically removed from the configuration, so Xray no longer routes all traffic through them.
+
+## [0.50.0] - 2025-05-31
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Removed explicit restart of the `firewall` and `dnsmasq` services.
+- IMPROVED: Move startup to the post-mount event.
+- ADDED: Introduce a new feature: `Advanced/Simple` toggle. A new button in the top-right corner lets you switch between Advanced and Simple modes. `Advanced mode` retains full access to every option (default). `Simple mode` surfaces only the most common Xray settings for VLESS/VMess proxies, making quick edits easier. `Heads-up`: If your configuration depends on less-common settings, stay in Advanced mode — hanging them in Simple mode may trigger unexpected errors.
+- ADDED: Added drag-and-drop sorting to the rules list: users can now grab the dotted handle of any rule, drag it up or down, and drop it to instantly change the order. [#125](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/125)
+- FIXED: Don't interfere with global fonts. [#130](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/130)
+
+## [0.49.4] - 2025-05-07
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Removed explicit restart of the `firewall` and `dnsmasq` services.
+
+## [0.49.3] - 2025-05-06
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: Settings page could fail to open when hidden formatting codes were present in the stored data. These codes are now removed before the page processes the information, ensuring reliable loading.
+- IMPROVED: Backup configuration file on saving. Now XRAYUI stores 3 last backups in the `/opt/etc/xray/` directory. Just in case :).
+- FIXED: Secondary WAN IPv4 addresses are now detected correctly, even on firmware versions that store them under the older wanX_ipaddr variable. This ensures both WAN links are taken into account when creating exclusion rules for the firewall.
+
+## [0.49.2] - 2025-05-04
+
+- FIXED: Ensure xray proc is running to apply heavy `bypass`/`redirect` ipsec configurations during the `dnsmasq` restarts.
+
+## [0.49.1] - 2025-05-04
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: `DNS → ipset` engine updated with a clear three-mode switch. Modes `off`, `bypass`, and `redirect` provide, respectively, no ipset handling, whitelist-style bypassing, or smart-proxy redirection. Early-return and TPROXY rules are generated dynamically, ensuring that only traffic matching the selected mode is processed by Xray.
+- IMPROVED: The process that generates the `dnsmasq` configuration and populates it with domain entries now completes significantly faster, reducing overall dnsmasq service restart time.
+
+## [0.49.0] - 2025-05-04
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Missing shebang when `/jffs/scripts/file` is initially empty.
+- FIXED: Bug when updating a specific _xray-core_ version from the CLI.
+- FIXED: Made the `dnsmasq` config-update task synchronous.
+- FIXED: Complete rework of the `xhttp` transport ([#121](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues/121)).
+- ADDED: Ability to update to **pre-release** and **draft** versions.
+- ADDED: **Enable DNS bypass (ipset)** — adds a `dnsmasq` + `ipset` layer in front of Xray; domains routed via `FREEDOM` are resolved into an ipset and hit an early `RETURN` rule, so the router handles them directly and Xray stays idle for that traffic.
+
+## [0.48.5] - 2025-04-29
+
+- REMOVED: rules excluding `STUN` (WebRTC) traffic.
+- REMOVED: the priority `101` parameter in the `ip rule add` command for policy rules.
+
+## [0.48.0] - 2025-04-29
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Verify the readiness of the router's `JFFS` partition during installation, ensuring that required configurations are enabled.
+- IMPROVED: Enhance `TPROXY` rules and improve exclusion handling in firewall configuration.
+- ADDED: Added rules to exclude traffic destined for the router's IP on `UDP` port `53`.
+- ADDED: Enhanced `TPROXY` rules by introducing connection marking for locally-owned `UDP` sockets and saving marks to improve traffic handling.
+- ADDED: Added rules to exclude traffic for specific tunnel UDP ports (`500`, `4500`, `51820`).
+
+## [0.47.11] - 2025-04-27
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: A new `Enable debug logs` option in the `General Settings`, allowing users to toggle debug logging.
+- ADDED: Backup management by adding specific backup deletion option.
+- IMPROVED: Enhanced diagnostics output by adding kernel module checks and improving log formatting.
+- IMPROVED: Increase maxlength for web socket transport `path` and `host` inputs to allow longer values (up to 256 characters).
+- FIXED: Firewall rules by clamping MSS for Xray-originated TCP flows and adding new rules for `IPsec` IKE/NAT-T traffic
+- FIXED: `bypass` policies were ignored in `TPROXY` mode.
+
+## [0.47.2] - 2025-04-27
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- IMPROVED: `IPv6` rules handling.
+
+## [0.47.1] - 2025-04-27
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: `IPv6` support.
+- ADDED: Added a rule to clamp the `TCP MSS` to the path `MTU` for all forwarded SYN packets in both `IPv4` and `IPv6`. This improves TCP performance by avoiding fragmentation.
+- IMPROVED: Diagnostics provides more useful information.
+
+## [0.46.6] - 2025-04-25
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Added a safety check that blocks deletion of a proxy while it is still referenced by any firewall/routing rule.
+- IMPROVED: Re-factored the iptables module: local-subnet exclusion rules are now generated in a single, cleaner block for easier maintenance and faster rule-matching.
+- IMPROVED: Small resolution support for modals.
+
+## [0.46.1] - 2025-04-24
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: `Json` configuration import.
+- FIXED: Front-end styles for `ROG` and `TUF` design.
+- ADDED: `DNAT` support for `dokodemo‑door` inbounds bound to a specific listen address (anything other than `0.0.0.0`)—those rules now use `-j DNAT --to-destination` instead of a generic `REDIRECT`.
+- ADDED: Source‑subnet filtering in client mode—all `dokodemo-door` REDIRECT/TPROXY rules are now prefixed with `-s <local_lan_subnet>`, so only LAN traffic is captured.
+- ADDED: listen‑address restriction for server inbounds—ACCEPT rules for `non‑0.0.0.0` binds now include `-d <listen_ip>`, limiting them to the configured interface.
+- ADDED: Filtering options for logs by source, target, inbound, and outbound in Logs component.
+- ADDED: a new CLI command `xrayui diagnostics iptables` to display diagnostics routing information.
+- IMPROVED: Moved logs window to a modal.
+
+## [0.45.0] - 2025-04-21
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: A `password` field and generation functionality to `Shadowsocks` inbound form.
+- ADDED: New option under General Settings — `Clients Online Status Check`. This feature is disabled by default. When enabled, XRAYUI will actively check which clients are currently connected to Xray.
+- REMOVED: XRAYUI no longer relies on Xray installed via Entware. It now fetches the latest version directly from the official [Xray-core repository](https://github.com/XTLS/Xray-core/releases) on GitHub.
+- IMPROVED: Prerelease and draft versions of `Xray Core` are now excluded from the update list.
+- IMPROVED: Update response handling and improve loading progress management.
+- IMPROVED: Enhanced the Xray version switch module to support switching to a specific version or the latest release. Use `xrayui update xray xx.xx.xx` or `xrayui update xray latest` to switch Xray-core versions directly from the CLI.
+- IMPROVED: Enhance response handling with cache-busting and improve service restart logic.
+
+## [0.44.3] - 2025-04-20
+
+- IMPROVED: Fine-tuned dnsmasq configuration handling for better log management. The XRAYUI now conditionally appends logging directives (`log-queries`, `log-async`, and `log-facility`) only if they are not already present, ensuring idempotent and non-intrusive updates. This prevents duplicate entries and respects existing user settings while enabling useful diagnostic logging when the dnsmasq option is enabled.
+- ADDED: `ADDON_DEBUG` flag (values: 0 or 1) to xrayui.conf, enabling optional diagnostic output for advanced debugging. Can be set manually by editing the file.
+- ADDED: A new `Skip testing XRAY` option under General Options. This allows users to bypass the XRAY configuration test step. While the test can help diagnose issues with the configuration file, it may consume system resources—so disabling it can improve performance on low-end routers.
+
+## [0.44.1] - 2025-04-18
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: A critical compatibility issue with the `Diversion` module. `XrayUI` and `Diversion` now correctly detect and synchronize the `dnsmasq` logging state, preventing duplicate or conflicting log entries when you enable or disable dnsmasq logging in either module.
+  > _Note: If you’ve already turned on `dnsmasq` logging in `Diversion`, enabling it afterward in XrayUI works perfectly; the modules will detect the existing settings and avoid duplicates. However, if you first enable `dnsmasq` logging in `XrayUI` and then go into `Diversion` and enable it there, you will end up with conflicting log directives and potential DNS service failures. To prevent this, only manage dnsmasq logging from one module—either Diversion or XrayUI—but not both._
+- IMPROVED: Refactored the internal logging system for better maintainability and clarity.
+- IMPROVED: Added checks for any inbound `TProxy` flags when increasing the maximum file descriptor limit.
+
+## [0.44.0] - 2025-04-18
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Option to automatically clear logs on `XRAY` service restart.
+- ADDED: Configurable log size limit in general settings. When the file exceeds the defined size, it will be rotated automatically.
+- ADDED: Automatic geosite update toggle in general settings. When enabled, the job will update geodata files nightly.
+- IMPROVED: Log parsing logic for better accuracy.
+- FIXED: `Logrotate` cron job now reliably created during installation.
+- REMOVED: `daily` and `compress` directives from logrotate configuration to prevent unnecessary log rotation and reduce overhead.
+
+## [0.43.3] - 2025-04-17
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Connected clients were not displayed correctly due to improper parsing of the access log.
+- IMPROVED: Added calls to restart the `dnsmasq` service after enabling or disabling logging, ensuring the changes take effect immediately.
+- IMPROVED: Enhanced log output.
+
+## [0.43.1] - 2025-04-16
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: an issue where non-object `DNS server entries` (like string addresses) were being dropped from the configuration.
+- FIXED: Ensure correct profile is used for data operations in backend.
+- FIXED: Logs parsing.
+- ADDED: A new checkbox in `General Settings` to enable `dnsmasq` logging. When enabled, `dnsmasq` logs will be activated and IP addresses in the xray access logs will be replaced with the corresponding domain names.
+
+## [0.43.0] - 2025-04-14
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Added missing `DNS` tag to the inbounds list in the routing rules form to ensure proper configuration.
+- FIXED: `General Settings` were not updating the current profile.
+- FIXED: Unable to enable logging when using the default import.
+- ADDED: Feature to associate `DNS` servers with specific routing rules (available in `Advanced mode`) to simplify domain management.
+- ADDED: `Import JSON` – Use this option when you have a client configuration file that you want to import into the router. The configuration will be automatically adjusted for compatibility with your router.
+- ADDED: `Restore from File` (Import) – Use this option to upload a previously working configuration file as is, without modifications.
+- ADDED: Restoring from a previously created backup is now supported.
+- IMPROVED: Refactored the `service_event` case statement in xrayui for better structure and readability.
+- IMPROVED: Refactored `Backup Manager`.
+
+## [0.42.9] - 2025-04-09
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: potential fix to correctly remount the plugin after a router reboot.
+- FIXED: Resolved bug where the default inbound configuration value `tcp` was ignored when applying firewall rules.
+
+## [0.42.8] - 2025-04-08
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: Support added for configuring multiple `DOKODEMO` inbounds.
+- ADDED: Inbound `DOKODEMO` proxies can now be split by processing method—either Direct (`REDIRECT`) or `TPROXY`, and by network protocol (`TCP`, `UDP`, or `both`).
+- IMPROVED: Disable log fetching during configuration updates to prevent unexpected page reloads.
+
+## [0.42.7] - 2025-04-06
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Resolved installation freeze issues in the web UI.
+- FIXED: Configuration changes are now saved to the default profile (`config.json`) instead of the active profile.
+- ADDED: Introduced the `xrayui update x.xx.x` argument to install a specific version; leaving it blank installs the latest version.
+- IMPROVED: Implemented a locking mechanism for `XRAYUI` operations and enhanced `NTP` synchronization.
+- IMPROVED: The import URL parser now displays an error message if it fails to parse the input.
+- IMPROVED: Only apply the GitHub proxy to URLs that begin with `github.com`.
+
+## [0.42.5] - 2025-04-03
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Resolved an issue that sometimes caused errors when updating log file locations, ensuring your log files are stored correctly.
+- ADDED: Automatic backup of the `Xray` configuration before installation, including a timestamp.
+
+## [0.42.4] - 2025-04-03
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: unable to deselect `GitHub Proxy` option.
+- FIXED: Proxy the download link when updating the `XRAY-Core` from Github.
+
+## [0.42.3] - 2025-04-03
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: A new `GitHub Proxy` option in `General Settings`. You can now select a proxy server if access to `github.com` is restricted in your region.
+- ADDED: Automatic downloading of `geodata` files during installation.
+- ADDED: A `backup` feature that allows you to perform a full backup of all xray/xrayui user configuration files and download them.
+- IMPROVED: Eliminated storing logs in the `/tmp` folder. If you previously stored logs there, please remove the old files or reboot your router.
+- REMOVED: The ability to define a custom log path. Logs are now hardcoded to the `/opt/share/xrayui/logs` directory.
+- FIXED: Minor issues encountered during installation.
+- FIXED: Prevented saving an empty profile name.
+- FIXED: Not possible to correctly select profile.
+- REFACTORED: Backend code has been split into more readable sections.
+
+## [0.41.4] - 2025-03-27
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Consolidated and fixed firewall script handling (NAT restart hook).
+- UPDATED: Migrated from `webpack` to `vite`.
+- UPDATED: Reduced `logrotate` retention period from 7 days to 2 days.
+
+## [0.41.3] - 2025-03-23
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: well-known geodata sources selection to the Genral Options.
+- FIXED: QR import for `REALITY` and `TLS`.
+- FIXED: When updating, the `logrotate` file is no longer overwritten if it already exists.
+- FIXED: The `logrotate` file is now updated with the new log file paths when the logs path in the `XRAY` config is changed.
+- IMPROVED: Config masking when sharing.
+- IMPROVED: Minor front-end refactoring.
+
+## [0.41.0] - 2025-03-22
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- CHANGED: `Client/Server` mode. XRAYUI now operates as a single proxy service on the router. This is a critical change that might affect some configurations. This change means that `XRAYUI` can configure `XRAY` to act as both a server and a client simultaneously. External devices can now connect to your home network, while local devices continue to be routed through the external VPS. In client mode, `XRAYUI` still expects at least one `dokodemo` inbound. Please report any issues on [GitHub](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/issues) if you encounter any.
+- CHANGED: `logrotate`: use configurable log file paths for access and error logs.
+- CHANGED: Switched to `SCSS`.
+- FIXED: Ensured that `shortId` is generated correctly.
+- FIXED: Reset the `XRAY` versions list before loading new data.
+- FIXED: Display log times in local time zone and improve log entry parsing.
+- ADDED: It is now possible to specify a custom logs location in the general settings.
+- ADDED: Configuration Profiles. You can now easily switch between configuration files using a new selection option in the Main Configuration section. This option dynamically lists all available JSON configuration files from the `/opt/etc/xray` directory, enabling quick and flexible profile management.
+- IMPROVED: Default settings are now correctly applied for proxy configurations.
+
+## [0.40.0] - 2025-03-11
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- ADDED: You can now update the `XRAY-CORE` binaries directly from the official repository. Click on the Xray-core version (on the top right corner) to open the `switch` modal window and initiate the update.
+- ADDED: Reverse proxy UI support. A new section `Reverse Proxy` has been added. When adding `bridge` or `portal` items to the reverse configuration, you can immediately reference them in `routing` configuration.
+
+## [0.39.1] - 2025-03-06
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure outdated files are updated._
+
+- FIXED: Importing an `mKCP` configuration.
+- FIXED: Numeric values in the `mKCP` saved as strings.
+  > _(If you had non-default values set for KCP, we recommend first reverting them to default values, applying the configuration, and then setting them to your desired values. This will reconvert previously saved values to numeric types.)_
+- ADDED: A new `Configuration for packet header obfuscation` field to the `mKCP` configuration.
+
+## [0.39.0] - 2025-03-05
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: Support for detailed importing of configuration links for `Vmess`, `Shadowsocks`, and `Trojan`.
+  - **Vmess:** Configuration links are decoded. All essential connection parameters (such as server address, port, UUID, and network settings) are extracted.
+  - **Shadowsocks:** Encrypted user credentials are decoded to retrieve the encryption method and password.
+  - **Trojan:** Connection details, including host, port, and security settings, are accurately parsed.
+- IMPROVED: General frontend code refactor/cleanup.
+- FIXED: Add a delay before fetching Xray response data on page initial load.
+
+## [0.38.3] - 2025-02-25
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: Resolved an issue where sorting rules were not applied correctly in the final rules array.
+  > Please reapply your settings (no additional changes needed).
+- FIXED: The page now remains responsive even when there is no internet connection.
+
+## [0.38.2] - 2025-02-24
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: an exclusion rule for `NTP` traffic (UDP port `123`), preventing time synchronization services from being inadvertently redirected to `xray`.
+- FIXED: an issue where logs were not correctly parsed in `xray-core 25.2`.
+- REMOVED: the loading window that appeared on page load, improving the user experience.
+- ADDED: a visible character counter showing current `config.json` size, helping users keep track of the configuration file limit.
+
+## [0.38.1] - 2025-02-20
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: a new version window fix.
+
+## [0.38.0] - 2025-02-20
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: When a new version is available, an update modal automatically appears on page load. The modal includes a `Don't want to update` button which, when clicked, dismisses the modal and prevents future notifications for that specific version.
+- ADDED: a new filter text box to filter the big list of devices (appears next to `Show all devices` checkbox).
+- IMPROVED: Enhanced X-RAY `access` log display. Access logs now show the source device name (if available) and the target domain name (if available), providing clearer context for connections. **This is not precise though**.
+
+## [0.37.1] - 2025-02-19
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: A confusing description under the `Devices` field in the `Redirect/Bypass` manager.
+- ADDED: A scrollbar to the `Devices` field to correctly display a large list of devices.
+- UPDATED: Renamed `Device policies` to the `Redirect/Bypass policies` in the `Routing` section.
+
+## [0.37.0] - 2025-02-18
+
+> _Important: Please clear your browser cache (e.g. **Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: a bug where editing a rule changed its position in the list.
+- FIXED: a bug that prevented disabling the connection status check in the `General Options`.
+- FIXED: a bug where a geosite URL was replaced with a geoip URL.
+  > _Important: Double-check your geosite URL. You may need to revert it to its original source._
+- ADDED: When Xray runs in `TPROXY` mode, the maximum number of open file descriptors is automatically raised to `65535` to accommodate high connection counts.
+- ADDED: Introduced per-device “bypass” and “redirect” policies in both `NAT` (REDIRECT) and `TPROXY` modes.
+  - `Bypass` policies now only proxy the specified ports and return all other traffic.
+  - `Redirect` policies proxy all traffic except for the listed ports.
+    This change unifies behavior between NAT and TPROXY and allows you to configure fine-grained rules per device.
+    > _Important: Since the previous setting `Ports redirect/bypass policy` has been removed, you may need to adjust your settings in the new `Device policies` manager._
+
+## [0.36.0] - 2025-02-12
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: It is now possible to `activate` or `deactivate` a rule by clicking a checkbox next to its name in the Routing Rules list.
+- ADDED: Display of the `X-Ray Core` process uptime, showing how long the process has been running.
+- ADDED: `X-Ray Core` version label in the `Configuration` section, aligned to the right.
+- ADDED: General Options window to control settings such as logs, geodata source URLs, etc.
+- FIXED: Incorrect modal window translation in general settings.
+- FIXED: A bug where pressing the reconnect button spawned a new X-Ray process instead of restarting the existing one.
+- UPDATED: When importing a configuration, DNS settings now revert to their default values (`queryStrategy` set to `UseIP` and `domainStrategy` set to `AsIs`).
+- REMOVED: DNS `queryStrategy=UseIP` from the configuration, as it is now the default.
+- REMOVED: Refactored the `Logs` section to display only logs; other settings were moved into the `General Options` window for log management.
+
+## [0.35.3] - 2025-02-10
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: Support for older `Shadowsocks` encryption methods (`aes-256-gcm`, `aes-128-gcm`, `chacha20-ietf-poly1305`, `none`, and `plain`), alongside the recommended 2022 ciphers.
+- CHANGED: Improved password generation logic, setting the password to an empty string for encryption methods that require no key.
+
+## [0.35.2] - 2025-02-09
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: An `edit` button to edit existing proxy users.
+- UPDATED: Swapped tags and proxy labels in the `Inbounds` and `Outbounds` display.
+- IMPROVED: Enhanced UI for proxy rows with improved styling.
+- IMPROVED: Enhanced UI for routing rules rows with improved styling.
+
+## [0.35.1] - 2025-02-08
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: missing compile-time flag `__VUE_PROD_DEVTOOLS__` casued the app crash on production.
+- ADDED: Language support.
+
+## [0.34.3] - 2025-02-06
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- FIXED: Resolved an issue during configuration import where routing rules were incorrectly assigned to a default `proxy` tag instead of the imported one (#21).
+- ADDED: Introduced an `Outbound` column to the routing rules list for improved clarity.
+
+## [0.34.2] - 2025-02-05
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: Ability to define an array of users on the routing rule level. The rule will now take effect when the source user's email matches any address in the array.
+- FIXED: Resolved an issue where QR code PNG images with transparent backgrounds could not be read.
+- FIXED: Addressed a warning in the `import manager` related to replacing a configuration when the full config import checkbox was unchecked.
+- IMPROVED: Enhanced the inbound/outbound tag editing so that any changes are now automatically propagated to the corresponding rules.
+- UPDATED: Relocated XRAYUI options (`Check Connection` and `Restart on Reboot`) to the General Options window.
+
+## [0.34.0] - 2025-02-05
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: Version command to display the current XRAYUI version. Usage: `/jffs/scripts/xrayui version`.
+- ADDED: Symlink to `/jffs/scripts/xrayui` for direct invocation of `xrayui`.
+- ADDED: XRAYUI configuration file (`/opt/etc/xrayui.conf`) to allow specifying custom community `geosite` and `geoip` URLs.
+- FIXED: `HTTP` Inbound type error in the `allowTransparent` property.
+- FIXED: Custom geodata tag files were not loaded properly.
+- FIXED: Unable to delete large custom geodata files.
+- REMOVED: Constraints on the address field that prevented entering domain names.
+- UPDATED: Due to limitations in `curl` on some routers, the connection-check logic was moved from the server-side to the client-side, and the endpoint was switched from `freeapi.com` to `ip-api.com`.
+
+## [0.33.0] - 2025-02-04
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- UPDATED: Introduced a `General options` row in the `Configuration` section.
+- ADDED: A new option, `Check connection to xray server`, in the `General options` section of Client mode. Enabling it allows XRAYUI to check the connection status of the outbound proxy. After restarting Xray, the check sends a connection request to an external service ([freeipapi.com](https://freeipapi.com)) to verify that the connection is truly established via the outbound proxy. Next to the status, a flag representing the X-RAY outbound server `country` location appears to indicate the connection status. Please note that it takes a couple of seconds after restart to validate the connection. When this option is enabled, XRAYUI automatically adds some system configurations (an inbound `SOCKS` proxy and a system routing rule).
+- ADDED: A new modal window for browsing the raw Xray configuration file. It replaces the old `show config` button in the `Configuration` section. You can now view a nicely formatted JSON version of your configuration and choose to hide sensitive data before copying and sharing it. However, it is still recommended reviewing the configuration carefully before sharing to ensure that no sensitive information is accidentally exposed.
+- IMPROVED: Compliance with `Codacy` code standards.
+
+## [0.32.1] - 2025-02-02
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: When importing a new client configuration, it is now possible to select the services to unblock. They will automatically be added to the `routing rules`, so there's no need to set them up manually later.
+- ADDED: A checkbox `Don't break my network devices` in the `import configuration` window. This will set the default mode to `bypass`, potentially preventing disruption to `IoT` devices on the network.
+- FIXED: Correctly display advanced `DNS` server name when defined.
+- FIXED: The `bypass`/`redirect` mode dropdown value sometimes remains unchanged.
+- FIXED: A bug with loading display function was not resolved.
+- FIXED: Implement normalization methods for TLS security protocol classes and update interfaces.
+- REMOVED: Unused/abandoned parts of the code.
+- IMPROVED: Mounting of the menu during installation.
+- IMPROVED: Minor cosmetic fixes and changes.
+
+## [0.31.1] - 2025-01-30
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: `transport` and `secururity` labels for Outbounds proxies.
+- IMPROVED: visual `proxy`, `transport` and `security` labels.
+- IMPROVED: Enhanced the visual loading and waiting display for a smoother user experience.
+
+## [0.31.0] - 2025-01-29
+
+> _Important: Please clear your browser cache (e.g.**Ctrl+F5**) to ensure that outdated files are updated._
+
+- ADDED: Display selected mode in the `Ports Bypass/Redirect Policy`.
+- ADDED: A new `Logs` section to monitor the Xray logs from the web UI.
+- UPDATED: Moved the outbounds `import` button to the `Configuration` section.
+- IMPROVED: Completely refactored the process of importing a new configuration connection in a `client` mode. The Import row has been migrated to the `Configuration` section and is now located under `Import Config File`. In the import modal, a new checkbox titled `I'd like to have a complete setup!` has been introduced. Enabling this option will create all required and missing configuration options (Inbounds, Outbounds, DNS settings etc.) when importing a server connection URL, allowing to set up a complete Xray client configuration with a single click. **Note: Enabling this will overwrite all previous configurations**.
+- IMPROVED: Enhanced the visual loading and waiting display for a smoother user experience.
+- IMPROVED: Removed the `TCP fragmentation` checkbox from the FREEDOM proxy and simplified the fragment packet method handling.
+
+## [0.30.0] - 2025-01-26
+
+- IMPROVED: Overall refactoring. The `xrayui` code now has a [![Codacy Badge](https://app.codacy.com/project/badge/Grade/5afa683e2930418a9b13efac6537aad8)](https://app.codacy.com/gh/DanielLavrushin/asuswrt-merlin-xrayui/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade), which required many fixes and changes. See [pull request](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/pull/8).
+- ADDED: `logrotate` setup to manage xray log file growth over time.
+- FIXED: Wrong `netstat` package name, replaced with `net-tools-netstat`.
+- UPDATED: GitHub action to follow build standards.
+- UPDATED: Bumped `golang` version to `1.22.2` following security recommendations.
+
+## [0.29.1] - 2025-01-24
+
+- ADDED: `Custom GEODATA Files Manager`. A new button labeled `Manage Local Files` has been added to the `Routing` section. This feature allows you to store rule-based domain and IP lists in standalone geodat files (similar to geosite.dat and geoip.dat). You can compile these files directly from the router's web interface. Assign a tag (e.g., `discord`), and after compiling, use it in the routing rules as `ext:xrayui:discord`.
+- ADDED: `Cache-Control` meta tag with a `no-cache` value. This addition attempts to combat Asus web caching mechanisms.
+- IMPROVED: Enhanced the installation process by checking for and installing missing `Entware` dependencies before installing XrayUI. The required dependencies now include `sed`, `jq`, `iptables`, `netstat`, `openssl`, and `flock`.
+- UPDATED: Modernized the `DOCTYPE` declaration and HTML structure by replacing Asus's `XHTML 1.0 Transitional` with `HTML5` standards.
+- FIXED: Resolved a bug in the `Ports Bypass/Redirect Policy` that previously prevented saving empty ports fields.
+- FIXED: Corrected issues with the fixme command to ensure it functions as intended.
+- FIXED: wrong opkg package check during the installation (openssl should be libopenssl)
+- IMPROVED: Ensured that all necessary Merlin script files are executable, addressing issue #7.
+
+## [0.28.0] - 2025-01-22
+
+- ADDED: **IMPORTANT!** For Xray in client mode, a new option called `Ports Bypass/Redirect Policy` has been added to the routing section. This controls how the router manages traffic to different ports. By default, it is set to `redirect` mode, meaning all traffic is redirected to the Xray inbound port. You can add ports to the exclusion list if certain ports should not be handled by Xray. When switching to `bypass` mode, all traffic bypasses Xray, and you can specify ports that should be redirected to Xray. This feature allows for fine-tuning traffic management to Xray directly from the web interface.
+- ADDED: A `60-second` waiting period on startup to ensure that Xray starts at the correct time, after applying `iptables` rules.
+- FIXED: The Xray server IP is no longer exposed in the logs.
+
+## [0.27.1] - 2025-01-22
+
+- ADDED: `Iptables` rules to ignore Steam/Playstation/XBOX/EGS ports.
+- FIXED: Correctly display `Clients Online` in server mode.
+
+## [0.27.0] - 2025-01-21
+
+- ADDED: Import support for outbound configurations in client mode. You can now upload a QR code or provide an xray URL. A new import button was added to the `outbounds` section.
+- ADDED: Internal mechanism to parse xray proxy URLs (currently only supports `VLESS`; more protocols coming).
+- ADDED: Emergency function `/jffs/scripts/xrayui` fixme to automatically address unexpected `xrayui` issues.
+- UPDATED: Refactored stream settings handling and normalization for various proxy types.
+- UPDATED: Made the `spiderX` field visible in `REALITY` while in client mode.
+- IMPROVED: Enhanced error message output on the Xray-Core router side when xray fails to start. Now a friendly `yellow exclamation` mark indicates what went wrong.
+- IMPROVED: Updated default configuration handling to avoid saving default xray parameters, thus reducing noise and file size.
+- IMPROVED: Fixed a residual payload issue in `custom_settings` (#2, #7).
+- IMPROVED: Normalized the `Sniffing` object when saving settings.
+- IMPROVED: Removed the entire `sockopt` entity when it is turned `off`.
+- IMPROVED: Added more user-friendly messages and improved validation during `QR` generation.
+- FIXED: Removed the hardcoded server port in the connected clients list for server mode (#6).
+- FIXED: The security object now correctly retains its default setting visually (`REALITY`, `TLS` - cosmetic fix).
+- FIXED: Corrected mapping for inbound types during configuration load.
+- FIXED: When the `sockopt.mark` field is empty, it is removed rather than being set as a string.
+
+## [0.26.1] - 2025-01-20
+
+- UPDATED: Added custom firewall script hooks for both `TPROXY` and `DIRECT` modes, executed before final interception rules are applied. This ensures user-defined rules (e.g., WAN interface exclusions) are processed in time.
+- ADDED: Display a hint next to the geodata files update button indicating when the files were last updated.
+- ADDED: DNAT-based exclusion in `TPROXY` rules to bypass inbound port-forwards (#4).
+- IMPROVED: Refactored `SSL certificates` generation and updated output file to cert.crt.
+- IMPROVED: Refactored `REALITY` keys generation.
+- IMPROVED: Refactored `Wireguard` private/public keys generation.
+- UPDATED: Show `regenerate` public key button for a `Wireguard` client only when a private key is generated; hidden otherwise.
+
+## [0.25.0] - 2025-01-19
+
+- ADDED: Exclude `WireGuard` subnet and port from XRAYUI `iptables` rules.
+- FIXED: Restored custom `iptables` user scripts logic on xray `start` and `stop`.
+- IMPROVED: XRAYUI Change log window redesigned
+
+## [0.24.2] - 2025-01-19
+
+- ADDED: `wan_ip` property to `app.html` in the front-end.
+- ADDED: QR code generation for `VLESS` and `VMESS` connections.
+- IMPROVED: Error handling for missing config.json; added `generate_default_config` functionality.
+- IMPROVED: Backend with minor cosmetic changes.
+
+## [0.23.1] - 2025-01-18
+
+- ADDED: Excluded `STUN` (WebRTC) traffic from Xray routing to resolve compatibility issues with video conferencing applications (e.g., Zoom, Microsoft Teams).
+- UPDATED: Improved confidentiality by removing Xray server IPs from being exposed in the logs.
+- REMOVED: unused iptables `nat` rules for a `client tproxy` operation mode
+
+## [0.23.0] - 2025-01-18
+
+- ADDED: Numerous hints and detailed help texts for fields; almost all fields now have detailed descriptions.
+- ADDED: GitHub `geosite` domain list community link for quicker access (`Routing` section).
+- ADDED: User confirmation dialog for deleting items from the form/config.
+- ADDED: `Domain Strategy` field in the `sockopt` configuration.
+- UPDATED: Show/hide of some transport fields based on proxy type (`inbound` vs. `outbound`).
+- FIXED: Display issue with the autogenerated rule name when a user's custom name is provided.
+- FIXED: Incorrect description for the `Wireguard` inbound.
+- IMPROVED: Minor cosmetic changes to front-end styles.
+
+## [0.22.2] - 2025-01-17
+
+- ADDED: give custom friendly names to the routing rules (added `name` field).
+- ADDED: Log an error when curl failed to download/update `geosite` files.
+- REMOVED: doublicate `testconfig` invokation form the `xrayui` script
+- IMPROVED: minor cosmetic `xrayui` script fixes.
+- IMPROVED: routing rules display names and enhance summary.
+- IMPROVED: Refactor routing object sotring in json to be optional and update normalization logic.
+
+## [0.22.1] - 2025-01-16
+
+- FIXED: The `Toggle Xray startup on reboot` checkbox occasionally reverted to its previous state.
+
+## [0.22.0] - 2025-01-15
+
+- ADDED: An option to toggle Xray startup on router reboot (enable/disable) (available under `Connection Status`).
+- ADDED: Introduced a Transparent Proxy `Mark` field in the `sockopt` configuration.
+- ADDED: Added an `Outbound network interface` field in the `sockopt` configuration.
+- ADDED: Implemented `sockopt object` normalization.
+- IMPROVED: Redesigned outbound proxy server lookup to exclude entries from the NAT and MANGLE tables (issue #3).
+- IMPROVED: Refactored client firewall rules configuration by separating DIRECT and TPROXY rules (issue #3).
+- IMPROVED: Simplified and optimized the firewall rules cleanup process.
+- UPDATED: Increased `configuration apply` time from 5 seconds to 10 seconds to ensure the Xray service fully restarts.
+- REMOVED: Deprecated shell functions `client add` and `client delete` .
+
+## [0.21.1] - 2025-01-13
+
+- REMOVED: Comment out redundant iptables rules for TCP DNS redirection (persistent android issue)
+
+## [0.21.0] - 2025-01-13
+
+- ADDED: Support for dynamic changelog display.
+- FIXED: Routing issues for Wi-Fi-connected devices by adding OUTPUT chain rules to process locally generated traffic.
+- FIXED: DNS redirection inconsistencies by applying rules for both UDP and TCP DNS traffic (dport 53, 853).
+- ADDED: Exclusion of traffic destined for the Xray server (SERVER_IP) to prevent routing loops.
+- ADDED: Explicit exemption for NTP traffic (dports 123, 323) to ensure reliable time synchronization.
+- ADDED: Logging for dropped packets in the XRAYUI chain to facilitate debugging.
+- ADDED: PID file check before restarting XRAY server so XRAY is restarted only when it runs
+- IMPROVED: Consistent marking of intercepted traffic with 0x8777 for proper routing via table 8777.
+
+## [0.20.1] - 2025-01-12
+
+- ADDED: Custom Scripts for Firewall Rules/IPTABLES (see readme)
+- FIXED: wireless devices are not able to connect when enabling xray in a client mode

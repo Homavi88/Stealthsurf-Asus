@@ -1,0 +1,233 @@
+<template>
+  <modal ref="modal" :title="$t('com.StreamSettingsModal.modal_title')">
+    <div class="formfontdesc">
+      <p v-html="$t('com.StreamSettingsModal.modal_desc')"></p>
+      <table width="100%" class="FormTable modal-form-table" :class="{ locked: isLocked }">
+        <thead>
+          <tr>
+            <td colspan="2">
+              {{ $t('com.StreamSettingsModal.title') }}
+            </td>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th>
+              {{ $t('com.StreamSettingsModal.label_security') }}
+              <hint v-html="$t('com.StreamSettingsModal.hint_security')"></hint>
+            </th>
+            <td>
+              <select class="input_option" v-model="transport.security">
+                <option v-for="(opt, index) in securityOptions" :key="index" :value="opt">{{ opt }}</option>
+              </select>
+              <span class="row-buttons" v-if="transport.security != 'none'">
+                <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click="manage_security" />
+              </span>
+              <modal ref="securityModal" :title="$t('com.StreamSettingsModal.modal_security_title')" v-if="transport.security != 'none'">
+                <component :is="securityComponent" :transport="transport" v-bind="securityProps" v-model:proxyType="proxyType" />
+              </modal>
+            </td>
+          </tr>
+          <tr>
+            <th>
+              {{ $t('com.StreamSettingsModal.label_network') }}
+              <hint v-html="$t('com.StreamSettingsModal.hint_network')"></hint>
+            </th>
+            <td>
+              <select class="input_option" v-model="transport.network">
+                <option v-for="(opt, index) in transportOptions" :key="index" :value="opt">{{ opt }}</option>
+              </select>
+              <span class="hint-color">default: tcp</span>
+            </td>
+          </tr>
+          <tr class="unlocked">
+            <th>
+              {{ $t('com.StreamSettingsModal.label_tproxy') }}
+              <hint v-html="$t('com.StreamSettingsModal.hint_tproxy')"></hint>
+            </th>
+            <td>
+              <span class="row-buttons">
+                <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click="manage_sockopt" />
+                <modal ref="sockoptModal" :title="$t('com.SockOpt.label')">
+                  <sockopt v-model:transport="transport" :proxy-type="proxyType"></sockopt>
+                </modal>
+              </span>
+            </td>
+          </tr>
+        </tbody>
+        <component :is="networkComponent" :transport="transport" :proxyType="proxyType" />
+      </table>
+    </div>
+    <template v-slot:footer>
+      <input class="button_gen button_gen_small" type="button" :value="$t('labels.save')" @click.prevent="save" />
+    </template>
+  </modal>
+</template>
+
+<script lang="ts">
+  import { defineComponent, ref, computed } from 'vue';
+  import { useI18n } from 'vue-i18n';
+
+  import { ITransportNetwork, IProtocolType } from '@/modules/Interfaces';
+  import { XrayInboundObject } from '@/modules/InboundObjects';
+  import { XrayOutboundObject } from '@/modules/OutboundObjects';
+  import { XrayOptions } from '@/modules/Options';
+  import {
+    XrayStreamGrpcSettingsObject,
+    XrayStreamTcpSettingsObject,
+    XrayStreamKcpSettingsObject,
+    XrayStreamHttpSettingsObject,
+    XrayStreamWsSettingsObject,
+    XrayStreamHttpUpgradeSettingsObject,
+    XrayStreamHysteriaSettingsObject
+  } from '@/modules/TransportObjects';
+  import { XrayStreamSettingsObject, XrayStreamRealitySettingsObject, XrayStreamTlsSettingsObject, XraySockoptObject } from '@/modules/CommonObjects';
+
+  import Hint from '@main/Hint.vue';
+  import Modal from '@main/Modal.vue';
+
+  import NetworkTcp from '../transport/Tcp.vue';
+  import NetworkKcp from '../transport/Kcp.vue';
+  import NetworkWs from '../transport/Ws.vue';
+  import NetworkHttp from '../transport/Http.vue';
+  import NetworkHttpUpgrade from '../transport/HttpUpgrade.vue';
+  import NetworkGrpc from '../transport/Grpc.vue';
+  import NetworkHysteria from '../transport/Hysteria.vue';
+  import Sockopt from '../transport/Sockopt.vue';
+
+  import SecurityTls from '../security/Tls.vue';
+  import SecurityReality from '../security/Reality.vue';
+
+  interface ProxyEndpoint {
+    address?: string;
+    port?: number;
+  }
+
+  interface ProxyEndpointHolder extends ProxyEndpoint {
+    vnext?: ProxyEndpoint[];
+    servers?: ProxyEndpoint[];
+  }
+
+  export default defineComponent({
+    name: 'StreamSettingsModal',
+    components: {
+      Modal,
+      Sockopt,
+      Hint
+    },
+    props: {
+      transport: XrayStreamSettingsObject
+    },
+    methods: {},
+    setup(props, { emit }) {
+      const { t } = useI18n();
+      const modal = ref();
+      const securityModal = ref();
+      const sockoptModal = ref();
+      const transport = ref<XrayStreamSettingsObject>(props.transport ?? new XrayStreamSettingsObject());
+      const network = ref<ITransportNetwork>();
+      const proxyType = ref<string>('');
+      const proxySubscribeUrl = ref<string>('');
+      const serverAddress = ref<string>('');
+      const serverPort = ref<number>(0);
+
+      const isLocked = computed(() => !!proxySubscribeUrl.value?.trim());
+
+      const networkComponent = computed(() => {
+        switch (transport.value.network) {
+          case 'tcp':
+            transport.value.tcpSettings = transport.value.tcpSettings ?? new XrayStreamTcpSettingsObject();
+            return NetworkTcp;
+          case 'kcp':
+            transport.value.kcpSettings = transport.value.kcpSettings ?? new XrayStreamKcpSettingsObject();
+            return NetworkKcp;
+          case 'ws':
+            transport.value.wsSettings = transport.value.wsSettings ?? new XrayStreamWsSettingsObject();
+            return NetworkWs;
+          case 'xhttp':
+            transport.value.xhttpSettings = transport.value.xhttpSettings ?? new XrayStreamHttpSettingsObject();
+            return NetworkHttp;
+          case 'httpupgrade':
+            transport.value.httpupgradeSettings = transport.value.httpupgradeSettings ?? new XrayStreamHttpUpgradeSettingsObject();
+            return NetworkHttpUpgrade;
+          case 'grpc':
+            transport.value.grpcSettings = transport.value.grpcSettings ?? new XrayStreamGrpcSettingsObject();
+            return NetworkGrpc;
+          case 'hysteria':
+            transport.value.hysteriaSettings = transport.value.hysteriaSettings ?? new XrayStreamHysteriaSettingsObject();
+            return NetworkHysteria;
+          default:
+            return null;
+        }
+      });
+
+      const securityComponent = computed(() => {
+        switch (transport.value.security) {
+          case 'tls':
+            transport.value.tlsSettings = transport.value.tlsSettings ?? new XrayStreamTlsSettingsObject();
+            return SecurityTls;
+          case 'reality':
+            transport.value.realitySettings = transport.value.realitySettings ?? new XrayStreamRealitySettingsObject();
+            return SecurityReality;
+
+          default:
+            return null;
+        }
+      });
+
+      const securityProps = computed(() =>
+        transport.value.security === 'tls' ? { serverAddress: serverAddress.value, serverPort: serverPort.value } : {}
+      );
+
+      const manage_security = () => {
+        securityModal.value.show();
+      };
+      const manage_sockopt = () => {
+        sockoptModal.value.show();
+      };
+
+      const show = (proxy: XrayInboundObject<IProtocolType> | XrayOutboundObject<IProtocolType>, pxtype: string) => {
+        proxy.streamSettings = transport.value = proxy.streamSettings ?? new XrayStreamSettingsObject();
+        proxyType.value = pxtype;
+
+        const settings = (proxy as XrayOutboundObject<IProtocolType>).settings as unknown as ProxyEndpointHolder | undefined;
+        const endpoint: ProxyEndpoint | undefined = settings?.vnext?.[0] ?? settings?.servers?.[0] ?? settings;
+        serverAddress.value = pxtype === 'outbound' ? (endpoint?.address ?? '') : '';
+        serverPort.value = pxtype === 'outbound' ? (endpoint?.port ?? 0) : 0;
+
+        proxySubscribeUrl.value = (proxy as XrayOutboundObject<IProtocolType>).surl ?? '';
+        modal.value.show();
+      };
+      const save = () => {
+        // normalize() drops the settings of an inactive network, so the XHTTP download sockopt only counts with xhttp selected
+        const download = transport.value.network === 'xhttp' ? transport.value.xhttpSettings?.extra?.downloadSettings?.sockopt : undefined;
+        const sockopts = [transport.value.sockopt, download];
+        if (!sockopts.every((s) => XraySockoptObject.isKeepAliveInRange(s))) {
+          alert(t('com.SockOpt.alert_keepalive_range', [XraySockoptObject.keepAliveMax]));
+          return;
+        }
+        emit('save', transport.value);
+        modal.value.close();
+      };
+
+      return {
+        transport,
+        network,
+        modal,
+        securityModal,
+        sockoptModal,
+        networkComponent,
+        securityComponent,
+        proxyType,
+        securityOptions: XrayOptions.securityOptions,
+        transportOptions: XrayOptions.transportOptions,
+        manage_security,
+        manage_sockopt,
+        show,
+        save,
+        isLocked,
+        securityProps
+      };
+    }
+  });
+</script>

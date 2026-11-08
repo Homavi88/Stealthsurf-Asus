@@ -1,0 +1,238 @@
+import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
+const HARNESS = path.join(process.cwd(), 'tests', 'backend', 'api', 'harness.sh');
+
+const which = (bin: string): string | undefined => {
+  const out = spawnSync('sh', ['-c', `command -v ${bin}`], { encoding: 'utf8' });
+  return out.status === 0 ? out.stdout.trim() : undefined;
+};
+const BUSYBOX = process.platform === 'linux' ? which('busybox') : undefined;
+const HAS_JQ = which('jq') !== undefined;
+const SHELLS: [string, string[]][] = [...(BUSYBOX ? [['busybox sh', [BUSYBOX, 'sh']] as [string, string[]]] : []), ['sh', ['sh']]];
+const describeIf = HAS_JQ ? describe : describe.skip;
+
+const API_CONFIG = JSON.stringify({ inbounds: [{ tag: 'sys:metrics_in', listen: '127.0.0.1', port: 10086 }] });
+const OBSERVATORY = {
+  'p-a': { alive: true, delay: 94, outbound_tag: 'p-a', last_seen_time: 1789999990, last_try_time: 1789999990 },
+  'p-b': { delay: 99999999, outbound_tag: 'p-b', last_error_reason: 'dead', last_try_time: 1789999990 }
+};
+const VARS = JSON.stringify({ cmdline: ['xray'], memstats: { Alloc: 1 }, observatory: OBSERVATORY, stats: { inbound: {}, outbound: {}, user: {} } });
+
+interface Scenario {
+  steps: string[];
+  env?: Record<string, string>;
+  files?: Record<string, string>;
+}
+
+interface Result {
+  events: string[];
+  status?: Record<string, unknown>;
+  observatory?: string;
+  apiConfig?: Record<string, unknown>;
+  clients?: string;
+}
+
+const run = (shell: string[], scenario: Scenario): Result => {
+  const state = fs.mkdtempSync(path.join(os.tmpdir(), 'xrayui-api-'));
+  try {
+    const files = { 'opt/etc/xray/xrayui/config-api.json': API_CONFIG, ...scenario.files };
+    Object.entries(files).forEach(([rel, content]) => {
+      const file = path.join(state, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, content);
+    });
+    const out = spawnSync(shell[0], [...shell.slice(1), HARNESS, state, ...scenario.steps], { encoding: 'utf8', env: { ...process.env, ...scenario.env } });
+    expect(out.error).toBeUndefined();
+    const read = (rel: string) => (fs.existsSync(path.join(state, rel)) ? fs.readFileSync(path.join(state, rel), 'utf8') : undefined);
+    const status = read('share/xray_connection_status.json');
+    const apiConfig = read('opt/etc/xray/xrayui/config-api.json');
+    return {
+      events: (read('events.log') ?? '').split('\n').filter(Boolean),
+      status: status ? JSON.parse(status) : undefined,
+      observatory: read('observatory.out'),
+      apiConfig: apiConfig ? JSON.parse(apiConfig) : undefined,
+      clients: read('share/clients-online.json')
+    };
+  } finally {
+    fs.rmSync(state, { recursive: true, force: true });
+  }
+};
+
+const CLIENTS_API_CONFIG = JSON.stringify({ api: { tag: 'sys:api', listen: '127.0.0.1:10085' } });
+const STATS = JSON.stringify({
+  stat: [
+    { name: 'user>>>alice@example>>>traffic>>>uplink', value: '120' },
+    { name: 'user>>>alice@example>>>traffic>>>downlink', value: '40' },
+    { name: 'user>>>bob@example>>>traffic>>>uplink', value: '0' }
+  ]
+});
+
+const balancerConfig = (balancer: Record<string, unknown>) => JSON.stringify({ outbounds: [{ tag: 'p-a' }], routing: { balancers: [{ tag: 'bal', selector: ['p-'], ...balancer }] } });
+
+describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
+  it('writes a status envelope with the observatory and the daemon pid', () => {
+    const r = run(shell, { steps: ['status'], env: { RS_PID: '4242' }, files: { 'vars.json': VARS } });
+    expect(r.status).toEqual({ v: 2, ok: true, ts: 1790000000, pid: 4242, observatory: OBSERVATORY });
+    expect(r.events).toEqual(['curl -fsS --max-time 5 http://127.0.0.1:10086/debug/vars', 'status rc=0']);
+  });
+
+  it('writes an empty observatory when Xray reports none', () => {
+    const r = run(shell, { steps: ['status'], env: { RS_PID: '4242' }, files: { 'vars.json': JSON.stringify({ observatory: null }) } });
+    expect(r.status).toEqual({ v: 2, ok: true, ts: 1790000000, pid: 4242, observatory: {} });
+  });
+
+  it('marks the status as unavailable and logs when a running Xray does not answer', () => {
+    const r = run(shell, { steps: ['status'], env: { RS_PID: '4242' } });
+    expect(r.status).toEqual({ v: 2, ok: false, ts: 1790000000, pid: 4242, observatory: {} });
+    expect(r.events).toContain('ERROR: Failed to fetch or parse observatory data');
+  });
+
+  it('marks the status as unavailable when the metrics answer is empty', () => {
+    const r = run(shell, { steps: ['status'], env: { RS_PID: '4242' }, files: { 'vars.json': '' } });
+    expect(r.status).toEqual({ v: 2, ok: false, ts: 1790000000, pid: 4242, observatory: {} });
+  });
+
+  it('replaces the last status without calling curl or logging when Xray is stopped', () => {
+    const r = run(shell, { steps: ['status'], files: { 'vars.json': VARS, 'share/xray_connection_status.json': JSON.stringify(OBSERVATORY) } });
+    expect(r.status).toEqual({ v: 2, ok: false, ts: 1790000000, pid: 0, observatory: {} });
+    expect(r.events).toEqual(['status rc=0']);
+  });
+
+  it('keeps the observatory map that auto-fallback reads', () => {
+    const ok = run(shell, { steps: ['observatory'], files: { 'vars.json': VARS } });
+    expect(JSON.parse(ok.observatory ?? '')).toEqual(OBSERVATORY);
+    expect(ok.events).toContain('observatory rc=0');
+    const down = run(shell, { steps: ['observatory'] });
+    expect(down.events).toContain('observatory rc=1');
+  });
+
+  it.each([
+    ['leastPing', { strategy: { type: 'leastPing' } }, 0],
+    ['leastLoad in any letter case', { strategy: { type: 'LEASTLOAD' } }, 0],
+    ['random with a fallback outbound', { fallbackTag: 'direct' }, 0],
+    ['roundRobin with a fallback outbound', { strategy: { type: 'roundRobin' }, fallbackTag: 'direct' }, 0],
+    ['random without a fallback outbound', {}, 1],
+    ['roundRobin without a fallback outbound', { strategy: { type: 'roundRobin' } }, 1]
+  ])('loads the observatory for a %s balancer with both checks off', (_label, balancer, rc) => {
+    const r = run(shell, {
+      steps: ['required'],
+      env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' },
+      files: { 'opt/etc/xray/config.json': balancerConfig(balancer) }
+    });
+    expect(r.events).toEqual([`required rc=${rc}`]);
+  });
+
+  it.each([
+    ['observatory', { observatory: { subjectSelector: ['p-'] } }],
+    ['burstObservatory', { burstObservatory: { subjectSelector: ['p-'] } }]
+  ])('leaves a configuration with its own %s alone when both checks are off', (_label, extra) => {
+    const config = { ...JSON.parse(balancerConfig({ strategy: { type: 'leastPing' } })), ...extra };
+    const r = run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.events).toEqual(['required rc=1']);
+  });
+
+  it('writes only an observatory for the balancers that need it when both checks are off', () => {
+    const config = {
+      outbounds: [{ tag: 'p-a' }],
+      routing: {
+        balancers: [
+          { tag: 'fast', selector: ['p-', 'q-'], strategy: { type: 'leastPing' } },
+          { tag: 'safe', selector: 'r-,p-', fallbackTag: 'direct' },
+          { tag: 'loose', selector: ['z-'] }
+        ]
+      }
+    };
+    const r = run(shell, {
+      steps: ['apply'],
+      env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false', RS_PROBE_URL: 'https://probe.example/204', RS_PROBE_INTERVAL: '45' },
+      files: { 'opt/etc/xray/config.json': JSON.stringify(config) }
+    });
+    expect(r.apiConfig).toEqual({
+      observatory: { subjectSelector: ['p-', 'q-', 'r-'], probeUrl: 'https://probe.example/204', probeInterval: '45s', enableConcurrency: true }
+    });
+    expect(r.events).not.toContain('jq_update_file');
+    expect(r.events).toContain('apply rc=0');
+  });
+
+  it('writes the full API configuration and the metrics rule when the connection check is on', () => {
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/config.json': balancerConfig({ strategy: { type: 'leastPing' } }) } });
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, observatory: { subjectSelector: ['p-a'] }, metrics: { tag: 'sys:metrics_out' } });
+    expect(r.events).toContain('jq_update_file');
+  });
+
+  it('probes every outbound through the burstObservatory instead of adding an observatory', () => {
+    const burstObservatory = { subjectSelector: ['p-'], pingConfig: { destination: 'https://probe.example/204', interval: '30s', sampling: 3 } };
+    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct' }], burstObservatory };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig).not.toHaveProperty('observatory');
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, burstObservatory: { subjectSelector: ['direct', 'p-', 'p-a'], pingConfig: burstObservatory.pingConfig } });
+  });
+
+  it('keeps the burstObservatory selectors as written when only the clients check is on', () => {
+    const burstObservatory = { subjectSelector: ['p-'], pingConfig: { interval: '30s' } };
+    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct' }], burstObservatory };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig).not.toHaveProperty('observatory');
+    expect(r.apiConfig?.burstObservatory).toEqual(burstObservatory);
+  });
+
+  // #466: the clients check reads StatsService only, so it must not probe every outbound
+  it.each([
+    ['no balancer', {}],
+    ['a balancer that needs no probes', { routing: { balancers: [{ tag: 'bal', selector: ['p-'] }] } }]
+  ])('probes no outbound when only the clients check is on and there is %s', (_label, extra) => {
+    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'reserve' }], ...extra };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, metrics: { tag: 'sys:metrics_out' } });
+    expect(r.apiConfig).not.toHaveProperty('observatory');
+    expect(r.events).toContain('apply rc=0');
+  });
+
+  it('probes only the balancer selectors when only the clients check is on', () => {
+    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'reserve' }], routing: { balancers: [{ tag: 'fast', selector: ['p-'], strategy: { type: 'leastPing' } }] } };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' } });
+    expect(r.apiConfig?.observatory).toEqual(expect.objectContaining({ subjectSelector: ['p-'] }));
+  });
+
+  it('leaves a hand-written observatory alone when only the clients check is on', () => {
+    const config = { ...JSON.parse(balancerConfig({ strategy: { type: 'leastPing' } })), observatory: { subjectSelector: ['p-'] } };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' } });
+    expect(r.apiConfig).not.toHaveProperty('observatory');
+  });
+
+  // a leastPing balancer stops Xray from starting without an observatory, even one with nothing to probe
+  it('keeps the observatory with an empty selector list when the connection check has nothing to probe', () => {
+    const config = { outbounds: [{ tag: 'block', protocol: 'blackhole' }], routing: { balancers: [{ tag: 'bal', selector: ['block'], strategy: { type: 'leastPing' } }] } };
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/config.json': JSON.stringify(config) } });
+    expect(r.apiConfig?.observatory).toEqual(expect.objectContaining({ subjectSelector: [] }));
+  });
+
+  it('lists the clients that moved traffic since the last query', () => {
+    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/xrayui/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
+    expect(JSON.parse(r.clients ?? '')).toEqual([{ ip: '', email: ['alice@example'] }]);
+    expect(r.events).toEqual(['xray api statsquery -s 127.0.0.1:10085 -pattern user>>> -reset', 'clients rc=0']);
+  });
+
+  it('does not start an xray process while Xray is stopped', () => {
+    const r = run(shell, { steps: ['clients'], files: { 'opt/etc/xray/xrayui/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
+    expect(JSON.parse(r.clients ?? '')).toEqual([]);
+    expect(r.events).toEqual(['clients rc=0']);
+  });
+
+  it('writes an empty client list when the stats service does not answer', () => {
+    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/xrayui/config-api.json': CLIENTS_API_CONFIG } });
+    expect(JSON.parse(r.clients ?? '')).toEqual([]);
+    expect(r.events).toContain('ERROR: StatsService unreachable on 127.0.0.1:10085');
+  });
+
+  it('needs the API configuration when either check is on, and not without a configuration', () => {
+    expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'true', RS_CLIENTS_CHECK: 'false' } }).events).toEqual(['required rc=0']);
+    expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' } }).events).toEqual(['required rc=0']);
+    expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' } }).events).toEqual(['required rc=1']);
+  });
+});

@@ -1,0 +1,81 @@
+#!/bin/sh
+# shellcheck disable=SC2034  # codacy:Unused variables
+
+update() {
+
+    update_loading_progress "Updating $ADDON_TITLE..." 0
+
+    local specific_version=${1:-"latest"}
+    specific_version=${specific_version#v}
+
+    # reject anything outside the tag alphabet first: grep matches per line, so a newline would slip through
+    case "$specific_version" in
+    *[!0-9A-Za-z.-]*)
+        log_error "Invalid version requested: $specific_version"
+        return 1
+        ;;
+    esac
+
+    if [ "$specific_version" != "latest" ] && ! printf '%s\n' "$specific_version" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?([.-]?[A-Za-z0-9]+)*$'; then
+        log_error "Invalid version requested: $specific_version"
+        return 1
+    fi
+
+    local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz")
+
+    if [ "$specific_version" != "latest" ]; then
+
+        local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/asuswrt-merlin-stealthsurf.tar.gz")
+
+    fi
+
+    mkdir -p "$ADDON_TMP_DIR" 2>/dev/null
+    local temp_file="$ADDON_TMP_DIR/asuswrt-merlin-stealthsurf.tar.gz"
+    local jffs_addons_path="/jffs/addons"
+
+    log_info "Downloading the version:$specific_version..."
+    update_loading_progress "Downloading the version:$specific_version..."
+    if wget -q --show-progress -O "$temp_file" "$url"; then
+        log_info "Download completed successfully."
+    else
+        log_error "Failed to download the $specific_version version. Exiting."
+        return 1
+    fi
+
+    log_info "Cleaning up existing installation..."
+    if rm -rf "$ADDON_JFFS_ADN_DIR"; then
+        log_info "Old installation removed."
+    else
+        log_error "Failed to remove the old installation. Exiting."
+        return 1
+    fi
+
+    log_info "Extracting the package..."
+    update_loading_progress "Extracting the package..."
+    if tar -xzf "$temp_file" -C "$jffs_addons_path"; then
+        log_info "Extraction completed."
+    else
+        log_error "Failed to extract the package. Exiting."
+        return 1
+    fi
+
+    log_info "Setting up the script..."
+    update_loading_progress "Setting up the script..."
+    if mv "$ADDON_JFFS_ADN_DIR/stealthsurf" "$ADDON_SCRIPT" && chmod 0777 "$ADDON_SCRIPT"; then
+        log_ok "Script set up successfully."
+    else
+        log_error "Failed to set up the script. Exiting."
+        return 1
+    fi
+
+    log_info "Running the installation..."
+    update_loading_progress "Running the installation..."
+    if sh "$ADDON_SCRIPT" install; then
+        log_ok "Installation completed successfully."
+    else
+        log_error "Installation finished with errors. The details are above."
+        return 1
+    fi
+
+    log_ok "Update process completed!"
+}

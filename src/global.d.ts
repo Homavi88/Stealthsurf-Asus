@@ -1,0 +1,55 @@
+/* eslint-disable no-unused-vars */
+import { SubmitActions, EngineLoadingProgress, EngineGeoTags } from './modules/Engine';
+import { XrayRouterDeviceOnline } from './modules/Interfaces';
+
+export {};
+
+export interface XrayUiCustomSettings {
+  [key: string]: string;
+  xray_page: string;
+  xray_version: string;
+  xray_startup: string;
+}
+
+export interface XrayUiServer {
+  isRunning: boolean;
+  xray_version_latest: string;
+  b4sni_isRunning: boolean;
+}
+
+export interface XrayRouter {
+  cpu: number;
+  name: string;
+  ip: string;
+  language: string;
+  firmware: string;
+  features: unknown;
+  wan_ip: string;
+  devices: [[string, string]];
+  devices_online: Record<string, XrayRouterDeviceOnline>;
+}
+
+export interface XrayUiGlobal {
+  server: XrayUiServer;
+  router: XrayRouter;
+  commands: SubmitActions;
+  custom_settings: XrayUiCustomSettings;
+  geotags: EngineGeoTags;
+}
+
+declare global {
+  interface Window {
+    xray: XrayUiGlobal;
+    confirm: (message?: string) => boolean;
+    hint: (message: string) => void;
+    overlib: (message: string) => void;
+    show_menu: () => void;
+    showLoading: (delay?: number | null, flag?: string | EngineLoadingProgress) => void;
+    updateLoadingProgress: (progress?: EngineLoadingProgress) => void;
+    hideLoading: () => void;
+    LoadingTime: (seconds: number, flag?: string) => void;
+    showtext: (element: HTMLElement | null, text: string) => void;
+    y: number;
+    progress: number;
+  }
+}

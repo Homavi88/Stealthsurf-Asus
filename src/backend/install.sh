@@ -1,330 +1,443 @@
 #!/bin/sh
+# shellcheck disable=SC2034  # codacy:Unused variables
 
-ss_resolve_nvram() {
-  if [ -x /bin/nvram ]; then
-    echo /bin/nvram
-  elif [ -x /sbin/nvram ]; then
-    echo /sbin/nvram
-  elif [ -x /usr/sbin/nvram ]; then
-    echo /usr/sbin/nvram
-  else
-    echo ""
-  fi
-}
+check_jffs_ready() {
 
-ss_resolve_opkg() {
-  # Prefer absolute paths — busybox `command -v` is unreliable under curl|sh on some Merlin builds
-  if [ -x /opt/bin/opkg ]; then
-    echo /opt/bin/opkg
-  elif [ -x /opt/sbin/opkg ]; then
-    echo /opt/sbin/opkg
-  elif [ -x /opt/usr/bin/opkg ]; then
-    echo /opt/usr/bin/opkg
-  else
-    echo ""
-  fi
-}
-
-ss_check_jffs_ready() {
-  local nv
-  if [ ! -d /jffs ]; then
-    ss_error "/jffs not found — Asuswrt-Merlin with JFFS required"
-    return 1
-  fi
-  nv=$(ss_resolve_nvram)
-  if [ -n "$nv" ]; then
-    if [ "$("$nv" get jffs2_on 2>/dev/null)" = "0" ]; then
-      ss_error "JFFS partition disabled (nvram jffs2_on=0). Enable under Administration → System"
-      return 1
+    if [ "$(nvram get jffs2_on 2>/dev/null)" != "1" ]; then
+        log_error "JFFS partition is DISABLED (nvram jffs2_on=0)."
+        log_error "Enable it under Administration ▸ System, or run:"
+        log_error "    nvram set jffs2_on=1 && nvram commit && reboot"
+        exit 1
+    else
+        log_info "JFFS partition is ENABLED."
     fi
-    if [ "$("$nv" get jffs2_scripts 2>/dev/null)" = "0" ]; then
-      ss_error "JFFS custom scripts DISABLED. Enable: Administration → System → Enable JFFS custom scripts = Yes, then reboot"
-      return 1
+
+    if [ "$(nvram get jffs2_scripts 2>/dev/null)" != "1" ]; then
+        log_error "JFFS custom scripts and configs are DISABLED."
+        log_error "Enable it in the router UI (Administration ▸ System) or run:"
+        log_error "    nvram set jffs2_scripts=1 && nvram commit && reboot"
+        exit 1
+    else
+        log_info "JFFS custom scripts and configs are ENABLED."
     fi
-  fi
-  return 0
 }
 
-ss_require_entware() {
-  local opkg
-  export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
-  if [ -f /opt/etc/profile ]; then
-    # shellcheck disable=SC1091
-    . /opt/etc/profile 2>/dev/null || true
-    export PATH="/opt/bin:/opt/sbin:/sbin:/bin:/usr/sbin:/usr/bin:$PATH"
-  fi
-  opkg=$(ss_resolve_opkg)
-  if [ -z "$opkg" ]; then
-    ss_error "Entware/opkg not found (/opt/bin/opkg). Install Entware via amtm, then: stealthsurf install"
-    return 1
-  fi
-  SS_OPKG="$opkg"
-  return 0
+install() {
+
+    update_loading_progress "Installing $ADDON_TITLE..."
+    log_info "Starting $ADDON_TITLE installation process."
+
+    check_jffs_ready
+
+    load_xrayui_config
+
+    # Check for Entware
+    if [ ! -x /opt/bin/opkg ]; then
+        log_error "Entware is not installed or opkg binary is not accessible."
+        log_error "Please install Entware first: https://github.com/Entware/Entware/wiki/Install-on-ASUSWRT"
+        exit 1
+    fi
+    log_info "Entware is installed."
+
+    update_loading_progress "Installing dependencies..."
+
+    opkg update
+    opkg upgrade
+
+    install_opkg_package sed true
+    install_opkg_package curl false
+    install_opkg_package jq true
+    install_opkg_package iptables true
+    install_opkg_package net-tools-netstat false
+    install_opkg_package libopenssl false
+    install_opkg_package flock false
+    install_opkg_package logrotate false
+    install_opkg_package ipset false
+    install_opkg_package findutils false
+
+    if which base64 >/dev/null 2>&1; then
+        log_debug "base64 is already installed."
+    else
+        log_warn "base64 is not installed. Installing base64..."
+        install_opkg_package coreutils-base64 false
+    fi
+
+    if which xray >/dev/null 2>&1; then
+        log_info "Xray is already installed. Skipping xray-core installation."
+    else
+        # The tested core, not the newest: a newer core may silently ignore settings XRAYUI writes
+        log_warn "Xray is not installed. Installing xray-core $XRAYUI_TESTED_CORE, the version this $ADDON_TITLE release was tested with..."
+        if ! switch_xray_version "$XRAYUI_TESTED_CORE"; then
+            log_warn "Could not install xray-core $XRAYUI_TESTED_CORE. Trying the latest release instead..."
+            switch_xray_version "latest"
+        fi
+    fi
+
+    # xrayui config
+    if [ ! -f "$XRAYUI_CONFIG_FILE" ]; then
+
+        log_info "XRAYUI config file not found. Creating default config."
+
+        cat <<EOF >"$XRAYUI_CONFIG_FILE"
+geoip_url=
+geosite_url=
+logs_dir=$ADDON_LOGS_DIR
+EOF
+        chmod 600 "$XRAYUI_CONFIG_FILE"
+
+        log_info "Default XRAYUI config created successfully."
+    else
+        log_info "XRAYUI config file $XRAYUI_CONFIG_FILE found."
+    fi
+
+    generate_xray_config
+
+    update_loading_progress "Configuring XRAY UI..."
+
+    clear_script_entries
+
+    # Add or update nat-start
+    setup_script_file "/jffs/scripts/nat-start" "/jffs/scripts/stealthsurf service_event firewall configure #stealthsurf"
+    setup_script_file "/jffs/scripts/firewall-start" "/jffs/scripts/stealthsurf service_event firewall configure #stealthsurf"
+
+    # Add or update post-mount
+    setup_script_file "/jffs/scripts/post-mount" "/jffs/scripts/stealthsurf service_event startup & #stealthsurf"
+
+    # Add or update service-event
+    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && /jffs/scripts/stealthsurf service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #stealthsurf"
+
+    # Add or update dnsmasq.postconf
+    setup_script_file "/jffs/scripts/dnsmasq.postconf" "/jffs/scripts/stealthsurf dnsmasq \"\$1\" #stealthsurf"
+
+    log_info "Mounting web page..."
+    remount_ui "skipwait"
+
+    am_settings_set xray_version $XRAYUI_VERSION
+
+    xray_startup=$(am_settings_get xray_startup)
+    if [ -z "$xray_startup" ]; then
+        am_settings_set xray_startup "y"
+        log_warn "xray_startup was empty. Set to 'enabled'."
+    else
+        log_info "xray_startup already set. Skipping."
+    fi
+
+    mkdir -p $ADDON_USER_SCRIPTS_DIR
+
+    # Install and setup geodata builder
+    log_info "Installing XRAY UI geodata files builder..."
+
+    mkdir -p "$ADDON_SHARE_DIR" || log_error "Failed to create $ADDON_SHARE_DIR."
+    mkdir -p "$ADDON_TMP_DIR" || log_error "Failed to create $ADDON_TMP_DIR."
+
+    update_loading_progress "Downloading XRAYUI geodata files builder..."
+
+    # Companion tools stay upstream (XrayUI releases); only the addon tarball is ours.
+    local release_url=$(github_proxy_url "https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz")
+
+    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" "$release_url"; then
+        tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract xraydatbuilder.tar.gz."
+        rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || log_error "Failed to remove xraydatbuilder.tar.gz."
+        chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || log_error "Failed to make xraydatbuilder executable."
+    else
+        log_error "Failed to download XRAYUI geodata files builder."
+    fi
+
+    # Install and setup v2dat (reverse geofile data extractor)
+    log_info "Installing v2dat (reverse geofile data extractor)..."
+    update_loading_progress "Downloading v2dat..."
+    local v2dat_arch_name=$(version_get_arch_name "v2dat")
+    local v2dat_url=$(github_proxy_url "https://github.com/DanielLavrushin/v2dat/releases/latest/download/$v2dat_arch_name")
+    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/v2dat.tar.gz" "$v2dat_url"; then
+        tar -xzf "$ADDON_TMP_DIR/v2dat.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract v2dat.tar.gz."
+        rm -f "$ADDON_TMP_DIR/v2dat.tar.gz" || log_error "Failed to remove v2dat.tar.gz."
+        chmod +x "$ADDON_SHARE_DIR/v2dat" || log_error "Failed to make v2dat executable."
+    else
+        log_error "Failed to download v2dat."
+    fi
+
+    # Install and setup RTLS-SCANNER
+    log_info "Installing RTLS-SCANNER..."
+    local rtls_arch_name=$(version_get_arch_name "rtls-scanner")
+    update_loading_progress "Downloading RTLS-SCANNER..."
+    local rtls_scan_url=$(github_proxy_url "https://github.com/DanielLavrushin/rtls-scanner/releases/latest/download/$rtls_arch_name")
+    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/rtls-scanner.tar.gz" "$rtls_scan_url"; then
+        tar -xzf "$ADDON_TMP_DIR/rtls-scanner.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract rtls-scanner.tar.gz."
+        rm -f "$ADDON_TMP_DIR/rtls-scanner.tar.gz" || log_error "Failed to remove rtls-scanner.tar.gz."
+        chmod +x "$ADDON_SHARE_DIR/rtls-scanner" || log_error "Failed to make rtls-scanner executable."
+
+        local mmdb_url=$(github_proxy_url "https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb")
+        wget -q --show-progress --no-hsts -O "$ADDON_SHARE_DIR/Country.mmdb" "$mmdb_url"
+
+    else
+        log_error "Failed to download RTLS-SCANNER."
+    fi
+
+    # Install and setup B4SNI (reverse geofile data extractor)
+    log_info "Installing B4SNI..."
+    update_loading_progress "Downloading B4SNI..."
+    local b4sni_arch_name=$(version_get_arch_name "b4sni" "linux")
+    local b4sni_url=$(github_proxy_url "https://github.com/DanielLavrushin/b4sni/releases/latest/download/$b4sni_arch_name")
+    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/b4sni.tar.gz" "$b4sni_url"; then
+        tar -xzf "$ADDON_TMP_DIR/b4sni.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract b4sni.tar.gz."
+        rm -f "$ADDON_TMP_DIR/b4sni.tar.gz" || log_error "Failed to remove b4sni.tar.gz."
+        chmod +x "$ADDON_SHARE_DIR/b4sni" || log_error "Failed to make b4sni executable."
+    else
+        log_error "Failed to download b4sni ($b4sni_arch_name)."
+    fi
+
+    # setup logrotate
+    logrotate_setup
+
+    # setup cron jobs
+    log_info "Configuring cron jobs for $ADDON_TITLE"
+    cron_jobs_add
+
+    update_community_geodata
+
+    cleanup_stale_asdfiles
+
+    if [ -f "$XRAY_CONFIG_FILE" ]; then
+        log_info "Updating $XRAY_CONFIG_FILE config to version 0.55.1..."
+        jq_update_file "$XRAY_CONFIG_FILE" '
+          if .inbounds then .inbounds |= map(select(.tag != "sys:socks-in")) else . end
+        | .routing.rules //= []
+        | .routing.rules |= map(select(.name != "sys:connection-check"))
+      ' || log_warn "Could not update $XRAY_CONFIG_FILE; it was left unchanged."
+    fi
+
+    xrayui_core_forget
+    xrayui_core_probe
+    if [ -z "$(xrayui_core_version)" ]; then
+        log_error_box "Installation finished, but the Xray core is not available ($XRAYUI_CORE_ERR). Install it with: stealthsurf update xray $XRAYUI_TESTED_CORE"
+        update_loading_progress "Installation finished, but the Xray core is not available."
+        return 1
+    fi
+
+    # StealthSurf API caches + migrate keys from 1.0.x addon conf
+    ss_api_ensure_caches 2>/dev/null || true
+    ss_api_migrate_legacy_keys 2>/dev/null || true
+    ss_api_public_keys_view 2>/dev/null || true
+    ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
+    # Clear legacy 1.0.x service-event block if present (replaced by #stealthsurf hook)
+    if [ -f /jffs/scripts/service-event ] && grep -q 'StealthSurf UI hook' /jffs/scripts/service-event 2>/dev/null; then
+        awk '
+          /StealthSurf UI hook begin/ {skip=1; next}
+          skip && /StealthSurf UI hook end/ {skip=0; next}
+          skip {next}
+          {print}
+        ' /jffs/scripts/service-event >/tmp/stealthsurf_se.$$ && mv /tmp/stealthsurf_se.$$ /jffs/scripts/service-event
+        chmod 0755 /jffs/scripts/service-event 2>/dev/null || true
+    fi
+
+    log_ok "Installed $(show_version) (StealthSurf $XRAYUI_VERSION beta on XrayUI platform)"
+    log_box "Installation process completed successfully."
+
+    update_loading_progress "Installation completed successfully."
 }
 
-ss_install_opkg() {
-  local pkg="$1"
-  local critical="${2:-0}"
-  local opkg="${SS_OPKG:-}"
-  [ -n "$opkg" ] || opkg=$(ss_resolve_opkg)
-  [ -n "$opkg" ] || {
-    ss_error "opkg missing"
-    return 1
-  }
-  if "$opkg" list-installed 2>/dev/null | grep -q "^${pkg} "; then
-    return 0
-  fi
-  ss_info "Installing $pkg…"
-  if "$opkg" install "$pkg" >/dev/null 2>&1; then
-    ss_ok "Installed $pkg"
-    return 0
-  fi
-  if [ "$critical" = "1" ]; then
-    ss_error "Critical package $pkg failed to install"
-    return 1
-  fi
-  ss_warn "Could not install $pkg (continuing)"
-  return 0
-}
+uninstall() {
+    log_info "Starting XRAY UI uninstallation process."
 
-ss_install_deps() {
-  local need_opkg_update=0
-  local pkg
-  ss_require_entware || return 1
-  ss_info "Using opkg: ${SS_OPKG}"
+    # Stop XRAY service if running
+    if [ -f "$XRAY_PIDFILE" ]; then
+        log_info "Stopping XRAY service..."
+        stop
+        rm -f $XRAY_PIDFILE
+        log_info "XRAY service stopped."
+    else
+        log_warn "XRAY service is not running."
+    fi
 
-  # Addon self-update / remount: skip slow "opkg update" when critical pkgs exist.
-  # Fresh install or missing packages still refresh the index.
-  if [ "${SS_INSTALL_SKIP_OPKG_UPDATE:-0}" = "1" ]; then
-    need_opkg_update=0
-  elif [ "${SS_FORCE_OPKG_UPDATE:-0}" = "1" ]; then
-    need_opkg_update=1
-  else
-    for pkg in curl jq ca-certificates; do
-      if ! "$SS_OPKG" list-installed 2>/dev/null | grep -q "^${pkg} "; then
-        need_opkg_update=1
-        break
-      fi
+    # Remove XRAY UI files
+    log_info "Removing XRAY UI files..."
+    rm -rf "$ADDON_WEB_DIR" || log_warn "Failed to remove $ADDON_WEB_DIR."
+    rm -rf "$ADDON_JFFS_ADN_DIR" || log_warn "Failed to remove $ADDON_JFFS_ADN_DIR."
+    rm -rf "$ADDON_SHARE_DIR"/*.json || log_warn "Failed to remove $ADDON_SHARE_DIR/*.json."
+    rm -rf "$ADDON_SHARE_DIR/logs" || log_warn "Failed to remove $ADDON_SHARE_DIR/logs."
+
+    rm -rf "$ADDON_SHARE_DIR/rtls-scanner" || log_warn "Failed to remove $ADDON_SHARE_DIR/rtls-scanner."
+    rm -rf "$ADDON_SHARE_DIR/v2dat" || log_warn "Failed to remove $ADDON_SHARE_DIR/v2dat."
+
+    rm -rf "$ADDON_SHARE_DIR/Country.mmdb" || log_warn "Failed to remove $ADDON_SHARE_DIR/Country.mmdb."
+
+    rm -rf "$ADDON_SHARE_DIR/dnsmasq" || log_warn "Failed to remove $ADDON_SHARE_DIR/dnsmasq."
+    rm -rf "$ADDON_SHARE_DIR/tmp" || log_warn "Failed to remove $ADDON_SHARE_DIR/tmp."
+
+    if [ $? -eq 0 ]; then
+        log_info "XRAY UI files removed successfully."
+    else
+        log_error "Failed to remove XRAY UI files."
+        exit 1
+    fi
+
+    clear_script_entries
+
+    # Unmount UI
+    log_info "Unmounting XRAY UI..."
+    unmount_ui
+
+    if [ $? -eq 0 ]; then
+        log_info "XRAY UI unmounted successfully."
+    else
+        log_error "Failed to unmount XRAY UI."
+        exit 1
+    fi
+
+    # Remove XRAY custom settings
+    log_info "Removing XRAY custom settings..."
+
+    grep '^xray_' /jffs/addons/custom_settings.txt | while IFS='=' read -r var_name _; do
+        [ -n "$var_name" ] && am_settings_del "$var_name"
     done
-  fi
-  if [ "$need_opkg_update" = "1" ]; then
-    "$SS_OPKG" update >/dev/null 2>&1 || ss_warn "opkg update failed (continuing)"
-  else
-    ss_info "Critical opkg packages present — skipping opkg update"
-  fi
 
-  # Critical — same baseline as xrayui dataplane
-  ss_install_opkg curl 1 || return 1
-  ss_install_opkg jq 1 || return 1
-  ss_install_opkg ca-certificates 1 || return 1
+    log_info "Custom settings removed successfully."
 
-  # Dataplane helpers. Do NOT install Entware `iptables` when firmware already
-  # has one — Entware's binary in PATH breaks Merlin's own NAT/firewall.
-  for pkg in flock ipset unzip coreutils-base64 openssl-util findutils; do
-    ss_install_opkg "$pkg" 0
-  done
-  if ! ss_resolve_system_iptables >/dev/null 2>&1; then
-    ss_warn "No system iptables found — installing Entware iptables as last resort"
-    ss_install_opkg iptables 0
-  else
-    ss_info "Using firmware iptables ($(ss_resolve_system_iptables)) — skipping Entware iptables"
-  fi
-  # Optional quality-of-life
-  for pkg in logrotate net-tools-netstat; do
-    ss_install_opkg "$pkg" 0
-  done
-}
+    # Remove XRAY UI shared files
+    log_info "Removing XRAY UI geodata files builder..."
+    rm -rf "$ADDON_SHARE_DIR/xraydatbuilder" || log_debug "Failed to remove $ADDON_SHARE_DIR/xraydatbuilder."
 
-ss_hook_line_ensure() {
-  # ss_hook_line_ensure <file> <match_grep> <line_to_append>
-  local f="$1"
-  local match="$2"
-  local line="$3"
-  if [ ! -f "$f" ]; then
-    printf '#!/bin/sh\n' >"$f"
-    chmod 0755 "$f"
-  elif ! head -n1 "$f" | grep -qx '#!/bin/sh'; then
-    ss_warn "$f is missing #!/bin/sh shebang"
-  fi
-  if ! grep -qF "$match" "$f" 2>/dev/null; then
-    printf '\n%s\n' "$line" >>"$f"
-  fi
-  chmod 0755 "$f" 2>/dev/null || true
-}
+    echo
+    log_warn "Do you want to remove custom GEODATA? (yes/no)"
+    read -r user_input
 
-ss_hook_scripts() {
-  # services-start: mount UI early; autostart is fallback only
-  ss_hook_line_ensure /jffs/scripts/services-start \
-    "$ADDON_TAG mount_ui" \
-    "/jffs/scripts/$ADDON_TAG mount_ui >/dev/null 2>&1 #stealthsurf"
-  ss_hook_line_ensure /jffs/scripts/services-start \
-    "$ADDON_TAG autostart" \
-    "/jffs/scripts/$ADDON_TAG autostart >/dev/null 2>&1 #stealthsurf"
+    if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
+        log_info "Removing custom GEODATA..."
+        rm -rf "$ADDON_SHARE_DIR" || log_debug "Failed to remove $ADDON_SHARE_DIR."
 
-  # post-mount: Entware USB ready — primary startup (xrayui pattern)
-  ss_hook_line_ensure /jffs/scripts/post-mount \
-    "$ADDON_TAG startup" \
-    "/jffs/scripts/$ADDON_TAG startup >/dev/null 2>&1 #stealthsurf"
-
-  # nat-start / firewall-start / wan-start: restore transparent rules
-  ss_hook_line_ensure /jffs/scripts/nat-start \
-    "$ADDON_TAG firewall-restore" \
-    "/jffs/scripts/$ADDON_TAG firewall-restore >/dev/null 2>&1 #stealthsurf"
-  ss_hook_line_ensure /jffs/scripts/firewall-start \
-    "$ADDON_TAG firewall-restore" \
-    "/jffs/scripts/$ADDON_TAG firewall-restore >/dev/null 2>&1 #stealthsurf"
-  ss_hook_line_ensure /jffs/scripts/wan-start \
-    "$ADDON_TAG wan-up" \
-    "/jffs/scripts/$ADDON_TAG wan-up >/dev/null 2>&1 #stealthsurf"
-
-  # dnsmasq.postconf
-  ss_hook_line_ensure /jffs/scripts/dnsmasq.postconf \
-    "$ADDON_TAG dnsmasq-configure" \
-    "/jffs/scripts/$ADDON_TAG dnsmasq-configure \"\$1\" >/dev/null 2>&1 #stealthsurf"
-}
-
-ss_remove_hook_scripts() {
-  local f
-  for f in /jffs/scripts/services-start /jffs/scripts/post-mount \
-    /jffs/scripts/nat-start /jffs/scripts/firewall-start \
-    /jffs/scripts/wan-start /jffs/scripts/dnsmasq.postconf; do
-    [ -f "$f" ] || continue
-    grep -v "$ADDON_TAG" "$f" >"$f.ss.$$" 2>/dev/null && mv "$f.ss.$$" "$f"
-    chmod 0755 "$f" 2>/dev/null || true
-  done
-}
-
-ss_install() {
-  # Addon-only remount (post ss_update_self): SS_INSTALL_REMOUNT=1 skips geoip refresh,
-  # opkg index update, and a redundant GitHub version check. Fresh `ssurf install` is unchanged.
-  local remount="${SS_INSTALL_REMOUNT:-0}"
-  ss_check_jffs_ready || return 1
-  ss_ensure_dirs
-  if [ "$remount" = "1" ]; then
-    SS_INSTALL_SKIP_OPKG_UPDATE=1
-    export SS_INSTALL_SKIP_OPKG_UPDATE
-  fi
-  ss_install_deps || return 1
-
-  if [ "$remount" = "1" ]; then
-    # Keep existing Xray binary — do not re-download from GitHub during addon update.
-    if ss_xray_resolve_bin; then
-      ss_xray_status_json >/dev/null 2>&1 || true
+        #Remove XRAY custom geodata
+        rm -rf /opt/sbin/xrayui /opt/sbin/stealthsurf || log_debug "Failed to remove geodata helper binary."
+        rm -rf /opt/sbin/geosite.dat || log_debug "Failed to remove /opt/sbin/geosite.dat."
+        rm -rf /opt/sbin/geoip.dat || log_debug "Failed to remove /opt/sbin/geoip.dat."
     else
-      ss_warn "Xray not found after addon update — run: ssurf xray"
+        log_info "Keeping custom GEODATA."
     fi
-  else
-    ss_ensure_xray || ss_warn "Xray not installed yet — run: stealthsurf install-xray"
-  fi
+    user_input=""
 
-  # Geodata is separate from the addon package. Refresh only when missing/forced,
-  # or on a full fresh install. Explicit: ssurf geo / UI «Обновить geoip/geosite».
-  if [ "${SS_FORCE_GEODATA:-0}" = "1" ]; then
-    ss_geodata_update || true
-  elif [ "$remount" = "1" ]; then
-    if [ -s "${GEOIP_DAT:-}" ] && [ -s "${GEOSITE_DAT:-}" ]; then
-      ss_info "Keeping existing geoip/geosite (addon update) — refresh: ssurf geo"
+    # Ask user if they want to remove backups
+    echo
+    log_warn "Do you want to remove BACKUPS? (yes/no)"
+    read -r user_input
+
+    if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
+        log_info "Removing  BACKUPS..."
+        backup_clear
     else
-      ss_warn "Geodata missing after addon update — fetching once"
-      ss_geodata_update || true
+        log_info "Keeping  BACKUPS."
     fi
-  elif [ -s "${GEOIP_DAT:-}" ] && [ -s "${GEOSITE_DAT:-}" ]; then
-    ss_info "Keeping existing geoip/geosite — refresh: ssurf geo"
-  else
-    ss_geodata_update || true
-  fi
+    user_input=""
 
-  if [ ! -f "$SS_CONF_FILE" ]; then
-    SS_API_KEY=""
-    SS_ACTIVE_CONFIG_ID=""
-    # Safe default: proxy only (SOCKS/HTTP). Transparent redirect/tproxy is opt-in
-    # via UI/CLI — installing must never hijack LAN and kill internet.
-    SS_MODE="proxy"
-    SS_PROXY_MODE="proxy"
-    SS_DNS_MODE="OFF"
-    SS_AUTO_START="1"
-    ss_save_conf
-  fi
+    # Ask user if they want to remove XRAY (opkg) and its configs
+    echo
+    log_warn "Do you want to remove XRAY (installed via opkg) and its configurations? (yes/no)"
+    read -r user_input
 
-  # Older builds defaulted to redirect even with no outbounds — that blackholes LAN.
-  # On upgrade/reinstall with nothing applied yet, force safe proxy + clear leftover rules.
-  if [ -z "${SS_ENABLED_OUTBOUNDS:-}" ] && [ -z "${SS_ACTIVE_CONFIG_ID:-}" ]; then
-    case "${SS_MODE:-proxy}" in
-    redirect | tproxy)
-      ss_warn "No outbounds configured but mode=$SS_MODE — switching to proxy to protect internet"
-      SS_MODE="proxy"
-      SS_PROXY_MODE="proxy"
-      ss_save_conf
-      ss_cleanup_firewall 2>/dev/null || true
-      ;;
-    esac
-  fi
+    if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
+        # Remove XRAY from Entware if installed
+        if opkg list-installed | grep -q '^xray$'; then
+            log_info "Removing XRAY from Entware..."
+            if opkg remove xray; then
+                log_info "XRAY removed successfully."
+            else
+                log_error "Failed to remove XRAY."
+                exit 1
+            fi
+        else
+            log_info "XRAY is not installed."
+        fi
 
-  ss_policies_init
-  ss_load_outbounds_meta
+        rm -f /opt/sbin/xray || log_debug "Failed to remove /opt/sbin/xray."
+        rm -f /opt/sbin/geoip.dat || log_debug "Failed to remove /opt/sbin/geoip.dat."
+        rm -f /opt/sbin/geosite.dat || log_debug "Failed to remove /opt/sbin/geosite.dat."
 
-  chmod 0755 "$ADDON_SCRIPT" 2>/dev/null
-  ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
-  # Short CLI name (avoid /opt/bin/ss — conflicts with iproute2)
-  ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
+        # Remove XRAY configuration files
+        log_info "Removing XRAY configuration files..."
+        rm -rf /opt/etc/xray || log_debug "Failed to remove /opt/etc/xray."
+        if [ $? -eq 0 ]; then
+            log_info "XRAY configuration files removed successfully."
+        else
+            log_error "Failed to remove XRAY configuration files."
+            exit 1
+        fi
+    else
+        log_info "Keeping XRAY and its configuration files."
+    fi
 
-  ss_hook_scripts
-  ss_install_service_event_hook
-  ss_install_cron
-  ss_mount_ui
-  ss_write_state full
-  ss_version_local >/dev/null 2>&1 || true
-  # Remount path refreshes version.json in ss_update_self — skip extra GitHub round-trip here.
-  if [ "$remount" != "1" ]; then
-    ss_version_check >/dev/null 2>&1 || true
-  fi
-  ss_ok "$ADDON_TITLE $ADDON_VERSION installed. Open VPN → StealthSurf after re-login."
-  ss_info "Hooks: services-start, post-mount, nat-start, firewall-start, wan-start, dnsmasq.postconf, service-event"
+    # Ask user to remove xrayui settings
+    echo
+    log_warn "Do you want to remove StealthSurf settings ($XRAYUI_CONFIG_FILE)? (yes/no)"
+    read -r user_input
+    if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
+        log_info "Removing StealthSurf settings..."
+        rm -f "$XRAYUI_CONFIG_FILE" /opt/etc/stealthsurf.conf /opt/etc/xrayui.conf || log_debug "Failed to remove settings conf."
+    else
+        log_info "Keeping StealthSurf settings ($XRAYUI_CONFIG_FILE)."
+    fi
+
+    cron_jobs_clear
+
+    rm -rf /opt/etc/logrotate.d/stealthsurf /opt/etc/logrotate.d/xrayui || log_debug "Failed to remove logrotate config."
+    rm -rf /jffs/scripts/stealthsurf || log_debug "Failed to remove /jffs/scripts/stealthsurf."
+
+    log_box "Uninstallation process completed successfully."
 }
 
-ss_uninstall() {
-  # Full removal from the router: stop dataplane, strip hooks/cron/UI/files.
-  ss_info "Full uninstall of $ADDON_TITLE…"
-  ss_activity "uninstall.start" ""
-  if type ss_stop_all_runtimes >/dev/null 2>&1; then
-    ss_stop_all_runtimes 2>/dev/null || true
-  fi
-  ss_stop 2>/dev/null || true
-  ss_desired_clear 2>/dev/null || true
-  ss_cleanup_firewall 2>/dev/null || true
-  ss_dnsmasq_cleanup 2>/dev/null || true
-  ss_dnsmasq_restart 2>/dev/null || true
-  ss_unmount_ui 2>/dev/null || true
-  ss_remove_service_event_hook 2>/dev/null || true
-  ss_remove_hook_scripts 2>/dev/null || true
-  ss_remove_cron 2>/dev/null || true
-  # leftover Telegram bot pid (feature removed)
-  if [ -f /var/run/stealthsurf-telegram.pid ]; then
-    kill "$(cat /var/run/stealthsurf-telegram.pid 2>/dev/null)" 2>/dev/null || true
-  fi
+install_opkg_package() {
+    local package="$1"
+    local critical=$2
+    # Check for jq
+    if ! opkg list-installed | grep "$package -"; then
+        log_info "$package is not installed. Installing $package..."
+        if opkg install $package; then
+            log_info "$package installed successfully."
+        else
+            if [ "$critical" = true ]; then
+                log_error "Critical package $package failed to install. Exiting."
+                exit 1
+            else
+                log_warn "Non-critical package $package failed to install. Continuing."
+            fi
+        fi
+    else
+        log_info "$package is already installed."
+    fi
+}
 
-  # Symlinks and addon-owned paths
-  rm -f "/opt/bin/$ADDON_TAG" "/opt/bin/ssurf"
-  rm -f "/opt/sbin/$ADDON_TAG" 2>/dev/null
-  rm -rf "$ADDON_JFFS_ADN_DIR" "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR"
-  rm -rf "$ADDON_BACKUP_DIR" 2>/dev/null
-  rm -f "$XRAY_CONFIG_FILE" "$XRAY_PIDFILE"
-  rm -f "$SS_CONF_FILE"
-  rm -f "$ADDON_SCRIPT"
-  rm -f /opt/etc/stealthsurf-hysteria.yaml* 2>/dev/null
-  rm -rf /opt/etc/stealthsurf-wg 2>/dev/null
-  rm -f "$SS_DESIRED_STATE_FILE" "$SS_STARTUP_LOCK" 2>/dev/null
-  rm -f /tmp/stealthsurf_payload.json /tmp/stealthsurf-service-event.log 2>/dev/null
-  rm -f /tmp/stealthsurf.desired /tmp/stealthsurf.lock 2>/dev/null
-  rm -f /tmp/stealthsurf-xray-test.log 2>/dev/null
-  rm -f /var/run/stealthsurf-telegram.pid /tmp/stealthsurf-tg-cmd.out 2>/dev/null
-  # Hysteria binary downloaded by the addon (leave shared Xray untouched)
-  rm -f /opt/sbin/hysteria /opt/bin/hysteria 2>/dev/null
+setup_script_file() {
 
-  # Menu entry leftovers under www user
-  rm -rf "/www/user/$ADDON_TAG" 2>/dev/null
+    local script_file="$1"
+    local command_entry="$2"
 
-  ss_activity "uninstall.done" "full"
-  ss_ok "Fully uninstalled $ADDON_TITLE (hooks, cron, UI, data, iptables cleaned)"
-  ss_info "Xray binary under /opt was left in place (may be shared). Remove manually if unused."
+    log_debug "Scritpt file: $script_file"
+    log_debug "Command entry: $command_entry"
+
+    if [ ! -f "$script_file" ]; then
+        printf '#!/bin/sh\n\n' >"$script_file"
+    else
+        if ! head -n1 "$script_file" | grep -qx '#!/bin/sh'; then
+            log_error "$script_file is missing the she-bang (#!/bin/sh)"
+        fi
+    fi
+
+    if ! grep -Fqx -- "$command_entry" "$script_file"; then
+        echo "$command_entry" >>"$script_file" || {
+            log_error "Failed to add command entry to $script_file"
+            return 1
+        }
+    fi
+
+    chmod +x "$script_file"
+    log_info "Updated $script_file with $ADDON_TITLE command entry."
+}
+
+clear_script_entries() {
+
+    log_info "Removing existing $ADDON_TITLE entries from scripts."
+    sed '/#stealthsurf/d' /jffs/scripts/services-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/services-start && chmod +x /jffs/scripts/services-start || log_debug "Failed to remove entry from /jffs/scripts/services-start."
+    sed '/#stealthsurf/d' /jffs/scripts/nat-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/nat-start && chmod +x /jffs/scripts/nat-start || log_debug "Failed to remove entry from /jffs/scripts/nat-start."
+    sed '/#stealthsurf/d' /jffs/scripts/firewall-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/firewall-start && chmod +x /jffs/scripts/firewall-start || log_debug "Failed to remove entry from /jffs/scripts/firewall-start."
+    sed '/#stealthsurf/d' /jffs/scripts/post-mount >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/post-mount && chmod +x /jffs/scripts/post-mount || log_debug "Failed to remove entry from /jffs/scripts/post-mount."
+    sed '/#stealthsurf/d' /jffs/scripts/service-event >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
+    sed '/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
+    sed '/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
 }

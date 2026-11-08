@@ -1,0 +1,272 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
+/* eslint-disable security/detect-object-injection */
+import { IProtocolType } from './Interfaces';
+import {
+  XrayTrojanServerObject,
+  XrayHttpServerObject,
+  XrayStreamSettingsObject,
+  XraySocksServerObject,
+  XrayVmessServerObject,
+  XrayNoiseObject,
+  XrayShadowsocksServerObject,
+  XrayPeerObject,
+  XrayVlessServerObject,
+  isObjectEmpty
+} from './CommonObjects';
+import { plainToInstance } from 'class-transformer';
+import { XrayVlessClientObject, XrayVmessClientObject } from './ClientsObjects';
+import { coreSupports } from './CoreVersion';
+
+export interface SubPoolMetadata {
+  enabled: boolean;
+  active?: string;
+  origin?: string;
+}
+
+export class XrayOutboundObject<TProxy extends IProtocolType> {
+  public protocol!: string;
+  public sendThrough? = '0.0.0.0';
+  public tag?: string;
+  public surl?: string;
+  public subPool?: SubPoolMetadata;
+  public settings?: TProxy;
+
+  public streamSettings?: XrayStreamSettingsObject = new XrayStreamSettingsObject();
+
+  constructor(protocol: string | undefined = undefined, settings: TProxy | undefined = undefined) {
+    if (protocol && settings) {
+      this.settings = settings;
+      this.protocol = protocol;
+      this.tag = 'obd-' + this.protocol;
+    }
+  }
+
+  public isSystem = (): boolean => {
+    return this.tag?.startsWith('sys:') ?? false;
+  };
+
+  normalize = (): this | undefined => {
+    this.sendThrough = this.sendThrough === '0.0.0.0' ? undefined : this.sendThrough;
+    this.tag = this.tag === '' ? undefined : this.tag;
+    if (this.subPool && !this.subPool.enabled) {
+      this.subPool = undefined;
+    }
+
+    this.streamSettings = plainToInstance(XrayStreamSettingsObject, this.streamSettings);
+    this.streamSettings = this.streamSettings ? this.streamSettings.normalize() : undefined;
+    if (this.surl && this.streamSettings) {
+      this.streamSettings.realitySettings = undefined;
+      this.streamSettings.tlsSettings = undefined;
+      this.settings = undefined;
+    } else {
+      if (this.settings && typeof (this.settings as any).normalize === 'function') {
+        this.settings = (this.settings as any).normalize();
+      }
+    }
+
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XrayVlessOutboundObject implements IProtocolType {
+  public vnext: XrayVlessServerObject[] = [];
+
+  constructor() {
+    if (this.vnext.length === 0) this.vnext.push(new XrayVlessServerObject());
+  }
+
+  isTargetAddress = (address: string) => {
+    return this.vnext.find((server) => server.address === address) !== undefined;
+  };
+  getUserNames = (): string[] => {
+    return this.vnext.flatMap((c) => c.users?.map((u) => u.email).filter((email): email is string => !!email) ?? []);
+  };
+
+  normalize = (): this | undefined => {
+    this.vnext.forEach((server) => {
+      server.users?.forEach((u, i) => {
+        const normalized = plainToInstance(XrayVlessClientObject, u).normalize();
+        server.users![i] = normalized;
+      });
+    });
+
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XrayVmessOutboundObject implements IProtocolType {
+  public vnext: XrayVmessServerObject[] = [];
+  constructor() {
+    if (this.vnext.length === 0) this.vnext.push(new XrayVmessServerObject());
+  }
+
+  isTargetAddress = (address: string) => {
+    return this.vnext.find((server) => server.address === address) !== undefined;
+  };
+  getUserNames = (): string[] => {
+    return this.vnext.flatMap((c) => c.users?.map((u) => u.email).filter((email): email is string => !!email) ?? []);
+  };
+
+  normalize = (): this | undefined => {
+    this.vnext.forEach((server) => {
+      server.users?.forEach((u, i) => {
+        const normalized = plainToInstance(XrayVmessClientObject, u).normalize();
+        server.users![i] = normalized;
+      });
+    });
+
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XrayBlackholeOutboundObject implements IProtocolType {
+  public response?: { type: string } = { type: 'none' }; // none, http
+  normalize = (): this | undefined => {
+    this.response = this.response?.type === 'none' ? undefined : this.response;
+
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XrayHttpOutboundObject implements IProtocolType {
+  public servers: XrayHttpServerObject[] = [];
+  constructor() {
+    if (this.servers.length === 0) this.servers.push(new XrayHttpServerObject());
+  }
+
+  isTargetAddress = (address: string) => {
+    return this.servers.find((server) => server.address === address) !== undefined;
+  };
+  getUserNames = (): string[] => {
+    return this.servers.flatMap((c) => c.users?.map((u) => u.user).filter((email): email is string => !!email) ?? []);
+  };
+}
+export class XrayShadowsocksOutboundObject implements IProtocolType {
+  public servers: XrayShadowsocksServerObject[] = [];
+  constructor() {
+    if (this.servers.length === 0) this.servers.push(new XrayShadowsocksServerObject());
+  }
+
+  getUserNames = (): string[] => {
+    return this.servers.flatMap((c) => c.users?.map((u) => u.email).filter((email): email is string => !!email) ?? []);
+  };
+
+  normalize = (): this | undefined => {
+    // Xray-core 26.6.22 removed `uot`: from each server, and from settings itself in the short form (`address`, `port`, … without `servers`).
+    [this as { uot?: boolean }, ...this.servers].forEach((target) => {
+      target.uot = target.uot && coreSupports('ssUot') ? true : undefined;
+    });
+    return this;
+  };
+}
+
+export class XrayTrojanOutboundObject implements IProtocolType {
+  public servers: XrayTrojanServerObject[] = [];
+  constructor() {
+    if (this.servers.length === 0) this.servers.push(new XrayTrojanServerObject());
+  }
+
+  isTargetAddress = (address: string) => {
+    return this.servers.find((server) => server.address === address) !== undefined;
+  };
+  getUserNames = (): string[] => {
+    return this.servers.flatMap((c) => c.users?.map((u) => u.user).filter((email): email is string => !!email) ?? []);
+  };
+}
+
+export class XrayWireguardOutboundObject implements IProtocolType {
+  static readonly strategyOptions = ['ForceIPv6v4', 'ForceIPv6', 'ForceIPv4v6', 'ForceIPv4', 'ForceIP'];
+  public secretKey!: string;
+  public address: string[] = [];
+  public peers: XrayPeerObject[] = [];
+  public mtu = 1420;
+  public reserved?: number[];
+  public noKernelTun?: boolean;
+
+  public domainStrategy? = 'ForceIP';
+
+  normalize = (): this | undefined => {
+    this.noKernelTun = this.noKernelTun ? true : undefined;
+    this.domainStrategy = coreSupports('wgDomainStrategy') ? this.domainStrategy : undefined;
+    // Xray-core 26.6.22 removed `workers`; configs saved by older StealthSurf versions still carry it.
+    delete (this as { workers?: number }).workers;
+    return this;
+  };
+}
+
+export class XrayLoopbackOutboundObject implements IProtocolType {
+  public inboundTag!: string;
+  normalize = (): this | undefined => {
+    return this;
+  };
+}
+
+export class XrayFreedomOutboundObject implements IProtocolType {
+  static readonly strategyOptions = ['AsIs', 'UseIP', 'UseIPv4', 'UseIPv6'];
+  static readonly fragmentOptions = ['1-3', 'tlshello'];
+  public domainStrategy? = 'AsIs';
+  public redirect? = '';
+  public fragment?: { packets: string; length: string; interval: string } | null = { packets: '', length: '100-200', interval: '10-20' };
+  public noises?: XrayNoiseObject[] = [];
+  public proxyProtocol? = 0; // 0: off, 1, 2
+
+  normalize = (): this | undefined => {
+    this.domainStrategy = this.domainStrategy === 'AsIs' ? undefined : this.domainStrategy;
+    this.fragment = this.fragment?.packets === '' ? undefined : this.fragment;
+    this.redirect = this.redirect === '' ? undefined : this.redirect;
+    this.noises = !this.noises || this.noises.length === 0 ? undefined : this.noises;
+    this.proxyProtocol = this.proxyProtocol === 0 ? undefined : this.proxyProtocol;
+
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XrayDnsOutboundObject implements IProtocolType {
+  public address?: string;
+  public port?: number;
+  public network?: string = 'tcp';
+  public nonIPQuery? = 'drop';
+
+  normalize = (): this | undefined => {
+    this.address = !this.address || this.address === '' ? undefined : this.address;
+    this.network = this.network && this.network !== 'tcp' ? this.network : undefined;
+    this.port = !this.port || this.port === 0 ? undefined : this.port;
+    this.nonIPQuery = this.nonIPQuery === 'drop' ? undefined : this.nonIPQuery;
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}
+
+export class XraySocksOutboundObject implements IProtocolType {
+  public servers: XraySocksServerObject[] = [];
+  constructor() {
+    if (this.servers.length === 0) this.servers.push(new XraySocksServerObject());
+  }
+
+  isTargetAddress = (address: string) => {
+    return this.servers.find((server) => server.address === address) !== undefined;
+  };
+  getUserNames = (): string[] => {
+    return this.servers.flatMap((c) => c.users?.map((u) => u.user).filter((email): email is string => !!email) ?? []);
+  };
+
+  normalize = (): this | undefined => {
+    return this;
+  };
+}
+
+export class XrayHysteriaOutboundObject implements IProtocolType {
+  public version? = 2;
+  public address!: string;
+  public port!: number;
+
+  constructor() {
+    this.version = 2;
+    this.address = '';
+    this.port = 443;
+  }
+
+  normalize = (): this | undefined => {
+    return isObjectEmpty(this) ? undefined : this;
+  };
+}

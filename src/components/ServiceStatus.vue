@@ -1,0 +1,142 @@
+<template>
+  <table width="100%" class="FormTable">
+    <thead>
+      <tr>
+        <td colspan="2">
+          {{ $t('com.ClientStatus.configuration') }}
+          <xray-version></xray-version>
+        </td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <th>{{ $t('com.ClientStatus.connection_status') }}</th>
+        <td>
+          <span class="label" :class="connectionClasses" v-text="statusLabel"></span>
+          <span v-if="!isRunning">
+            <a class="button_gen button_gen_small button_info" href="#" @click.prevent="testConfig()" title="try to retrieve a server-side error">!</a>
+          </span>
+          <span class="row-buttons">
+            <a v-if="!isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(connect)">{{ $t('labels.start') }} </a>
+            <a v-if="isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(reconnect)">{{ $t('labels.restart') }} </a>
+            <a v-if="isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(stop)">{{ $t('labels.stop') }}</a>
+            <input class="button_gen button_gen_small" type="button" :value="$t('labels.show_config')" @click.prevent="show_config_modal()" />
+          </span>
+          <config-modal ref="configModal" />
+        </td>
+      </tr>
+      <profiles />
+      <process-uptime />
+      <import-config v-model:config="config" />
+      <tr>
+        <th>{{ $t('com.ClientStatus.general_options') }}</th>
+        <td>
+          <span class="row-buttons">
+            <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click.prevent="manage_general_options()" v-show="uiResponse?.xray" />
+          </span>
+          <general-options-modal ref="generalOptionsModal" v-model:config="config"></general-options-modal>
+        </td>
+      </tr>
+      <backup />
+    </tbody>
+  </table>
+</template>
+
+<script lang="ts">
+  import { defineComponent, ref, computed, inject, Ref } from 'vue';
+  import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+  import GeneralOptionsModal from '@modal/GeneralOptionsModal.vue';
+  import ImportConfig from './ImportConfig.vue';
+  import { XrayObject } from '@/modules/XrayConfig';
+  import ConfigModal from '@modal/ConfigModal.vue';
+  import { useI18n } from 'vue-i18n';
+  import ProcessUptime from './ProcessUptime.vue';
+  import XrayVersion from './XrayVersion.vue';
+  import Profiles from './Profiles.vue';
+  import Backup from './Backup.vue';
+
+  export default defineComponent({
+    name: 'ServiceStatus',
+    components: {
+      GeneralOptionsModal,
+      ImportConfig,
+      ConfigModal,
+      ProcessUptime,
+      XrayVersion,
+      Profiles,
+      Backup
+    },
+    props: {
+      config: {
+        type: XrayObject,
+        required: true
+      }
+    },
+    computed: {
+      statusLabel(): string {
+        return this.isRunning ? this.$t('com.ClientStatus.xray_running') : this.$t('com.ClientStatus.xray_stopped');
+      }
+    },
+    setup(props) {
+      const { t } = useI18n();
+      const config = ref(props.config);
+      const configModal = ref();
+      const generalOptionsModal = ref();
+      const connectionStationLabel = ref<string>(t('com.ClientStatus.xray_running'));
+      const connectionClasses = computed(() => ({
+        'label-success': isRunning.value,
+        'label-error': !isRunning.value
+      }));
+
+      const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
+
+      const isRunning = ref<boolean>(window.xray.server.isRunning);
+
+      const show_config_modal = () => {
+        configModal.value.show();
+      };
+
+      const manage_general_options = () => {
+        generalOptionsModal.value.show();
+      };
+
+      const testConfig = async () => {
+        let delay = 1000;
+        window.showLoading(delay);
+        await engine.submit(SubmitActions.serverTestConfig, null, delay);
+        let users = await engine.getXrayResponse();
+        window.hideLoading();
+        alert(users.xray?.test.replace(/\\"/g, '"'));
+      };
+
+      const handleStatus = async (action: string) => {
+        if (engine.hasUnappliedChanges(config.value) && !window.confirm(t('com.ClientStatus.confirm_unapplied_changes'))) return;
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(action);
+        });
+      };
+
+      return {
+        config,
+        configModal,
+        isRunning,
+        connectionClasses,
+        connectionStationLabel,
+        generalOptionsModal,
+        connect: SubmitActions.serverStart,
+        reconnect: SubmitActions.serverRestart,
+        stop: SubmitActions.serverStop,
+        uiResponse,
+        show_config_modal,
+        manage_general_options,
+        testConfig,
+        handleStatus
+      };
+    }
+  });
+</script>
+<style scoped>
+  .FormTable td span.label.flag {
+    margin-left: 5px;
+  }
+</style>

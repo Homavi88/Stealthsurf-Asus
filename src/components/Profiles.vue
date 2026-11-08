@@ -1,0 +1,129 @@
+<template>
+  <tr>
+    <th>
+      {{ $t('com.Profiles.manager') }}
+      <hint v-html="$t('com.Profiles.hint')"></hint>
+    </th>
+    <td>
+      <select v-model="profile" class="input_option" @change="change_profile()" v-if="profile">
+        <option v-for="p in profiles" :value="p" :key="p">{{ p.replace('.json', '') }}</option>
+      </select>
+      <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click.prevent="manage()" />
+      <modal ref="modal" :title="$t('com.Profiles.modal_title')" width="400">
+        <table class="FormTable modal-form-table">
+          <tbody>
+            <tr v-for="p in profiles" :key="p">
+              <td>{{ p }}</td>
+              <td>
+                <input
+                  v-if="uiResponse.xray && p !== uiResponse.xray.profile"
+                  class="button_gen button_gen_small"
+                  type="button"
+                  value="&#10005;"
+                  :title="$t('labels.delete')"
+                  @click.prevent="deleteProfile(p)"
+                />
+              </td>
+            </tr>
+            <tr>
+              <td>
+                <input v-model="profile_name" class="input_25_table" placeholder="new profile name" />
+              </td>
+              <td>
+                <input class="button_gen button_gen_small" type="button" :value="$t('labels.add')" @click.prevent="add" />
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </modal>
+    </td>
+  </tr>
+</template>
+<script lang="ts">
+  import { defineComponent, ref, watch, inject, Ref } from 'vue';
+  import Modal from '@main/Modal.vue';
+  import Hint from '@main/Hint.vue';
+  import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+
+  export default defineComponent({
+    name: 'Profiles',
+    components: {
+      Modal,
+      Hint
+    },
+    props: {},
+    setup(props) {
+      const profile = ref();
+      const modal = ref();
+      const profile_name = ref('');
+      const profiles = ref<string[]>([]);
+      const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
+
+      watch(
+        () => uiResponse?.value,
+        (newVal) => {
+          if (newVal) {
+            if (newVal?.xray) {
+              const list = Array.isArray(newVal.xray.profiles) ? [...newVal.xray.profiles] : [];
+              if (newVal.xray.profile && !list.includes(newVal.xray.profile)) list.push(newVal.xray.profile);
+              profile.value = newVal.xray.profile;
+              profiles.value = list.sort();
+            }
+          }
+        },
+        { immediate: true }
+      );
+      const change_profile = async () => {
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(SubmitActions.changeProfile, { profile: profile.value }, 3000);
+        });
+      };
+      const delete_profile = async (p: string) => {
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(SubmitActions.deleteProfile, { profile: p }, 1000);
+        }, false);
+      };
+      const manage = () => {
+        profile_name.value = '';
+        modal.value.show();
+      };
+      const deleteProfile = async (p: string) => {
+        if (confirm('Are you sure you want to delete config profile ' + p + '?')) {
+          profiles.value = profiles.value.filter((x) => x !== p).sort();
+          await delete_profile(p);
+        }
+      };
+      const add = async () => {
+        if (profile_name.value === '') {
+          return;
+        }
+        profile_name.value =
+          profile_name.value
+            .trim()
+            .replace(/[^a-zA-Z0-9]/g, '_')
+            .replace('.json', '') + '.json';
+
+        if (profiles.value.indexOf(profile_name.value) === -1) {
+          profiles.value.push(profile_name.value);
+          modal.value.close();
+          profile.value = profile_name.value;
+          await change_profile();
+        } else {
+          alert('Profile already exists');
+        }
+      };
+      return {
+        profile,
+        profile_name,
+        profiles,
+        modal,
+        uiResponse,
+        manage,
+        change_profile,
+        delete_profile,
+        add,
+        deleteProfile
+      };
+    }
+  });
+</script>
