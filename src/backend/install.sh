@@ -67,9 +67,9 @@ install() {
     else
         # The tested core, not the newest: a newer core may silently ignore settings XRAYUI writes
         log_warn "Xray is not installed. Installing xray-core $XRAYUI_TESTED_CORE, the version this $ADDON_TITLE release was tested with..."
-        if ! switch_xray_version "$XRAYUI_TESTED_CORE"; then
+        if ! switch_stealthsurf_version "$XRAYUI_TESTED_CORE"; then
             log_warn "Could not install xray-core $XRAYUI_TESTED_CORE. Trying the latest release instead..."
-            switch_xray_version "latest"
+            switch_stealthsurf_version "latest"
         fi
     fi
 
@@ -112,14 +112,14 @@ EOF
     log_info "Mounting web page..."
     remount_ui "skipwait"
 
-    am_settings_set xray_version $XRAYUI_VERSION
+    am_settings_set stealthsurf_version $XRAYUI_VERSION
 
-    xray_startup=$(am_settings_get xray_startup)
-    if [ -z "$xray_startup" ]; then
-        am_settings_set xray_startup "y"
-        log_warn "xray_startup was empty. Set to 'enabled'."
+    stealthsurf_startup=$(am_settings_get stealthsurf_startup)
+    if [ -z "$stealthsurf_startup" ]; then
+        am_settings_set stealthsurf_startup "y"
+        log_warn "stealthsurf_startup was empty. Set to 'enabled'."
     else
-        log_info "xray_startup already set. Skipping."
+        log_info "stealthsurf_startup already set. Skipping."
     fi
 
     mkdir -p $ADDON_USER_SCRIPTS_DIR
@@ -193,7 +193,17 @@ EOF
     log_info "Configuring cron jobs for $ADDON_TITLE"
     cron_jobs_add
 
-    update_community_geodata
+    mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_SHARE_DIR/data" 2>/dev/null
+    # Isolate from stock XrayUI: never use /opt/etc/xray/config.json as our profile
+    load_xrayui_config
+    if [ ! -f "$XRAY_CONFIG_FILE" ]; then
+        generate_xray_config
+        log_ok "Created isolated config $XRAY_CONFIG_FILE"
+    fi
+    # Move junk out of geodata data/ (outbound-ss-* caused invalid attribute errors)
+    geodata_sanitize_datadir 2>/dev/null || true
+
+    update_community_geodata || log_warn "Community geodata update finished with warnings"
 
     cleanup_stale_asdfiles
 
@@ -287,7 +297,8 @@ uninstall() {
     # Remove XRAY custom settings
     log_info "Removing XRAY custom settings..."
 
-    grep '^xray_' /jffs/addons/custom_settings.txt | while IFS='=' read -r var_name _; do
+    # Only our keys — never delete stock XrayUI xray_* settings
+    grep '^stealthsurf_' /jffs/addons/custom_settings.txt 2>/dev/null | while IFS='=' read -r var_name _; do
         [ -n "$var_name" ] && am_settings_del "$var_name"
     done
 
@@ -433,11 +444,11 @@ setup_script_file() {
 clear_script_entries() {
 
     log_info "Removing existing $ADDON_TITLE entries from scripts."
-    sed '/#stealthsurf/d' /jffs/scripts/services-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/services-start && chmod +x /jffs/scripts/services-start || log_debug "Failed to remove entry from /jffs/scripts/services-start."
-    sed '/#stealthsurf/d' /jffs/scripts/nat-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/nat-start && chmod +x /jffs/scripts/nat-start || log_debug "Failed to remove entry from /jffs/scripts/nat-start."
-    sed '/#stealthsurf/d' /jffs/scripts/firewall-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/firewall-start && chmod +x /jffs/scripts/firewall-start || log_debug "Failed to remove entry from /jffs/scripts/firewall-start."
-    sed '/#stealthsurf/d' /jffs/scripts/post-mount >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/post-mount && chmod +x /jffs/scripts/post-mount || log_debug "Failed to remove entry from /jffs/scripts/post-mount."
-    sed '/#stealthsurf/d' /jffs/scripts/service-event >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
-    sed '/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
-    sed '/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/xrayui_script.$$ 2>/dev/null && mv /tmp/xrayui_script.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
+    sed '/#stealthsurf/d' /jffs/scripts/services-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/services-start && chmod +x /jffs/scripts/services-start || log_debug "Failed to remove entry from /jffs/scripts/services-start."
+    sed '/#stealthsurf/d' /jffs/scripts/nat-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/nat-start && chmod +x /jffs/scripts/nat-start || log_debug "Failed to remove entry from /jffs/scripts/nat-start."
+    sed '/#stealthsurf/d' /jffs/scripts/firewall-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/firewall-start && chmod +x /jffs/scripts/firewall-start || log_debug "Failed to remove entry from /jffs/scripts/firewall-start."
+    sed '/#stealthsurf/d' /jffs/scripts/post-mount >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/post-mount && chmod +x /jffs/scripts/post-mount || log_debug "Failed to remove entry from /jffs/scripts/post-mount."
+    sed '/#stealthsurf/d' /jffs/scripts/service-event >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
+    sed '/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
+    sed '/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
 }

@@ -47,7 +47,7 @@ backup_configuration() {
     fi
 
     local items_list=""
-    for item in /opt/etc/xray/*.json /opt/etc/xray/xrayui/* /opt/etc/xray/stealthsurf/* /opt/etc/xray/cert /jffs/stealthsurf_custom "$ADDON_SHARE_DIR/data" "$XRAYUI_CONFIG_FILE"; do
+    for item in "$XRAY_CONFIG_DIR"/*.json "$XRAY_CONFIG_DIR"/cert /jffs/stealthsurf_custom "$ADDON_SHARE_DIR/data" "$XRAYUI_CONFIG_FILE"; do
         if [ -e "$item" ]; then
             items_list="$items_list $item"
         else
@@ -168,7 +168,7 @@ backup_xray_config() {
 
     local timestamp=$(date +%Y%m%d-%H%M%S)
     local base_cfg=$(basename "$XRAY_CONFIG_FILE")
-    local backup_dir=/opt/etc/xray
+    local backup_dir="$XRAY_CONFIG_DIR"
     local backup_file="${backup_dir}/${base_cfg}.${timestamp}.bak"
 
     log_info "Backing up $XRAY_CONFIG_FILE to $backup_file"

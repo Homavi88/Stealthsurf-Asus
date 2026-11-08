@@ -34,7 +34,7 @@ const clientList = (fields: Record<string, string> = {}) => jsonc({ [MAC]: devic
 type Handlers = Record<string, string>;
 
 const DEFAULTS: Handlers = {
-  get_custom_settings: jsonc({ xray_version: '0.70.0', xray_startup: 'y', MerlinAU_version_local: '1.5.9' }),
+  get_custom_settings: jsonc({ stealthsurf_version: '0.70.0', stealthsurf_startup: 'y', MerlinAU_version_local: '1.5.9' }),
   cpu_core_num: '4',
   get_clientlist: clientList(),
   get_clientlist_from_json_database: clientList(),
@@ -74,7 +74,7 @@ describe('App.html bootstrap data', () => {
     expect(window.xray.router.cpu).toBe(4);
     expect(window.xray.router.devices[MAC].name).toBe('FI9961EP');
     expect(window.xray.router.devices_online[MAC].mac).toBe(MAC);
-    expect(window.xray.custom_settings).toEqual({ xray_version: '0.70.0', xray_startup: 'y', MerlinAU_version_local: '1.5.9' });
+    expect(window.xray.custom_settings).toEqual({ stealthsurf_version: '0.70.0', stealthsurf_startup: 'y', MerlinAU_version_local: '1.5.9' });
     expect(window.xray.server.isRunning).toBe(true);
     expect(window.xray.server.b4sni_isRunning).toBe(false);
     expect(window.document.getElementById('stealthsurf-app')).not.toBeNull();
@@ -103,7 +103,7 @@ describe('App.html bootstrap data', () => {
     expect(window.document.getElementById('stealthsurf-app')).not.toBeNull();
     expect(window.xray.router.devices[MAC][field]).toBe(value);
     expect(window.xray.router.devices_online[MAC][field]).toBe(value);
-    expect(window.xray.custom_settings.xray_version).toBe('0.70.0');
+    expect(window.xray.custom_settings.stealthsurf_version).toBe('0.70.0');
     expect(window.xray.router.cpu).toBe(4);
   });
 
@@ -118,30 +118,30 @@ describe('App.html bootstrap data', () => {
     expect(errors).toEqual([]);
     expect(window.xray.router.devices_online).toEqual(expected);
     expect(window.xray.router.devices).toEqual(expected);
-    expect(window.xray.custom_settings.xray_version).toBe('0.70.0');
+    expect(window.xray.custom_settings.stealthsurf_version).toBe('0.70.0');
   });
 
   it("keeps other add-ons' settings exactly as stored", () => {
     const foreign = { other_quote: 'a"b', other_apostrophe: "it's", other_backslash: String.raw`C:\temp\new`, other_slash: 'https://example.com/x' };
-    const { window, errors } = render({ get_custom_settings: jsonc({ xray_version: '0.70.0', ...foreign }) });
+    const { window, errors } = render({ get_custom_settings: jsonc({ stealthsurf_version: '0.70.0', ...foreign }) });
 
     expect(errors).toEqual([]);
-    expect(window.xray.custom_settings).toEqual({ xray_version: '0.70.0', ...foreign });
+    expect(window.xray.custom_settings).toEqual({ stealthsurf_version: '0.70.0', ...foreign });
   });
 
   it('keeps working while an unfinished request is still stored', () => {
     const payload = JSON.stringify({ profile: 'config.json', tags: ['a', 'b'] });
-    const { window, errors } = render({ get_custom_settings: jsonc({ xray_version: '0.70.0', xray_payload0: payload }) });
+    const { window, errors } = render({ get_custom_settings: jsonc({ stealthsurf_version: '0.70.0', stealthsurf_payload0: payload }) });
 
     expect(errors).toEqual([]);
-    expect(window.xray.custom_settings.xray_payload0).toBe(payload);
+    expect(window.xray.custom_settings.stealthsurf_payload0).toBe(payload);
   });
 
   it('removes terminal colour codes from stored values', () => {
-    const { window, errors } = render({ get_custom_settings: jsonc({ xray_version: '0.70.0', xray_page: '\u001b[32muser2.asp\u001b[0m' }) });
+    const { window, errors } = render({ get_custom_settings: jsonc({ stealthsurf_version: '0.70.0', stealthsurf_page: '\u001b[32muser2.asp\u001b[0m' }) });
 
     expect(errors).toEqual([]);
-    expect(window.xray.custom_settings.xray_page).toBe('user2.asp');
+    expect(window.xray.custom_settings.stealthsurf_page).toBe('user2.asp');
   });
 
   it('uses empty settings when the settings file does not exist', () => {

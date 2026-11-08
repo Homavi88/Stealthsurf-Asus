@@ -55,14 +55,14 @@ describe('Version.vue', () => {
   });
 
   it('adds the patch number to a two-part stored version', async () => {
-    const { wrapper, respond } = mountWith({ xray_version: '0.70' });
+    const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70' });
     await respond('9.9.9');
     expect(label(wrapper)).toBe('! XRAYUI v0.70.0');
   });
 
   it('shows markup in the release notes as text', async () => {
     (engine.fetchGithubJson as jest.Mock).mockResolvedValueOnce([{ tag_name: 'v0.70.1', body: '**Fixed** <img src=x onerror="window.pwned=1">' }]);
-    const { wrapper, respond } = mountWith({ xray_version: '0.70.0' });
+    const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70.0' });
     await respond('0.70.0');
     const notes = wrapper.find('.changelog');
     expect(notes.find('img').exists()).toBe(false);
@@ -71,7 +71,7 @@ describe('Version.vue', () => {
   });
 
   it('prefers the stored version', async () => {
-    const { wrapper, respond } = mountWith({ xray_version: '0.70.1' });
+    const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70.1' });
     await respond('9.9.9');
     expect(label(wrapper)).toBe('XRAYUI v0.70.1');
   });

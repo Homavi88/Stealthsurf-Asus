@@ -43,30 +43,30 @@ describe('RulesModal custom geodata lists', () => {
     return vm;
   };
 
-  it('refuses ext:xrayui: lists in the target IP list', () => {
+  it('refuses ext:stealthsurf: lists in the target IP list', () => {
     const vm = mountModal();
-    vm.ips = '1.1.1.1/32\next:xrayui:viber-geoip';
+    vm.ips = '1.1.1.1/32\next:stealthsurf:viber-geoip';
     vm.saveRule();
     expect(alertSpy).toHaveBeenCalledWith('com.RulesModal.alert_ext_xrayui_in_ips');
     expect(vm.rules).toHaveLength(0);
   });
 
-  it('refuses ext:xrayui: lists in the source IP list', () => {
+  it('refuses ext:stealthsurf: lists in the source IP list', () => {
     const vm = mountModal();
-    vm.source = 'EXT:XRAYUI:viber-geoip';
+    vm.source = 'EXT:STEALTHSURF:viber-geoip';
     vm.saveRule();
     expect(alertSpy).toHaveBeenCalled();
     expect(vm.rules).toHaveLength(0);
   });
 
-  it('keeps ext:xrayui: lists in the domain list and other ext: files in IP lists', () => {
+  it('keeps ext:stealthsurf: lists in the domain list and other ext: files in IP lists', () => {
     const vm = mountModal();
-    vm.domains = 'ext:xrayui:viber';
+    vm.domains = 'ext:stealthsurf:viber';
     vm.ips = 'ext:geoip_custom.dat:viber\ngeoip:cloudflare';
     vm.saveRule();
     expect(alertSpy).not.toHaveBeenCalled();
     expect(vm.rules).toHaveLength(1);
-    expect(vm.rules[0].domain).toEqual(['ext:xrayui:viber']);
+    expect(vm.rules[0].domain).toEqual(['ext:stealthsurf:viber']);
     expect(vm.rules[0].ip).toEqual(['ext:geoip_custom.dat:viber', 'geoip:cloudflare']);
   });
 });

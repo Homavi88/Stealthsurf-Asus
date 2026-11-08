@@ -66,7 +66,7 @@ uninstall)
 update)
     case "$2" in
     xray)
-        switch_xray_version $3 || exit 1
+        switch_stealthsurf_version $3 || exit 1
         ;;
     *)
         update "$2"
@@ -383,7 +383,7 @@ service_event)
             fi
             ;;
         xrayversionswitch)
-            switch_xray_version
+            switch_stealthsurf_version
             case $? in
             0)
                 initial_response

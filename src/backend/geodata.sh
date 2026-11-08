@@ -59,7 +59,8 @@ geodata_unpack_tags() {
 
     geosite_json="[]"
     geoip_json="[]"
-    xrayui_json="[]"
+    custom_json="[]"
+    custom_dat="$xray_dir/${CUSTOM_GEODATA_NAME:-stealthsurf}"
 
     if [ -f "$xray_dir/geosite.dat" ]; then
         log_info "Unpacking geosite.dat..."
@@ -71,12 +72,13 @@ geodata_unpack_tags() {
         geoip_json=$($IONICE $NICE "$V2DAT" unpack geoip -p -t "$xray_dir/geoip.dat" | json_array)
     fi
 
-    if [ -f "$xray_dir/xrayui" ]; then
-        log_info "Unpacking xrayui..."
-        xrayui_json=$($IONICE $NICE "$V2DAT" unpack geosite -p -t "$xray_dir/xrayui" | json_array)
+    if [ -f "$custom_dat" ]; then
+        log_info "Unpacking custom geodata $custom_dat..."
+        custom_json=$($IONICE $NICE "$V2DAT" unpack geosite -p -t "$custom_dat" | json_array)
     fi
 
-    printf '{\n  "geosite": %s,\n  "geoip": %s,\n  "xrayui": %s\n}\n' "$geosite_json" "$geoip_json" "$xrayui_json" >"$GEO_TAGS_FILE"
+    # Keep key "xrayui" for EngineGeoTags.xrayui compatibility in UI, values from our dat.
+    printf '{\n  "geosite": %s,\n  "geoip": %s,\n  "xrayui": %s\n}\n' "$geosite_json" "$geoip_json" "$custom_json" >"$GEO_TAGS_FILE"
 }
 
 get_custom_geodata_tagfiles() {
@@ -144,40 +146,79 @@ geodata_remount_to_web() {
     return 0
 }
 
+geodata_sanitize_datadir() {
+    # Drop non-list junk (e.g. outbound-ss-* leftovers) that break xraydatbuilder:
+    # "invalid attribute: ss-230924" = space-separated token without leading @.
+    local datadir="$ADDON_SHARE_DIR/data"
+    local f base
+    [ -d "$datadir" ] || return 0
+    for f in "$datadir"/*; do
+        [ -f "$f" ] || continue
+        base=$(basename "$f")
+        case "$base" in
+        outbound-* | *.json | *.fp | *.bak | *.tmp | stealthsurf | xrayui)
+            log_warn "Geodata: ignoring non-list file $base"
+            continue
+            ;;
+        esac
+        # Lines with bare tokens after a domain (no @attr) break the builder — strip them.
+        if grep -qE '[[:space:]]+[A-Za-z0-9_-]+' "$f" 2>/dev/null; then
+            awk '
+              /^[[:space:]]*#/ || NF==0 { print; next }
+              {
+                out=$1
+                for (i=2;i<=NF;i++) {
+                  if ($i ~ /^@/) out=out " " $i
+                }
+                print out
+              }
+            ' "$f" >"$f.sanitized" && mv "$f.sanitized" "$f"
+        fi
+    done
+}
+
 geodata_recompile_all() {
     log_info "Recompiling ALL custom geodata files..."
     update_loading_progress "Recompiling geodata files..."
 
     local builder="$ADDON_SHARE_DIR/xraydatbuilder"
+    local outname="${CUSTOM_GEODATA_NAME:-stealthsurf}"
 
     if [ ! -f "$builder" ] || [ ! -x "$builder" ]; then
-        log_error "Error: Builder not found or not executable at $builder"
-        return 1
+        log_warn "Geodata builder missing at $builder — skip recompile"
+        return 0
     fi
 
-    local outdir=$(dirname "$(which xray)")
+    local outdir=$(dirname "$(which xray)" 2>/dev/null)
+    [ -n "$outdir" ] || outdir="/opt/sbin"
     local datadir="$ADDON_SHARE_DIR/data"
+    mkdir -p "$datadir"
 
-    rm -f "$outdir/xrayui" || log_debug "Failed to remove existing xrayui file: $outdir/xrayui"
+    geodata_sanitize_datadir
 
-    "$builder" --datapath "$datadir" --outputdir "$outdir" --outputname "xrayui" || {
-        log_error "Failed to recompile geodata files."
-        return 1
-    }
+    # Never overwrite stock XrayUI custom dat (/opt/sbin/xrayui)
+    rm -f "$outdir/$outname" || log_debug "Failed to remove existing $outdir/$outname"
 
-    chmod -x "$datadir/xrayui" || log_debug "Failed to set executable permission for $datadir/xrayui"
+    if ! "$builder" --datapath "$datadir" --outputdir "$outdir" --outputname "$outname"; then
+        log_warn "Failed to recompile geodata files (non-fatal). Custom ext:stealthsurf: lists may be empty until fixed."
+        cleanup_payload
+        geodata_remount_to_web
+        return 0
+    fi
+
+    chmod a-x "$outdir/$outname" 2>/dev/null || true
 
     cleanup_payload
     geodata_unpack_tags
     geodata_remount_to_web
 
-    if [ -f "$XRAY_PIDFILE" ]; then
+    if [ -f "$XRAY_PIDFILE" ] && [ -n "$(get_xray_daemon_pid 2>/dev/null)" ]; then
         update_loading_progress "Restarting Xray service..."
         restart
         GEODATA_RESTARTED="true"
     fi
 
-    log_ok "Recompiled all custom geodata files successfully."
+    log_ok "Recompiled custom geodata ($outname) successfully."
     return 0
 }
 

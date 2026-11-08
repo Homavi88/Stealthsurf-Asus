@@ -227,7 +227,7 @@
             {{ $t('com.RulesModal.label_domains') }}
             <div class="prefix-tags">
               <span class="proxy-label tag geo-tag-prefix" @click.prevent="setPrefix('geosite:', domainsRef)">geosite:</span>
-              <span class="proxy-label tag geo-tag-prefix" @click.prevent="setPrefix('ext:xrayui:', domainsRef)">ext:xrayui:</span>
+              <span class="proxy-label tag geo-tag-prefix" @click.prevent="setPrefix('ext:stealthsurf:', domainsRef)">ext:stealthsurf:</span>
             </div>
             <hint v-html="$t('com.RulesModal.hint_domains')"></hint>
           </th>
@@ -450,7 +450,7 @@
         modalReassign.value?.close();
       };
 
-      const currentPrefix = ref<'geosite:' | 'ext:xrayui:' | 'geoip:'>('geosite:');
+      const currentPrefix = ref<'geosite:' | 'ext:stealthsurf:' | 'geoip:'>('geosite:');
       const activeField = ref<'domains' | 'ips' | null>(null);
       const domainsRef = ref<HTMLTextAreaElement | null>(null);
       const ipsRef = ref<HTMLTextAreaElement | null>(null);
@@ -461,7 +461,7 @@
       const geotags = computed(() => window.xray.geotags ?? ({ geosite: [], xrayui: [], geoip: [] } as EngineGeoTags));
       const tagSources = computed(() => ({
         'geosite:': geotags.value.geosite,
-        'ext:xrayui:': geotags.value.xrayui,
+        'ext:stealthsurf:': geotags.value.xrayui,
         'geoip:': geotags.value.geoip
       }));
 
@@ -535,7 +535,7 @@
               .filter((s) => s)
           : [];
 
-        const customListsInIps = [...newRule.ip, ...newRule.source].filter((v) => /^ext:xrayui:/i.test(v));
+        const customListsInIps = [...newRule.ip, ...newRule.source].filter((v) => /^ext:stealthsurf:/i.test(v));
         if (customListsInIps.length) {
           alert(t('com.RulesModal.alert_ext_xrayui_in_ips', { entries: customListsInIps.join(', ') }));
           return;
@@ -687,13 +687,13 @@
         const le = val.indexOf('\n', pos);
         const line = val.slice(ls, le === -1 ? val.length : le);
 
-        const allowedregex = activeField.value === 'domains' ? /^(geosite:|ext:xrayui:)(.*)$/i : /^(geoip:)(.*)$/i;
+        const allowedregex = activeField.value === 'domains' ? /^(geosite:|ext:stealthsurf:)(.*)$/i : /^(geoip:)(.*)$/i;
         const m = line.match(allowedregex);
         if (!m) {
           suggestionList.value = [];
           return;
         }
-        currentPrefix.value = m[1] as 'geosite:' | 'ext:xrayui:' | 'geoip:';
+        currentPrefix.value = m[1] as 'geosite:' | 'ext:stealthsurf:' | 'geoip:';
         const prefix = m[2].trim();
 
         const src = (tagSources.value[currentPrefix.value] ?? []) as string[];

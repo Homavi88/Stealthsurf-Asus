@@ -89,7 +89,7 @@ describe('XrayConfig', () => {
       const sent: string[][] = [];
       jest.spyOn(HTMLFormElement.prototype, 'submit').mockImplementation(function (this: HTMLFormElement) {
         const input = this.querySelector<HTMLInputElement>('input[name="amng_custom"]')!;
-        sent.push(Object.keys(JSON.parse(input.value) as Record<string, string>).filter((key) => key.startsWith('xray_payload') || key.startsWith('xray_stage')));
+        sent.push(Object.keys(JSON.parse(input.value) as Record<string, string>).filter((key) => key.startsWith('stealthsurf_payload') || key.startsWith('stealthsurf_stage')));
       });
       const post = async (payload: object) => {
         const promise = engine.submit(SubmitActions.configurationApply, payload, 0);
@@ -103,14 +103,14 @@ describe('XrayConfig', () => {
         return 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[seed % 62];
       }).join('');
 
-      window.xray.custom_settings.xray_payload7 = 'left over from an earlier page';
-      window.xray.custom_settings.xray_staged_session = 'old-session';
-      window.xray.custom_settings.xray_stage_data = 'old chunk';
+      window.xray.custom_settings.stealthsurf_payload7 = 'left over from an earlier page';
+      window.xray.custom_settings.stealthsurf_staged_session = 'old-session';
+      window.xray.custom_settings.stealthsurf_stage_data = 'old chunk';
       await post({ data: noise });
       await post({ serverName: 'a.example' });
 
-      expect(sent[0]).toEqual(['xray_payload0', 'xray_payload1', 'xray_payload2']);
-      expect(sent[1]).toEqual(['xray_payload0']);
+      expect(sent[0]).toEqual(['stealthsurf_payload0', 'stealthsurf_payload1', 'stealthsurf_payload2']);
+      expect(sent[1]).toEqual(['stealthsurf_payload0']);
     });
   });
 });

@@ -483,7 +483,7 @@ failover_merge_outbound() {
 
 # Fails when the installed Xray core would not start with the outbound; FAILOVER_REJECT_REASON then holds core's reason.
 failover_validate_outbound() {
-    local tmp="/tmp/xrayui_fo_test.$$.json"
+    local tmp="/tmp/stealthsurf_fo_test.$$.json"
     local rc out
     FAILOVER_REJECT_REASON=""
     printf '%s' "$1" | jq -c '{outbounds: [del(.subPool, .surl)]}' >"$tmp" 2>/dev/null || {

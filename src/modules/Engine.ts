@@ -435,22 +435,22 @@ export class Engine {
     const payloadString = this.compressPayload(JSON.stringify(payload));
     const chunks = this.splitPayload(payloadString, this.nvramChunkSize);
     Object.keys(window.xray.custom_settings).forEach((k) => {
-      if (k.startsWith('xray_payload') || k.startsWith('xray_stage')) {
+      if (k.startsWith('stealthsurf_payload') || k.startsWith('stealthsurf_stage')) {
         delete window.xray.custom_settings[k];
       }
     });
     chunks.forEach((chunk: string, idx) => {
-      window.xray.custom_settings[`xray_payload${idx}`] = chunk;
+      window.xray.custom_settings[`stealthsurf_payload${idx}`] = chunk;
     });
 
-    const serialized = JSON.stringify(window.xray.custom_settings);
+    const serialized = JSON.stringify(this.ownCustomSettings());
     if (serialized.length <= this.amngCustomLimit) {
       return this.postForm(action, true, delay);
     }
 
     // payload too large for single POST; fall back to chunked staging
     chunks.forEach((_, idx) => {
-      delete window.xray.custom_settings[`xray_payload${idx}`];
+      delete window.xray.custom_settings[`stealthsurf_payload${idx}`];
     });
     return this.submitStaged(action, payloadString, delay);
   }
@@ -466,6 +466,17 @@ export class Engine {
     } catch {
       return raw;
     }
+  }
+
+  /** Only StealthSurf keys — never write stock XrayUI `xray_*` settings back. */
+  private ownCustomSettings(): Record<string, string> {
+    const out: Record<string, string> = {};
+    Object.keys(window.xray.custom_settings || {}).forEach((k) => {
+      if (k.startsWith('stealthsurf_')) {
+        out[k] = String((window.xray.custom_settings as Record<string, string>)[k] ?? '');
+      }
+    });
+    return out;
   }
 
   private postForm(action: string, includeCustomSettings: boolean, delay: number): Promise<void> {
@@ -492,7 +503,7 @@ export class Engine {
         amngCustomInput = document.createElement('input');
         amngCustomInput.type = 'hidden';
         amngCustomInput.name = 'amng_custom';
-        amngCustomInput.value = JSON.stringify(window.xray.custom_settings);
+        amngCustomInput.value = JSON.stringify(this.ownCustomSettings());
         form.appendChild(amngCustomInput);
       }
 
@@ -514,10 +525,10 @@ export class Engine {
   }
 
   private async submitStaged(action: string, payloadString: string, delay: number): Promise<void> {
-    const stageKeys = ['xray_stage_session', 'xray_stage_index', 'xray_stage_total', 'xray_stage_data', 'xray_staged_session'];
+    const stageKeys = ['stealthsurf_stage_session', 'stealthsurf_stage_index', 'stealthsurf_stage_total', 'stealthsurf_stage_data', 'stealthsurf_staged_session'];
     const stripStaleKeys = () => {
       Object.keys(window.xray.custom_settings).forEach((k) => {
-        if (k.startsWith('xray_payload') || stageKeys.includes(k)) {
+        if (k.startsWith('stealthsurf_payload') || stageKeys.includes(k)) {
           delete (window.xray.custom_settings as Record<string, unknown>)[k];
         }
       });
@@ -530,12 +541,12 @@ export class Engine {
 
     try {
       for (let idx = 0; idx < chunks.length; idx++) {
-        window.xray.custom_settings.xray_stage_session = session;
-        window.xray.custom_settings.xray_stage_index = String(idx);
-        window.xray.custom_settings.xray_stage_total = String(chunks.length);
-        window.xray.custom_settings.xray_stage_data = chunks[idx];
+        window.xray.custom_settings.stealthsurf_stage_session = session;
+        window.xray.custom_settings.stealthsurf_stage_index = String(idx);
+        window.xray.custom_settings.stealthsurf_stage_total = String(chunks.length);
+        window.xray.custom_settings.stealthsurf_stage_data = chunks[idx];
 
-        const serialized = JSON.stringify(window.xray.custom_settings);
+        const serialized = JSON.stringify(this.ownCustomSettings());
         if (serialized.length > this.amngCustomLimit) {
           throw new Error(
             `Staged chunk ${idx + 1}/${chunks.length} (${serialized.length} bytes) exceeds the ${this.amngCustomLimit}-byte ` +
@@ -546,11 +557,11 @@ export class Engine {
         await this.postForm(SubmitActions.configurationStageChunk, true, this.stagingInterChunkDelay);
       }
 
-      delete window.xray.custom_settings.xray_stage_session;
-      delete window.xray.custom_settings.xray_stage_index;
-      delete window.xray.custom_settings.xray_stage_total;
-      delete window.xray.custom_settings.xray_stage_data;
-      window.xray.custom_settings.xray_staged_session = session;
+      delete window.xray.custom_settings.stealthsurf_stage_session;
+      delete window.xray.custom_settings.stealthsurf_stage_index;
+      delete window.xray.custom_settings.stealthsurf_stage_total;
+      delete window.xray.custom_settings.stealthsurf_stage_data;
+      window.xray.custom_settings.stealthsurf_staged_session = session;
 
       await this.postForm(action, true, delay);
     } finally {

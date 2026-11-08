@@ -1,10 +1,10 @@
 <template>
-  <span class="core-version" v-show="xray_version || core_error">
+  <span class="core-version" v-show="stealthsurf_version || core_error">
     X-RAY Core
-    <a href="#" :title="xray_version || core_error === 'not installed' ? undefined : core_error" @click="show">{{ label }}</a>
-    <span class="core-untested" v-if="xray_version && newerThanTested" :title="untestedHint">{{ untestedNote }}</span>
+    <a href="#" :title="stealthsurf_version || core_error === 'not installed' ? undefined : core_error" @click="show">{{ label }}</a>
+    <span class="core-untested" v-if="stealthsurf_version && newerThanTested" :title="untestedHint">{{ untestedNote }}</span>
   </span>
-  <xray-core-version-modal ref="modal" v-model:current-version="xray_version"></xray-core-version-modal>
+  <xray-core-version-modal ref="modal" v-model:current-version="stealthsurf_version"></xray-core-version-modal>
 </template>
 
 <script lang="ts">
@@ -22,12 +22,12 @@
     setup() {
       const { t } = useI18n();
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
-      const xray_version = ref('');
+      const stealthsurf_version = ref('');
       const core_error = ref('');
       const modal = ref();
 
       const label = computed(() => {
-        if (xray_version.value) return xray_version.value;
+        if (stealthsurf_version.value) return stealthsurf_version.value;
         return core_error.value === 'not installed' ? t('com.XrayVersion.not_installed') : t('com.XrayVersion.not_working');
       });
 
@@ -44,7 +44,7 @@
           () => [uiResponse?.value.xray?.core_version, uiResponse?.value.xray?.core_error],
           ([version, error]) => {
             if (version) {
-              xray_version.value = version;
+              stealthsurf_version.value = version;
               core_error.value = '';
             } else if (error) {
               core_error.value = error;
@@ -52,7 +52,7 @@
           }
         );
       });
-      return { xray_version, core_error, label, newerThanTested, untestedNote, untestedHint, modal, show };
+      return { stealthsurf_version, core_error, label, newerThanTested, untestedNote, untestedHint, modal, show };
     }
   });
 </script>

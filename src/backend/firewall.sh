@@ -1,11 +1,8 @@
 #!/bin/sh
 # shellcheck disable=SC2034  # codacy:Unused variables
 
-tproxy_mark=0x10000
-tproxy_mask=0x10000
-tproxy_table=77
+# tproxy_mark/mask/table + FW_* chains come from _globals.sh (isolated from XrayUI)
 IP6NAT_LOADED="0"
-XRAYUI_FIREWALL_LOCKFILE=/tmp/xrayui.firewall.lock
 
 import ./tun.sh
 
@@ -112,13 +109,13 @@ has_mac_module() {
 append_rule() {
     local tbl=$1
     shift
-    ipt_ensure "$tbl" XRAYUI -A "$@"
+    ipt_ensure "$tbl" "$FW_CHAIN" -A "$@"
 }
 
 insert_rule() {
     local tbl=$1
     shift
-    ipt_ensure "$tbl" XRAYUI -I "$@"
+    ipt_ensure "$tbl" "$FW_CHAIN" -I "$@"
 }
 
 contains_ipv4() {
@@ -212,7 +209,7 @@ has_loopback_dokodemo() {
 }
 
 firewall_is_configured() {
-    iptables -w -t filter -n -L XRAYUI >/dev/null 2>&1
+    iptables -w -t filter -n -L "$FW_CHAIN" >/dev/null 2>&1
 }
 
 firewall_lock() {
@@ -255,7 +252,7 @@ cleanup_firewall() {
 }
 
 configure_firewall_rules() {
-    local STARTUP_LOCK="/tmp/xrayui_startup.lock"
+    local STARTUP_LOCK="/tmp/stealthsurf_startup.lock"
     if [ -f "$STARTUP_LOCK" ]; then
         local lock_pid=$(cat "$STARTUP_LOCK" 2>/dev/null)
         if [ -n "$lock_pid" ] && [ "$lock_pid" != "$$" ] && kill -0 "$lock_pid" 2>/dev/null; then
@@ -317,26 +314,26 @@ configure_firewall_rules() {
 
     # create / flush chains (filter + mangle for both families)
     for tbl in filter mangle nat; do
-        ipt_reset_chain "$tbl" XRAYUI
+        ipt_reset_chain "$tbl" "$FW_CHAIN"
     done
 
-    ipt_reset_chain mangle DIVERT
-    ipt mangle -A DIVERT -j MARK --set-mark $tproxy_mark/$tproxy_mask
-    ipt mangle -A DIVERT -j CONNMARK --save-mark --mask $tproxy_mask
-    ipt mangle -A DIVERT -j ACCEPT
+    ipt_reset_chain mangle "$FW_DIVERT_CHAIN"
+    ipt mangle -A "$FW_DIVERT_CHAIN" -j MARK --set-mark $tproxy_mark/$tproxy_mask
+    ipt mangle -A "$FW_DIVERT_CHAIN" -j CONNMARK --save-mark --mask $tproxy_mask
+    ipt mangle -A "$FW_DIVERT_CHAIN" -j ACCEPT
 
     if kmod_is_loaded xt_socket || kmod_load xt_socket 2>/dev/null; then
-        ipt_ensure mangle PREROUTING -I -p tcp -m socket --transparent -j DIVERT
+        ipt_ensure mangle PREROUTING -I -p tcp -m socket --transparent -j "$FW_DIVERT_CHAIN"
     else
-        log_warn "xt_socket missing; skipping transparent DIVERT hook"
+        log_warn "xt_socket missing; skipping transparent $FW_DIVERT_CHAIN hook"
     fi
 
-    ipt filter -A XRAYUI -j RETURN
+    ipt filter -A "$FW_CHAIN" -j RETURN
 
     configure_firewall_server
 
-    ipt_ensure filter INPUT -I -j XRAYUI
-    ipt_ensure filter FORWARD -I -j XRAYUI
+    ipt_ensure filter INPUT -I -j "$FW_CHAIN"
+    ipt_ensure filter FORWARD -I -j "$FW_CHAIN"
 
     # Clamp MSS for Xray-originated flows as well
     local daemon_uid=""
@@ -397,7 +394,7 @@ configure_firewall_rules() {
         "$fw_after_script" 9>&- || log_error "Error executing $fw_after_script."
     fi
 
-    log_ok "XRAYUI firewall rules applied successfully."
+    log_ok "$ADDON_TITLE firewall rules applied successfully."
 }
 
 # Firmware Parental Control and Network Services Filter only add rules to
@@ -448,7 +445,7 @@ configure_inbounds() {
 }
 
 # Drop UDP/TCP destined to port 53 anywhere except the dedicated Xray DNS
-# inbound. Hooks the XRAYUI_DNS_LOCK chain into filter:OUTPUT (router
+# inbound. Hooks the "$FW_DNS_LOCK_CHAIN" chain into filter:OUTPUT (router
 # itself, e.g. dnsmasq forwarders) and filter:FORWARD (LAN clients that
 # slip past TPROXY).
 configure_dns_leak_lock() {
@@ -486,12 +483,12 @@ configure_dns_leak_lock() {
     if [ -n "$dns_lock_uid" ] && [ "$dns_lock_uid" != "0" ]; then
         owner_match_ok=1
         for IPT in $IPT_LIST; do
-            $IPT -w -t filter -F XRAYUI_DNS_OWNERPROBE 2>/dev/null
-            $IPT -w -t filter -X XRAYUI_DNS_OWNERPROBE 2>/dev/null
-            if $IPT -w -t filter -N XRAYUI_DNS_OWNERPROBE 2>/dev/null; then
-                $IPT -w -t filter -A XRAYUI_DNS_OWNERPROBE -m owner --uid-owner "$dns_lock_uid" -j RETURN 2>/dev/null || owner_match_ok=0
-                $IPT -w -t filter -F XRAYUI_DNS_OWNERPROBE 2>/dev/null
-                $IPT -w -t filter -X XRAYUI_DNS_OWNERPROBE 2>/dev/null
+            $IPT -w -t filter -F "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
+            $IPT -w -t filter -X "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
+            if $IPT -w -t filter -N "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null; then
+                $IPT -w -t filter -A "$FW_DNS_OWNERPROBE_CHAIN" -m owner --uid-owner "$dns_lock_uid" -j RETURN 2>/dev/null || owner_match_ok=0
+                $IPT -w -t filter -F "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
+                $IPT -w -t filter -X "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
             else
                 owner_match_ok=0
             fi
@@ -499,15 +496,15 @@ configure_dns_leak_lock() {
     fi
 
     for IPT in $IPT_LIST; do
-        $IPT -w -t filter -N XRAYUI_DNS_LOCK 2>/dev/null || $IPT -w -t filter -F XRAYUI_DNS_LOCK
+        $IPT -w -t filter -N "$FW_DNS_LOCK_CHAIN" 2>/dev/null || $IPT -w -t filter -F "$FW_DNS_LOCK_CHAIN"
     done
 
     if [ "$owner_match_ok" = "1" ]; then
-        ipt filter -A XRAYUI_DNS_LOCK -m owner --uid-owner "$dns_lock_uid" -j RETURN
+        ipt filter -A "$FW_DNS_LOCK_CHAIN" -m owner --uid-owner "$dns_lock_uid" -j RETURN
     fi
-    ipt filter -A XRAYUI_DNS_LOCK -m addrtype --dst-type LOCAL -j RETURN
-    ipt filter -A XRAYUI_DNS_LOCK -p udp --dport 53 -j DROP
-    ipt filter -A XRAYUI_DNS_LOCK -p tcp --dport 53 -j DROP
+    ipt filter -A "$FW_DNS_LOCK_CHAIN" -m addrtype --dst-type LOCAL -j RETURN
+    ipt filter -A "$FW_DNS_LOCK_CHAIN" -p udp --dport 53 -j DROP
+    ipt filter -A "$FW_DNS_LOCK_CHAIN" -p tcp --dport 53 -j DROP
 
     local dns_lock_hooks="OUTPUT FORWARD"
     if [ "$owner_match_ok" != "1" ]; then
@@ -520,7 +517,7 @@ configure_dns_leak_lock() {
     fi
 
     for hook in $dns_lock_hooks; do
-        ipt_ensure filter "$hook" -I -j XRAYUI_DNS_LOCK
+        ipt_ensure filter "$hook" -I -j "$FW_DNS_LOCK_CHAIN"
     done
 
     log_ok "DNS leak lock applied"
@@ -558,7 +555,7 @@ configure_firewall_server() {
             continue
         fi
 
-        # Add rules to the XRAYUI chain
+        # Add rules to the "$FW_CHAIN" chain
         if [ "$listen_addr" != "0.0.0.0" ] && [ "$listen_addr" != "::" ]; then
             local IPT_LISTEN_ADDR_FLAGS="-d $listen_addr"
         else
@@ -568,8 +565,8 @@ configure_firewall_server() {
         local IPT_LISTEN_FLAGS="$IPT_LISTEN_ADDR_FLAGS --dport $port -j ACCEPT"
 
         log_debug "Adding rules for inbound:$tag $listen_addr $port $IPT_LISTEN_FLAGS"
-        ipt filter -I XRAYUI 1 -m addrtype --dst-type LOCAL -p tcp $IPT_LISTEN_FLAGS
-        ipt filter -I XRAYUI 1 -m addrtype --dst-type LOCAL -p udp $IPT_LISTEN_FLAGS
+        ipt filter -I "$FW_CHAIN" 1 -m addrtype --dst-type LOCAL -p tcp $IPT_LISTEN_FLAGS
+        ipt filter -I "$FW_CHAIN" 1 -m addrtype --dst-type LOCAL -p udp $IPT_LISTEN_FLAGS
 
         log_ok "Firewall SERVER rules applied for inbound:$tag $listen_addr $port"
     done
@@ -608,7 +605,7 @@ configure_firewall_client() {
 
     for wan_if in $(ip -o link show | awk -F': ' '{print $2}' |
         grep -E '^(ppp|pppoe|wan|wwan|lte|l2tp)[0-9]+$'); do
-        ipt "$IPT_TABLE" -I XRAYUI 1 -i "$wan_if" -j RETURN
+        ipt "$IPT_TABLE" -I "$FW_CHAIN" 1 -i "$wan_if" -j RETURN
     done
 
     # --- Begin Exclusion Rules ---
@@ -645,30 +642,30 @@ configure_firewall_client() {
     if [ "$IPT_TYPE" = "TPROXY" ]; then
         kmod_is_loaded xt_socket || kmod_load xt_socket 2>/dev/null
 
-        ipt $IPT_TABLE -I XRAYUI 1 -p udp -m socket --transparent -j MARK --set-mark $tproxy_mark/$tproxy_mask
-        ipt $IPT_TABLE -I XRAYUI 2 -p tcp -m socket --transparent -j MARK --set-mark $tproxy_mark/$tproxy_mask
+        ipt $IPT_TABLE -I "$FW_CHAIN" 1 -p udp -m socket --transparent -j MARK --set-mark $tproxy_mark/$tproxy_mask
+        ipt $IPT_TABLE -I "$FW_CHAIN" 2 -p tcp -m socket --transparent -j MARK --set-mark $tproxy_mark/$tproxy_mask
 
         insert_rule filter -m mark --mark $tproxy_mark/$tproxy_mask -j ACCEPT
 
-        iptables -w -t "$IPT_TABLE" -I XRAYUI 1 -m addrtype --src-type LOCAL -j RETURN
-        iptables -w -t "$IPT_TABLE" -I XRAYUI 2 -m addrtype --dst-type LOCAL -j RETURN
+        iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m addrtype --src-type LOCAL -j RETURN
+        iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 2 -m addrtype --dst-type LOCAL -j RETURN
 
         # for net4 in $source_nets_v4; do
-        #     iptables -w -t "$IPT_TABLE" -I XRAYUI 1 -d "$net4" -p udp --dport 53 -j RETURN
+        #     iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -d "$net4" -p udp --dport 53 -j RETURN
         # done
 
         if is_ipv6_enabled; then
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 1 -m addrtype --src-type LOCAL -j RETURN
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 2 -m addrtype --dst-type LOCAL -j RETURN
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 3 -d ff00::/8 -j RETURN
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 4 -p icmpv6 -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m addrtype --src-type LOCAL -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 2 -m addrtype --dst-type LOCAL -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 3 -d ff00::/8 -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 4 -p icmpv6 -j RETURN
         fi
 
     fi
 
     for net in $source_nets; do
         log_debug "Excluding static network $net from $IPT_TABLE."
-        ipt $IPT_TABLE -A XRAYUI -d "$net" -j RETURN
+        ipt $IPT_TABLE -A "$FW_CHAIN" -d "$net" -j RETURN
     done
 
     if [ -n "$ipsec" ] && [ "$ipsec" != "off" ]; then
@@ -683,25 +680,25 @@ configure_firewall_client() {
             v6_sets="true"
         fi
 
-        iptables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set --match-set "$IPSET_BYPASS_NET_V4" dst -j RETURN
-        iptables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set --match-set "$IPSET_BYPASS_V4" dst -j RETURN
+        iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set --match-set "$IPSET_BYPASS_NET_V4" dst -j RETURN
+        iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set --match-set "$IPSET_BYPASS_V4" dst -j RETURN
 
         if [ "$v6_sets" = "true" ]; then
             log_debug "Adding IPv6 IPSET rules for $IPT_TABLE."
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set --match-set "$IPSET_BYPASS_NET_V6" dst -j RETURN
-            ip6tables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set --match-set "$IPSET_BYPASS_V6" dst -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set --match-set "$IPSET_BYPASS_NET_V6" dst -j RETURN
+            ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set --match-set "$IPSET_BYPASS_V6" dst -j RETURN
         fi
 
         if [ "$ipsec" = "redirect" ]; then
-            iptables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set ! --match-set "$IPSET_PROXY_V4" dst -m set ! --match-set "$IPSET_PROXY_NET_V4" dst -j RETURN
+            iptables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set ! --match-set "$IPSET_PROXY_V4" dst -m set ! --match-set "$IPSET_PROXY_NET_V4" dst -j RETURN
 
             if [ "$v6_sets" = "true" ]; then
-                ip6tables -w -t "$IPT_TABLE" -I XRAYUI 1 -m set ! --match-set "$IPSET_PROXY_V6" dst -m set ! --match-set "$IPSET_PROXY_NET_V6" dst -j RETURN
+                ip6tables -w -t "$IPT_TABLE" -I "$FW_CHAIN" 1 -m set ! --match-set "$IPSET_PROXY_V6" dst -m set ! --match-set "$IPSET_PROXY_NET_V6" dst -j RETURN
             fi
         fi
     fi
 
-    local IPT_BASE_FLAGS="$IPT_TABLE -A XRAYUI"
+    local IPT_BASE_FLAGS="$IPT_TABLE -A $FW_CHAIN"
 
     # Exclude DHCP (UDP ports 67 and 68):
     # Exclude NTP (UDP port 123)
@@ -714,7 +711,7 @@ configure_firewall_client() {
     ipt $IPT_BASE_FLAGS -d 239.0.0.0/8 -j RETURN
 
     # Exclude  broadcast addresses:
-    iptables -w -t "$IPT_TABLE" -A XRAYUI -m addrtype --dst-type BROADCAST -j RETURN
+    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -m addrtype --dst-type BROADCAST -j RETURN
 
     # Exclude traffic in DNAT state (covers inbound port-forwards):
     ipt $IPT_BASE_FLAGS -m conntrack --ctstate DNAT -j RETURN
@@ -800,7 +797,7 @@ configure_firewall_client() {
         done
     fi
 
-    local policies_file="/tmp/xrayui-policies.$$"
+    local policies_file="/tmp/stealthsurf-policies.$$"
     jq -r '
         def clean: tostring | split("\n") | join(" ");
         (.routing.policies // [])
@@ -886,15 +883,15 @@ EOF
     if [ "$IPT_TYPE" = "TPROXY" ]; then
         add_tproxy_routes "$tproxy_mark/$tproxy_mask" "$tproxy_table"
     else
-        ipt $IPT_TABLE -A XRAYUI -p tcp -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
+        ipt $IPT_TABLE -A "$FW_CHAIN" -p tcp -m conntrack --ctstate ESTABLISHED,RELATED -j RETURN
         ipt $IPT_BASE_FLAGS -j RETURN 2>/dev/null || log_error "Failed to add default rule in $IPT_TABLE chain."
     fi
 
     #   ipt $IPT_BASE_FLAGS -m limit --limit 10/second --limit-burst 30 -j LOG --log-prefix "XrayUI: " --log-level 4
 
     # Hook chain into  PREROUTING:
-    log_info "Hooking XRAYUI chain into $IPT_TABLE PREROUTING."
-    ipt_ensure "$IPT_TABLE" PREROUTING -A -j XRAYUI
+    log_info "Hooking "$FW_CHAIN" chain into $IPT_TABLE PREROUTING."
+    ipt_ensure "$IPT_TABLE" PREROUTING -A -j "$FW_CHAIN"
 
     if [ "$POST_RESTART_DNSMASQ" = "false" ]; then
         if [ "$FIREWALL_FROM_HOOK" = "true" ] && dnsmasq_has_xrayui_block; then
@@ -928,21 +925,21 @@ cleanup_firewall_rules() {
 
     for tbl in filter mangle nat; do
         for hook in INPUT FORWARD PREROUTING OUTPUT; do
-            ipt_remove "$tbl" "$hook" -j XRAYUI
+            ipt_remove "$tbl" "$hook" -j "$FW_CHAIN"
         done
 
-        ipt $tbl -F XRAYUI 2>/dev/null
-        ipt $tbl -X XRAYUI 2>/dev/null
+        ipt $tbl -F "$FW_CHAIN" 2>/dev/null
+        ipt $tbl -X "$FW_CHAIN" 2>/dev/null
     done
 
     # Tear down the DNS leak lock (filter:OUTPUT, filter:FORWARD)
     for hook in OUTPUT FORWARD; do
-        ipt_remove filter "$hook" -j XRAYUI_DNS_LOCK
+        ipt_remove filter "$hook" -j "$FW_DNS_LOCK_CHAIN"
     done
-    ipt filter -F XRAYUI_DNS_LOCK 2>/dev/null
-    ipt filter -X XRAYUI_DNS_LOCK 2>/dev/null
-    ipt filter -F XRAYUI_DNS_OWNERPROBE 2>/dev/null
-    ipt filter -X XRAYUI_DNS_OWNERPROBE 2>/dev/null
+    ipt filter -F "$FW_DNS_LOCK_CHAIN" 2>/dev/null
+    ipt filter -X "$FW_DNS_LOCK_CHAIN" 2>/dev/null
+    ipt filter -F "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
+    ipt filter -X "$FW_DNS_OWNERPROBE_CHAIN" 2>/dev/null
 
     if [ "$ipsec" = "redirect" ]; then
         ipset_learned_save
@@ -950,7 +947,7 @@ cleanup_firewall_rules() {
         rm -f "$IPSET_LEARNED_FILE"
     fi
 
-    ipset list -n 2>/dev/null | awk '/^XRAYUI_/{print $1}' | while read -r s; do
+    ipset list -n 2>/dev/null | awk '/^STEALTHSURF_/{print $1}' | while read -r s; do
         ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null
     done
 
@@ -966,11 +963,11 @@ cleanup_firewall_rules() {
             done
     done
 
-    ipt mangle -D DIVERT -j MARK --set-mark $tproxy_mark/$tproxy_mask 2>/dev/null
-    ipt mangle -D DIVERT -j CONNMARK --save-mark --mask $tproxy_mask 2>/dev/null
-    ipt mangle -D DIVERT -j ACCEPT 2>/dev/null
+    ipt mangle -D "$FW_DIVERT_CHAIN" -j MARK --set-mark $tproxy_mark/$tproxy_mask 2>/dev/null
+    ipt mangle -D "$FW_DIVERT_CHAIN" -j CONNMARK --save-mark --mask $tproxy_mask 2>/dev/null
+    ipt mangle -D "$FW_DIVERT_CHAIN" -j ACCEPT 2>/dev/null
 
-    ipt_remove mangle PREROUTING -p tcp -m socket --transparent -j DIVERT
+    ipt_remove mangle PREROUTING -p tcp -m socket --transparent -j "$FW_DIVERT_CHAIN"
 
     for fam in -4 -6; do
         [ "$fam" = "-6" ] && ! is_ipv6_enabled && continue
@@ -980,16 +977,16 @@ cleanup_firewall_rules() {
         done
     done
 
-    # flush both possible tables
-    for tbl in 77 8777; do
-        ip route flush table "$tbl"
+    # flush our policy-routing table only (stock XrayUI uses 77 — do not touch it)
+    for tbl in "$tproxy_table"; do
+        ip route flush table "$tbl" 2>/dev/null
         if is_ipv6_enabled; then
-            ip -6 route flush table "$tbl"
+            ip -6 route flush table "$tbl" 2>/dev/null
         fi
     done
 
     # Flush and remove ipsets created during configuration
-    for set in "$IPSET_BYPASS_V4" "$IPSET_PROXY_V4" XRAYUI_BYPASS; do
+    for set in "$IPSET_BYPASS_V4" "$IPSET_PROXY_V4" "$IPSET_BYPASS_V4"; do
         ipset list -n 2>/dev/null | grep -qx "$set" && {
             ipset flush "$set"
             ipset destroy "$set"
@@ -997,7 +994,7 @@ cleanup_firewall_rules() {
     done
 
     if is_ipv6_enabled; then
-        for set in "$IPSET_BYPASS_V6" "$IPSET_PROXY_V6" XRAYUI_BYPASS6; do
+        for set in "$IPSET_BYPASS_V6" "$IPSET_PROXY_V6" "$IPSET_BYPASS_V6"; do
             ipset list -n 2>/dev/null | grep -qx "$set" && {
                 ipset flush "$set"
                 ipset destroy "$set"
@@ -1112,12 +1109,12 @@ set_route_localnet() {
 }
 
 ensure_bypass_ipset() {
-    ipset list XRAYUI_BYPASS >/dev/null 2>&1 ||
-        ipset create XRAYUI_BYPASS hash:ip family inet hashsize 1024 maxelem 65536 timeout 86400
+    ipset list "$IPSET_BYPASS_V4" >/dev/null 2>&1 ||
+        ipset create "$IPSET_BYPASS_V4" hash:ip family inet hashsize 1024 maxelem 65536 timeout 86400
 
     if is_ipv6_enabled; then
-        ipset list XRAYUI_BYPASS6 >/dev/null 2>&1 ||
-            ipset create XRAYUI_BYPASS6 hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 86400
+        ipset list "$IPSET_BYPASS_V6" >/dev/null 2>&1 ||
+            ipset create "$IPSET_BYPASS_V6" hash:ip family inet6 hashsize 1024 maxelem 65536 timeout 86400
     fi
 }
 

@@ -159,9 +159,17 @@ is_xray_daemon_cmdline() {
 }
 
 is_xray_daemon_pid() {
+    local cmdline
     [ -n "$1" ] || return 1
     [ -r "/proc/$1/cmdline" ] || return 1
-    is_xray_daemon_cmdline "$(tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null)"
+    cmdline=$(tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null)
+    is_xray_daemon_cmdline "$cmdline" || return 1
+    # Only claim processes started with OUR config (never stock XrayUI's config.json)
+    case " $cmdline " in
+    *" $XRAY_CONFIG_FILE "* | *" -c $XRAY_CONFIG_FILE "* | *" -config $XRAY_CONFIG_FILE "*) return 0 ;;
+    *" $XRAY_CONFIG_DIR/"*) return 0 ;;
+    esac
+    return 1
 }
 
 get_xray_daemon_pids() {
@@ -298,12 +306,12 @@ remove_json_comments() {
     echo $tempconfig
 }
 
-XRAYUI_STAGING_DIR="/tmp/xrayui-staging"
+XRAYUI_STAGING_DIR="/tmp/stealthsurf-staging"
 
 reconstruct_payload() {
 
     local session
-    session=$(am_settings_get xray_staged_session)
+    session=$(am_settings_get stealthsurf_staged_session)
 
     if [ -n "$session" ]; then
         reconstruct_staged_payload "$session"
@@ -314,7 +322,7 @@ reconstruct_payload() {
     local chunk
     local payload=""
     while :; do
-        chunk=$(am_settings_get xray_payload$idx)
+        chunk=$(am_settings_get stealthsurf_payload$idx)
         if [ -z "$chunk" ]; then
             break
         fi
@@ -391,7 +399,7 @@ reconstruct_staged_payload() {
         return 1
     fi
 
-    local tmp_assembly="/tmp/xrayui-staged-assembly.$$"
+    local tmp_assembly="/tmp/stealthsurf-staged-assembly.$$"
     : >"$tmp_assembly"
 
     local idx=0
@@ -423,13 +431,13 @@ reconstruct_staged_payload() {
 }
 
 cleanup_payload() {
-    grep -q '^xray_payload' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
-    custom_settings_drop '/^xray_payload/d'
+    grep -q '^stealthsurf_payload' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
+    custom_settings_drop '/^stealthsurf_payload/d'
 }
 
 cleanup_staged_marker() {
     grep -qE '^xray_stag(ed_session|e_)' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
-    custom_settings_drop '/^xray_staged_session/d;/^xray_stage_/d'
+    custom_settings_drop '/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d'
 }
 
 cleanup_staging() {
@@ -458,10 +466,10 @@ stage_chunk() {
     local total
     local data
 
-    session=$(am_settings_get xray_stage_session)
-    index=$(am_settings_get xray_stage_index)
-    total=$(am_settings_get xray_stage_total)
-    data=$(am_settings_get xray_stage_data)
+    session=$(am_settings_get stealthsurf_stage_session)
+    index=$(am_settings_get stealthsurf_stage_index)
+    total=$(am_settings_get stealthsurf_stage_total)
+    data=$(am_settings_get stealthsurf_stage_data)
 
     local safe_session
     safe_session=$(printf '%s' "$session" | tr -cd 'A-Za-z0-9_-' | cut -c1-64)
@@ -660,7 +668,7 @@ fixme() {
 
     log_info "Removing XRAY broken payload settings..."
     if grep -qE '^xray_(payload|staged_session|stage_)' /jffs/addons/custom_settings.txt 2>/dev/null; then
-        custom_settings_drop '/^xray_payload/d;/^xray_staged_session/d;/^xray_stage_/d' || log_warn "Failed to remove broken payload settings"
+        custom_settings_drop '/^stealthsurf_payload/d;/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' || log_warn "Failed to remove broken payload settings"
     else
         log_info "No broken payload settings found."
     fi
@@ -774,11 +782,11 @@ cleanup_stale_asdfiles() {
     # Purge orphaned xrayui staging files and any ASD (Asus Self Defense) backups
     local asdbk="/jffs/.asdbk"
 
-    rm -f /tmp/xrayui_*.tmp.* 2>/dev/null
-    rm -f /tmp/xrayui_dnsmasq_direct.tmp.* 2>/dev/null
-    rm -f /tmp/xrayui_geoip4.* /tmp/xrayui_geoip6.* 2>/dev/null
-    rm -f /tmp/xrayui_config.* /tmp/xrayui-dnsmasq-servers.* 2>/dev/null
-    rm -f /tmp/xrayui_script.* /tmp/xrayui_payload* 2>/dev/null
+    rm -f /tmp/stealthsurf_*.tmp.* 2>/dev/null
+    rm -f /tmp/stealthsurf_dnsmasq_direct.tmp.* 2>/dev/null
+    rm -f /tmp/stealthsurf_geoip4.* /tmp/stealthsurf_geoip6.* 2>/dev/null
+    rm -f /tmp/stealthsurf_config.* /tmp/stealthsurf-dnsmasq-servers.* 2>/dev/null
+    rm -f /tmp/stealthsurf_script.* /tmp/stealthsurf_payload* 2>/dev/null
 
     if [ -d "$asdbk" ]; then
         rm -f "$asdbk"/xrayui_*_bk "$asdbk"/*xrayui*.tmp.*_bk 2>/dev/null

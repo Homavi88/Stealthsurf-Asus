@@ -113,7 +113,7 @@ start() {
         api_apply_configuration
 
         local xray_config_name=$(basename "$XRAY_CONFIG_FILE")
-        local xray_api_config="/opt/etc/xray/xrayui/${xray_config_name%.json}-api.json"
+        local xray_api_config="$XRAY_CONFIG_DIR/${xray_config_name%.json}-api.json"
 
         local XRAY_EXTRA_CFG=""
         if [ -f "$xray_api_config" ]; then

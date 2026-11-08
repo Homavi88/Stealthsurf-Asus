@@ -50,6 +50,22 @@ routing, DNS, clients online, geodata, subscriptions, firewall/TPROXY, updates, 
 Upstream project and license: see [ATTRIBUTION.md](./ATTRIBUTION.md) and [LICENSE](./LICENSE)
 (CC BY-NC-SA 4.0, © Daniel Lavrushin / contributors).
 
+## Coexistence with stock XrayUI (1.1.1+)
+
+StealthSurf keeps its own state so it can sit beside stock XrayUI on one router:
+
+| Resource | StealthSurf | Stock XrayUI |
+| --- | --- | --- |
+| Profile JSON | `/opt/etc/xray/stealthsurf/config.json` | `/opt/etc/xray/config.json` |
+| Addon conf | `/opt/etc/stealthsurf.conf` | `/opt/etc/xrayui.conf` |
+| Merlin settings | `stealthsurf_*` | `xray_*` |
+| PID | `/var/run/stealthsurf-xray.pid` | `/var/run/xray.pid` |
+| Firewall | chains `STEALTHSURF*`, mark `0x20000`, table `78` | `XRAYUI*`, `0x10000`, `77` |
+| Custom geodata | `/opt/sbin/stealthsurf`, `ext:stealthsurf:` | `/opt/sbin/xrayui`, `ext:xrayui:` |
+
+Still shared (single binary/dat on the router): `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat`.
+Do not run both addons’ transparent proxy at the same time.
+
 ## Build
 
 ```sh
