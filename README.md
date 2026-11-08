@@ -27,16 +27,17 @@ wget -O /tmp/asuswrt-merlin-stealthsurf.tar.gz \
 && sh /jffs/scripts/stealthsurf install
 ```
 
-WebUI: **VPN → StealthSurf**. CLI: `stealthsurf` / `ssurf`.
+WebUI: **VPN → StealthSurf**. CLI: `ssurf` / `ss` / `stealthsurf` (`ssurf h` · `ssurf m`).
 
 ## StealthSurf API (1.1)
 
 | Action | CLI | WebUI |
 | --- | --- | --- |
-| Save / add API key | `stealthsurf set-key stlth_…` / `add-key` | Account panel |
-| Balances (RUB + referral) | `stealthsurf bal` | Balance table (+ browser CORS refresh) |
-| Sync configs / locations / subs | `stealthsurf sync` | Sync catalog |
-| Import config → outbound `ss-<id>` | `stealthsurf import-config <id>` | Import selected → Outbounds |
+| Save / add API key | `ssurf key stlth_…` / `ssurf addk` | Account panel |
+| Balances (RUB + referral) | `ssurf bal` | Balance table (+ browser CORS refresh) |
+| Sync configs / locations / subs | `ssurf sy` · `ssurf ls` | Sync catalog |
+| Import config → outbound `ss-<id>` | `ssurf ap <id>` / `ssurf ic <id>` | Import selected → Outbounds |
+| Start / stop / restart / status | `ssurf up` · `dn` · `re` · `st` | Server controls |
 
 API base: `https://api.stealthsurf.net` (Bearer `stlth_…` keys).
 

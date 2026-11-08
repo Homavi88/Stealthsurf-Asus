@@ -34,55 +34,16 @@ import ./diagnostics.sh
 import ./rtls.sh
 import ./b4sni.sh
 import ./stealthsurf_api.sh
+import ./cli_aliases.sh
+
+# Short CLI (ssurf up|dn|re|st|sy|ls|ap|…) + common long names
+ss_cli_dispatch "$@"
+_ss_cli_rc=$?
+if [ "$_ss_cli_rc" -ne 2 ]; then
+    exit "$_ss_cli_rc"
+fi
 
 case "$1" in
-version)
-    show_version
-    ;;
-install)
-    install || exit 1
-    ;;
-key | set-key)
-    ss_api_set_primary_key "$2" "${3:-primary}"
-    ;;
-add-key)
-    ss_api_add_key "$2" "$3"
-    ;;
-remove-key)
-    ss_api_keys_store_remove "$2"
-    ;;
-bal | balances)
-    ss_api_fetch_balances "${2:-1}"
-    ;;
-sy | sync)
-    ss_api_sync_all
-    ;;
-import-config)
-    ss_api_import_config_to_xray "$2"
-    ;;
-uninstall)
-    uninstall
-    ;;
-update)
-    case "$2" in
-    xray)
-        switch_stealthsurf_version $3 || exit 1
-        ;;
-    *)
-        update "$2"
-        ;;
-    esac
-    exit 0
-    ;;
-start)
-    with_restart_lock start
-    ;;
-stop)
-    with_restart_lock stop
-    ;;
-restart)
-    restart
-    ;;
 mount_ui)
     mount_ui
     ;;
@@ -92,33 +53,8 @@ unmount_ui)
 remount_ui)
     remount_ui $2
     ;;
-fixme)
-    fixme
-    ;;
-backup)
-    backup_configuration
-    ;;
 dnsmasq)
     dnsmasq_configure "$2"
-    ;;
-diagnostics)
-    case "$2" in
-    iptables)
-        diagnostics_iptables
-        ;;
-    env)
-        diagnostics_env
-        ;;
-    xrayui)
-        diagnostics_xrayui
-        ;;
-    *)
-        diagnostics_env
-        diagnostics_xrayui
-        diagnostics_iptables
-        ;;
-    esac
-    exit 0
     ;;
 subscriptions)
     case "$2" in
@@ -482,7 +418,7 @@ service_event)
     exit 0
     ;;
 *)
-    echo "Usage: $0 {version|install|uninstall|start|stop|restart|update|mount_ui|unmount_ui|remount_ui}"
+    ss_cli_help
     exit 1
     ;;
 esac
