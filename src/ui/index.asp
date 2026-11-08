@@ -420,7 +420,12 @@ function initial() {
     font-size: 12px;
     margin-left: auto;
   }
-  .ss-suggest-wrap { position: relative; display: inline-block; vertical-align: middle; }
+  .ss-suggest-wrap {
+    position: relative;
+    display: block;
+    width: 100%;
+    max-width: 520px;
+  }
   .ss-suggest-box {
     display: none;
     position: absolute;
@@ -456,7 +461,42 @@ function initial() {
     color: #9ab;
     font-size: 11px;
   }
-  #ruleMatcher { width: 260px; }
+  .ss-rule-field { margin-bottom: 8px; }
+  .ss-rule-field label {
+    display: block;
+    color: #9ab;
+    font-size: 11px;
+    margin-bottom: 3px;
+  }
+  .ss-prefix-tags {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 0 0 4px 0;
+  }
+  .ss-prefix-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 1px solid #5a686d;
+    background: #2f3a3e;
+    color: #fc0;
+    font-size: 11px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .ss-prefix-tag:hover { border-color: #fc0; }
+  #ruleDomains,
+  #ruleIps {
+    width: 100%;
+    max-width: 520px;
+    box-sizing: border-box;
+    min-height: 120px;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12px;
+    resize: vertical;
+  }
+  #ruleIps { min-height: 72px; }
+  #ruleOutbound { min-width: 220px; }
   #conflictBanner {
     display: none;
     margin: 8px 0 12px;
@@ -638,7 +678,9 @@ function initial() {
     .FormTable select.input_25_table,
     .FormTable select.input_32_table,
     .FormTable select.input_15_table,
-    #ruleMatcher {
+    #ruleDomains,
+    #ruleIps,
+    .ss-suggest-wrap {
       width: 100% !important;
       max-width: 100%;
       box-sizing: border-box;
@@ -1221,45 +1263,58 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Своё правило: что искать (сайт, страна, IP) и куда отправлять (в VPN или напрямую). Подсказки появятся, когда начнёте печатать название сайта.">Новое правило</th>
+                          <th data-ss-hint="Как в XrayUI: сверху выберите VPN (outbound), ниже — список сайтов/категорий по одному на строку. Подсказки появляются при вводе домена или geosite:/geoip:.">Новое правило</th>
                           <td>
-                            <div style="margin-bottom:6px">
-                              <select id="ruleType" class="input_15_table" title="тип matcher">
-                                <option value="domain">domain (поддомены)</option>
-                                <option value="full">full (точный хост)</option>
-                                <option value="keyword">keyword</option>
-                                <option value="geosite">geosite ( Loyalsoldier )</option>
-                                <option value="geoip">geoip</option>
-                                <option value="ip">ip / cidr</option>
-                                <option value="regexp">regexp</option>
-                              </select>
-                              <select id="ruleOutbound" class="input_25_table" style="margin-left:6px" title="куда слать"></select>
+                            <div class="ss-rule-field">
+                              <label for="ruleOutbound">VPN / outbound</label>
+                              <select id="ruleOutbound" class="input_25_table" title="куда слать трафик"></select>
                             </div>
-                            <div style="margin-bottom:6px">
+                            <div class="ss-rule-field">
+                              <label for="ruleName">Имя (опционально)</label>
+                              <input id="ruleName" class="input_25_table" type="text" placeholder="например streaming" maxlength="40">
+                              <input id="rulePriority" class="input_15_table" type="number" placeholder="prio" style="width:70px;margin-left:6px" min="1" max="9999" title="приоритет">
+                            </div>
+                            <div class="ss-rule-field">
+                              <label for="ruleDomains">Домены / geosite (по одному на строку)</label>
+                              <div class="ss-prefix-tags" id="ruleDomainPrefixes">
+                                <span class="ss-prefix-tag" data-prefix="geosite:" data-target="ruleDomains">geosite:</span>
+                                <span class="ss-prefix-tag" data-prefix="domain:" data-target="ruleDomains">domain:</span>
+                                <span class="ss-prefix-tag" data-prefix="full:" data-target="ruleDomains">full:</span>
+                                <span class="ss-prefix-tag" data-prefix="keyword:" data-target="ruleDomains">keyword:</span>
+                                <span class="ss-prefix-tag" data-prefix="regexp:" data-target="ruleDomains">regexp:</span>
+                              </div>
                               <span class="ss-suggest-wrap">
-                                <input id="ruleMatcher" class="input_32_table" type="text" autocomplete="off" placeholder="домен или geosite/geoip…" spellcheck="false">
+                                <textarea id="ruleDomains" class="input_32_table" rows="8" spellcheck="false" autocomplete="off" placeholder="youtube.com&#10;geosite:netflix&#10;domain:openai.com"></textarea>
                                 <div id="ruleSuggestBox" class="ss-suggest-box" role="listbox"></div>
                               </span>
-                              <input id="ruleName" class="input_15_table" type="text" placeholder="имя (опц.)" style="margin-left:6px" maxlength="40">
-                              <input id="rulePriority" class="input_15_table" type="number" placeholder="prio" style="width:70px;margin-left:6px" min="1" max="9999">
+                            </div>
+                            <div class="ss-rule-field">
+                              <label for="ruleIps">IP / geoip (опционально)</label>
+                              <div class="ss-prefix-tags" id="ruleIpPrefixes">
+                                <span class="ss-prefix-tag" data-prefix="geoip:" data-target="ruleIps">geoip:</span>
+                              </div>
+                              <span class="ss-suggest-wrap">
+                                <textarea id="ruleIps" class="input_32_table" rows="4" spellcheck="false" autocomplete="off" placeholder="geoip:private&#10;1.2.3.0/24"></textarea>
+                              </span>
                             </div>
                             <div id="ruleSuggestHint" class="ss-hint">
-                              Начните вводить домен — подсказки из списка популярных сайтов. Для geosite/geoip — категории из репозитория geodata.
+                              Одна строка = один matcher. Обычный сайт → domain:. Категория → geosite:youtube. Подсказки — по текущей строке.
                             </div>
                             <div class="row-buttons" style="margin-top:6px">
                               <input id="btnAddRule" class="button_gen button_gen_small" type="button" value="Добавить в список">
+                              <input id="btnClearRuleForm" class="button_gen button_gen_small" type="button" value="Очистить форму">
                               <input id="btnSaveRouting" class="button_gen button_gen_small" type="button" value="Сохранить routing">
                               <input id="btnGeodata" class="button_gen button_gen_small" type="button" value="Обновить geoip/geosite">
                             </div>
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Список уже действующих правил. Чем меньше номер приоритета — тем раньше правило срабатывает. Можно удалить ненужное.">Текущие правила</th>
+                          <th data-ss-hint="Список правил. Чем меньше номер приоритета — тем раньше срабатывает. Редактирование подставляет outbound и список доменов обратно в форму.">Текущие правила</th>
                           <td>
                             <div class="ss-table-scroll"><table class="ss-data-table">
                               <thead>
                                 <tr>
-                                  <th>#</th><th>Имя</th><th>Тип</th><th>Matcher</th><th>Outbound</th><th>Prio</th><th></th>
+                                  <th>#</th><th>Имя / matchers</th><th>Outbound</th><th>Prio</th><th></th>
                                 </tr>
                               </thead>
                               <tbody id="rulesTable"></tbody>
@@ -1275,9 +1330,9 @@ function initial() {
                           <td>
                             <textarea id="routingJson" spellcheck="false"></textarea>
                             <div class="ss-hint">
-                              Редактируйте вручную при необходимости. Типы:
-                              <code>domain</code>, <code>full</code>, <code>keyword</code>, <code>regexp</code>,
-                              <code>geosite</code>, <code>geoip</code>, <code>ip</code>, <code>cidr</code>.
+                              Формат правила: <code>outbound</code> + массивы <code>domain</code> / <code>ip</code>
+                              (как в Xray: <code>domain:site.com</code>, <code>geosite:youtube</code>, <code>geoip:ru</code>).
+                              Старый формат <code>type</code>+<code>matcher</code> тоже поддерживается.
                             </div>
                           </td>
                         </tr>
