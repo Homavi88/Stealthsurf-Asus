@@ -57,9 +57,10 @@ mv -f "$JFFS_ADDONS/stealthsurf/stealthsurf" /jffs/scripts/stealthsurf
 chmod 0755 /jffs/scripts/stealthsurf
 ln -sf /jffs/scripts/stealthsurf /opt/bin/stealthsurf 2>/dev/null || true
 ln -sf /jffs/scripts/stealthsurf /opt/bin/ssurf 2>/dev/null || true
+ln -sf /jffs/scripts/stealthsurf /opt/bin/ss 2>/dev/null || true
 
 echo "==> Running stealthsurf install"
 sh /jffs/scripts/stealthsurf install
 
 echo "==> Done. Open VPN → StealthSurf in the router WebUI."
-echo "    CLI: stealthsurf | ssurf"
+echo "    CLI: ssurf | ss | stealthsurf   (help: ssurf h)"

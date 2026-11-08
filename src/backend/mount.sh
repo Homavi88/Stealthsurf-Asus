@@ -50,6 +50,8 @@ mount_ui() {
     fi
 
     ln -s -f "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" || log_error "Failed to create symlink for $ADDON_TAG."
+    ln -s -f "$ADDON_SCRIPT" /opt/bin/ssurf || log_error "Failed to create symlink for ssurf."
+    ln -s -f "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
 
     ln -s -f "$ADDON_JFFS_ADN_DIR/app.js" $ADDON_WEB_DIR/app.js || log_error "Failed to create symlink for app.js."
     ln -s -f "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" || log_error "Failed to create symlink for xray-config.json."
@@ -120,7 +122,7 @@ unmount_ui() {
         mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
     fi
 
-    rm -rf "/opt/bin/$ADDON_TAG" || log_error "Failed to remove symlink for $ADDON_TAG."
+    rm -f "/opt/bin/$ADDON_TAG" /opt/bin/ssurf /opt/bin/ss || log_error "Failed to remove CLI symlinks."
 
     clear_lock
 

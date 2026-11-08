@@ -228,7 +228,11 @@ EOF
     ss_api_ensure_caches 2>/dev/null || true
     ss_api_migrate_legacy_keys 2>/dev/null || true
     ss_api_public_keys_view 2>/dev/null || true
-    ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
+    ss_cli_ensure_bin_links 2>/dev/null || {
+        ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+        ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
+        ln -sf "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
+    }
     # Clear legacy 1.0.x service-event block if present (replaced by #stealthsurf hook)
     if [ -f /jffs/scripts/service-event ] && grep -q 'StealthSurf UI hook' /jffs/scripts/service-event 2>/dev/null; then
         awk '

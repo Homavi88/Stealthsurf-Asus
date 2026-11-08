@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.2] - 2026-11-08
+
+### Short CLI aliases restored
+
+- Terminal shortcuts again: `ssurf` / `ss` (symlinks) plus `up` `dn` `re` `st` `sy` `ls` `ap` `bal` `key` `h` `m` …
+- Examples: `ssurf up`, `ssurf sy && ssurf ls`, `ssurf ap <id> && ssurf re`, `ssurf h`, `ssurf m`
+
+---
+
 ## [1.1.1] - 2026-11-08
 
 ### Isolation from stock XrayUI
