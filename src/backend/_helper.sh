@@ -1,585 +1,797 @@
 #!/bin/sh
+# shellcheck disable=SC2034  # codacy:Unused variables
 
-# Human status on stderr when interactive. Never on stdout —
-# service-event / jq captures must stay clean. Override: SS_PROGRESS=0|1.
-# Merlin/Entware SSH often has stderr not marked as TTY — also accept
-# stdin/stdout TTY, and CLI update paths force SS_PROGRESS=1.
-ss_console_enabled() {
-  case "${SS_PROGRESS:-auto}" in
-  0 | off | no | false) return 1 ;;
-  1 | on | yes | true) return 0 ;;
-  esac
-  [ -t 2 ] 2>/dev/null && return 0
-  [ -t 1 ] 2>/dev/null && return 0
-  [ -t 0 ] 2>/dev/null && return 0
-  return 1
-}
+# ANSI color codes (only used if stdout is a terminal)
+CDBG='\033[0;90m'  # gray
+CERR='\033[0;31m'  # red
+CWARN='\033[0;33m' # yellow
+CINFO='\033[0;36m' # cyan
+CSUC='\033[0;32m'  # green
+CLOG='\033[0;37m'  # white
+CRESET='\033[0m'
+LOG_FACILITY='user'
 
-# Force visible progress for update/install-version CLI (unless user set SS_PROGRESS=0).
-ss_cli_force_progress() {
-  case "${SS_PROGRESS:-auto}" in
-  0 | off | no | false) return 0 ;;
-  esac
-  SS_PROGRESS=1
-  export SS_PROGRESS
-}
+if [ -t 1 ]; then
+    USE_COLOR=1
+else
+    USE_COLOR=0
+fi
 
-ss_console() {
-  ss_console_enabled || return 0
-  printf '%s\n' "$1" >&2
-}
+printlog() {
+    level=$1
+    shift
+    msg=$*
 
-# Always print to stderr (even without TTY) — for critical update status.
-ss_cli_echo() {
-  printf '%s\n' "$1" >&2
-}
+    # Map LEVEL → syslog priority & console color
+    case "$level" in
+    ALERT | CRIT)
+        priority='crit'
+        color=$CERR
+        ;;
+    ERROR)
+        priority='err'
+        color=$CERR
+        ;;
+    WARN | WARNING)
+        priority='warning'
+        color=$CWARN
+        ;;
+    NOTICE)
+        priority='notice'
+        color=$CINFO
+        ;;
 
-ss_progress_log_file() {
-  # Always persist progress breadcrumbs (TTY or not)
-  local kind="$1"
-  local msg="$2"
-  [ -n "${ADDON_LOGS_DIR:-}" ] || return 0
-  mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null || true
-  printf '%s action=progress.%s %s\n' \
-    "$(date '+%Y-%m-%d %H:%M:%S')" "$kind" "$msg" \
-    >>"$ADDON_LOGS_DIR/activity.log" 2>/dev/null || true
-}
+    LOG)
+        priority='info'
+        color=$CLOG
+        ;;
+    INFO)
+        priority='info'
+        color=$CINFO
+        ;;
+    DEBUG)
+        priority='debug'
+        color=$CDBG
+        ;;
+    SUCCESS | OK)
+        priority='info'
+        color=$CSUC
+        ;;
+    *)
+        priority='info'
+        color=$CINFO
+        ;;
+    esac
 
-ss_progress_begin() {
-  # ss_progress_begin <title> [total_steps]
-  SS_PROGRESS_TITLE="${1:-StealthSurf update}"
-  SS_PROGRESS_TOTAL="${2:-7}"
-  SS_PROGRESS_STEP=0
-  ss_progress_log_file "begin" "title=$SS_PROGRESS_TITLE total=$SS_PROGRESS_TOTAL"
-  ss_console_enabled || return 0
-  printf '\n======== %s ========\n' "$SS_PROGRESS_TITLE" >&2
-}
+    logger -t "STEALTHSURF" -p "${LOG_FACILITY}.${priority}" -- "$msg"
 
-ss_progress_step() {
-  # ss_progress_step <message>
-  local msg="$1"
-  local n t pct
-  SS_PROGRESS_STEP=$((${SS_PROGRESS_STEP:-0} + 1))
-  n="$SS_PROGRESS_STEP"
-  t="${SS_PROGRESS_TOTAL:-7}"
-  if [ "$t" -gt 0 ] 2>/dev/null; then
-    pct=$((n * 100 / t))
-  else
-    pct=0
-  fi
-  [ "$pct" -gt 100 ] 2>/dev/null && pct=100
-  ss_progress_log_file "step" "step=$n/$t pct=$pct $msg"
-  ss_console_enabled || return 0
-  printf '[%d/%d] (%3d%%) %s\n' "$n" "$t" "$pct" "$msg" >&2
-}
-
-ss_progress_end() {
-  # ss_progress_end <final message>
-  local msg="${1:-done}"
-  ss_progress_log_file "end" "$msg"
-  ss_console_enabled || return 0
-  printf '======== %s ========\n\n' "$msg" >&2
-}
-
-ss_curl_download() {
-  # ss_curl_download <url> <outfile> — progress bar on TTY, silent otherwise
-  local url="$1"
-  local out="$2"
-  if ss_console_enabled; then
-    # --progress-bar → stderr meter (stdout stays clean for callers)
-    if curl -fL --connect-timeout 15 --max-time 300 --progress-bar -o "$out" "$url"; then
-      return 0
+    if [ "$ADDON_DEBUG" = "false" ] && [ "$level" = "DEBUG" ]; then
+        return
     fi
-    # Some firmware curls lack --progress-bar; retry with -# then silent
-    if curl -fL --connect-timeout 15 --max-time 300 -# -o "$out" "$url"; then
-      return 0
+
+    if [ "$USE_COLOR" -eq 1 ]; then
+        printf '%b%s%b\n' "$color" "$msg" "$CRESET"
+    else
+        printf '%s\n' "$msg"
     fi
-  fi
-  curl -fsSL --connect-timeout 15 --max-time 300 -o "$out" "$url"
 }
 
-ss_log() {
-  logger -t "$ADDON_TAG" "$1"
-  mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null
-  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1" >>"$ADDON_LOGS_DIR/addon.log" 2>/dev/null
-  ss_console "$1"
+log_alert() { printlog ALERT "$@"; }
+log_crit() { printlog CRIT "$@"; }
+log_error() { printlog ERROR "$@"; }
+log_warn() { printlog WARN "$@"; }
+log_notice() { printlog NOTICE "$@"; }
+log_info() { printlog INFO "$@"; }
+log_log() { printlog LOG "$@"; }
+log_ok() { printlog OK "$@"; }
+log_debug() { printlog DEBUG "$@"; }
+
+log_info_box() {
+    log_box "$1" "$CINFO"
 }
 
-ss_ok() { ss_log "OK: $1"; }
-ss_info() { ss_log "INFO: $1"; }
-ss_warn() { ss_log "WARN: $1"; }
-ss_error() { ss_log "ERROR: $1"; }
-
-ss_ensure_dirs() {
-  mkdir -p "$ADDON_SHARE_DIR" "$ADDON_LOGS_DIR" "$ADDON_TMP_DIR" "/opt/etc/xray" \
-    "$ADDON_DATA_DIR" "$ADDON_BACKUP_DIR" 2>/dev/null
-  mkdir -p "$(dirname "$SS_CONF_FILE")" 2>/dev/null
-  # Default JSON stores
-  [ -f "$SS_POLICIES_FILE" ] || echo '{"rules":[]}' >"$SS_POLICIES_FILE"
-  [ -f "$SS_ROUTING_FILE" ] || echo '{"domainStrategy":"AsIs","default_outbound":"","rules":[],"preset":""}' >"$SS_ROUTING_FILE"
-  [ -f "$SS_OUTBOUNDS_FILE" ] || echo '{"enabled":[],"default":""}' >"$SS_OUTBOUNDS_FILE"
-  [ -f "$SS_CACHE_KEYS" ] || echo '[]' >"$SS_CACHE_KEYS"
-  [ -f "$SS_CACHE_SUBSCRIPTIONS" ] || echo '[]' >"$SS_CACHE_SUBSCRIPTIONS"
-  [ -f "$SS_CACHE_CONFIGS" ] || echo '[]' >"$SS_CACHE_CONFIGS"
-  [ -f "$SS_CACHE_BALANCES" ] || echo '{"fetched_at":0,"keys":[],"total_balance":0,"total_referral":0,"currency":"RUB"}' >"$SS_CACHE_BALANCES"
-  [ -f "$SS_CACHE_CLIENTS" ] || echo '[]' >"$SS_CACHE_CLIENTS"
-  [ -f "$SS_ENDPOINTS_FILE" ] || echo '[]' >"$SS_ENDPOINTS_FILE"
+log_warn_box() {
+    log_box "$1" "$CWARN"
 }
 
-ss_save_conf() {
-  ss_ensure_dirs
-  # Sync enabled outbounds / default from outbounds file if present
-  if [ -f "$SS_OUTBOUNDS_FILE" ]; then
-    SS_ENABLED_OUTBOUNDS=$(jq -r '(.enabled // []) | map(tostring) | join(" ")' "$SS_OUTBOUNDS_FILE" 2>/dev/null)
-    SS_DEFAULT_OUTBOUND=$(jq -r '.default // empty' "$SS_OUTBOUNDS_FILE" 2>/dev/null)
-  fi
-  cat >"$SS_CONF_FILE" <<EOF
-SS_API_KEY='$SS_API_KEY'
-SS_API_KEYS='$SS_API_KEYS'
-SS_API_BASE='$SS_API_BASE'
-SS_ACTIVE_CONFIG_ID='$SS_ACTIVE_CONFIG_ID'
-SS_DEFAULT_OUTBOUND='$SS_DEFAULT_OUTBOUND'
-SS_ENABLED_OUTBOUNDS='$SS_ENABLED_OUTBOUNDS'
-SS_SOCKS_PORT='$SS_SOCKS_PORT'
-SS_HTTP_PORT='$SS_HTTP_PORT'
-SS_TPROXY_PORT='$SS_TPROXY_PORT'
-SS_REDIRECT_PORT='$SS_REDIRECT_PORT'
-SS_DNS_PORT='$SS_DNS_PORT'
-SS_MODE='$SS_MODE'
-SS_DNS_MODE='$SS_DNS_MODE'
-SS_PROXY_MODE='$SS_PROXY_MODE'
-SS_AUTO_START='$SS_AUTO_START'
-SS_WATCHDOG='$SS_WATCHDOG'
-SS_FALLBACK_OUTBOUND='$SS_FALLBACK_OUTBOUND'
-SS_XRAY_ACCESS_LOG='${SS_XRAY_ACCESS_LOG:-0}'
-SS_AUTO_BACKUP='${SS_AUTO_BACKUP:-1}'
-SS_BACKUP_KEEP='${SS_BACKUP_KEEP:-10}'
-SS_LOG_MAX_BYTES='${SS_LOG_MAX_BYTES:-1048576}'
-SS_STARTUP_DELAY='${SS_STARTUP_DELAY:-8}'
-SS_REBOOT_SCHEDULE='${SS_REBOOT_SCHEDULE:-off}'
-SS_REBOOT_CRON='${SS_REBOOT_CRON:-}'
-SS_GEODATA_AUTO='${SS_GEODATA_AUTO:-0}'
-SS_GEODATA_SCHEDULE='${SS_GEODATA_SCHEDULE:-weekly}'
-SS_GEODATA_BASE='${SS_GEODATA_BASE:-https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download}'
-SS_GEODATA_PRESET='${SS_GEODATA_PRESET:-loyalsoldier}'
-SS_LAST_SYNC='${SS_LAST_SYNC:-}'
+log_error_box() {
+    log_box "$1" "$CERR"
+}
+
+log_box() {
+    msg="$1"
+    padding=2
+    len=$(printf '%s' "$msg" | wc -c)
+    width=$((len + padding * 2))
+    color="${2:-$CSUC}"
+
+    border=''
+    i=0
+    while [ "$i" -lt "$width" ]; do
+        border="${border}═"
+        i=$((i + 1))
+    done
+
+    printf '%b╔%s╗\n' "$color" "$border"
+    printf '%b║%*s║\n' "$color" "$width" ''
+    printf '%b║%*s%s%*s║\n' "$color" "$padding" '' "$msg" "$padding" ''
+    printf '%b║%*s║\n' "$color" "$width" ''
+    printf '%b╚%s╝%b\n' "$color" "$border" "$CRESET"
+}
+
+# PATH puts /opt/sbin first, so a bare `modprobe` resolves to Entware's kmod,
+# which can fail to load firmware modules. Prefer the firmware's own modprobe.
+kmod_load() {
+    if [ -x /sbin/modprobe ]; then
+        /sbin/modprobe "$@"
+    else
+        modprobe "$@"
+    fi
+}
+
+# Read /proc/modules directly instead of `lsmod`, which has the same PATH issue.
+kmod_is_loaded() {
+    grep -q "^$1 " /proc/modules 2>/dev/null
+}
+
+get_proc() {
+    local proc_name="$1"
+    echo $(/bin/pidof "$proc_name" 2>/dev/null | awk '{print $NF}')
+}
+
+is_xray_daemon_cmdline() {
+    local args
+    case "${1%% *}" in
+    xray | */xray) ;;
+    *) return 1 ;;
+    esac
+    case "$1" in
+    *" "*) args="${1#* }" ;;
+    *) args="" ;;
+    esac
+    case " $args " in
+    *" -test "* | *" --test "* | *" -test="* | *" --test="* | *" -dump "* | *" --dump "* | *" -dump="* | *" --dump="* | *" -version "* | *" --version "* | *" -h "* | *" -help "* | *" --help "*) return 1 ;;
+    esac
+    case "${args%% *}" in
+    "" | run | -*) return 0 ;;
+    esac
+    return 1
+}
+
+is_xray_daemon_pid() {
+    [ -n "$1" ] || return 1
+    [ -r "/proc/$1/cmdline" ] || return 1
+    is_xray_daemon_cmdline "$(tr '\0' ' ' <"/proc/$1/cmdline" 2>/dev/null)"
+}
+
+get_xray_daemon_pids() {
+    local pid
+    for pid in $(/bin/pidof xray 2>/dev/null); do
+        if is_xray_daemon_pid "$pid"; then
+            echo "$pid"
+        fi
+    done
+}
+
+get_xray_daemon_pid() {
+    local pid
+    if [ -f "$XRAY_PIDFILE" ]; then
+        pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && is_xray_daemon_pid "$pid"; then
+            echo "$pid"
+            return 0
+        fi
+    fi
+
+    pid=$(get_xray_daemon_pids | head -n 1)
+    [ -n "$pid" ] || return 1
+    echo "$pid"
+}
+
+kill_xray_daemon() {
+    local sig="${1:--TERM}"
+    local pid
+    for pid in $(get_xray_daemon_pids); do
+        log_debug "Sending $sig to Xray daemon (PID: $pid)."
+        kill "$sig" "$pid" 2>/dev/null
+    done
+}
+
+get_proc_uptime() {
+    local pid
+    if [ "$1" = "xray" ]; then
+        pid=$(get_xray_daemon_pid)
+    else
+        pid=$(pidof "$1")
+    fi
+
+    if [ -z "$pid" ] || [ ! -f "/proc/$pid/stat" ]; then
+        echo 0
+        return
+    fi
+
+    local uptime_s=$(cut -d. -f1 /proc/uptime)
+    local localstart_time_jiffies=$(awk '{print $22}' /proc/$pid/stat)
+
+    local jiffies_per_sec=100
+
+    local process_start_s=$((localstart_time_jiffies / jiffies_per_sec))
+
+    local proc_uptime=$((uptime_s - process_start_s))
+    echo $proc_uptime
+}
+
+sanitize_probe_interval() {
+    local v="${1:-30}"
+    case "$v" in
+    '' | *[!0-9]*) v=30 ;;
+    esac
+    while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do v="${v#0}"; done
+    if [ "$v" -lt 5 ]; then
+        v=5
+    elif [ "$v" -gt 3600 ]; then
+        v=3600
+    fi
+    echo "$v"
+}
+
+get_webui_page() {
+    ADDON_USER_PAGE="none"
+    local max_user_page=0
+    local used_pages=""
+
+    for page in /www/user/user*.asp; do
+        if [ -f "$page" ]; then
+            if grep -q "page:$ADDON_TAG" "$page"; then
+                ADDON_USER_PAGE=$(basename "$page")
+                log_ok "Found existing $ADDON_TAG_UPPER page: $ADDON_USER_PAGE"
+                return
+            fi
+
+            user_number=$(echo "$page" | sed -E 's/.*user([0-9]+)\.asp$/\1/')
+            used_pages="$used_pages $user_number"
+
+            if [ "$user_number" -gt "$max_user_page" ]; then
+                max_user_page="$user_number"
+            fi
+        fi
+    done
+
+    if [ "$ADDON_USER_PAGE" != "none" ]; then
+        log_ok "Found existing $ADDON_TAG_UPPER page: $ADDON_USER_PAGE"
+        return
+    fi
+
+    if [ "$1" = "true" ]; then
+        i=1
+        while true; do
+            if ! echo "$used_pages" | grep -qw "$i"; then
+                ADDON_USER_PAGE="user$i.asp"
+                log_ok "Assigning new $ADDON_TAG_UPPER page: $ADDON_USER_PAGE"
+                return
+            fi
+            i=$((i + 1))
+        done
+    fi
+}
+
+am_settings_del() {
+    local key="$1"
+    custom_settings_drop "/$key/d"
+}
+
+custom_settings_drop() {
+    local settings=/jffs/addons/custom_settings.txt
+    local staged="/tmp/custom_settings.$$"
+    local tmp="$settings.$$"
+    if sed "$1" "$settings" >"$staged" && cat "$staged" >"$tmp" && mv -f "$tmp" "$settings"; then
+        rm -f "$staged"
+        return 0
+    fi
+    rm -f "$staged" "$tmp"
+    return 1
+}
+
+remove_json_comments() {
+    local tempconfig="/tmp/xray-config-clean.json"
+    sed 's/\/\/.*//' "$XRAY_CONFIG_FILE" >$tempconfig
+    echo $tempconfig
+}
+
+XRAYUI_STAGING_DIR="/tmp/xrayui-staging"
+
+reconstruct_payload() {
+
+    local session
+    session=$(am_settings_get xray_staged_session)
+
+    if [ -n "$session" ]; then
+        reconstruct_staged_payload "$session"
+        return
+    fi
+
+    local idx=0
+    local chunk
+    local payload=""
+    while :; do
+        chunk=$(am_settings_get xray_payload$idx)
+        if [ -z "$chunk" ]; then
+            break
+        fi
+        payload="$payload$chunk"
+        idx=$((idx + 1))
+    done
+
+    cleanup_payload
+
+    decode_payload "$payload"
+
+}
+
+b64_decode() {
+    if which base64 >/dev/null 2>&1; then
+        base64 -d 2>/dev/null
+    else
+        tr -d '\r\n' | openssl base64 -d -A 2>/dev/null
+    fi
+}
+
+decode_payload() {
+    local raw="$1"
+    case "$raw" in
+        gz:*)
+            local decoded
+            decoded=$(
+                b64_decode <<EOF | gunzip 2>/dev/null
+${raw#gz:}
 EOF
-  chmod 600 "$SS_CONF_FILE"
-  if type ss_settings_publish >/dev/null 2>&1; then
-    ss_settings_publish 2>/dev/null || true
-  fi
+            )
+            if [ -z "${decoded:+1}" ]; then
+                log_error "decode_payload: failed to decompress gz: payload (base64/gunzip pipeline failed or produced empty output)" >&2
+                return 1
+            fi
+            cat <<EOF
+$decoded
+EOF
+            ;;
+        *)
+            cat <<EOF
+$raw
+EOF
+            ;;
+    esac
 }
 
-ss_with_lock() {
-  # ss_with_lock <lockname> <command...>
-  local lockname="$1"
-  shift
-  local lockfile="/tmp/${ADDON_TAG}.${lockname}.lock"
-  if command -v flock >/dev/null 2>&1; then
-    (
-      flock -w 30 9 || {
-        ss_error "Could not acquire lock $lockname"
-        exit 1
-      }
-      "$@"
-    ) 9>"$lockfile"
-  else
-    local stamp="$lockfile.dir"
-    local tries=0
-    while ! mkdir "$stamp" 2>/dev/null; do
-      tries=$((tries + 1))
-      [ "$tries" -gt 30 ] && {
-        ss_error "Could not acquire lock $lockname"
+reconstruct_staged_payload() {
+    # NOTE: this function is called via $(...) substitution; ALL log output MUST go to stderr,
+    # otherwise it gets captured as part of the returned payload and corrupts the assembled JSON.
+    local session="$1"
+    local safe_session
+    safe_session=$(printf '%s' "$session" | tr -cd 'A-Za-z0-9_-' | cut -c1-64)
+
+    if [ -z "$safe_session" ] || [ "$safe_session" != "$session" ]; then
+        log_error "Invalid staged session id: '$session'" >&2
+        cleanup_staged_marker >&2
         return 1
-      }
-      sleep 1
-    done
-    echo "$$" >"$stamp/pid"
-    "$@"
-    local rc=$?
-    rm -rf "$stamp"
-    return $rc
-  fi
-}
-
-ss_json_response() {
-  local status="$1"
-  local message="$2"
-  local data="${3:-null}"
-  local status_json="false"
-  case "$status" in
-  true | 1 | ok | OK) status_json="true" ;;
-  esac
-  # Nested ops inside applypending must not overwrite the final UI response file.
-  if [ "${SS_BATCH_SILENT:-0}" = "1" ]; then
-    [ "$status_json" = "true" ]
-    return $?
-  fi
-  ss_ensure_dirs
-  mkdir -p "$ADDON_WEB_DIR" 2>/dev/null
-  jq -nc \
-    --argjson status "$status_json" \
-    --arg message "$message" \
-    --argjson data "$data" \
-    --argjson ts "$(date +%s)" \
-    '{status:$status, message:$message, data:$data, ts:$ts}' >"$SS_UI_RESPONSE"
-}
-
-ss_require_key() {
-  if [ -z "$SS_API_KEY" ] && [ -z "$SS_API_KEYS" ]; then
-    ss_error "API key is not set. Use: stealthsurf set-key <stlth_...>"
-    return 1
-  fi
-  if [ -z "$SS_API_KEY" ] && [ -n "$SS_API_KEYS" ]; then
-    SS_API_KEY=$(printf '%s' "$SS_API_KEYS" | awk '{print $1}')
-  fi
-  case "$SS_API_KEY" in
-  stlth_????????_????????????????????????) ;;
-  *)
-    ss_warn "API key format looks unusual (expected stlth_<8hex>_<24hex>)"
-    ;;
-  esac
-  return 0
-}
-
-ss_all_api_keys() {
-  # Print unique API keys (primary + extras), one per line
-  local k
-  {
-    [ -n "$SS_API_KEY" ] && printf '%s\n' "$SS_API_KEY"
-    for k in $SS_API_KEYS; do
-      [ -n "$k" ] && printf '%s\n' "$k"
-    done
-    if [ -f "$SS_CACHE_KEYS" ]; then
-      jq -r '.[] | .key // empty' "$SS_CACHE_KEYS" 2>/dev/null
     fi
-  } | awk 'NF && !seen[$0]++'
-}
 
-ss_urldecode() {
-  printf '%b' "$(printf '%s' "$1" | sed 's/+/ /g; s/%/\\x/g')"
-}
-
-ss_get_query_param() {
-  # ss_get_query_param "host=a&port=443&security=reality" security
-  local qs="$1"
-  local key="$2"
-  local pair
-  local IFS='&'
-  for pair in $qs; do
-    case "$pair" in
-    "$key"=*)
-      ss_urldecode "${pair#*=}"
-      return 0
-      ;;
-    esac
-  done
-  return 1
-}
-
-ss_detect_arch() {
-  local machine
-  machine=$(uname -m 2>/dev/null || echo unknown)
-  case "$machine" in
-  aarch64 | arm64) echo "arm64-v8a" ;;
-  armv7* | armv6* | arm) echo "arm32-v7a" ;;
-  x86_64 | amd64) echo "64" ;;
-  i386 | i686) echo "32" ;;
-  mips64*) echo "mips64" ;;
-  mips*) echo "mips32" ;;
-  *) echo "arm64-v8a" ;; # Merlin ARM64 default
-  esac
-}
-
-ss_lan_cidrs() {
-  # Best-effort LAN CIDRs for anti-loop
-  local lan_ip mask cidr
-  lan_ip=$(nvram get lan_ipaddr 2>/dev/null || echo "192.168.1.1")
-  mask=$(nvram get lan_netmask 2>/dev/null || echo "255.255.255.0")
-  case "$mask" in
-  255.255.255.0) cidr="${lan_ip%.*}.0/24" ;;
-  255.255.0.0) cidr="${lan_ip%.*.*}.0.0/16" ;;
-  255.255.255.128) cidr="$lan_ip/25" ;;
-  *) cidr="${lan_ip%.*}.0/24" ;;
-  esac
-  printf '%s\n' "$cidr" "10.0.0.0/8" "172.16.0.0/12" "192.168.0.0/16" "127.0.0.0/8" "169.254.0.0/16"
-}
-
-ss_router_ip() {
-  nvram get lan_ipaddr 2>/dev/null || ip -4 addr show br0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1 | head -1
-}
-
-ss_resolve_system_iptables() {
-  # Prefer firmware/busybox iptables over Entware — Entware in PATH breaks Merlin NAT.
-  local bin
-  for bin in /usr/sbin/iptables /sbin/iptables /bin/iptables; do
-    if [ -x "$bin" ]; then
-      printf '%s\n' "$bin"
-      return 0
+    local dir="$XRAYUI_STAGING_DIR/$safe_session"
+    if [ ! -d "$dir" ]; then
+        log_error "Staged session directory missing: $dir" >&2
+        cleanup_staged_marker >&2
+        return 1
     fi
-  done
-  # Last resort: whatever is on PATH (may be Entware)
-  if command -v iptables >/dev/null 2>&1; then
-    command -v iptables
+
+    local total
+    total=$(cat "$dir/total" 2>/dev/null)
+    if [ -z "$total" ] || ! [ "$total" -gt 0 ] 2>/dev/null; then
+        log_error "Staged session $safe_session has invalid total: '$total'" >&2
+        cleanup_staging "$safe_session" >&2
+        cleanup_staged_marker >&2
+        return 1
+    fi
+
+    local tmp_assembly="/tmp/xrayui-staged-assembly.$$"
+    : >"$tmp_assembly"
+
+    local idx=0
+    while [ "$idx" -lt "$total" ]; do
+        local chunk_file="$dir/chunk-$idx"
+        if [ ! -f "$chunk_file" ]; then
+            log_error "Staged chunk $idx of $total missing for session $safe_session" >&2
+            rm -f "$tmp_assembly"
+            cleanup_staging "$safe_session" >&2
+            cleanup_staged_marker >&2
+            return 1
+        fi
+        cat "$chunk_file" >>"$tmp_assembly"
+        idx=$((idx + 1))
+    done
+
+    local assembled_size
+    assembled_size=$(wc -c <"$tmp_assembly" 2>/dev/null)
+    log_info "reconstruct_staged_payload: session $safe_session, $total chunks → $assembled_size bytes assembled" >&2
+
+    cleanup_staging "$safe_session" >&2
+    cleanup_staged_marker >&2
+    cleanup_payload >&2
+
+    local assembled
+    assembled=$(cat "$tmp_assembly")
+    rm -f "$tmp_assembly"
+    decode_payload "$assembled"
+}
+
+cleanup_payload() {
+    grep -q '^xray_payload' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
+    custom_settings_drop '/^xray_payload/d'
+}
+
+cleanup_staged_marker() {
+    grep -qE '^xray_stag(ed_session|e_)' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
+    custom_settings_drop '/^xray_staged_session/d;/^xray_stage_/d'
+}
+
+cleanup_staging() {
+    local session="$1"
+    if [ -n "$session" ]; then
+        rm -rf "$XRAYUI_STAGING_DIR/$session"
+    fi
+    sweep_stale_staging
+}
+
+sweep_stale_staging() {
+    [ -d "$XRAYUI_STAGING_DIR" ] || return 0
+    local now d mtime
+    now=$(date +%s)
+    for d in "$XRAYUI_STAGING_DIR"/*; do
+        [ -d "$d" ] || continue
+        mtime=$(date -r "$d" +%s 2>/dev/null) || continue
+        [ $((now - mtime)) -gt 300 ] && rm -rf "$d"
+    done
     return 0
-  fi
-  return 1
 }
 
-ss_resolve_system_ip6tables() {
-  local bin
-  for bin in /usr/sbin/ip6tables /sbin/ip6tables /bin/ip6tables; do
-    if [ -x "$bin" ]; then
-      printf '%s\n' "$bin"
-      return 0
+stage_chunk() {
+    local session
+    local index
+    local total
+    local data
+
+    session=$(am_settings_get xray_stage_session)
+    index=$(am_settings_get xray_stage_index)
+    total=$(am_settings_get xray_stage_total)
+    data=$(am_settings_get xray_stage_data)
+
+    local safe_session
+    safe_session=$(printf '%s' "$session" | tr -cd 'A-Za-z0-9_-' | cut -c1-64)
+
+    if [ -z "$safe_session" ] || [ "$safe_session" != "$session" ]; then
+        log_error "stage_chunk: invalid session id: '$session'"
+        cleanup_staged_marker
+        return 1
     fi
-  done
-  command -v ip6tables 2>/dev/null || return 1
-}
 
-ss_iptables_init() {
-  # Cache absolute paths once per process
-  if [ -z "$SS_IPTABLES" ]; then
-    SS_IPTABLES=$(ss_resolve_system_iptables) || SS_IPTABLES="iptables"
-  fi
-  if [ -z "$SS_IP6TABLES" ]; then
-    SS_IP6TABLES=$(ss_resolve_system_ip6tables 2>/dev/null) || SS_IP6TABLES="ip6tables"
-  fi
-}
-
-ss_dokodemo_listening() {
-  # True if transparent inbound port is accepting connections (avoid blackhole LAN)
-  local mode port
-  # Prefer conf mode — avoid lsmod/modprobe on every poll
-  mode="${SS_MODE:-proxy}"
-  case "$mode" in
-  tproxy) port="${SS_TPROXY_PORT:-10810}" ;;
-  redirect) port="${SS_REDIRECT_PORT:-10811}" ;;
-  *) return 0 ;; # proxy mode needs no hijack port
-  esac
-  if command -v netstat >/dev/null 2>&1; then
-    netstat -lntu 2>/dev/null | grep -qE "[:.]${port}[[:space:]]" && return 0
-  fi
-  if [ -r /proc/net/tcp ]; then
-    # hex port
-    local hex
-    hex=$(printf '%04X' "$port")
-    grep -qiE ":${hex}[[:space:]]" /proc/net/tcp /proc/net/tcp6 2>/dev/null && return 0
-  fi
-  # Fallback: assume OK if our xray pid is alive (port check unavailable)
-  ss_xray_running 2>/dev/null
-}
-
-ss_protocol_runtime() {
-  # Map StealthSurf protocol → runtime: xray|hysteria|wg|awg|unsupported
-  # openflux and wg prefer Xray (xray_config / wireguard outbound); awg needs awg-quick.
-  local proto="$1"
-  case "$proto" in
-  vless | vless-2410 | trojan | trojan-2901 | shadowsocks-2022 | shadowsocks | ss | openflux)
-    echo xray
-    ;;
-  hysteria2 | hy2)
-    echo hysteria
-    ;;
-  wg | wireguard)
-    echo wg
-    ;;
-  amnezia-wg-2 | amneziawg | awg)
-    echo awg
-    ;;
-  http | socks5 | socks)
-    echo xray
-    ;;
-  *)
-    echo unsupported
-    ;;
-  esac
-}
-
-ss_protocol_supported_on_router() {
-  local proto="$1"
-  local runtime
-  runtime=$(ss_protocol_runtime "$proto")
-  case "$runtime" in
-  xray)
-    # openflux / vless* / trojan* / ss / http / socks → need Xray
-    [ -x "$XRAY_BIN" ] || command -v xray >/dev/null 2>&1
-    ;;
-  hysteria)
-    [ -x "$HYSTERIA_BIN" ] || command -v hysteria >/dev/null 2>&1 || [ -x /opt/sbin/hysteria ]
-    ;;
-  wg)
-    # Preferred path is Xray wireguard outbound; iface fallback needs wg/wg-quick
-    if [ -x "$XRAY_BIN" ] || command -v xray >/dev/null 2>&1; then
-      return 0
+    if ! [ "$index" -ge 0 ] 2>/dev/null || ! [ "$total" -gt 0 ] 2>/dev/null; then
+        log_error "stage_chunk: invalid index/total ($index/$total) for session $safe_session"
+        cleanup_staged_marker
+        return 1
     fi
-    command -v wg >/dev/null 2>&1 || [ -x /usr/sbin/wg ]
-    ;;
-  awg)
-    command -v awg-quick >/dev/null 2>&1 || command -v awg >/dev/null 2>&1 || [ -x "$AWG_BIN" ]
-    ;;
-  *)
-    return 1
-    ;;
-  esac
+
+    if [ "$index" -ge "$total" ]; then
+        log_error "stage_chunk: index $index out of range (total $total)"
+        cleanup_staged_marker
+        return 1
+    fi
+
+    mkdir -p "$XRAYUI_STAGING_DIR/$safe_session"
+    chmod 700 "$XRAYUI_STAGING_DIR" "$XRAYUI_STAGING_DIR/$safe_session" 2>/dev/null
+
+    echo "$total" >"$XRAYUI_STAGING_DIR/$safe_session/total"
+    printf '%s' "$data" >"$XRAYUI_STAGING_DIR/$safe_session/chunk-$index"
+
+    local stored_size
+    stored_size=$(wc -c <"$XRAYUI_STAGING_DIR/$safe_session/chunk-$index" 2>/dev/null)
+    log_info "stage_chunk: stored chunk $index/$total ($stored_size bytes) for session $safe_session"
+
+    cleanup_staged_marker
+
+    sweep_stale_staging
+
+    return 0
 }
 
-ss_jq_file_or() {
-  local file="$1"
-  local fallback="$2"
-  if [ -f "$file" ] && jq -e . "$file" >/dev/null 2>&1; then
-    cat "$file"
-  else
-    printf '%s' "$fallback"
-  fi
+load_ui_response() {
+
+    if [ ! -f "$UI_RESPONSE_FILE" ]; then
+        log_ok "Creating $ADDON_TITLE response file: $UI_RESPONSE_FILE"
+        echo '{}' >"$UI_RESPONSE_FILE"
+        chmod 600 "$UI_RESPONSE_FILE"
+    fi
+
+    UI_RESPONSE=$(cat "$UI_RESPONSE_FILE")
+    if [ -z "$UI_RESPONSE" ] || ! echo "$UI_RESPONSE" | jq empty 2>/dev/null; then
+        log_warn "Response file is empty or contains invalid JSON, resetting to {}"
+        UI_RESPONSE="{}"
+        echo '{}' >"$UI_RESPONSE_FILE"
+    fi
 }
 
-# ── XrayUI coexistence ────────────────────────────────────────────────
-# Both addons drive transparent proxy. Separate marks/tables avoid collision,
-# but dual hijack of LAN still breaks internet. Refuse start while XrayUI runs.
-# Detection is cheap-first + short TTL cache so watchdog/state writes stay light.
+save_ui_response() {
 
-SS_XRAYUI_PIDFILE="${SS_XRAYUI_PIDFILE:-/var/run/xray.pid}"
-SS_XRAYUI_DESIRED="${SS_XRAYUI_DESIRED:-/tmp/xrayui.desired}"
-SS_XRAYUI_CONFIG="${SS_XRAYUI_CONFIG:-/opt/etc/xray/config.json}"
-SS_XRAYUI_CACHE="${SS_XRAYUI_CACHE:-/tmp/stealthsurf.xrayui.cache}"
-SS_XRAYUI_CACHE_TTL="${SS_XRAYUI_CACHE_TTL:-45}"
-SS_XRAYUI_MSG_RU="XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя."
+    log_debug "Saving UI response to $UI_RESPONSE_FILE"
 
-ss_xrayui_installed() {
-  [ -x /jffs/scripts/xrayui ] && return 0
-  [ -d /opt/share/xrayui ] && return 0
-  [ -d /jffs/addons/xrayui ] && return 0
-  [ -f /opt/etc/xrayui.conf ] && return 0
-  return 1
+    if [ -z "$UI_RESPONSE" ]; then
+        log_error "UI_RESPONSE is empty, refusing to overwrite $UI_RESPONSE_FILE"
+        return 1
+    fi
+
+    if ! echo "$UI_RESPONSE" >"$UI_RESPONSE_FILE"; then
+        log_error "Failed to save UI response to $UI_RESPONSE_FILE"
+        clear_lock
+        return 1
+    fi
+
 }
 
-ss_xrayui_pid_alive() {
-  local pid=""
-  [ -f "$SS_XRAYUI_PIDFILE" ] || return 1
-  pid=$(cat "$SS_XRAYUI_PIDFILE" 2>/dev/null)
-  [ -n "$pid" ] || return 1
-  # Must not be our StealthSurf Xray
-  if [ -f "$XRAY_PIDFILE" ]; then
-    local ours
-    ours=$(cat "$XRAY_PIDFILE" 2>/dev/null)
-    [ -n "$ours" ] && [ "$pid" = "$ours" ] && return 1
-  fi
-  kill -0 "$pid" 2>/dev/null
+test_xray_config() {
+    log_info "Testing Xray configuration..."
+    update_loading_progress "Testing Xray configuration..."
+
+    load_xrayui_config
+    local skip_test="${skip_test:-false}"
+
+    if [ "$skip_test" = "true" ]; then
+        log_info "Skipping Xray configuration test as per user settings."
+        return
+    fi
+
+    local output extra_cfg=""
+
+    if api_config_required; then
+        [ -f "$(api_get_current_config)" ] || api_apply_configuration
+        [ -f "$(api_get_current_config)" ] && extra_cfg="-c $(api_get_current_config)"
+    fi
+
+    if ! output=$(xray -c $XRAY_CONFIG_FILE $extra_cfg -test 2>&1); then
+        message=$(echo "$output" | sed -n '/> infra\/conf:/ {s/.*> infra\/conf: //p}')
+        if [ -z "$message" ]; then
+            message="$output"
+        fi
+        message=$(echo "$message" | sed 's/"/\\"/g')
+    else
+        message="Config file appears to be fine, but the XRAY service has not started. Try to restart/reconnect it."
+    fi
+
+    log_info "Xray config test result: $output"
+
+    load_ui_response
+
+    local json_content
+    json_content=$(jq --arg msg "$message" '.xray.test = $msg' "$UI_RESPONSE_FILE" 2>/dev/null)
+    if [ -z "$json_content" ]; then
+        log_warn "Failed to update test result in response file."
+        return 1
+    fi
+    echo "$json_content" >"/tmp/xray-response.$$.tmp" && mv -f "/tmp/xray-response.$$.tmp" "$UI_RESPONSE_FILE"
 }
 
-ss_xrayui_process_running() {
-  # xrayui uses /opt/etc/xray/config.json; we use stealthsurf.json
-  local cfg="$SS_XRAYUI_CONFIG"
-  local line=""
-  # Prefer single ps; skip expensive /proc walk when ps exists
-  if command -v ps >/dev/null 2>&1; then
-    # shellcheck disable=SC2009
-    line=$(ps w 2>/dev/null | grep -E '[x]ray.*(run )?.*(/opt/etc/xray/config\.json|xrayui)' | grep -v stealthsurf | head -1)
-    [ -n "$line" ] && return 0
-    return 1
-  fi
-  # /proc fallback only when ps is unavailable
-  local p cmd
-  for p in /proc/[0-9]*; do
-    [ -r "$p/cmdline" ] || continue
-    cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
-    case "$cmd" in
-    *xray*"$cfg"* | *xray*xrayui*)
-      case "$cmd" in
-      *stealthsurf.json*) continue ;;
-      *) return 0 ;;
-      esac
-      ;;
+update_loading_progress() {
+    local message=$1
+    local progress=$2
+
+    if [ ! -d "$ADDON_WEB_DIR" ]; then
+        return
+    fi
+
+    load_ui_response
+
+    local json_content
+    if [ -f "$UI_RESPONSE_FILE" ]; then
+        json_content=$(cat "$UI_RESPONSE_FILE")
+    else
+        json_content="{}"
+    fi
+
+    if [ -n "$progress" ]; then
+        json_content=$(echo "$json_content" | jq --argjson progress "$progress" --arg message "$message" '
+            .loading.message = $message |
+            .loading.progress = $progress
+        ')
+    else
+        json_content=$(echo "$json_content" | jq --arg message "$message" '
+            .loading.message = $message
+        ')
+    fi
+
+    if [ -z "$json_content" ]; then
+        log_warn "Failed to update loading progress in response file."
+        return 1
+    fi
+
+    echo "$json_content" >"/tmp/xray-response.$$.tmp" && mv -f "/tmp/xray-response.$$.tmp" "$UI_RESPONSE_FILE"
+
+    if [ "$progress" = "100" ]; then
+        /jffs/scripts/stealthsurf service_event cleanloadingprogress >/dev/null 2>&1 &
+    fi
+
+}
+
+remove_loading_progress() {
+
+    log_info "Removing loading progress..."
+    if [ ! -d "$ADDON_WEB_DIR" ]; then
+        return
+    fi
+
+    sleep 1
+    local message
+    message=$(jq -r '.loading.message // empty' "$UI_RESPONSE_FILE" 2>/dev/null)
+    case "$message" in
+    Error*) sleep 5 ;;
+    *) message="" ;;
     esac
-  done
-  return 1
-}
+    load_ui_response
 
-ss_xrayui_firewall_active() {
-  local ipt
-  ipt=$(ss_resolve_system_iptables 2>/dev/null) || ipt="iptables"
-  "$ipt" -w -t nat -nL XRAYUI >/dev/null 2>&1 && return 0
-  "$ipt" -w -t mangle -nL XRAYUI >/dev/null 2>&1 && return 0
-  return 1
-}
+    local json_content=$(cat "$UI_RESPONSE_FILE")
 
-ss_xrayui_cache_invalidate() {
-  rm -f "$SS_XRAYUI_CACHE" 2>/dev/null || true
-}
+    json_content=$(echo "$json_content" | jq --arg m "$message" 'if $m == "" or .loading.message == $m then del(.loading) else . end' 2>/dev/null)
 
-ss_xrayui_cache_store() {
-  # $1 = 0|1
-  printf '%s %s\n' "$(date +%s 2>/dev/null || echo 0)" "$1" >"$SS_XRAYUI_CACHE" 2>/dev/null || true
-}
-
-ss_xrayui_running() {
-  # ss_xrayui_running [force] — force bypasses TTL cache (use on start/refuse)
-  local force="${1:-}"
-  local ts status now age running=0
-
-  if [ "$force" != "force" ] && [ -f "$SS_XRAYUI_CACHE" ]; then
-    read -r ts status <"$SS_XRAYUI_CACHE" 2>/dev/null || true
-    now=$(date +%s 2>/dev/null || echo 0)
-    if [ -n "$ts" ] && [ -n "$status" ] && [ "$now" -ge "$ts" ] 2>/dev/null; then
-      age=$((now - ts))
-      if [ "$age" -lt "$SS_XRAYUI_CACHE_TTL" ] 2>/dev/null; then
-        [ "$status" = "1" ]
-        return $?
-      fi
+    if [ -z "$json_content" ]; then
+        log_warn "Failed to remove loading progress from response file."
+        return 1
     fi
-  fi
 
-  # Cheap → expensive. Skip ps when XrayUI is clearly not installed (periodic paths).
-  if ss_xrayui_pid_alive; then
-    running=1
-  elif [ -f "$SS_XRAYUI_DESIRED" ] && ss_xrayui_firewall_active; then
-    running=1
-  elif ss_xrayui_installed || [ "$force" = "force" ]; then
-    if ss_xrayui_process_running; then
-      running=1
+    echo "$json_content" >"/tmp/xray-response.$$.tmp" && mv -f "/tmp/xray-response.$$.tmp" "$UI_RESPONSE_FILE"
+}
+
+fixme() {
+    log_info "Attempting to fix XRAY UI issues..."
+
+    local jffs_usage=$(df /jffs 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%')
+    if [ -n "$jffs_usage" ] && [ "$jffs_usage" -gt 90 ]; then
+        log_warn "/jffs is ${jffs_usage}% full! Listing large files:"
+        du -ak /jffs 2>/dev/null | sort -nr | while read -r size path; do
+            [ "$size" -gt 100 ] || break
+            [ -f "$path" ] && printf '%6s KB  %s\n' "$size" "$path"
+        done | head -20
+        log_warn "Consider removing old backups or logs before proceeding."
     fi
-  fi
 
-  ss_xrayui_cache_store "$running"
-  [ "$running" = "1" ]
-}
-
-ss_xrayui_conflict_message() {
-  printf '%s\n' "$SS_XRAYUI_MSG_RU"
-}
-
-ss_xrayui_status_json() {
-  local installed=false running=false conflict="" msg=""
-  ss_xrayui_installed && installed=true
-  if ss_xrayui_running; then
-    running=true
-    conflict="xrayui"
-    msg="$SS_XRAYUI_MSG_RU"
-  fi
-  jq -nc \
-    --argjson installed "$installed" \
-    --argjson running "$running" \
-    --arg conflict "$conflict" \
-    --arg message "$msg" \
-    '{
-      installed:$installed,
-      running:$running,
-      conflict:(if $conflict=="" then null else $conflict end),
-      message:(if $message=="" then null else $message end)
-    }'
-}
-
-ss_refuse_if_xrayui() {
-  # Call before start / autostart / watchdog restart — always fresh detect
-  ss_xrayui_cache_invalidate
-  if ss_xrayui_running force; then
-    ss_error "$(ss_xrayui_conflict_message)"
-    if type ss_desired_clear >/dev/null 2>&1; then
-      ss_desired_clear 2>/dev/null || true
+    log_info "Removing XRAY broken payload settings..."
+    if grep -qE '^xray_(payload|staged_session|stage_)' /jffs/addons/custom_settings.txt 2>/dev/null; then
+        custom_settings_drop '/^xray_payload/d;/^xray_staged_session/d;/^xray_stage_/d' || log_warn "Failed to remove broken payload settings"
+    else
+        log_info "No broken payload settings found."
     fi
-    ss_activity "start.blocked" "xrayui_running=1"
+
+    log_info "Removing file $UI_RESPONSE_FILE..."
+    rm -f "$UI_RESPONSE_FILE" || log_warn "Failed to remove $UI_RESPONSE_FILE"
+
+    cleanup_stale_asdfiles
+
+    log_ok "Done with fixme function."
+}
+
+urldecode() {
+    local data
+    data=$(printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')
+    printf '%b' "$data"
+}
+
+jq_update_file() {
+    local file="$1"
+    local target
+    shift
+    if [ -L "$file" ] && target=$(readlink -f "$file") && [ -n "$target" ]; then
+        file="$target"
+    fi
+    local tmp="$file.tmp.$$"
+    if jq "$@" "$file" >"$tmp" 2>"$tmp.err" &&
+        jq -n -e '[inputs] | length == 1 and (.[0] | type == "object")' "$tmp" >/dev/null 2>&1 &&
+        mv -f "$tmp" "$file"; then
+        rm -f "$tmp.err"
+        return 0
+    fi
+    log_debug "jq_update_file: $file was left unchanged: $(head -c 300 "$tmp.err" 2>/dev/null)"
+    rm -f "$tmp" "$tmp.err"
     return 1
-  fi
-  return 0
+}
+
+xrayui_core_probe() {
+    [ -n "$XRAYUI_CORE_VER_CACHE" ] && return 0
+    local out rc bin
+    XRAYUI_CORE_ERR=""
+    out=$(xray version 2>&1)
+    rc=$?
+    XRAYUI_CORE_VER_CACHE=$(printf '%s\n' "$out" | grep -E '^Xray [0-9]+\.[0-9]+\.[0-9]+' | head -n 1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)
+    [ -n "$XRAYUI_CORE_VER_CACHE" ] && return 0
+    XRAYUI_CORE_VER_CACHE="-"
+    if [ "$rc" -eq 127 ]; then
+        bin=$(which xray 2>/dev/null)
+        if [ -z "$bin" ]; then
+            XRAYUI_CORE_ERR="not installed"
+        else
+            XRAYUI_CORE_ERR="$bin cannot be executed (missing loader or interpreter)"
+        fi
+        return 0
+    fi
+    XRAYUI_CORE_ERR=$(printf '%s\n' "$out" | sed '/^[[:space:]]*$/d' | head -n 1 | cut -c1-200 | tr -d '<')
+    case "$XRAYUI_CORE_ERR" in
+    *": line "[01]": syntax error"*) XRAYUI_CORE_ERR="exec format error: the binary is not built for this router's CPU" ;;
+    esac
+    XRAYUI_CORE_ERR="${XRAYUI_CORE_ERR:-no version output, exit code $rc}"
+}
+
+xrayui_core_forget() {
+    XRAYUI_CORE_VER_CACHE=""
+    XRAYUI_CORE_ERR=""
+}
+
+xrayui_core_version() {
+    xrayui_core_probe
+    [ "$XRAYUI_CORE_VER_CACHE" = "-" ] || printf '%s' "$XRAYUI_CORE_VER_CACHE"
+}
+
+version_ge() {
+    [ "$(printf '%s\n%s\n' "$2" "$1" | sort -t. -k1,1n -k2,2n -k3,3n | head -n1)" = "$2" ]
+}
+
+core_supports_allow_insecure() {
+    local v
+    v=$(xrayui_core_version)
+    [ -z "$v" ] && return 1
+    version_ge "$v" "26.3.27" && return 1
+    return 0
+}
+
+# Xray 26.7.11 removed the unencrypted Shadowsocks ciphers (none/plain) and refuses to start with them.
+core_supports_ss_plain_cipher() {
+    local v
+    v=$(xrayui_core_version)
+    [ -z "$v" ] && return 1
+    version_ge "$v" "26.7.11" && return 1
+    return 0
+}
+
+get_or_create_hwid() {
+    local hwid_file="$ADDON_SHARE_DIR/.hwid"
+    if [ -f "$hwid_file" ]; then
+        cat "$hwid_file"
+        return
+    fi
+    local hwid=""
+    if [ -f /proc/sys/kernel/random/uuid ]; then
+        hwid=$(cat /proc/sys/kernel/random/uuid)
+    else
+        hwid=$(openssl rand -hex 16 | sed 's/\(.\{8\}\)\(.\{4\}\)\(.\{4\}\)\(.\{4\}\)\(.\{12\}\)/\1-\2-\3-\4-\5/')
+    fi
+    printf '%s' "$hwid" >"$hwid_file"
+    printf '%s' "$hwid"
+}
+
+cleanup_stale_asdfiles() {
+    # Purge orphaned xrayui staging files and any ASD (Asus Self Defense) backups
+    local asdbk="/jffs/.asdbk"
+
+    rm -f /tmp/xrayui_*.tmp.* 2>/dev/null
+    rm -f /tmp/xrayui_dnsmasq_direct.tmp.* 2>/dev/null
+    rm -f /tmp/xrayui_geoip4.* /tmp/xrayui_geoip6.* 2>/dev/null
+    rm -f /tmp/xrayui_config.* /tmp/xrayui-dnsmasq-servers.* 2>/dev/null
+    rm -f /tmp/xrayui_script.* /tmp/xrayui_payload* 2>/dev/null
+
+    if [ -d "$asdbk" ]; then
+        rm -f "$asdbk"/xrayui_*_bk "$asdbk"/*xrayui*.tmp.*_bk 2>/dev/null
+    fi
+
+}
+
+urldecode_pct() {
+    s=$(printf '%s' "$1" | sed 's/\\/\\\\/g')
+    s=$(printf '%s' "$s" | sed -e 's/%\([0-9A-Fa-f][0-9A-Fa-f]\)/\\x\1/g')
+    printf '%b' "$s"
+}
+
+safe_preview() {
+    dd bs=200 count=1 2>/dev/null | tr '\r\n' ' '
 }

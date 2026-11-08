@@ -1,398 +1,290 @@
 #!/bin/sh
+# shellcheck disable=SC2034  # codacy:Unused variables
 
-ss_xray_running() {
-  if [ -f "$XRAY_PIDFILE" ]; then
+start() {
+
+    load_xrayui_config
+
+    # Checked under the restart lock, which UI/CLI stops also hold
+    if [ "${WATCHDOG_RUN:-false}" = "true" ] && [ ! -f "$XRAY_DESIRED_STATE_FILE" ]; then
+        log_info "Xray was stopped on purpose while the watchdog was waiting. Not restarting it."
+        return 0
+    fi
+
+    watchdog_mark_desired
+
+    migrate_tun_inbounds_config
+
+    cleanup_stale_asdfiles
+
+    # Prevent duplicate starts - check if the Xray daemon is already running
+    local existing_pid=$(get_xray_daemon_pid)
+    if [ -n "$existing_pid" ]; then
+        if [ "${FORCE_RESTART:-false}" = "true" ]; then
+            log_warn "Xray daemon (PID: $existing_pid) is still running during restart. Forcing it to stop."
+            kill_xray_daemon -9
+
+            local tries=0
+            while [ -n "$(get_xray_daemon_pid)" ] && [ "$tries" -lt 5 ]; do
+                sleep 1
+                tries=$((tries + 1))
+            done
+
+            rm -f "$XRAY_PIDFILE"
+
+            existing_pid=$(get_xray_daemon_pid)
+            if [ -n "$existing_pid" ]; then
+                log_error "Failed to force-stop the Xray daemon (PID: $existing_pid). Aborting start."
+                return 1
+            fi
+        else
+            log_warn "Xray is already running (PID: $existing_pid). Skipping start."
+            if ! firewall_is_configured; then
+                log_warn "Xray firewall rules are missing while Xray is running. Restoring them."
+                configure_firewall
+            fi
+            return 0
+        fi
+    fi
+
+    local skip_test="${skip_test:-false}"
+
+    if [ "$skip_test" = "true" ]; then
+        log_info "Skipping Xray configuration test as per user settings."
+    else
+        test_xray_config
+    fi
+
+    log_info "Starting $ADDON_TITLE"
+
+    local TPROXY_MODE=$(
+        jq -r '
+    .inbounds? // []
+    | map(.streamSettings.sockopt.tproxy? // "off")
+    | if any(. != "off") then "on" else "off" end
+  ' "$XRAY_CONFIG_FILE"
+    )
+
+    if [ "$TPROXY_MODE" = "on" ]; then
+        log_info "TPROXY mode is $TPROXY_MODE. Increasing max open files to 65535."
+        ulimit -Hn 65535
+        ulimit -Sn 65535
+    fi
+
+    local HAS_WG_OUTBOUND=$(
+        jq -r '
+    .outbounds? // []
+    | map(.protocol? // "")
+    | if any(. == "wireguard") then "yes" else "no" end
+  ' "$XRAY_CONFIG_FILE"
+    )
+
+    if [ "$HAS_WG_OUTBOUND" = "yes" ]; then
+        local svm_path="/proc/sys/net/ipv4/conf/all/src_valid_mark"
+        if [ ! -e "$svm_path" ]; then
+            log_warn "WireGuard outbound detected but $svm_path is unavailable; gVisor outbound may not work."
+        else
+            local current_svm=$(cat "$svm_path" 2>/dev/null)
+            if [ "$current_svm" != "1" ]; then
+                log_info "WireGuard outbound detected. Setting net.ipv4.conf.all.src_valid_mark=1."
+                if ! { sysctl -w net.ipv4.conf.all.src_valid_mark=1 >/dev/null 2>&1 ||
+                    echo 1 >"$svm_path" 2>/dev/null; }; then
+                    log_warn "Failed to set net.ipv4.conf.all.src_valid_mark=1; WireGuard gVisor outbound may not work."
+                fi
+            fi
+        fi
+    fi
+
+    local xray_clear_logs=${logs_dor:-false}
+    if [ "$xray_clear_logs" = "true" ]; then
+        log_info "Clearing Xray logs..."
+        rm -f "$ADDON_LOGS_DIR/xray_access.log"
+        rm -f "$ADDON_LOGS_DIR/xray_error.log"
+        rm -f "$ADDON_LOGS_DIR/xrayui_ip2domain.cache"
+    fi
+
+    if [ ! -d "$ADDON_LOGS_DIR" ]; then
+        mkdir -p "$ADDON_LOGS_DIR"
+    fi
+
+    update_loading_progress "Starting $ADDON_TITLE..."
+    if api_config_required; then
+
+        api_apply_configuration
+
+        local xray_config_name=$(basename "$XRAY_CONFIG_FILE")
+        local xray_api_config="/opt/etc/xray/xrayui/${xray_config_name%.json}-api.json"
+
+        local XRAY_EXTRA_CFG=""
+        if [ -f "$xray_api_config" ]; then
+            XRAY_EXTRA_CFG="-c $xray_api_config"
+            log_info "Loading API extension $xray_api_config."
+        else
+            log_info "No API extension for $(basename "$XRAY_CONFIG_FILE"); running plain config."
+        fi
+    fi
+
+    process_subscriptions "$XRAY_CONFIG_FILE"
+
+    XRAY_ARGS="-c $XRAY_CONFIG_FILE $XRAY_EXTRA_CFG"
+    log_debug "Starting Xray with args: $XRAY_ARGS"
+    $IONICE $NICE xray $XRAY_ARGS </dev/null >/dev/null 2>&1 3>&- 4>&- 5>&- 6>&- 7>&- 8>&- 9>&- 387>&- 386>&- &
+    echo $! >"$XRAY_PIDFILE"
+    log_debug "Xray started with PID $(cat "$XRAY_PIDFILE")"
+
+    xray_sleep_time="${xray_sleep_time:-10}"
+    if [ "$xray_sleep_time" -gt 0 ]; then
+        i=1
+        while [ "$i" -le "$xray_sleep_time" ]; do
+            update_loading_progress "Waiting $i/$xray_sleep_time seconds for Xray to initialize..."
+            log_debug "Waiting $i/$xray_sleep_time seconds for Xray to initialize..."
+            sleep 1
+            i=$((i + 1))
+        done
+    fi
+
+    configure_firewall
+}
+
+stop() {
+    local rc=0
     local pid
-    pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
-      return 0
+    log_info "Stopping $ADDON_TITLE"
+
+    watchdog_clear_desired
+
+    update_loading_progress "Stopping $ADDON_TITLE"
+
+    if [ -f "$XRAY_PIDFILE" ]; then
+        rm -f "$XRAY_PIDFILE"
+        log_info "PID file $XRAY_PIDFILE removed successfully."
     fi
-  fi
-  return 1
-}
 
-ss_write_state() {
-  # ss_write_state [full] — full refreshes protocols.json + version.json (mount/doctor)
-  ss_ensure_dirs
-  local mode xrayui_json full="${1:-}"
-  # Use configured mode — avoid lsmod/modprobe on every state write
-  mode="${SS_MODE:-proxy}"
-  case "$mode" in
-  proxy | redirect | tproxy) ;;
-  *) mode="proxy" ;;
-  esac
-  xrayui_json=$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')
-  xray_json=$(ss_xray_status_json 2>/dev/null || true)
-  case "$xray_json" in
-  \{*) ;;
-  *) xray_json='{}' ;;
-  esac
-  jq -nc \
-    --arg active "${SS_ACTIVE_CONFIG_ID}" \
-    --arg mode "${SS_MODE}" \
-    --arg proxy_mode "$mode" \
-    --arg dns_mode "${SS_DNS_MODE}" \
-    --arg default "${SS_DEFAULT_OUTBOUND}" \
-    --arg enabled "${SS_ENABLED_OUTBOUNDS}" \
-    --argjson running "$(ss_xray_running && echo true || echo false)" \
-    --arg socks "${SS_SOCKS_PORT}" \
-    --arg http "${SS_HTTP_PORT}" \
-    --arg tproxy "${SS_TPROXY_PORT}" \
-    --arg redirect "${SS_REDIRECT_PORT}" \
-    --arg version "$ADDON_VERSION" \
-    --arg last_sync "${SS_LAST_SYNC:-}" \
-    --argjson xrayui "$xrayui_json" \
-    --argjson xray "$xray_json" \
-    '{
-      active_config_id: (if $active == "" then null else ($active|tonumber?) // $active end),
-      mode: $mode,
-      proxy_mode: $proxy_mode,
-      dns_mode: $dns_mode,
-      default_outbound: (if $default == "" then null else $default end),
-      enabled_outbounds: (if $enabled == "" then [] else ($enabled|split(" ")|map(tonumber? // .)) end),
-      running: $running,
-      socks_port: ($socks|tonumber),
-      http_port: ($http|tonumber),
-      tproxy_port: ($tproxy|tonumber),
-      redirect_port: ($redirect|tonumber),
-      version: $version,
-      last_sync: (if $last_sync == "" then null else ($last_sync|tonumber?) // $last_sync end),
-      xray: $xray,
-      xrayui: $xrayui,
-      conflict: $xrayui.conflict,
-      conflict_message: $xrayui.message
-    }' >"$SS_STATE_FILE"
-  ln -sf "$SS_STATE_FILE" "$ADDON_WEB_DIR/state.json" 2>/dev/null || true
-  # Heavy UI sidecars only when missing or explicitly requested
-  if [ "$full" = "full" ] || [ ! -f "$ADDON_WEB_DIR/protocols.json" ]; then
-    if type ss_protocol_status_matrix >/dev/null 2>&1; then
-      ss_protocol_status_matrix >/dev/null 2>&1 || true
+    if [ -n "$(get_xray_daemon_pid)" ]; then
+        kill_xray_daemon -TERM
+
+        local waited=0
+        while [ -n "$(get_xray_daemon_pid)" ] && [ "$waited" -lt 10 ]; do
+            log_debug "Waiting for Xray to stop... ($waited/10)"
+            update_loading_progress "Waiting for Xray to stop... ($waited/10)"
+            sleep 1
+            waited=$((waited + 1))
+        done
+
+        if [ -n "$(get_xray_daemon_pid)" ]; then
+            log_warn "Xray did not stop in time. Sending SIGKILL."
+            kill_xray_daemon -9
+            sleep 1
+        fi
+
+        for pid in $(get_xray_daemon_pids); do
+            log_error "Xray daemon is still running after SIGKILL (PID: $pid)."
+            rc=1
+        done
+    else
+        log_info "Xray daemon is not running."
     fi
-  fi
-  if [ "$full" = "full" ] || [ ! -f "$SS_VERSION_FILE" ]; then
-    if type ss_version_local >/dev/null 2>&1; then
-      ss_version_local >/dev/null 2>&1 || true
+
+    cleanup_firewall
+
+    cleanup_stale_asdfiles
+
+    return "$rc"
+}
+
+# Returned when a strict acquire times out, so callers can tell it from a failed start or stop
+RESTART_LOCK_BUSY_RC=75
+
+# One lock for restarts, UI/CLI starts and stops, and the watchdog.
+# With "true", a timeout returns RESTART_LOCK_BUSY_RC instead of going ahead without the lock.
+restart_lock_acquire() {
+    local strict="${1:-false}"
+    local waited=0
+    RESTART_LOCK_HELD=false
+
+    if which flock >/dev/null 2>&1 && touch "$XRAY_RESTART_LOCKFILE" 2>/dev/null; then
+        eval exec "$XRAY_RESTART_LOCK_FD>$XRAY_RESTART_LOCKFILE"
+        RESTART_LOCK_HELD=true
+
+        while ! flock -n "$XRAY_RESTART_LOCK_FD"; do
+            if [ "$waited" -ge 120 ]; then
+                if [ "$strict" = "true" ]; then
+                    log_error "Timed out waiting for another start, stop or restart to finish. Nothing was changed. Try again."
+                    eval exec "$XRAY_RESTART_LOCK_FD>&-"
+                    RESTART_LOCK_HELD=false
+                    return "$RESTART_LOCK_BUSY_RC"
+                fi
+                log_warn "Timed out waiting for the running restart to finish. Restarting anyway."
+                break
+            fi
+            if [ "$waited" -eq 0 ]; then
+                log_warn "Another restart is already in progress. Waiting for it to finish..."
+            fi
+            update_loading_progress "Another restart is in progress. Waiting..."
+            sleep 2
+            waited=$((waited + 2))
+        done
     fi
-  fi
 }
 
-ss_apply_config_id() {
-  # Enable this config as outbound (+ optionally sole default) and rebuild
-  local config_id="$1"
-  local sole="${2:-1}" # 1 = make this the only/default outbound (legacy UX)
-  local entry link xray_cfg proto runtime
-
-  [ -n "$config_id" ] || {
-    ss_error "usage: apply <config_id>"
-    return 1
-  }
-  ss_activity "apply.start" "config_id=$config_id sole=$sole"
-  ss_backup_auto "pre-apply" || true
-
-  entry=$(ss_cache_get_config "$config_id")
-  if [ -z "$entry" ] || [ "$entry" = "null" ]; then
-    ss_info "Config $config_id not in cache, syncing…"
-    ss_api_sync_configs >/dev/null || return 1
-    entry=$(ss_cache_get_config "$config_id")
-  fi
-
-  if [ -z "$entry" ] || [ "$entry" = "null" ]; then
-    ss_error "Config id $config_id not found"
-    return 1
-  fi
-
-  proto=$(printf '%s' "$entry" | jq -r '.protocol // "vless"')
-  runtime=$(ss_protocol_runtime "$proto")
-  if [ "$runtime" = "unsupported" ]; then
-    ss_error "Протокол $proto не поддерживается"
-    return 1
-  fi
-  # Soft check: hysteria can auto-download; openflux/wg need xray; awg needs awg-quick
-  if ! ss_protocol_supported_on_router "$proto"; then
-    case "$runtime" in
-    hysteria) ss_info "Hysteria binary missing — will try auto-download on apply" ;;
-    *)
-      ss_error "Протокол $proto не поддерживается на этом роутере (нет runtime: $runtime)"
-      return 1
-      ;;
-    esac
-  fi
-
-  link=$(printf '%s' "$entry" | jq -r '.connection_url // empty')
-  xray_cfg=$(printf '%s' "$entry" | jq -r '.xray_config // empty')
-  if [ -z "$link" ] && { [ -z "$xray_cfg" ] || [ "$xray_cfg" = "null" ]; }; then
-    ss_error "Config $config_id has neither connection_url nor xray_config"
-    return 1
-  fi
-
-  if [ "$sole" = "1" ]; then
-    ss_set_enabled_outbounds "[$config_id]" "ss-$config_id" || return 1
-  else
-    ss_enable_outbound "$config_id" || return 1
-  fi
-
-  SS_ACTIVE_CONFIG_ID="$config_id"
-  ss_save_conf
-
-  # Build/persist outbound (starts Hy2/AWG side runtimes when needed)
-  rm -f "$ADDON_DATA_DIR/outbound-ss-${config_id}.json" 2>/dev/null
-  ss_apply_protocol_config "$config_id" || return 1
-
-  ss_rebuild_and_restart || {
-    ss_activity "apply.fail" "config_id=$config_id proto=$proto"
-    return 1
-  }
-  ss_activity "apply.done" "config_id=$config_id proto=$runtime tag=ss-$config_id"
-  ss_ok "Applied config $config_id ($proto) as outbound ss-$config_id"
-}
-
-ss_rebuild_xray_config() {
-  local full
-  ss_ensure_dirs
-  ss_ensure_xray || ss_warn "xray binary missing"
-
-  # Refresh outbounds for enabled configs (starts Hy2/AWG/WG bridges when needed)
-  local id entry
-  for id in $SS_ENABLED_OUTBOUNDS; do
-    entry=$(ss_cache_get_config "$id" 2>/dev/null) || continue
-    [ -n "$entry" ] && [ "$entry" != "null" ] || continue
-    rm -f "$ADDON_DATA_DIR/outbound-ss-${id}.json" 2>/dev/null
-    ss_apply_protocol_config "$id" || ss_warn "Failed to prepare outbound for $id"
-  done
-
-  if [ -z "$SS_ENABLED_OUTBOUNDS" ] && [ -n "$SS_ACTIVE_CONFIG_ID" ]; then
-    entry=$(ss_cache_get_config "$SS_ACTIVE_CONFIG_ID") || return 1
-    full=$(ss_build_xray_config "$(ss_outbound_from_entry "$entry" "proxy")") || return 1
-  else
-    full=$(ss_build_xray_config_multi) || return 1
-  fi
-
-  printf '%s\n' "$full" >"$XRAY_CONFIG_FILE"
-  ss_write_state
-  return 0
-}
-
-ss_soft_restart_inner() {
-  # Kill our Xray + re-apply firewall/start without rebuilding config or side runtimes
-  ss_activity "rebuild.soft_restart" ""
-  ss_cleanup_firewall 2>/dev/null || true
-  ss_kill_our_xray
-  ss_start_inner
-}
-
-ss_rebuild_and_restart() {
-  # Rebuild once, then soft-restart Xray (do not call ss_restart — it rebuilds again
-  # and would re-start Hysteria/AWG a second time during apply/enable).
-  # applypending sets SS_DEFER_REBUILD=1 so multiple config ops share one final rebuild.
-  if [ "${SS_DEFER_REBUILD:-0}" = "1" ]; then
-    SS_NEED_REBUILD=1
-    export SS_NEED_REBUILD
-    return 0
-  fi
-  ss_rebuild_xray_config || return 1
-  if ! command -v xray >/dev/null 2>&1 && [ ! -x "$XRAY_BIN" ]; then
-    ss_warn "xray binary not found — config written to $XRAY_CONFIG_FILE"
-    return 0
-  fi
-  ss_with_lock lifecycle ss_soft_restart_inner
-}
-
-ss_needs_side_runtimes() {
-  # True if any enabled outbound uses hysteria/awg (must be rematerialized after stop/reboot)
-  local id entry runtime
-  [ -n "$SS_ENABLED_OUTBOUNDS" ] || return 1
-  for id in $SS_ENABLED_OUTBOUNDS; do
-    entry=$(ss_cache_get_config "$id" 2>/dev/null) || continue
-    runtime=$(ss_protocol_runtime "$(printf '%s' "$entry" | jq -r '.protocol // "vless"')")
-    case "$runtime" in
-    hysteria | awg) return 0 ;;
-    esac
-  done
-  return 1
-}
-
-ss_start_inner() {
-  ss_activity "start.begin" "mode=${SS_MODE} dns=${SS_DNS_MODE} enabled=${SS_ENABLED_OUTBOUNDS}"
-  # Dual transparent proxy with XrayUI blackholes LAN — hard refuse
-  if ! ss_refuse_if_xrayui; then
-    ss_write_state
-    return 1
-  fi
-  ss_desired_mark 2>/dev/null || true
-  ss_ensure_xray || {
-    ss_error "xray not installed"
-    ss_activity "start.fail" "xray missing"
-    return 1
-  }
-  [ -x "$XRAY_BIN" ] || XRAY_BIN=$(command -v xray)
-  ss_prepare_runtime 2>/dev/null || ss_sysctl_dataplane 2>/dev/null || true
-
-  # After stop/reboot Hy2/AWG bridges are gone — rebuild outbounds before launching Xray
-  if [ -n "$SS_ENABLED_OUTBOUNDS" ] || [ -n "$SS_ACTIVE_CONFIG_ID" ]; then
-    if ss_needs_side_runtimes || [ ! -f "$XRAY_CONFIG_FILE" ]; then
-      ss_info "Rematerializing outbounds/side runtimes before start…"
-      ss_rebuild_xray_config || {
-        ss_error "Failed to rebuild Xray config for start"
-        ss_activity "start.fail" "rebuild failed"
+# Non-blocking variant for the watchdog: returns 1 while someone else holds the lock
+restart_lock_try() {
+    RESTART_LOCK_HELD=false
+    if ! which flock >/dev/null 2>&1 || ! touch "$XRAY_RESTART_LOCKFILE" 2>/dev/null; then
+        return 0
+    fi
+    eval exec "$XRAY_RESTART_LOCK_FD>$XRAY_RESTART_LOCKFILE"
+    if ! flock -n "$XRAY_RESTART_LOCK_FD"; then
+        eval exec "$XRAY_RESTART_LOCK_FD>&-"
         return 1
-      }
     fi
-  fi
+    RESTART_LOCK_HELD=true
+}
 
-  if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-    ss_error "No local Xray config. Run: stealthsurf apply <config_id> or rebuild"
-    ss_activity "start.fail" "no xray config"
-    return 1
-  fi
-
-  if ss_xray_running; then
-    ss_info "Already running (pid $(cat "$XRAY_PIDFILE"))"
-    if ! ss_firewall_is_configured 2>/dev/null; then
-      ss_warn "Xray running but firewall rules missing — restoring"
+restart_lock_release() {
+    if [ "${RESTART_LOCK_HELD:-false}" = "true" ]; then
+        flock -u "$XRAY_RESTART_LOCK_FD" 2>/dev/null
+        eval exec "$XRAY_RESTART_LOCK_FD>&-"
     fi
-    ss_configure_firewall
-    ss_write_state
-    ss_activity "start.already" "pid=$(cat "$XRAY_PIDFILE")"
-    return 0
-  fi
+    RESTART_LOCK_HELD=false
+}
 
-  if ! "$XRAY_BIN" run -test -c "$XRAY_CONFIG_FILE" >/tmp/stealthsurf-xray-test.log 2>&1; then
-    ss_error "Xray config test failed — see /tmp/stealthsurf-xray-test.log"
-    ss_activity "start.fail" "config test failed"
-    return 1
-  fi
+# UI/CLI start and stop: never run without the lock, or a stop could be undone
+with_restart_lock() {
+    restart_lock_acquire true || return
+    "$@"
+    local rc=$?
+    restart_lock_release
+    return "$rc"
+}
 
-  "$XRAY_BIN" run -c "$XRAY_CONFIG_FILE" >/dev/null 2>&1 &
-  echo $! >"$XRAY_PIDFILE"
-  # Wait until dokodemo listens (or timeout) instead of fixed sleep 3
-  local waited=0
-  while [ "$waited" -lt 6 ]; do
-    if type ss_dokodemo_listening >/dev/null 2>&1 && ss_dokodemo_listening 2>/dev/null; then
-      break
+# Keeps the old behaviour: after the timeout it restarts anyway
+restart() {
+    restart_lock_acquire
+    restart_unlocked
+    local rc=$?
+    restart_lock_release
+    return "$rc"
+}
+
+# The caller holds the restart lock
+restart_unlocked() {
+    log_info "Restarting $ADDON_TITLE"
+
+    POST_RESTART_DNSMASQ="true"
+
+    stop
+
+    FORCE_RESTART=true
+    start
+    local start_rc=$?
+    FORCE_RESTART=false
+
+    if [ "$POST_RESTART_DNSMASQ" = "true" ]; then
+        dnsmasq_restart
     fi
-    if [ "$waited" -ge 2 ] && ss_xray_running; then
-      # ports may be proxy-only; don't block forever
-      case "${SS_MODE:-proxy}" in
-      proxy) break ;;
-      esac
-    fi
-    sleep 1
-    waited=$((waited + 1))
-  done
-  if ss_xray_running; then
-    if ! ss_configure_firewall; then
-      case "${SS_MODE:-proxy}" in
-      proxy) ;;
-      *)
-        ss_warn "Transparent firewall not applied — LAN stays direct (safe). Fix config/mode then restart."
-        ;;
-      esac
-    fi
-    case "$SS_DNS_MODE" in
-    OFF) ;;
-    *)
-      ss_dnsmasq_configure
-      ss_dnsmasq_restart
-      ;;
-    esac
-    ss_ok "Xray started (pid $(cat "$XRAY_PIDFILE")), mode=${SS_MODE:-proxy}"
-    ss_activity "start.done" "pid=$(cat "$XRAY_PIDFILE") mode=${SS_MODE:-proxy}"
-    ss_write_state
-    return 0
-  fi
-  ss_error "Xray failed to stay up"
-  ss_activity "start.fail" "process died"
-  ss_cleanup_firewall 2>/dev/null || true
-  rm -f "$XRAY_PIDFILE"
-  ss_write_state
-  return 1
-}
 
-ss_kill_our_xray() {
-  local pid=""
-  if [ -f "$XRAY_PIDFILE" ]; then
-    pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
-    if [ -n "$pid" ]; then
-      kill "$pid" 2>/dev/null
-      local waited=0
-      while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt 8 ]; do
-        sleep 1
-        waited=$((waited + 1))
-      done
-      if kill -0 "$pid" 2>/dev/null; then
-        kill -9 "$pid" 2>/dev/null
-      fi
-    fi
-    rm -f "$XRAY_PIDFILE"
-  fi
-}
+    POST_RESTART_DNSMASQ="false"
 
-ss_stop_inner() {
-  local pid=""
-  [ -f "$XRAY_PIDFILE" ] && pid=$(cat "$XRAY_PIDFILE" 2>/dev/null)
-  ss_activity "stop.begin" "pid=${pid:-none}"
-  ss_desired_clear 2>/dev/null || true
-  ss_cleanup_firewall 2>/dev/null
-  ss_dnsmasq_cleanup 2>/dev/null
-  # Reload dnsmasq so REDIRECT/BYPASS settings don't stay poisoned after stop
-  if [ "${SS_DNS_MODE:-OFF}" != "OFF" ]; then
-    ss_dnsmasq_restart 2>/dev/null || true
-  fi
-  ss_stop_all_runtimes 2>/dev/null
-  ss_kill_our_xray
-  # Do NOT killall xray — other addons may use it
-  ss_ok "Stopped (firewall cleaned, our PID only)"
-  ss_activity "stop.done" "firewall cleaned"
-  ss_write_state
-}
-
-ss_start() {
-  ss_with_lock lifecycle ss_start_inner
-}
-
-ss_stop() {
-  ss_with_lock lifecycle ss_stop_inner
-}
-
-ss_restart_inner() {
-  # Restart Xray without dropping Hy2/AWG bridges (stop clears those intentionally)
-  ss_activity "restart.begin" ""
-  ss_cleanup_firewall 2>/dev/null
-  ss_kill_our_xray
-  # Re-materialize side runtimes + outbounds then start
-  ss_rebuild_xray_config 2>/dev/null || true
-  ss_start_inner
-}
-
-ss_restart() {
-  ss_with_lock lifecycle ss_restart_inner
-}
-
-ss_status() {
-  ss_write_state
-  if [ -f "$SS_STATE_FILE" ]; then
-    cat "$SS_STATE_FILE"
-  else
-    echo '{"running":false}'
-  fi
-}
-
-ss_set_mode() {
-  local mode="$1"
-  case "$mode" in
-  proxy | redirect | tproxy) ;;
-  *)
-    ss_error "mode must be proxy|redirect|tproxy"
-    return 1
-    ;;
-  esac
-  ss_backup_auto "pre-set-mode" || true
-  ss_activity "mode.set" "from=${SS_MODE} to=${mode}"
-  SS_MODE="$mode"
-  SS_PROXY_MODE="$mode"
-  ss_save_conf
-  if ss_xray_running || [ -f "$XRAY_CONFIG_FILE" ]; then
-    ss_rebuild_and_restart || return 1
-  fi
-  ss_ok "Mode set to $mode"
+    return "$start_rc"
 }

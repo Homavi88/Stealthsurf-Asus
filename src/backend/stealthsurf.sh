@@ -2,424 +2,489 @@
 
 import ./_globals.sh
 import ./_helper.sh
-import ./api_client.sh
-import ./link_parse.sh
-import ./routing.sh
-import ./policies.sh
-import ./logging.sh
-import ./firewall.sh
-import ./dnsmasq.sh
-import ./protocols.sh
-import ./xray_bin.sh
-import ./diag.sh
-import ./backup.sh
-import ./settings.sh
-import ./version.sh
-import ./startup.sh
-import ./control.sh
+
+import ./lock.sh
+import ./ntp.sh
+import ./config.sh
 import ./mount.sh
-import ./hooks.sh
+import ./api.sh
+import ./version.sh
+import ./control.sh
+import ./startup.sh
 import ./install.sh
-import ./service_event.sh
+import ./update.sh
+import ./firewall.sh
+import ./certificates.sh
+import ./reality.sh
+import ./wireguard.sh
+import ./ech.sh
+import ./tlsping.sh
+import ./general_opts.sh
+import ./response.sh
+import ./subscriptions.sh
+import ./github.sh
+import ./geodata.sh
+import ./profile.sh
+import ./logs.sh
+import ./backup.sh
+import ./cron.sh
+import ./failover.sh
+import ./dnsmasq.sh
+import ./diagnostics.sh
+import ./rtls.sh
+import ./b4sni.sh
+import ./stealthsurf_api.sh
 
-ss_cli_help() {
-  cat <<EOF
-$ADDON_TITLE $ADDON_VERSION — CLI
-
-Вызов:  ssurf <к> …    или    stealthsurf <к> …
-Справка: ssurf h       Меню: ssurf m
-
-── Коротко (запоминайте эти) ───────────────────────────────
-  up|on          start          dn|off         stop
-  re|rs          restart        st             status
-  sy             sync           ls|l           list
-  ap|a <id>      apply          en <id>        enable
-  dis <id>       disable        def <tag>      set-default
-  key <stlth_>   set-key        bal            balances
-  mode <m>       set-mode       dns <m>        set-dns-mode
-  rb             rebuild
-  v|ver          version        cu|chk         check-update
-  upd [ -f ]     update         uf             force-update
-  lv             list-versions  iv <tag>       install-version / rollback
-  d|dg           diag           p|proto        protocols
-  log [src] [n]  logs           bak [note]     backup
-  baks           backups        cl             clients
-  dev            devices        conn [url]     connectivity
-  xray           install-xray   geo            geodata
-  cfg            settings       setcfg '<json>' set-settings
-  un --yes       uninstall      doctor         восстановить UI/CLI
-  h|?            help           m|menu         интерактивное меню
-
-── Полные имена (как раньше) ───────────────────────────────
-  start stop restart status install uninstall version
-  check-update update force-update list-versions install-version
-  set-key add-key remove-key verify balances sync list apply enable disable
-  set-default update-settings set-routing preset set-policies clients
-  set-mode set-dns-mode rebuild diag test-config connectivity
-  protocols logs devices backup backups restore
-  install-xray geodata settings set-settings
-
-Примеры:
-  ssurf up
-  ssurf sy && ssurf ls
-  ssurf ap 101 && ssurf mode redirect && ssurf up
-  ssurf st
-  ssurf cu && ssurf upd
-  ssurf lv && ssurf iv v1.0.16   # список релизов + откат на выбранную
-  ssurf m
-EOF
-}
-
-ss_cli_menu() {
-  # Interactive short menu — no need to remember every alias
-  cat <<EOF
-
-$ADDON_TITLE — меню
-  1) up      старт VPN
-  2) dn      стоп VPN
-  3) re      рестарт
-  4) st      статус
-  5) sy      sync с сайта
-  6) ls      список конфигов
-  7) d       diag
-  8) p       protocols
-  9) cu      check-update
-  a) ap      apply <id>
-  e) en      enable <id>
-  x) un      uninstall
-  h) help
-  q) выход
-EOF
-  printf 'Выбор: '
-  read -r choice || return 0
-  case "$choice" in
-  1 | up | on) set -- up ;;
-  2 | dn | off) set -- dn ;;
-  3 | re | rs) set -- re ;;
-  4 | st) set -- st ;;
-  5 | sy) set -- sy ;;
-  6 | ls | l) set -- ls ;;
-  7 | d | dg) set -- d ;;
-  8 | p | proto) set -- p ;;
-  9 | cu | chk) set -- cu ;;
-  a | ap | A)
-    printf 'config id: '
-    read -r cid || return 0
-    set -- ap "$cid"
+case "$1" in
+version)
+    show_version
     ;;
-  e | en | E)
-    printf 'config id: '
-    read -r cid || return 0
-    set -- en "$cid"
+install)
+    install || exit 1
     ;;
-  x | un)
-    printf 'Точно удалить аддон? [y/N]: '
-    read -r yn || return 0
-    case "$yn" in
-    y | Y | yes | YES) set -- uninstall --yes ;;
+key | set-key)
+    ss_api_set_primary_key "$2" "${3:-primary}"
+    ;;
+add-key)
+    ss_api_add_key "$2" "$3"
+    ;;
+remove-key)
+    ss_api_keys_store_remove "$2"
+    ;;
+bal | balances)
+    ss_api_fetch_balances "${2:-1}"
+    ;;
+sy | sync)
+    ss_api_sync_all
+    ;;
+import-config)
+    ss_api_import_config_to_xray "$2"
+    ;;
+uninstall)
+    uninstall
+    ;;
+update)
+    case "$2" in
+    xray)
+        switch_xray_version $3 || exit 1
+        ;;
     *)
-      echo "Отмена"
-      return 0
-      ;;
+        update "$2"
+        ;;
     esac
+    exit 0
     ;;
-  h | help | \?) set -- h ;;
-  q | Q | "")
-    echo "Выход"
-    return 0
+start)
+    with_restart_lock start
     ;;
-  *)
-    echo "Неизвестный пункт: $choice"
-    return 1
+stop)
+    with_restart_lock stop
     ;;
-  esac
-  # Re-enter dispatcher with chosen short command
-  ss_cli_dispatch "$@"
-}
-
-ss_cli_dispatch() {
-  case "$1" in
-  "" | help | -h | --help | h | \?)
-    ss_cli_help
-    return 0
+restart)
+    restart
     ;;
-  m | menu)
-    ss_cli_menu
-    return $?
+mount_ui)
+    mount_ui
     ;;
-  version | v | ver)
-    echo "$ADDON_TITLE $ADDON_VERSION"
-    ss_version_local >/dev/null 2>&1 || true
-    if [ -f "$SS_VERSION_FILE" ]; then
-      jq -r '"installed=\(.installed) latest=\(.latest // "-") update=\(.update_available)"' "$SS_VERSION_FILE" 2>/dev/null || true
-    fi
+unmount_ui)
+    unmount_ui
     ;;
-  check-update | version-check | checkupdate | cu | chk)
-    ss_version_check || return 1
+remount_ui)
+    remount_ui $2
     ;;
-  update | upgrade | upd)
-    # Always show terminal stages unless user set SS_PROGRESS=0
-    ss_cli_force_progress
-    force=0
-    case "${2:-}" in
-    --force | -f | force | 1) force=1 ;;
-    esac
-    if [ "$force" = "1" ]; then
-      ss_cli_echo "→ Force update: downloading latest release…"
-      # Silence JSON on stdout; keep stderr for progress/status
-      ss_version_check >/dev/null || true
-      ss_update_self || return 1
-      ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
-    else
-      ss_version_update_if_available 0
-      rc=$?
-      [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
-      [ "$rc" = "0" ] && ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
-    fi
+fixme)
+    fixme
     ;;
-  force-update | update-force | uf)
-    ss_cli_force_progress
-    ss_cli_echo "→ Force update: downloading latest release…"
-    ss_version_check >/dev/null || true
-    ss_update_self || return 1
-    ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
+backup)
+    backup_configuration
     ;;
-  update-if-newer)
-    ss_cli_force_progress
-    ss_version_update_if_available "${2:-0}"
-    rc=$?
-    [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
+dnsmasq)
+    dnsmasq_configure "$2"
     ;;
-  list-versions | versions | lv)
-    ss_version_list || return 1
-    if [ -f "$SS_VERSIONS_FILE" ]; then
-      jq -r '
-        "installed=\(.installed)",
-        (.releases[]? | "  \(.tag)\t\(.direction)\t\(.changelog.headline // "")")
-      ' "$SS_VERSIONS_FILE" 2>/dev/null || cat "$SS_VERSIONS_FILE"
-    fi
-    ;;
-  install-version | switch-version | rollback | roll | iv)
-    ss_cli_force_progress
-    tag="${2:-}"
-    force_tag=0
-    case "${3:-}" in
-    --force | -f | force | 1) force_tag=1 ;;
-    esac
-    case "${2:-}" in
-    --force | -f | force | 1)
-      force_tag=1
-      tag="${3:-}"
-      ;;
-    esac
-    [ -n "$tag" ] || {
-      echo "usage: ssurf iv <tag>   e.g. ssurf iv v1.0.16"
-      return 1
-    }
-    ss_cli_echo "→ Installing version $tag…"
-    SS_FORCE_TAG="$force_tag"
-    export SS_FORCE_TAG
-    ss_version_install_tag "$tag"
-    rc=$?
-    unset SS_FORCE_TAG
-    [ "$rc" = "0" ] || [ "$rc" = "2" ] || return 1
-    [ "$rc" = "0" ] && ss_cli_echo "→ Tip: ssurf log activity 40   — подробный лог шагов"
-    ;;
-  install)
-    ss_install || return 1
-    ;;
-  uninstall | remove | purge | un)
-    # Require explicit confirmation — former alias `rm` was too easy to run by mistake
-    # and wiped the whole addon (UI + CLI). Usage: ssurf un --yes
-    case "${2:-}" in
-    --yes | -y | yes | confirm | 1) ss_uninstall ;;
+diagnostics)
+    case "$2" in
+    iptables)
+        diagnostics_iptables
+        ;;
+    env)
+        diagnostics_env
+        ;;
+    xrayui)
+        diagnostics_xrayui
+        ;;
     *)
-      ss_error "uninstall refuses without confirmation. Run: ssurf un --yes"
-      ss_info "If the tab/CLI vanished after a glitch, try first: ssurf doctor"
-      return 1
-      ;;
+        diagnostics_env
+        diagnostics_xrayui
+        diagnostics_iptables
+        ;;
     esac
+    exit 0
     ;;
-  doctor | heal | fix | repair)
-    ss_doctor || return 1
+subscriptions)
+    case "$2" in
+    process)
+        process_subscriptions "$3"
+        ;;
+    esac
+    exit 0
     ;;
-  mount_ui)
-    ss_mount_ui || return 1
+cron)
+    case "$2" in
+    logrotate | geodata | subscription_refresh | subscription_fallback | ipset_save | watchdog)
+        cron_job_lock "$2" || exit 0
+        update_loading_progress() { :; }
+        ;;
+    esac
+    case "$2" in
+    addjobs)
+        cron_jobs_add
+        ;;
+    deletejobs)
+        cron_jobs_clear
+        ;;
+    logrotate)
+        cron_logrotate_run
+        ;;
+    geodata)
+        update_community_geodata if_changed
+        ;;
+    subscription_refresh)
+        cron_subscription_refresh_run
+        ;;
+    subscription_fallback)
+        failover_check
+        ;;
+    watchdog)
+        cron_watchdog_run
+        ;;
+    ipset_save)
+        load_xrayui_config
+        if [ "$ipsec" = "redirect" ] && [ -n "$(get_xray_daemon_pid)" ] && firewall_is_configured; then
+            with_firewall_lock ipset_learned_save
+        fi
+        ;;
+    *) ;;
+    esac
+    exit $?
     ;;
-  unmount_ui)
-    ss_unmount_ui
+service_event)
+    case "$2" in
+    b4sni)
+        case "$3" in
+        start)
+            b4sni_start
+            ;;
+        stop)
+            b4sni_stop
+            ;;
+        clearlogs)
+            b4sni_clear_logs
+            ;;
+        esac
+        ;;
+    rtlsscan)
+        case "$3" in
+        start)
+            rtls_scan_start
+            ;;
+        stop)
+            rtls_scan_stop
+            ;;
+        *) ;;
+        esac
+        exit 0
+        ;;
+    startup)
+        startup
+        ;;
+    cleanloadingprogress)
+        remove_loading_progress
+        ;;
+    testconfig)
+        test_xray_config true
+        ;;
+    update)
+        # empty payload means "latest"; a payload that fails to load or parse must not fall back to latest
+        if ! update_payload=$(reconstruct_payload) || ! update_version=$(printf '%s' "$update_payload" | jq -r '.version // empty' 2>/dev/null); then
+            log_error "Could not read the requested update version. Nothing was installed."
+            initial_response
+            update_loading_progress "Error: could not read the requested version. Nothing was installed." 100
+            exit 0
+        fi
+        if update "${update_version:-latest}"; then
+            initial_response
+            update_loading_progress "Update process completed!" 100
+        else
+            initial_response
+            update_loading_progress "Error: the update finished with errors. The details are in the system log." 100
+        fi
+        exit 0
+        ;;
+    geodata)
+        case "$3" in
+        communityupdate)
+            update_community_geodata
+            update_loading_progress "Community geodata files updated successfully." 100
+            ;;
+        customtagfiles)
+            get_custom_geodata_tagfiles
+            update_loading_progress "Custom tagfiles retrieved successfully." 100
+            ;;
+        customrecompileall)
+            if geodata_recompile_all; then
+                update_loading_progress "Geodata recompiled successfully." 100
+            else
+                update_loading_progress "Error: geodata could not be recompiled." 100
+            fi
+            ;;
+        customrecompile)
+            if geodata_recompile; then
+                update_loading_progress "Geodata recompiled successfully." 100
+            else
+                update_loading_progress "Error: the custom list could not be saved or compiled." 100
+            fi
+            ;;
+        customdeletetag)
+            if geodata_delete_tag; then
+                update_loading_progress "Geodata tag deleted successfully." 100
+            else
+                update_loading_progress "Error: the geodata tag could not be deleted or geodata could not be recompiled." 100
+            fi
+            ;;
+        esac
+        ;;
+    connectedclients)
+        api_get_connected_clients
+        ;;
+    connectionstatus)
+        api_get_connection_status
+        ;;
+    setkey)
+        if ss_api_handle_setkey; then
+            ss_api_fetch_balances 1 >/dev/null || true
+            ss_api_public_keys_view
+            update_loading_progress "API key saved." 100
+        else
+            update_loading_progress "Error: API key rejected." 100
+        fi
+        ;;
+    addkey)
+        if ss_api_handle_addkey; then
+            ss_api_fetch_balances 1 >/dev/null || true
+            ss_api_public_keys_view
+            update_loading_progress "API key added." 100
+        else
+            update_loading_progress "Error: could not add API key." 100
+        fi
+        ;;
+    removekey)
+        if ss_api_handle_removekey; then
+            ss_api_fetch_balances 1 >/dev/null || true
+            ss_api_public_keys_view
+            update_loading_progress "API key removed." 100
+        else
+            update_loading_progress "Error: could not remove API key." 100
+        fi
+        ;;
+    balances | refreshbalances)
+        ss_api_fetch_balances 1 >/dev/null || true
+        update_loading_progress "Balances refreshed." 100
+        ;;
+    sync)
+        if ss_api_sync_all; then
+            ss_api_public_keys_view
+            update_loading_progress "StealthSurf catalog synced." 100
+        else
+            update_loading_progress "Error: sync failed." 100
+        fi
+        ;;
+    importconfigs)
+        if ss_api_import_enabled_batch; then
+            update_loading_progress "Configs imported into Xray outbounds." 100
+        else
+            update_loading_progress "Error: import failed." 100
+        fi
+        ;;
+    regenerate)
+        case "$3" in
+        realitykeys)
+            reality_generate_keys
+            ;;
+        wgkeys)
+            wireguard_generate_keys
+            ;;
+        sslcertificates)
+            regenerate_ssl_certificates
+            ;;
+        echkeys)
+            ech_generate_keys
+            ;;
+        esac
+        ;;
+    tlsping)
+        tlsping_fetch
+        exit 0
+        ;;
+    configuration)
+        case "$3" in
+        apply)
+            apply_config
+            update_loading_progress "Configuration applied successfully." 100
+            exit 0
+            ;;
+        stagechunk)
+            stage_chunk
+            exit 0
+            ;;
+        sbscrpts)
+            case "$4" in
+            fetchprotocols)
+                update_loading_progress "Updating subscription protocols..." 0
+                if subscription_fetch_protocols; then
+                    update_loading_progress "Subscription protocols updated successfully." 100
+                else
+                    update_loading_progress "No usable links were fetched. The previous list was kept." 100
+                fi
+                ;;
+            esac
+            ;;
+        logs)
+            case "$4" in
+            fetch)
+                logs_fetch
+                ;;
+            changeloglevel)
+                if change_log_level; then
+                    update_loading_progress "Log level changed successfully." 100
+                else
+                    update_loading_progress "Error: failed to change the log level. Nothing was changed." 100
+                fi
+                ;;
+            *)
+                enable_config_logs
+                update_loading_progress "Configuration logs enabled successfully." 100
+                ;;
+            esac
+            exit 0
+            ;;
+        togglestartup)
+            toggle_startup
+            ;;
+        generatedefaultconfig)
+            generate_xray_config
+            ;;
+        initresponse)
+            initial_response
+            ;;
+        applygeneraloptions)
+            if apply_general_options; then
+                initial_response
+                update_loading_progress "General settings applied." 100
+            fi
+            ;;
+        xrayversionswitch)
+            switch_xray_version
+            case $? in
+            0)
+                initial_response
+                update_loading_progress "Switched Xray version successfully!" 100
+                ;;
+            2)
+                initial_response
+                update_loading_progress "Error: the new Xray version was installed, but Xray did not start with the current configuration. The details are in the system log." 100
+                ;;
+            *)
+                initial_response
+                update_loading_progress "Error: failed to switch the Xray version. The details are in the system log." 100
+                ;;
+            esac
+            ;;
+        changeprofile)
+            change_config_profile
+            initial_response
+            update_loading_progress "Configuration profile changed successfully." 100
+            ;;
+        deleteprofile)
+            delete_config_profile
+            initial_response
+            update_loading_progress "Configuration profile deleted successfully." 100
+            ;;
+        backup)
+            backup_configuration
+            initial_response
+            update_loading_progress "Backup created successfully" 100
+            ;;
+        backupclear)
+            backup_clear
+            initial_response
+            update_loading_progress "Clearing backup complete." 100
+            ;;
+        backuprestore)
+            backup_restore_configuration
+            initial_response
+            update_loading_progress "Restore complete." 100
+            ;;
+        esac
+        exit 0
+        ;;
+    firewall)
+        case "$3" in
+        configure)
+            FIREWALL_FROM_HOOK="true"
+            configure_firewall
+            ;;
+        cleanup)
+            cleanup_firewall
+            ;;
+        esac
+        ;;
+    serverstatus)
+        case "$3" in
+        start)
+            update_loading_progress "Starting Xray service..." 0
+            with_restart_lock start
+            case $? in
+            "$RESTART_LOCK_BUSY_RC")
+                update_loading_progress "Error: another start, stop or restart is still running. Nothing was changed. Try again." 100
+                ;;
+            *)
+                update_loading_progress "Xray service started successfully." 100
+                ;;
+            esac
+            ;;
+        restart)
+            update_loading_progress "Restarting Xray service..." 0
+            restart
+            update_loading_progress "Xray service restarted successfully." 100
+            ;;
+        stop)
+            update_loading_progress "Stopping Xray service..." 0
+            with_restart_lock stop
+            case $? in
+            0)
+                update_loading_progress "Xray service stopped successfully." 100
+                ;;
+            "$RESTART_LOCK_BUSY_RC")
+                update_loading_progress "Error: another start, stop or restart is still running. Nothing was changed. Try again." 100
+                ;;
+            *)
+                update_loading_progress "Error: Xray is still running. The details are in the system log." 100
+                ;;
+            esac
+            ;;
+        *)
+            exit 1
+            ;;
+        esac
+        ;;
+    *) ;;
+    esac
+    exit 0
     ;;
-  autostart)
-    ss_autostart || return 1
+*)
+    echo "Usage: $0 {version|install|uninstall|start|stop|restart|update|mount_ui|unmount_ui|remount_ui}"
+    exit 1
     ;;
-  startup)
-    ss_startup "$2" || return 1
-    ;;
-  wan-up)
-    ss_wan_up_hook || return 1
-    ;;
-  firewall-restore)
-    ss_firewall_restore_hook || return 1
-    ;;
-  dnsmasq-configure)
-    ss_dnsmasq_configure_hook "$2" || return 1
-    ;;
-  set-key | key | sk)
-    SS_API_KEY="$2"
-    [ -n "$SS_API_KEY" ] || {
-      echo "usage: ssurf key <stlth_...>"
-      return 1
-    }
-    ss_save_conf
-    ss_api_verify_key || return 1
-    ;;
-  add-key)
-    ss_api_add_key "$2" "$3" || return 1
-    ;;
-  remove-key)
-    ss_api_keys_store_remove "$2" || return 1
-    ;;
-  verify)
-    ss_api_verify_key || return 1
-    ;;
-  balances | balance | bal)
-    # Force refresh account balance(s) for all configured API keys
-    ss_api_fetch_balances 1 || return 1
-    ;;
-  sync | sy)
-    ss_sync_from_provider || return 1
-    ;;
-  autosync)
-    ss_sync_from_provider >/dev/null 2>&1 || true
-    ;;
-  list | ls | l)
-    [ -f "$SS_CACHE_CONFIGS" ] || ss_api_sync_configs >/dev/null || return 1
-    jq -r '.[] | select(. != null) | "\(.id)\t\(.protocol)\t\(.title // "-")\t\(.location_id)\texp=\(.expires_at)\tonline=\(.is_online)"' "$SS_CACHE_CONFIGS"
-    ;;
-  apply | ap | a)
-    ss_apply_config_id "$2" "${3:-1}" || return 1
-    ;;
-  enable | en)
-    ss_enable_outbound "$2" && ss_rebuild_and_restart || return 1
-    ;;
-  disable | dis)
-    ss_disable_outbound "$2" && ss_rebuild_and_restart || return 1
-    ;;
-  set-default | def)
-    ss_set_default_outbound "$2" && ss_rebuild_and_restart || return 1
-    ;;
-  set-outbounds)
-    ss_set_enabled_outbounds "$2" "$3" && ss_rebuild_and_restart || return 1
-    ;;
-  set-routing)
-    ss_routing_set_rules "$2" "$3" "$4" && ss_rebuild_and_restart || return 1
-    ;;
-  preset)
-    ss_routing_apply_preset "$2" "$3" "$4" && ss_rebuild_and_restart || return 1
-    ;;
-  set-policies)
-    ss_policies_set "$2" || return 1
-    if ss_xray_running; then
-      ss_cleanup_firewall
-      ss_configure_firewall
-    fi
-    ;;
-  clients | cl)
-    ss_clientlist_json
-    ;;
-  set-mode | mode | sm)
-    ss_set_mode "$2" || return 1
-    ;;
-  set-dns-mode | dns | sdns)
-    ss_set_dns_mode "$2" || return 1
-    ;;
-  update-settings | us)
-    ss_api_update_settings "$2" "$3" || return 1
-    ;;
-  rebuild | rb)
-    ss_rebuild_and_restart || return 1
-    ;;
-  start | up | on)
-    ss_start || return 1
-    ;;
-  stop | dn | off)
-    ss_stop || return 1
-    ;;
-  restart | re | rs)
-    ss_restart || return 1
-    ;;
-  status | st)
-    ss_status
-    ;;
-  watchdog)
-    ss_watchdog_tick || return 1
-    ;;
-  diag | d | dg)
-    ss_diag_dump
-    ;;
-  test-config | tc)
-    ss_test_xray_config || return 1
-    ;;
-  connectivity | conn)
-    ss_connectivity_check "$2" "${3:-socks}"
-    ;;
-  logs | log)
-    ss_tail_logs "${2:-activity}" "${3:-100}"
-    ;;
-  clear-logs)
-    ss_logs_clear "${2:-all}" || return 1
-    ;;
-  devices | dev)
-    ss_log_devices_snapshot
-    ss_tail_logs devices 100
-    ;;
-  backup | bak)
-    ss_backup "${2:-manual}" || return 1
-    ;;
-  backups | baks)
-    ss_backup_list
-    ;;
-  restore)
-    ss_restore "$2" || return 1
-    ;;
-  install-xray | xray)
-    if [ -n "${2:-}" ]; then
-      ss_xray_download "$2" || return 1
-    else
-      ss_ensure_xray || return 1
-    fi
-    ss_xray_status_json
-    ;;
-  xray-versions | xv)
-    ss_xray_list_versions || return 1
-    ;;
-  xray-status | xs)
-    ss_xray_status_json
-    ;;
-  geodata | geo)
-    ss_geodata_update || return 1
-    ;;
-  settings | cfg | get-settings)
-    ss_settings_publish 2>/dev/null || true
-    ss_settings_json
-    ;;
-  set-settings | setcfg)
-    ss_settings_apply "${2:-{}}" || return 1
-    ;;
-  protocols | p | proto)
-    ss_protocol_status_matrix
-    ;;
-  service_event)
-    ss_service_event "$2" "$3" || return 1
-    ;;
-  *)
-    echo "Unknown command: $1" >&2
-    echo "Run: ssurf h   or   ssurf m" >&2
-    return 1
-    ;;
-  esac
-  return 0
-}
+esac
 
-ss_cli_dispatch "$@" || exit $?
 exit 0

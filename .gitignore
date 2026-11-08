@@ -1,11 +1,16 @@
+www/
+wwwext/
+custom_settings.txt
 node_modules/
+
+.env
+
+addons/*
+scripts/*
 dist/
 *.tar.gz
-!packaged/*.tar.gz
-.DS_Store
-.env
-*.log
-.pack-stage/
-package-lock.json
-tools/ui-preview/index.html
-tools/ui-preview/ext/
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md
+.claude/
+CLAUDE.md

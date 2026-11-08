@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - name: Build and pack
+        run: |
+          pnpm run pack
+          test -s packaged/asuswrt-merlin-stealthsurf.tar.gz
+          tar -tzf packaged/asuswrt-merlin-stealthsurf.tar.gz | grep -E 'stealthsurf/.*/?(stealthsurf|index\.asp|app\.js)$'
+          # Ensure version stamp and StealthSurf API module are present
+          rm -rf /tmp/ss-ci-pkg && mkdir -p /tmp/ss-ci-pkg
+          tar -xzf packaged/asuswrt-merlin-stealthsurf.tar.gz -C /tmp/ss-ci-pkg
+          grep -q 'XRAYUI_VERSION="1.1.0"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_fetch_balances' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -qE 'ssSetKey|api.stealthsurf.net' /tmp/ss-ci-pkg/stealthsurf/app.js
+          grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp

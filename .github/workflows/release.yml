@@ -18,30 +18,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
+          cache: pnpm
 
-      - name: Unit tests
-        run: |
-          sh tools/test-protocols.sh
-          sh tools/test-version-cli.sh
-          sh tools/test-sync-fingerprint.sh
-          sh tools/test-xrayui-detect.sh
-          sh tools/test-routing-suggest.sh
-          sh tools/test-settings.sh
-          sh tools/test-deferred-apply.sh
-          sh tools/test-update-progress.sh
-          sh tools/test-update-atomic.sh
-          sh tools/test-merlin-chrome.sh
-          sh tools/test-service-event-hook.sh
-          sh tools/test-xray-versions-ui.sh
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm run typecheck
 
       - name: Build and pack
         run: |
-          npm run pack
+          pnpm run pack
           ls -la packaged/
           test -s packaged/asuswrt-merlin-stealthsurf.tar.gz
+          tar -tzf packaged/asuswrt-merlin-stealthsurf.tar.gz | head -20
+          rm -rf /tmp/ss-rel-pkg && mkdir -p /tmp/ss-rel-pkg
+          tar -xzf packaged/asuswrt-merlin-stealthsurf.tar.gz -C /tmp/ss-rel-pkg
+          test -x /tmp/ss-rel-pkg/stealthsurf/stealthsurf
+          test -f /tmp/ss-rel-pkg/stealthsurf/index.asp
+          test -f /tmp/ss-rel-pkg/stealthsurf/app.js
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -67,3 +69,4 @@ jobs:
           files: packaged/asuswrt-merlin-stealthsurf.tar.gz
           generate_release_notes: true
           fail_on_unmatched_files: true
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
