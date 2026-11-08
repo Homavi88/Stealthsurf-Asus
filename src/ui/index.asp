@@ -99,7 +99,8 @@ function initial() {
   .FormTable th {
     vertical-align: middle;
   }
-  .FormTable td span.label {
+  .FormTable td span.label,
+  .ss-data-table span.label {
     color: #fff;
     padding: 3px 5px;
     border-radius: 4px;
@@ -107,10 +108,14 @@ function initial() {
     font-weight: bold;
     display: inline-block;
   }
-  .FormTable td span.label-success { background-color: green; }
-  .FormTable td span.label-error { background-color: red; }
-  .FormTable td span.label-warning { background-color: #fc0; color: #596e74; }
-  .FormTable td span.label-muted { background-color: #6b757b; }
+  .FormTable td span.label-success,
+  .ss-data-table span.label-success { background-color: green; }
+  .FormTable td span.label-error,
+  .ss-data-table span.label-error { background-color: red; }
+  .FormTable td span.label-warning,
+  .ss-data-table span.label-warning { background-color: #fc0; color: #596e74; }
+  .FormTable td span.label-muted,
+  .ss-data-table span.label-muted { background-color: #6b757b; }
   .FormTable input[type="text"],
   .FormTable input[type="password"],
   .FormTable input[type="number"],
@@ -486,6 +491,12 @@ function initial() {
     font-size: 12px;
   }
   .ss-data-table th { color: #ffcc00; }
+  .ss-data-table tr.ss-xray-current td {
+    background: rgba(0, 128, 0, 0.18);
+  }
+  .ss-data-table tr.ss-xray-current td:first-child {
+    font-weight: bold;
+  }
   .ss-opt-row label {
     display: inline-block;
     margin-right: 12px;
@@ -1411,9 +1422,10 @@ function initial() {
                           </td>
                         </tr>
                         <tr>
-                          <th data-ss-hint="Список релизов Xray-core автоматически загружается с GitHub (api.github.com/repos/XTLS/Xray-core/releases), как в XrayUI. Можно поставить конкретную версию под архитектуру роутера.">Релизы GitHub</th>
+                          <th data-ss-hint="Список релизов Xray-core автоматически загружается с GitHub (api.github.com/repos/XTLS/Xray-core/releases), как в XrayUI. Текущая установленная версия помечается в списке зелёной меткой «установлена».">Релизы GitHub</th>
                           <td>
                             <div class="ss-hint">Репозиторий: <a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a> — список подтягивается сам при открытии раздела.</div>
+                            <div id="xrayVersionsHint" class="ss-hint">Установленная версия будет отмечена в списке зелёной меткой «установлена».</div>
                             <span class="row-buttons" style="margin:6px 0">
                               <input id="btnXrayVersions" class="button_gen button_gen_small" type="button" value="Обновить список">
                             </span>

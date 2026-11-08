@@ -49,6 +49,15 @@ fi
 # Install by tag still mutates via triggerService (OK)
 grep -q 'triggerService("installxray"' "$APP" && ok "installxray still uses triggerService" || bad "installxray still uses triggerService"
 
+# Installed version marked in the releases list
+grep -q 'xrayInstalledVersionHint' "$APP" && ok "xrayInstalledVersionHint" || bad "xrayInstalledVersionHint"
+grep -q 'xrayReleaseIsInstalled' "$APP" && ok "xrayReleaseIsInstalled" || bad "xrayReleaseIsInstalled"
+grep -q "label-success'>установлена" "$APP" && ok "installed badge in list" || bad "installed badge in list"
+grep -q 'ss-xray-current' "$APP" && ok "current row class" || bad "current row class"
+grep -q 'ss-xray-current' "$ASP" && ok "ASP current row CSS" || bad "ASP current row CSS"
+grep -q 'xrayVersionsHint' "$ASP" && ok "ASP versions hint" || bad "ASP versions hint"
+grep -q 'Переустановить' "$APP" && ok "reinstall button for current" || bad "reinstall button for current"
+
 # Backend cache fallback still lists from same GitHub repo
 grep -q 'XTLS/Xray-core/releases' "$ROOT/src/backend/xray_bin.sh" && ok "backend lists XTLS/Xray-core" || bad "backend lists XTLS/Xray-core"
 grep -q 'per_page=30' "$ROOT/src/backend/_globals.sh" && ok "backend per_page=30" || bad "backend per_page=30"

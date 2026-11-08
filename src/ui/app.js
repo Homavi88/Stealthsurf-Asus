@@ -879,6 +879,27 @@ let xrayInfoCache = {};
 let xrayVersionsCache = { releases: [] };
 let clientsLoadPending = false;
 
+function xrayInstalledVersionHint() {
+  // xray version output looks like "Xray 25.10.15 (Xray, Penetrates Everything.) …"
+  const raw =
+    (xrayInfoCache && xrayInfoCache.version) ||
+    (stateCache && stateCache.xray && stateCache.xray.version) ||
+    "";
+  if (!raw) return "";
+  const m = String(raw).match(/v?(\d+\.\d+(?:\.\d+){0,3})/i);
+  return m ? m[1] : versionNormalize(raw);
+}
+
+function xrayReleaseIsInstalled(rel, installed) {
+  if (!rel || !installed) return false;
+  const tag = rel.tag || rel.name || "";
+  if (!tag) return false;
+  const a = versionNormalize(tag);
+  const b = versionNormalize(installed);
+  if (!a || !b) return false;
+  return a === b || versionCmp(a, b) === 0;
+}
+
 function renderXrayStatus(info) {
   xrayInfoCache = info || xrayInfoCache || {};
   const box = byId("xrayStatusBox");
@@ -889,9 +910,11 @@ function renderXrayStatus(info) {
         "<b>Не установлен</b>. Нажмите «Установить / найти Xray» — аддон возьмёт бинарь из opkg или с " +
         '<a href="https://github.com/XTLS/Xray-core/releases" target="_blank" rel="noopener">XTLS/Xray-core</a>.';
     } else {
+      const verHint = xrayInstalledVersionHint();
       box.innerHTML =
         "<b>Установлен:</b> " +
         escapePendingHtml(data.version || "версия неизвестна") +
+        (verHint ? " <span class='label label-success'>v" + escapePendingHtml(verHint) + "</span>" : "") +
         "<br><b>Путь:</b> <code>" +
         escapePendingHtml(data.path || "—") +
         "</code>" +
@@ -904,6 +927,10 @@ function renderXrayStatus(info) {
     }
   }
   updateSectionSummaries();
+  // Refresh list markers when installed version becomes known / changes.
+  if (xrayVersionsCache && Array.isArray(xrayVersionsCache.releases) && xrayVersionsCache.releases.length) {
+    renderXrayVersions(xrayVersionsCache);
+  }
 }
 
 function xrayArchHint() {
@@ -970,6 +997,7 @@ function renderXrayVersions(payload) {
   if (!tbody) return;
   tbody.innerHTML = "";
   const list = (xrayVersionsCache && xrayVersionsCache.releases) || [];
+  const installed = xrayInstalledVersionHint();
   if (xrayVersionsCache.error && !list.length) {
     const tr = document.createElement("tr");
     tr.innerHTML = "<td colspan='3'>" + escapePendingHtml(xrayVersionsCache.error) + "</td>";
@@ -982,12 +1010,17 @@ function renderXrayVersions(payload) {
     tbody.appendChild(tr);
     return;
   }
+  let matchedInstalled = false;
   list.forEach((rel) => {
     const tr = document.createElement("tr");
     const when = rel.published_at ? String(rel.published_at).slice(0, 10) : "—";
+    const isCurrent = xrayReleaseIsInstalled(rel, installed);
+    if (isCurrent) matchedInstalled = true;
+    if (isCurrent) tr.className = "ss-xray-current";
     tr.innerHTML =
       "<td>" +
       escapePendingHtml(rel.tag || rel.name || "—") +
+      (isCurrent ? " <span class='label label-success'>установлена</span>" : "") +
       (rel.prerelease ? " <span class='label label-warning'>pre</span>" : "") +
       "</td><td>" +
       escapePendingHtml(when) +
@@ -995,15 +1028,38 @@ function renderXrayVersions(payload) {
     const btn = document.createElement("input");
     btn.type = "button";
     btn.className = btnClass("");
-    btn.value = "Установить";
+    if (isCurrent) {
+      btn.value = "Переустановить";
+      btn.title = "Сейчас установлена эта версия — можно переустановить с GitHub";
+    } else {
+      btn.value = "Установить";
+    }
     btn.addEventListener("click", () => {
-      if (!confirm("Установить Xray " + (rel.tag || "") + " с GitHub?")) return;
-      setMsg("Установка Xray " + (rel.tag || "") + "…", "");
+      const action = isCurrent ? "Переустановить" : "Установить";
+      if (!confirm(action + " Xray " + (rel.tag || "") + " с GitHub?")) return;
+      setMsg((isCurrent ? "Переустановка" : "Установка") + " Xray " + (rel.tag || "") + "…", "");
       triggerService("installxray", { tag: rel.tag }, { wait: 45 });
     });
     tr.lastChild.appendChild(btn);
     tbody.appendChild(tr);
   });
+  // Hint above the table when we know installed version but it is outside the shown list.
+  const hint = byId("xrayVersionsHint");
+  if (hint) {
+    if (installed && matchedInstalled) {
+      hint.textContent = "В списке отмечена установленная версия v" + installed + ".";
+      hint.className = "ss-hint ok";
+    } else if (installed) {
+      hint.textContent =
+        "Сейчас установлено v" +
+        installed +
+        " — этой версии нет в последних релизах списка (можно поставить другую ниже).";
+      hint.className = "ss-hint";
+    } else {
+      hint.textContent = "Установленная версия будет отмечена в списке зелёной меткой «установлена».";
+      hint.className = "ss-hint";
+    }
+  }
 }
 
 async function requestXrayVersionsList(opts) {
