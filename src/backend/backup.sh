@@ -270,7 +270,8 @@ ss_update_self() {
   fi
   ss_progress_begin "StealthSurf update" 7
   if type ss_cli_echo >/dev/null 2>&1; then
-    ss_cli_echo "Stages: backup → resolve URL → download → validate → install → remount → version"
+    ss_cli_echo "Stages: backup → resolve URL → download → validate → install → remount (addon only) → version"
+    ss_cli_echo "Note: geoip/geosite and Xray binary are left as-is (ssurf geo / ssurf xray to refresh)"
   fi
 
   ss_progress_step "Backup before update"
@@ -384,11 +385,17 @@ ss_update_self() {
   ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
   ln -sf "$ADDON_SCRIPT" "/opt/bin/ssurf" 2>/dev/null || true
 
-  ss_progress_step "Remounting UI / rewriting hooks"
-  # Re-run install with NEW script (hooks, deps, mount UI, version.json)
+  ss_progress_step "Remounting UI / rewriting hooks (addon only)"
+  # Re-run install with NEW script (hooks, deps, mount UI). Addon-only remount:
+  # do not re-download geoip/geosite or Xray, and skip slow opkg update.
+  # Explicit geodata refresh remains: ssurf geo / UI geodata button.
+  SS_INSTALL_REMOUNT=1
+  SS_INSTALL_SKIP_OPKG_UPDATE=1
+  export SS_INSTALL_REMOUNT SS_INSTALL_SKIP_OPKG_UPDATE
   if ! sh "$ADDON_SCRIPT" install; then
     ss_warn "Post-update install reported errors — run: $ADDON_SCRIPT doctor"
   fi
+  unset SS_INSTALL_REMOUNT SS_INSTALL_SKIP_OPKG_UPDATE
 
   ss_progress_step "Refreshing version.json"
   # Refresh version after install (new ADDON_VERSION is inside new script; this shell still has old)
@@ -398,6 +405,7 @@ ss_update_self() {
   new_ver=$(jq -r '.installed // empty' "$SS_VERSION_FILE" 2>/dev/null)
   ss_activity "update.done" "installed=${new_ver:-ok}"
   ss_ok "Updated addon from GitHub Releases (now ${new_ver:-unknown}) — refresh WebUI / re-login"
+  ss_info "Geodata untouched — refresh with: ssurf geo"
   ss_progress_end "done — now ${new_ver:-unknown}"
 }
 

@@ -30,8 +30,8 @@ stealthsurf <команда>           # полное имя
 | `rb` | `rebuild` | Пересобрать dataplane |
 | `v` / `ver` | `version` | Версия |
 | `cu` / `chk` | `check-update` | Проверить GitHub |
-| `upd` [`-f`] | `update` | Обновить (с `-f` / `uf` — принудительно) |
-| `uf` | `force-update` | Всегда скачать latest |
+| `upd` [`-f`] | `update` | Обновить **только аддон** (geoip/Xray не трогает; с `-f` / `uf` — принудительно) |
+| `uf` | `force-update` | Всегда скачать latest аддона |
 | `lv` | `list-versions` | Список релизов + changelog |
 | `iv` \<tag\> | `install-version` | Установить / откатить на tag |
 | `d` / `dg` | `diag` | Диагностика |
@@ -75,7 +75,8 @@ ssurf un --yes        # полное удаление
 ```
 
 Обновление в SSH показывает этапы `[1/7]…[7/7]` и пишет их в `/opt/share/stealthsurf/logs/activity.log`.  
-Если `ssurf upd` пишет «Already up to date» — это нормально; переустановка: `ssurf uf`.  
+`upd` / `uf` / `iv` обновляют **только пакет аддона** (UI + CLI + хуки) — не скачивают заново `geoip.dat` / `geosite.dat` и не трогают бинарь Xray. Geo: `ssurf geo`. Xray: `ssurf xray`.  
+Если `ssurf upd` пишет «Already up to date» — это нормально; переустановка аддона: `ssurf uf`.  
 Отключить прогресс: `SS_PROGRESS=0 ssurf upd`.
 
 `sy` / autosync: тянут каталог API и пересобирают dataplane только при изменении включённых конфигов. Подробнее: [PROTOCOLS.md](./PROTOCOLS.md).

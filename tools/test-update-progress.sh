@@ -35,7 +35,10 @@ grep -q 'Checking GitHub / resolving download URL' "$BACKUP" && ok "stage: githu
 grep -q 'Downloading release' "$BACKUP" && ok "stage: download" || bad "stage download"
 grep -q 'Validating archive' "$BACKUP" && ok "stage: validate" || bad "stage validate"
 grep -q 'Extracting and installing files' "$BACKUP" && ok "stage: extract" || bad "stage extract"
-grep -q 'Remounting UI / rewriting hooks' "$BACKUP" && ok "stage: remount" || bad "stage remount"
+grep -q 'Remounting UI / rewriting hooks (addon only)' "$BACKUP" && ok "stage: remount" || bad "stage remount"
+grep -q 'SS_INSTALL_REMOUNT=1' "$BACKUP" && ok "update remount skips geo/xray" || bad "update remount skips geo/xray"
+grep -q 'SS_INSTALL_SKIP_OPKG_UPDATE=1' "$BACKUP" && ok "update skips opkg update" || bad "update skips opkg update"
+grep -q 'Geodata untouched' "$BACKUP" && ok "update notes geodata untouched" || bad "update notes geodata untouched"
 grep -q 'Refreshing version.json' "$BACKUP" && ok "stage: version.json" || bad "stage version"
 grep -q 'ss_curl_download' "$BACKUP" && ok "update uses ss_curl_download" || bad "update curl helper"
 

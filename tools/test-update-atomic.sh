@@ -14,6 +14,11 @@ grep -q 'stealthsurf-update-stage' "$ROOT/src/backend/backup.sh" && ok "staged e
 grep -q 'refusing to replace addon\|live addon untouched' "$ROOT/src/backend/backup.sh" && ok "refuse bad archive" || bad "refuse bad archive"
 grep -q 'ss_progress_begin' "$ROOT/src/backend/backup.sh" && ok "update progress stages" || bad "update progress stages"
 grep -q 'ss_curl_download' "$ROOT/src/backend/backup.sh" && ok "download with progress helper" || bad "download progress helper"
+grep -q 'SS_INSTALL_REMOUNT=1' "$ROOT/src/backend/backup.sh" && ok "post-update remount flag" || bad "post-update remount flag"
+grep -q 'SS_INSTALL_REMOUNT' "$ROOT/src/backend/install.sh" && ok "install honors remount (skip geo)" || bad "install honors remount (skip geo)"
+grep -q 'Keeping existing geoip/geosite' "$ROOT/src/backend/install.sh" && ok "keeps existing geodata" || bad "keeps existing geodata"
+grep -q 'SS_FORCE_GEODATA' "$ROOT/src/backend/install.sh" && ok "SS_FORCE_GEODATA override" || bad "SS_FORCE_GEODATA override"
+grep -q 'skipping opkg update' "$ROOT/src/backend/install.sh" && ok "can skip opkg update" || bad "can skip opkg update"
 grep -q 'stealthsurf-install-stage' "$ROOT/install.sh" && ok "installer staged" || bad "installer staged"
 grep -q 'установленный аддон не тронут\|отказ трогать установленный аддон' "$ROOT/install.sh" && ok "installer refuse" || bad "installer refuse"
 

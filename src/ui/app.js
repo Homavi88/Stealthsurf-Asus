@@ -439,11 +439,11 @@ function triggerService(action, payload, opts) {
   form.action_wait.value = String(wait);
 
   const labels = {
-    installversion: "Установка выбранной версии с GitHub…",
-    switchversion: "Переключение версии с GitHub…",
-    rollback: "Откат на выбранную версию…",
-    update: "Установка обновления с GitHub (скачивание)…",
-    upgrade: "Установка обновления с GitHub…",
+    installversion: "Установка версии аддона с GitHub (без geoip/Xray)…",
+    switchversion: "Переключение версии аддона с GitHub…",
+    rollback: "Откат версии аддона…",
+    update: "Обновление аддона с GitHub (без geoip/Xray)…",
+    upgrade: "Обновление аддона с GitHub (без geoip/Xray)…",
     start: "Запуск…",
     stop: "Остановка…",
     restart: "Рестарт…",
