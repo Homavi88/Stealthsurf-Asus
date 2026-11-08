@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3] - 2026-11-08
+
+### Fix update/install ash syntax error
+
+- Broken `awk` quoting in `diagnostics_iptables` (`'$3==c' {…}` → `'$3==c {…}'`) caused `syntax error: unexpected "("` at install on Asuswrt ash/dash, so `stealthsurf update` failed mid-install.
+
+---
+
 ## [1.1.2] - 2026-11-08
 
 ### Short CLI aliases restored

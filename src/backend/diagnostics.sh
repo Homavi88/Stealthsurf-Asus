@@ -133,7 +133,7 @@ diagnostics_iptables() {
         for ch in PREROUTING INPUT FORWARD OUTPUT; do
             if iptables -w -t "$tbl" -C "$ch" -j "$FW_CHAIN" 2>/dev/null; then
                 stats=$(iptables -w -t "$tbl" -nvL "$ch" |
-                    awk -v c="$FW_CHAIN" '$3==c' {p+=$1; b+=$2; n++} END {printf "refs=%d pkts=%d bytes=%d", n+0, p+0, b+0}')
+                    awk -v c="$FW_CHAIN" '$3==c {p+=$1; b+=$2; n++} END {printf "refs=%d pkts=%d bytes=%d", n+0, p+0, b+0}')
                 echo "$tbl/$ch  $stats"
             fi
         done
