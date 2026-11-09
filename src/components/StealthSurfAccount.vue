@@ -300,8 +300,11 @@
 
       const importSelected = async () => {
         if (!selectedIds.value.length) return;
-        await engine.submit(SubmitActions.ssImportConfigs, { ids: selectedIds.value }, 10);
-        alert('Imported into Outbounds. Open Outbounds / Apply to use them.');
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(SubmitActions.ssImportConfigs, { ids: selectedIds.value }, 10);
+          await engine.loadXrayConfig();
+        });
+        alert('Imported into Outbounds as default route. Connection status appears after Start/Restart (🟢/🔴).');
       };
 
       onMounted(async () => {

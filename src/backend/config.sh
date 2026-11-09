@@ -76,10 +76,17 @@ EOF
         else .outbounds += [{ "protocol": "blackhole", "tag": "block", "settings": {} }] end
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
 
-    # Fresh installs: transparent proxy on (legacy 1.0). Respect an explicit user value.
+    # Fresh installs: send all LAN traffic into Xray (ipsec=off).
+    # Catch-all routing rules need this — ipsec=redirect only proxies PROXY-ipset destinations.
+    # Respect an explicit user value if already set.
     if [ -z "${ipsec:-}" ]; then
-        update_xrayui_config "ipsec" "redirect"
-        ipsec="redirect"
+        update_xrayui_config "ipsec" "off"
+        ipsec="off"
+    fi
+    # Status probes for Outbounds list (🟢/🔴) — enable when unset
+    if [ -z "${check_connection:-}" ]; then
+        update_xrayui_config "check_connection" "true"
+        check_connection="true"
     fi
 }
 

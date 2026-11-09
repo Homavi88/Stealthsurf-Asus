@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.5] - 2026-11-09
+
+### Connections work + status badges + README
+
+- After API import: enable connection probes, rebuild observatory, restart if running — Outbounds show 🟢/🟡/🔴 for `ss-*`
+- Catch-all default route uses `ipsec=off` (full tunnel); `redirect` alone cannot carry a network-only rule
+- Outbounds list seeds yellow placeholders for new proxies before the first probe returns
+- GitHub README restored to the v1.0 landing style with 1.1 notes and screenshots
+
+---
+
 ## [1.1.4] - 2026-11-09
 
 ### Controls + default outbound
