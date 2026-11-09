@@ -81,7 +81,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 
 | | |
 | --- | --- |
-| **Каталог из API** | Sync / автосинк конфигов StealthSurf, несколько ключей, импорт в Outbounds |
+| **Каталог из API** | Sync / автосинк VPN + paid/cloud, expires/локация/auto-renew, PATCH settings, autofit под ISP, traffic/stats, renew/top-up |
 | **Transparent proxy** | Весь LAN через Xray (`ipsec=off`) или smart proxy (`redirect` + geosite) |
 | **Routing** | domain / geosite / geoip → `ss-<id>`, пресеты XrayUI |
 | **Надёжность** | автостарт, watchdog, backup, geodata |

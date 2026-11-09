@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.14] - 2026-11-09
+
+### StealthSurf API control plane (catalog → PATCH → autofit → billing)
+
+- Catalog shows **expires**, **location**, **auto-renew**, and **source** (vpn / paid / cloud); Sync also pulls paid-options + cloud configs into the same Import list (`ss-po-*` / `ss-cs-*`)
+- **PATCH settings** from Account: protocol, location, server (`available-servers`), REALITY/SNI/XHTTP/gRPC — rebuilds imported outbound
+- **Autofit (ISP)**: tries alternate servers → protocols → stealth flags until Observatory is green on the router
+- **Server stats** + **traffic** panels; **auto-renewal**, **renew**, **balance top-up** (+ calc)
+- CLI: `ssurf autofit|patch|stats|traffic|renew|topup`
+
+---
+
 ## [1.1.13] - 2026-11-09
 
 ### Outbound probe diagnosis + API rebuild

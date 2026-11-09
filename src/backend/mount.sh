@@ -71,6 +71,13 @@ mount_ui() {
     ln -s -f "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/ss_locations.json" 2>/dev/null || true
     ln -s -f "$SS_CACHE_PROFILE" "$ADDON_WEB_DIR/ss_profile.json" 2>/dev/null || true
     ln -s -f "$SS_CACHE_SUBSCRIPTIONS" "$ADDON_WEB_DIR/ss_subscriptions.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_PAID" "$ADDON_WEB_DIR/ss_paid_options.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_CLOUD" "$ADDON_WEB_DIR/ss_cloud_servers.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_TARIFFS" "$ADDON_WEB_DIR/ss_tariffs.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_TRAFFIC" "$ADDON_WEB_DIR/ss_traffic.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_SERVER_STATS" "$ADDON_WEB_DIR/ss_server_stats.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_AVAILABLE_SERVERS" "$ADDON_WEB_DIR/ss_available_servers.json" 2>/dev/null || true
+    ln -s -f "$SS_CACHE_AUTOFIT" "$ADDON_WEB_DIR/ss_autofit.json" 2>/dev/null || true
     mount_web_aliases
     rm -f "$ADDON_WEB_DIR/xray_error_partial.asp" "$ADDON_WEB_DIR/xray_access_partial.asp"
 
@@ -83,7 +90,7 @@ mount_ui() {
 
 mount_web_aliases() {
     local name
-    for name in xray-config xray-ui-response clients-online connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions; do
+    for name in xray-config xray-ui-response clients-online connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions ss_paid_options ss_cloud_servers ss_tariffs ss_traffic ss_server_stats ss_available_servers ss_autofit; do
         [ -L "$ADDON_WEB_DIR/$name.cab" ] || ln -s -f "$name.json" "$ADDON_WEB_DIR/$name.cab" || log_error "Failed to create symlink for $name.cab."
     done
 }

@@ -349,7 +349,16 @@ export enum SubmitActions {
   ssBalances = 'stealthsurf_balances',
   ssSync = 'stealthsurf_sync',
   ssImportConfigs = 'stealthsurf_importconfigs',
-  ssRefreshOutbound = 'stealthsurf_refreshoutbound'
+  ssRefreshOutbound = 'stealthsurf_refreshoutbound',
+  ssUpdateSettings = 'stealthsurf_updatesettings',
+  ssAvailableServers = 'stealthsurf_availableservers',
+  ssServerStats = 'stealthsurf_serverstats',
+  ssTraffic = 'stealthsurf_traffic',
+  ssAutofit = 'stealthsurf_autofit',
+  ssAutoRenewal = 'stealthsurf_autorenewal',
+  ssRenew = 'stealthsurf_renew',
+  ssTopup = 'stealthsurf_topup',
+  ssTopupCalc = 'stealthsurf_topupcalc'
 }
 
 export class Engine {

@@ -38,7 +38,7 @@ ss_cli_list_configs() {
     fi
     jq -r '
       .[] |
-      "\(.id)\t\(.protocol // "-")\t\(if .is_online then "online" else "-" end)\t\(.title // .name // ("ss-" + (.id|tostring)))"
+      "\(.id)\t\(._ss_source // "config")\t\(.protocol // "-")\t\(._ss_location_title // .location_id // "-")\t\(if .is_online then "online" else "-" end)\t\(.title // .name // (._ss_tag // ("ss-" + (.id|tostring))))"
     ' "$SS_CACHE_CONFIGS"
 }
 
@@ -55,6 +55,10 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   sy             sync           ls|l           list catalog
   ic|imp|ap <id> import-config  bal            balances
   refresh <id>   rebuild ss-* from API
+  patch <id>     PATCH settings (JSON via env SS_PATCH_BODY)
+  autofit <id>   try servers/protocols until green
+  stats <id>     serverStats    traffic [type] [id]
+  renew <id>     renew config   topup <amount>
   key <stlth_>   set-key        addk <k> [lbl] add-key
   rmkey <k>      remove-key
   bak            backup         d|dg           diagnostics
@@ -66,7 +70,8 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
 ── Полные имена ───────────────────────────────────────────
   start stop restart version install uninstall update
   set-key add-key remove-key balances sync import-config
-  refresh-outbound backup diagnostics mount_ui remount_ui
+  refresh-outbound update-settings autofit server-stats traffic
+  renew topup backup diagnostics mount_ui remount_ui
 
 Примеры:
   ssurf up
@@ -74,6 +79,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   ssurf sy && ssurf ls
   ssurf ic 101 && ssurf re
   ssurf refresh 69191
+  ssurf autofit 69191
   ssurf st
   ssurf m
 EOF
@@ -213,6 +219,54 @@ ss_cli_dispatch() {
             return 0
         fi
         return 1
+        ;;
+    patch | update-settings)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: patch <config-id>  (JSON body in SS_PATCH_BODY)"
+            return 1
+        }
+        [ -n "${SS_PATCH_BODY:-}" ] || {
+            ss_cli_echo "Set SS_PATCH_BODY='{\"location_id\":1,\"protocol\":\"vless\"}'"
+            return 1
+        }
+        ss_api_update_settings "$2" "$SS_PATCH_BODY" "${3:-config}" "$4"
+        return $?
+        ;;
+    autofit)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: autofit <config-id>"
+            return 1
+        }
+        ss_api_autofit_config "$2"
+        return $?
+        ;;
+    stats | server-stats)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: stats <config-id> [source] [parent_id]"
+            return 1
+        }
+        ss_api_server_stats "$2" "${3:-config}" "$4"
+        return $?
+        ;;
+    traffic)
+        ss_api_fetch_traffic "${2:-account}" "$3" "${4:-day}"
+        return $?
+        ;;
+    renew)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: renew <config-id> [tariff_id] [payment_method_id]"
+            return 1
+        }
+        ss_api_renew_config "$2" "$3" "$4"
+        return $?
+        ;;
+    topup)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: topup <amount> [payment_method_id]"
+            return 1
+        }
+        ss_api_topup_balance "$2" "$3"
+        return $?
         ;;
     bak | backup)
         backup_configuration
