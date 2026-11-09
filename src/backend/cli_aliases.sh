@@ -54,6 +54,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   re|rs          restart        st             status
   sy             sync           ls|l           list catalog
   ic|imp|ap <id> import-config  bal            balances
+  refresh <id>   rebuild ss-* from API
   key <stlth_>   set-key        addk <k> [lbl] add-key
   rmkey <k>      remove-key
   bak            backup         d|dg           diagnostics
@@ -65,13 +66,14 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
 ── Полные имена ───────────────────────────────────────────
   start stop restart version install uninstall update
   set-key add-key remove-key balances sync import-config
-  backup diagnostics mount_ui remount_ui
+  refresh-outbound backup diagnostics mount_ui remount_ui
 
 Примеры:
   ssurf up
   ssurf key 'stlth_…'
   ssurf sy && ssurf ls
   ssurf ic 101 && ssurf re
+  ssurf refresh 69191
   ssurf st
   ssurf m
 EOF
@@ -194,6 +196,19 @@ ss_cli_dispatch() {
         ;;
     ic | imp | ap | a | apply | import-config | import)
         if ss_api_import_config_to_xray "$2"; then
+            ss_api_import_finalize
+            return 0
+        fi
+        return 1
+        ;;
+    refresh | ro | refresh-outbound)
+        [ -n "$2" ] || {
+            ss_cli_echo "usage: refresh <config-id>"
+            return 1
+        }
+        if ss_api_sync_configs >/dev/null && ss_api_refresh_outbound_from_catalog "$2"; then
+            printf '%s\n' "$(ss_api_connection_fingerprint)" >"$SS_IMPORTED_FP_FILE" 2>/dev/null || true
+            ss_api_stamp_outbounds_from_catalog || true
             ss_api_import_finalize
             return 0
         fi

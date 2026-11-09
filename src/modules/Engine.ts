@@ -348,7 +348,8 @@ export enum SubmitActions {
   ssRemoveKey = 'stealthsurf_removekey',
   ssBalances = 'stealthsurf_balances',
   ssSync = 'stealthsurf_sync',
-  ssImportConfigs = 'stealthsurf_importconfigs'
+  ssImportConfigs = 'stealthsurf_importconfigs',
+  ssRefreshOutbound = 'stealthsurf_refreshoutbound'
 }
 
 export class Engine {

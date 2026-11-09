@@ -54,6 +54,13 @@
               <span v-if="isRunning && check_connection && connectionStatus[proxy.tag]" class="connection-status" :title="statusTitle(proxy.tag)">
                 {{ connectionStatus[proxy.tag]?.alive ? '🟢' : connectionStatus[proxy.tag]?.alive === false ? '🔴' : '🟡' }}
               </span>
+              <span
+                v-if="isRunning && check_connection && probeKindLabel(proxy)"
+                class="probe-kind"
+                :class="{ dead: connectionStatus[proxy.tag]?.alive === false, mismatch: probeDiagnosis(proxy)?.apiMismatch }"
+                :title="statusTitle(proxy.tag)"
+                >{{ probeKindLabel(proxy) }}</span
+              >
             </th>
             <td>
               <a class="hint" href="#" @click.prevent="edit_proxy(proxy)">
@@ -71,6 +78,14 @@
                 proxy.streamSettings?.sockopt?.tproxy
               }}</span>
               <span class="row-buttons">
+                <a
+                  v-if="canRefreshFromApi(proxy)"
+                  class="button_gen button_gen_small"
+                  href="#"
+                  @click.prevent="refreshFromApi(proxy)"
+                  :title="$t('com.Outbounds.btn_refresh_from_api_title')"
+                  >{{ $t('com.Outbounds.btn_refresh_from_api') }}</a
+                >
                 <a class="button_gen button_gen_small" href="#" @click.prevent="show_transport(proxy)">
                   {{ $t('labels.transport') }}
                 </a>
@@ -94,7 +109,7 @@
 
 <script lang="ts">
   import { defineComponent, ref, computed, nextTick, watch, onMounted, onUnmounted, inject, Ref } from 'vue';
-  import engine, { EngineResponseConfig } from '@/modules/Engine';
+  import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import Modal from '@main/Modal.vue';
   import { xrayProtocols } from '@/modules/XrayConfig';
 
@@ -106,6 +121,7 @@
   import { liveStatus, refreshLiveStatus, clearLiveStatus, observationAge } from '@/modules/LiveStatus';
   import { computeOutboundMarks, OutboundMark, OutboundMarkItem } from '@/modules/BalancerStatus';
   import { balancersWithoutOutbounds } from '@/modules/ApplyChecks';
+  import { diagnoseOutboundProbe, formatProbeStatusTitle } from '@/modules/OutboundProbeHint';
   import {
     SS_DEFAULT_RULE,
     SsCatalogConfig,
@@ -297,11 +313,58 @@
 
       const fallbackActive = computed(() => !!uiResponse.value.xray?.subscription_auto_fallback && !!uiResponse.value.xray?.check_connection);
 
+      const isRunning = computed(() => {
+        const running = uiResponse.value.xray?.running;
+        if (typeof running === 'boolean') return running;
+        const uptime = uiResponse.value.xray?.uptime;
+        if (typeof uptime === 'number') return uptime > 0;
+        return window.xray.server.isRunning;
+      });
+
+      const probeDiagnosis = (proxy: XrayOutboundObject<IProtocolType>) => {
+        if (!proxy.tag || !check_connection.value) return undefined;
+        return diagnoseOutboundProbe({
+          status: connectionStatus.value[proxy.tag],
+          apiOnline: apiOnline(proxy),
+          ssId: outboundSsId(proxy)
+        });
+      };
+
+      const probeKindLabel = (proxy: XrayOutboundObject<IProtocolType>) => {
+        const d = probeDiagnosis(proxy);
+        if (!d || d.kind === 'alive' || d.kind === 'pending') return '';
+        const short = t(`com.Outbounds.probe_short_${d.kind}`);
+        return d.apiMismatch ? `${short} · API` : short;
+      };
+
+      const canRefreshFromApi = (proxy: XrayOutboundObject<IProtocolType>) => {
+        if (!outboundSsId(proxy)) return false;
+        // When connection checks are off there is no probe colour — still allow a one-click API rebuild.
+        if (!check_connection.value) return true;
+        const d = probeDiagnosis(proxy);
+        return !!d && d.kind !== 'alive' && d.kind !== 'pending';
+      };
+
       const statusTitle = (tag: string) => {
-        const status = connectionStatus.value[tag];
-        if (!status || status.alive === undefined) return '';
-        if (status.alive) return status.delay !== undefined ? `${status.delay} ms` : '';
-        return status.reason || t('com.Outbounds.status_unreachable');
+        const proxy = config.value.outbounds.find((o) => o.tag === tag);
+        if (!proxy) {
+          const status = connectionStatus.value[tag];
+          if (!status || status.alive === undefined) return '';
+          if (status.alive) return status.delay !== undefined ? `${status.delay} ms` : '';
+          return status.reason || t('com.Outbounds.status_unreachable');
+        }
+        return formatProbeStatusTitle(probeDiagnosis(proxy), t, observationAge(tag));
+      };
+
+      const refreshFromApi = async (proxy: XrayOutboundObject<IProtocolType>) => {
+        const id = outboundSsId(proxy);
+        if (!id) return;
+        if (!window.confirm(t('com.Outbounds.confirm_refresh_from_api', [displayTitle(proxy), id]))) return;
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(SubmitActions.ssRefreshOutbound, { id }, 12);
+          await engine.loadXrayConfig();
+        });
+        await fetchStatus();
       };
 
       const showImportModal = () => {
@@ -465,6 +528,10 @@
         check_connection,
         fallbackActive,
         statusTitle,
+        probeDiagnosis,
+        probeKindLabel,
+        canRefreshFromApi,
+        refreshFromApi,
         balancerMarks,
         rowClass,
         badgeClass,
@@ -479,13 +546,7 @@
         apiOnline,
         ssIdBadge,
         isDefaultRoute,
-        isRunning: computed(() => {
-          const running = uiResponse.value.xray?.running;
-          if (typeof running === 'boolean') return running;
-          const uptime = uiResponse.value.xray?.uptime;
-          if (typeof uptime === 'number') return uptime > 0;
-          return window.xray.server.isRunning;
-        })
+        isRunning
       };
     }
   });
@@ -495,6 +556,23 @@
   .connection-status {
     float: right;
     margin: 0 4px 0 10px;
+  }
+  .probe-kind {
+    float: right;
+    margin: 1px 0 0 2px;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: #9aa5a9;
+    cursor: help;
+    &.dead {
+      color: #ff9a8a;
+    }
+    &.mismatch {
+      color: #ffcc00;
+    }
   }
   .ss-api-dot {
     display: inline-block;

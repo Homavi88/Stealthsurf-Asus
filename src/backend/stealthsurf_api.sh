@@ -745,6 +745,40 @@ ss_api_import_enabled_batch() {
     return 1
 }
 
+ss_api_refresh_outbound_batch() {
+    # Sync catalog, then rebuild one or more already-imported ss-<id> outbounds in place.
+    # Unlike importconfigs, this does not change the default route.
+    local payload ids id ok=0 fail=0
+    payload=$(reconstruct_payload) || payload="{}"
+    ids=$(printf '%s' "$payload" | jq -r '.ids // (if .id then [.id] else [] end) | .[]' 2>/dev/null)
+    [ -n "$ids" ] || {
+        log_error "No ids in payload"
+        return 1
+    }
+    load_xrayui_config
+    ss_api_ensure_caches
+    ss_api_sync_configs >/dev/null || {
+        log_error "Could not sync StealthSurf catalog before refresh"
+        return 1
+    }
+    for id in $ids; do
+        if ss_api_refresh_outbound_from_catalog "$id"; then
+            ok=$((ok + 1))
+        else
+            fail=$((fail + 1))
+        fi
+    done
+    if [ "$ok" -gt 0 ]; then
+        printf '%s\n' "$(ss_api_connection_fingerprint)" >"$SS_IMPORTED_FP_FILE" 2>/dev/null || true
+        ss_api_stamp_outbounds_from_catalog || true
+        ss_api_import_finalize
+        log_ok "Refreshed $ok imported proxy(ies) from API (fail=$fail)"
+        return 0
+    fi
+    log_error "No outbounds refreshed (fail=$fail)"
+    return 1
+}
+
 ss_api_handle_setkey() {
     local payload key label
     payload=$(reconstruct_payload) || payload="{}"

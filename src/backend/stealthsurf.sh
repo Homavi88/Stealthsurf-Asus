@@ -247,6 +247,14 @@ service_event)
             update_loading_progress "Error: import failed." 100
         fi
         ;;
+    refreshoutbound | refreshoutbounds)
+        if ss_api_refresh_outbound_batch; then
+            initial_response
+            update_loading_progress "Outbound(s) rebuilt from StealthSurf API." 100
+        else
+            update_loading_progress "Error: could not refresh outbound from API." 100
+        fi
+        ;;
     regenerate)
         case "$3" in
         realitykeys)
