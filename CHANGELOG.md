@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.11] - 2026-11-09
+
+### Popular service routing rules
+
+- Rules modal: button **Popular services** creates aggregated `Common services (domains)` + `Common services (IPs)` (+ Discord UDP) via geosite/geoip
+- Covers YouTube, Instagram/Meta, Telegram, Kinopub and other common tags without one rule per service
+- Same preset powers Import → Complete setup → Basic bypass
+
+---
+
 ## [1.1.10] - 2026-11-09
 
 ### Rule / balancer UI shows API titles
