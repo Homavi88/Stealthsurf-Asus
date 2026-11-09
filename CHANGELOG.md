@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.13] - 2026-11-09
+
+### Outbound probe diagnosis + API rebuild
+
+- Red 🔴 outbounds show a short classified reason (`timeout`, `reality`, `udp`, …) next to the status; hover shows a plain-language hint, raw Xray error, probe age, and whether the StealthSurf API still says online
+- Dead `ss-*` rows get **API ↻**: sync catalog and rebuild that outbound in place (default route unchanged), then restart Xray so Observatory re-checks
+- CLI: `ssurf refresh <id>` / `refresh-outbound`
+
+---
+
 ## [1.1.12] - 2026-11-09
 
 ### Remove Simple mode tab

@@ -9,8 +9,12 @@ jest.mock('@/modules/Engine', () => ({
     get xrayConfig() {
       return mockConfig;
     },
-    getWebData: async () => ({ data: [{ id: 69191, title: 'Нидерланды VLESS XHTTP', is_online: true }] })
-  }
+    getWebData: async () => ({ data: [{ id: 69191, title: 'Нидерланды VLESS XHTTP', is_online: true }] }),
+    submit: jest.fn(async () => undefined),
+    loadXrayConfig: jest.fn(async () => undefined),
+    executeWithLoadingProgress: jest.fn(async (fn: () => Promise<void>) => fn())
+  },
+  SubmitActions: { ssRefreshOutbound: 'stealthsurf_refreshoutbound' }
 }));
 jest.mock('@/modules/Polling', () => ({ createPoller: () => ({ start: () => undefined, stop: () => undefined }) }));
 jest.mock('@/modules/LiveStatus', () => ({

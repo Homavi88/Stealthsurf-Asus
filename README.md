@@ -14,12 +14,12 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.12-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.13-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#установка"><strong>Установка</strong></a> ·
-  <a href="#что-нового-в-118"><strong>1.1.12</strong></a> ·
+  <a href="#что-нового-в-118"><strong>1.1.13</strong></a> ·
   <a href="#возможности"><strong>Возможности</strong></a> ·
   <a href="#веб-интерфейс"><strong>WebUI</strong></a> ·
   <a href="#cli-за-минуту"><strong>CLI</strong></a> ·
@@ -30,7 +30,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf: без клиента на телефонах, с балансом/каталогом из API, импортом в outbounds и коротким CLI `ssurf`. Вкладка **VPN → StealthSurf**.
 
-Актуальная версия **1.1.12** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
+Актуальная версия **1.1.13** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
 
 ## Установка
 
@@ -64,6 +64,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 
 | | |
 | --- | --- |
+| **1.1.13 probe diagnosis** | У 🔴 outbound — короткая причина (timeout/reality/udp…), tooltip с подсказкой, кнопка **API ↻** пересобирает `ss-*` из каталога; CLI `ssurf refresh <id>` |
 | **1.1.12 UI** | Убрана вкладка Simple — WebUI всегда показывает полный advanced-интерфейс |
 | **1.1.11 popular rules** | Routing → Rules → «Популярные сервисы»: geosite/geoip пресет (YouTube, Instagram, Telegram, Kinopub, …) в одном domain + IP правиле |
 | **1.1.10 titles** | В правилах / балансировщиках / SNI / sockopt / import — title из API вместо только `ss-<id>` |
@@ -126,13 +127,14 @@ ssurf h                # справка · ssurf m — меню
 | --- | --- |
 | `ssurf up` / `dn` / `re` / `st` | старт / стоп / рестарт / статус |
 | `ssurf sy` · `ls` · `ap <id>` | sync · список · import |
+| `ssurf refresh <id>` | пересобрать `ss-*` из API |
 | `ssurf bal` · `key` · `addk` | баланс · ключ |
 | `ssurf bak` · `upd` · `fix` | backup · update · doctor |
 | `ssurf h` · `ssurf m` | справка · меню |
 
 ## Рядом с XrayUI
 
-StealthSurf **1.1.12** держит своё состояние:
+StealthSurf **1.1.13** держит своё состояние:
 
 | | StealthSurf | Stock XrayUI |
 | --- | --- | --- |
