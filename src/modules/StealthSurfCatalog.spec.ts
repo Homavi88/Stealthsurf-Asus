@@ -1,8 +1,11 @@
 import {
+  catalogLocationLabel,
   catalogSourceLabel,
   catalogTag,
   catalogTitle,
+  enrichCatalogWithLocations,
   formatExpiresAt,
+  locationDisplayName,
   outboundApiOnline,
   outboundDisplayTitle,
   outboundSsId,
@@ -88,5 +91,18 @@ describe('StealthSurfCatalog', () => {
     expect(formatExpiresAt(now + 86400 * 3, now)).toContain('3d');
     expect(formatExpiresAt(now - 10, now)).toContain('expired');
     expect(formatExpiresAt(undefined)).toBe('—');
+  });
+
+  it('resolves location names instead of bare ids', () => {
+    const locations = [
+      { id: 1, code: 'NL', title: 'Netherlands' },
+      { id: 2, code: 'DE', title: 'Germany' }
+    ];
+    expect(locationDisplayName(locations[0])).toBe('Netherlands (NL)');
+    expect(catalogLocationLabel({ id: 1, location_id: 1 }, locations)).toBe('Netherlands (NL)');
+    expect(catalogLocationLabel({ id: 1, location_id: 99 }, locations)).toBe('loc 99');
+    const enriched = enrichCatalogWithLocations([{ id: 1, location_id: 2, title: 'x' }], locations);
+    expect(enriched[0]._ss_location_title).toBe('Germany');
+    expect(catalogLocationLabel(enriched[0], locations)).toBe('Germany (DE)');
   });
 });

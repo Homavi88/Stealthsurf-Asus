@@ -7,6 +7,8 @@
 - **Server stats** and **Traffic** open the StealthSurf Vue modal and call the API from the browser
 - No more stuck `/start_apply.htm` «Please wait» for these read-only actions
 - Traffic query now sends required `from`/`to` (last 30 days); Load servers / top-up calc also go direct to API
+- Catalog **Location** column shows country name (`Netherlands (NL)`), not numeric id
+- Config **Manage** button opens settings/stats/billing in a modal — Selected panel no longer stretches the Account page
 
 ---
 

@@ -19,16 +19,21 @@ cat >"$TMP/configs.json" <<'EOF'
 ]
 EOF
 
+# Enrichment stamps title + code (UI joins them as "Netherlands (NL)")
 jq --slurpfile loc "$TMP/locations.json" '
   ($loc[0] // []) as $L |
   map(
     . as $c |
     ($L | map(select((.id | tostring) == (($c.location_id // "") | tostring))) | first) as $hit |
-    $c + { _ss_location_title: ($hit.title // $hit.code // null) }
+    $c + {
+      _ss_location_title: ($hit.title // $hit.caption // $hit.code // null),
+      _ss_location_code: ($hit.code // null)
+    }
   )
 ' "$TMP/configs.json" >"$TMP/enriched.json"
 
 test "$(jq -r 'map(select(.id==101))[0]._ss_location_title' "$TMP/enriched.json")" = "Netherlands"
+test "$(jq -r 'map(select(.id==101))[0]._ss_location_code' "$TMP/enriched.json")" = "NL"
 test "$(jq -r 'map(select(.id==55))[0]._ss_location_title' "$TMP/enriched.json")" = "Germany"
 test "$(jq -r 'map(select(._ss_tag=="ss-po-55"))[0]._ss_source' "$TMP/enriched.json")" = "paid_option"
 test "$(jq -r '[.[]._ss_tag] | unique | length' "$TMP/enriched.json")" = "3"

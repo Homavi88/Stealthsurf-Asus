@@ -1,5 +1,14 @@
 export type SsCatalogSource = 'config' | 'paid_option' | 'cloud' | string;
 
+export interface SsLocation {
+  id: number | string;
+  code?: string | null;
+  title?: string | null;
+  caption?: string | null;
+  description?: string | null;
+  is_active?: boolean;
+}
+
 export interface SsCatalogConfig {
   id: number | string;
   title?: string;
@@ -20,6 +29,7 @@ export interface SsCatalogConfig {
   _ss_parent_id?: number | string | null;
   _ss_instance_id?: number | string | null;
   _ss_location_title?: string | null;
+  _ss_location_code?: string | null;
   _ss_catalog_key?: string;
 }
 
@@ -58,6 +68,48 @@ export const catalogSourceLabel = (c: SsCatalogConfig): string => {
       return 'vpn';
   }
 };
+
+export const locationDisplayName = (loc?: SsLocation | null): string => {
+  if (!loc) return '';
+  const title = (loc.title || loc.caption || '').trim();
+  const code = (loc.code || '').trim();
+  if (title && code && title.toLowerCase() !== code.toLowerCase()) return `${title} (${code})`;
+  return title || code || '';
+};
+
+export const findLocation = (locations: SsLocation[], locationId?: number | string | null): SsLocation | undefined => {
+  if (locationId == null || locationId === '') return undefined;
+  const key = String(locationId);
+  return locations.find((l) => String(l.id) === key);
+};
+
+/** Prefer enriched title, then locations map; never show bare numeric id when a name exists. */
+export const catalogLocationLabel = (c: SsCatalogConfig, locations: SsLocation[] = []): string => {
+  const stamped = (c._ss_location_title || '').trim();
+  const code = (c._ss_location_code || '').trim();
+  if (stamped) {
+    if (code && stamped.toLowerCase() !== code.toLowerCase() && !stamped.includes(`(${code})`)) {
+      return `${stamped} (${code})`;
+    }
+    return stamped;
+  }
+  const hit = findLocation(locations, c.location_id);
+  const named = locationDisplayName(hit);
+  if (named) return named;
+  if (c.location_id == null || c.location_id === '') return '—';
+  return `loc ${c.location_id}`;
+};
+
+export const enrichCatalogWithLocations = (configs: SsCatalogConfig[], locations: SsLocation[]): SsCatalogConfig[] =>
+  configs.map((c) => {
+    const hit = findLocation(locations, c.location_id);
+    if (!hit) return c;
+    return {
+      ...c,
+      _ss_location_title: hit.title || hit.caption || hit.code || c._ss_location_title || null,
+      _ss_location_code: hit.code || c._ss_location_code || null
+    };
+  });
 
 export const formatExpiresAt = (ts?: number | null, nowSec = Math.floor(Date.now() / 1000)): string => {
   if (ts == null || !Number.isFinite(Number(ts)) || Number(ts) <= 0) return '—';
