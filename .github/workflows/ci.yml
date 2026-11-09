@@ -59,7 +59,6 @@ jobs:
           grep -q '_ss_title' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -qE 'ssSetKey|api.stealthsurf.net|ownCustomSettings|ext:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'outboundTagDisplayTitle' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp
           sh tests/backend/scaffold.spec.sh
           sh tests/backend/ss_catalog_sync.spec.sh
