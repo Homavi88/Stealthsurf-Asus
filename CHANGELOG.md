@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.12] - 2026-11-09
+
+### Remove Simple mode tab
+
+- WebUI no longer offers the advanced/simple mode switcher
+- The panel always shows the full configuration (inbounds, outbounds, routing, DNS, …)
+- Removed the unused `SimpleMode` component
+
+---
+
 ## [1.1.11] - 2026-11-09
 
 ### Popular service routing rules
