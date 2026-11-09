@@ -34,6 +34,7 @@ import ./diagnostics.sh
 import ./rtls.sh
 import ./b4sni.sh
 import ./stealthsurf_api.sh
+import ./stealthsurf_api_ops.sh
 import ./cli_aliases.sh
 import ./xrayui_conflict.sh
 
@@ -253,6 +254,72 @@ service_event)
             update_loading_progress "Outbound(s) rebuilt from StealthSurf API." 100
         else
             update_loading_progress "Error: could not refresh outbound from API." 100
+        fi
+        ;;
+    updatesettings)
+        if ss_api_handle_update_settings >/dev/null; then
+            initial_response
+            update_loading_progress "Config settings updated." 100
+        else
+            update_loading_progress "Error: could not update config settings." 100
+        fi
+        ;;
+    availableservers)
+        if ss_api_handle_available_servers >/dev/null; then
+            update_loading_progress "Available servers refreshed." 100
+        else
+            update_loading_progress "Error: could not load available servers." 100
+        fi
+        ;;
+    serverstats)
+        if ss_api_handle_server_stats >/dev/null; then
+            update_loading_progress "Server stats refreshed." 100
+        else
+            update_loading_progress "Error: could not load server stats." 100
+        fi
+        ;;
+    traffic)
+        if ss_api_handle_traffic >/dev/null; then
+            update_loading_progress "Traffic stats refreshed." 100
+        else
+            update_loading_progress "Error: could not load traffic." 100
+        fi
+        ;;
+    autofit)
+        if ss_api_handle_autofit; then
+            initial_response
+            update_loading_progress "Autofit found a working combination." 100
+        else
+            initial_response
+            update_loading_progress "Autofit finished without a green result." 100
+        fi
+        ;;
+    autorenewal)
+        if ss_api_handle_auto_renewal >/dev/null; then
+            update_loading_progress "Auto-renewal updated." 100
+        else
+            update_loading_progress "Error: could not update auto-renewal." 100
+        fi
+        ;;
+    renew)
+        if ss_api_handle_renew >/dev/null; then
+            update_loading_progress "Renewal requested." 100
+        else
+            update_loading_progress "Error: renewal failed." 100
+        fi
+        ;;
+    topup)
+        if ss_api_handle_topup >/dev/null; then
+            update_loading_progress "Top-up requested." 100
+        else
+            update_loading_progress "Error: top-up failed." 100
+        fi
+        ;;
+    topupcalc)
+        if ss_api_handle_topup_calc >/dev/null; then
+            update_loading_progress "Top-up options loaded." 100
+        else
+            update_loading_progress "Error: could not calculate top-up." 100
         fi
         ;;
     regenerate)

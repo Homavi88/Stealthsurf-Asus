@@ -10,12 +10,26 @@ ss_api_ensure_caches() {
     [ -f "$SS_CACHE_LOCATIONS" ] || echo '[]' >"$SS_CACHE_LOCATIONS"
     [ -f "$SS_CACHE_PROFILE" ] || echo '{}' >"$SS_CACHE_PROFILE"
     [ -f "$SS_CACHE_SUBSCRIPTIONS" ] || echo '[]' >"$SS_CACHE_SUBSCRIPTIONS"
+    [ -f "$SS_CACHE_PAID" ] || echo '[]' >"$SS_CACHE_PAID"
+    [ -f "$SS_CACHE_CLOUD" ] || echo '[]' >"$SS_CACHE_CLOUD"
+    [ -f "$SS_CACHE_TARIFFS" ] || echo '{"fetched_at":0,"configs":[],"paid_options":[]}' >"$SS_CACHE_TARIFFS"
+    [ -f "$SS_CACHE_TRAFFIC" ] || echo '{}' >"$SS_CACHE_TRAFFIC"
+    [ -f "$SS_CACHE_SERVER_STATS" ] || echo '{}' >"$SS_CACHE_SERVER_STATS"
+    [ -f "$SS_CACHE_AVAILABLE_SERVERS" ] || echo '[]' >"$SS_CACHE_AVAILABLE_SERVERS"
+    [ -f "$SS_CACHE_AUTOFIT" ] || echo '{}' >"$SS_CACHE_AUTOFIT"
     ln -sf "$SS_CACHE_KEYS" "$ADDON_WEB_DIR/api_keys.json" 2>/dev/null || true
     ln -sf "$SS_CACHE_BALANCES" "$ADDON_WEB_DIR/balances.json" 2>/dev/null || true
     ln -sf "$SS_CACHE_CONFIGS" "$ADDON_WEB_DIR/ss_configs.json" 2>/dev/null || true
     ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/ss_locations.json" 2>/dev/null || true
     ln -sf "$SS_CACHE_PROFILE" "$ADDON_WEB_DIR/ss_profile.json" 2>/dev/null || true
     ln -sf "$SS_CACHE_SUBSCRIPTIONS" "$ADDON_WEB_DIR/ss_subscriptions.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_PAID" "$ADDON_WEB_DIR/ss_paid_options.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_CLOUD" "$ADDON_WEB_DIR/ss_cloud_servers.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_TARIFFS" "$ADDON_WEB_DIR/ss_tariffs.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_TRAFFIC" "$ADDON_WEB_DIR/ss_traffic.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_SERVER_STATS" "$ADDON_WEB_DIR/ss_server_stats.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_AVAILABLE_SERVERS" "$ADDON_WEB_DIR/ss_available_servers.json" 2>/dev/null || true
+    ln -sf "$SS_CACHE_AUTOFIT" "$ADDON_WEB_DIR/ss_autofit.json" 2>/dev/null || true
 }
 
 ss_api_migrate_legacy_keys() {
@@ -342,8 +356,28 @@ ss_api_sync_configs_one() {
     local resp
     resp=$(ss_api_with_key "$key" GET '/configs?limit=100&offset=0') || return 1
     printf '%s' "$resp" | jq --arg key_fp "$(printf '%s' "$key" | awk -F_ '{print $2}')" '
-    (.data // []) | map(select(. != null) | . + {_api_key_fp: $key_fp})
+    (.data // []) | map(select(. != null) | . + {
+      _api_key_fp: $key_fp,
+      _ss_source: "config",
+      _ss_tag: ("ss-" + (.id | tostring)),
+      _ss_parent_id: null
+    })
   '
+}
+
+ss_api_enrich_catalog_locations() {
+    # Stamp human location titles onto unified catalog entries.
+    local file="${1:-$SS_CACHE_CONFIGS}"
+    [ -f "$file" ] || return 0
+    [ -f "$SS_CACHE_LOCATIONS" ] || return 0
+    jq --slurpfile loc "$SS_CACHE_LOCATIONS" '
+      ($loc[0] // []) as $L |
+      map(
+        . as $c |
+        ($L | map(select((.id | tostring) == (($c.location_id // "") | tostring))) | first) as $hit |
+        $c + { _ss_location_title: ($hit.title // $hit.code // $c._ss_location_title // null) }
+      )
+    ' "$file" >"$file.tmp" && mv -f "$file.tmp" "$file"
 }
 
 ss_api_sync_configs() {
@@ -355,7 +389,7 @@ ss_api_sync_configs() {
         [ -n "$key" ] || continue
         if merged=$(ss_api_sync_configs_one "$key"); then
             any=1
-            jq --argjson add "$merged" '. + $add | unique_by(.id)' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
+            jq --argjson add "$merged" '. + $add | unique_by(._ss_tag // ("ss-" + (.id|tostring)))' "$tmp" >"$tmp.n" && mv "$tmp.n" "$tmp"
         else
             log_warn "Sync failed for key …$(printf '%s' "$key" | tail -c 6)"
         fi
@@ -366,6 +400,7 @@ ss_api_sync_configs() {
         return 1
     fi
     mv "$tmp" "$SS_CACHE_CONFIGS"
+    ss_api_enrich_catalog_locations "$SS_CACHE_CONFIGS"
     ln -sf "$SS_CACHE_CONFIGS" "$ADDON_WEB_DIR/ss_configs.json" 2>/dev/null || true
     log_ok "Synced $(jq 'length' "$SS_CACHE_CONFIGS") StealthSurf configs"
     cat "$SS_CACHE_CONFIGS"
@@ -376,6 +411,7 @@ ss_api_sync_locations() {
     resp=$(ss_api GET /locations) || return 1
     printf '%s' "$resp" | jq '.data // []' >"$SS_CACHE_LOCATIONS"
     ln -sf "$SS_CACHE_LOCATIONS" "$ADDON_WEB_DIR/ss_locations.json" 2>/dev/null || true
+    ss_api_enrich_catalog_locations "$SS_CACHE_CONFIGS" || true
     log_ok "Synced locations"
 }
 
@@ -404,9 +440,14 @@ ss_api_sync_subscriptions() {
 ss_api_sync_all() {
     load_xrayui_config
     ss_api_ensure_caches
-    ss_api_sync_configs >/dev/null || return 1
+    # Locations first so config enrichment has titles ready.
     ss_api_sync_locations >/dev/null || true
+    ss_api_sync_configs >/dev/null || return 1
+    ss_api_sync_paid_options >/dev/null || true
+    ss_api_sync_cloud_servers >/dev/null || true
+    ss_api_merge_extra_into_catalog >/dev/null || true
     ss_api_sync_subscriptions >/dev/null || true
+    ss_api_fetch_tariffs >/dev/null || true
     SS_LAST_SYNC=$(date +%s)
     update_xrayui_config "SS_LAST_SYNC" "$SS_LAST_SYNC"
     ss_api_fetch_balances 1 >/dev/null || true
@@ -469,34 +510,52 @@ ss_api_connection_fingerprint() {
     } | awk '{print $1}'
 }
 
+ss_api_catalog_lookup() {
+    # Resolve catalog entry by id, ss-tag, or composite key. Prints one JSON object.
+    local key="$1"
+    [ -n "$key" ] || return 1
+    [ -f "$SS_CACHE_CONFIGS" ] || return 1
+    jq -c --arg key "$key" '
+      map(select(. != null)) |
+      map(select(
+        ((.id | tostring) == $key)
+        or ((._ss_tag // ("ss-" + (.id|tostring))) == $key)
+        or ((._ss_tag // "") == ("ss-" + $key))
+        or ((._ss_catalog_key // "") == $key)
+      )) | first // empty
+    ' "$SS_CACHE_CONFIGS"
+}
+
 ss_api_build_outbound_from_catalog() {
-    # Prints one outbound JSON for config id, or fails.
+    # Prints one outbound JSON for config id / ss-tag, or fails.
     local config_id="$1"
-    local cfg link outbound tag title online
+    local cfg link outbound tag title online source parent
     [ -n "$config_id" ] || return 1
     [ -f "$SS_CACHE_CONFIGS" ] || return 1
-    cfg=$(jq -c --arg id "$config_id" 'map(select(. != null and (.id|tostring) == $id)) | first // empty' "$SS_CACHE_CONFIGS")
+    cfg=$(ss_api_catalog_lookup "$config_id")
     [ -n "$cfg" ] || return 1
     link=$(printf '%s' "$cfg" | jq -r '.connection_url // empty')
-    title=$(printf '%s' "$cfg" | jq -r '.title // .name // ("ss-" + (.id|tostring))')
+    title=$(printf '%s' "$cfg" | jq -r '.title // .name // (._ss_tag // ("ss-" + (.id|tostring)))')
     online=$(printf '%s' "$cfg" | jq -r 'if .is_online == true then "true" else "false" end')
-    tag="ss-$config_id"
+    tag=$(printf '%s' "$cfg" | jq -r '._ss_tag // ("ss-" + (.id|tostring))')
+    source=$(printf '%s' "$cfg" | jq -r '._ss_source // "config"')
+    parent=$(printf '%s' "$cfg" | jq -r '._ss_parent_id // empty')
     outbound=""
     if [ -z "$link" ]; then
         if printf '%s' "$cfg" | jq -e '.xray_config' >/dev/null 2>&1; then
-            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" '
+            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$(printf '%s' "$cfg" | jq -r '.id')" --argjson online "$online" --arg source "$source" --arg parent "$parent" '
                 (.xray_config | if type=="string" then (try fromjson catch .) else . end) as $x |
                 (if ($x|type)=="object" and ($x.outbounds|type)=="array" then $x.outbounds[0]
                  elif ($x|type)=="object" and ($x.protocol != null) then $x
                  else empty end) | select(. != null)
-                | . + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}
+                | . + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online, _ss_source:$source, _ss_parent_id:(if $parent=="" then null else $parent end)}
             ')
         fi
     else
         outbound=$(subscription_parse_link_to_outbound "$link") || outbound=""
         if [ -n "$outbound" ]; then
-            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" \
-                '. + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}')
+            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$(printf '%s' "$cfg" | jq -r '.id')" --argjson online "$online" --arg source "$source" --arg parent "$parent" \
+                '. + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online, _ss_source:$source, _ss_parent_id:(if $parent=="" then null else $parent end)}')
         fi
     fi
     [ -n "$outbound" ] || return 1
@@ -566,7 +625,7 @@ ss_api_apply_provider_connection_changes() {
     return 1
 }
 
-# Stamp API titles / online flags onto already imported ss-<id> outbounds.
+# Stamp API titles / online flags onto already imported ss-* outbounds.
 ss_api_stamp_outbounds_from_catalog() {
     load_xrayui_config
     [ -f "$SS_CACHE_CONFIGS" ] || return 0
@@ -574,15 +633,17 @@ ss_api_stamp_outbounds_from_catalog() {
     jq --slurpfile cat "$SS_CACHE_CONFIGS" '
       ($cat[0] // []) as $c |
       .outbounds = ((.outbounds // []) | map(
-        if ((.tag // "") | test("^ss-[0-9]+$")) then
-          ((.tag | sub("^ss-"; "")) as $id |
-          ($c | map(select((.id | tostring) == $id)) | first) as $m |
+        if ((.tag // "") | test("^ss-")) then
+          ((.tag) as $tag |
+          ($c | map(select((._ss_tag // ("ss-" + (.id|tostring))) == $tag or ((.id|tostring) == ($tag | sub("^ss-(po-|cs-)?"; ""))))) | first) as $m |
           if $m != null then
             . + {
               _stealthsurf: true,
               _ss_id: $m.id,
               _ss_title: ($m.title // $m.name // .tag),
-              _ss_online: ($m.is_online // false)
+              _ss_online: ($m.is_online // false),
+              _ss_source: ($m._ss_source // ._ss_source // "config"),
+              _ss_parent_id: ($m._ss_parent_id // ._ss_parent_id // null)
             }
           else . end)
         else . end
@@ -757,10 +818,14 @@ ss_api_refresh_outbound_batch() {
     }
     load_xrayui_config
     ss_api_ensure_caches
+    ss_api_sync_locations >/dev/null || true
     ss_api_sync_configs >/dev/null || {
         log_error "Could not sync StealthSurf catalog before refresh"
         return 1
     }
+    ss_api_sync_paid_options >/dev/null || true
+    ss_api_sync_cloud_servers >/dev/null || true
+    ss_api_merge_extra_into_catalog >/dev/null || true
     for id in $ids; do
         if ss_api_refresh_outbound_from_catalog "$id"; then
             ok=$((ok + 1))

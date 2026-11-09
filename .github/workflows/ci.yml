@@ -34,7 +34,7 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.13"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.14"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'geodata_is_list_file' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           sh tests/backend/geodata_sanitize.spec.sh
           sh -n /tmp/ss-ci-pkg/stealthsurf/stealthsurf
@@ -42,6 +42,9 @@ jobs:
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_import_finalize' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_refresh_outbound_batch' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_autofit_config' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_update_settings' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_merge_extra_into_catalog' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'probe_hint_timeout' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'xray.running' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_refuse_if_xrayui' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
@@ -60,8 +63,10 @@ jobs:
           grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q '_ss_title' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -qE 'ssSetKey|api.stealthsurf.net|ownCustomSettings|ext:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/app.js
+          grep -q 'ssAutofit\|ssUpdateSettings' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp
           sh tests/backend/scaffold.spec.sh
           sh tests/backend/ss_catalog_sync.spec.sh
+          sh tests/backend/ss_catalog_enrich.spec.sh
           sh tests/backend/test-xrayui-detect.sh

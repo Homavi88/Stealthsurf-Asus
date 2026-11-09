@@ -11,7 +11,7 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.1.13"
+XRAYUI_VERSION="1.1.14"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -55,6 +55,13 @@ SS_CACHE_CONFIGS="$ADDON_SHARE_DIR/ss_configs.json"
 SS_CACHE_LOCATIONS="$ADDON_SHARE_DIR/ss_locations.json"
 SS_CACHE_PROFILE="$ADDON_SHARE_DIR/ss_profile.json"
 SS_CACHE_SUBSCRIPTIONS="$ADDON_SHARE_DIR/ss_subscriptions.json"
+SS_CACHE_PAID="$ADDON_SHARE_DIR/ss_paid_options.json"
+SS_CACHE_CLOUD="$ADDON_SHARE_DIR/ss_cloud_servers.json"
+SS_CACHE_TARIFFS="$ADDON_SHARE_DIR/ss_tariffs.json"
+SS_CACHE_TRAFFIC="$ADDON_SHARE_DIR/ss_traffic.json"
+SS_CACHE_SERVER_STATS="$ADDON_SHARE_DIR/ss_server_stats.json"
+SS_CACHE_AVAILABLE_SERVERS="$ADDON_SHARE_DIR/ss_available_servers.json"
+SS_CACHE_AUTOFIT="$ADDON_SHARE_DIR/ss_autofit.json"
 SS_IMPORTED_FP_FILE="$ADDON_SHARE_DIR/imported-configs.fp"
 SS_LAST_SYNC=""
 # disabled | 15m | 30m | 1h | 3h | 6h | 12h
