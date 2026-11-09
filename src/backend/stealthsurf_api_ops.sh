@@ -189,15 +189,19 @@ ss_api_fetch_traffic() {
     local scope_type="${1:-account}"
     local scope_id="$2"
     local group_by="${3:-day}"
-    local path resp
+    local days="${4:-30}"
+    local path resp now from
     ss_api_ensure_caches
     ss_require_key || return 1
-    path="/traffic?group_by=${group_by}&scope_type=${scope_type}"
+    now=$(date +%s)
+    from=$((now - days * 86400))
+    [ "$from" -lt 0 ] && from=0
+    path="/traffic?from=${from}&to=${now}&group_by=${group_by}&scope_type=${scope_type}"
     if [ "$scope_type" != "account" ] && [ -n "$scope_id" ]; then
         path="${path}&scope_id=${scope_id}"
     fi
     resp=$(ss_api GET "$path") || return 1
-    printf '%s' "$resp" | jq --argjson ts "$(date +%s)" --arg st "$scope_type" --argjson sid "${scope_id:-null}" \
+    printf '%s' "$resp" | jq --argjson ts "$now" --arg st "$scope_type" --argjson sid "${scope_id:-null}" \
         '{fetched_at:$ts, scope_type:$st, scope_id:$sid, data:(.data // null)}' >"$SS_CACHE_TRAFFIC"
     ln -sf "$SS_CACHE_TRAFFIC" "$ADDON_WEB_DIR/ss_traffic.json" 2>/dev/null || true
     cat "$SS_CACHE_TRAFFIC"

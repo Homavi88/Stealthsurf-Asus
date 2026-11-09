@@ -165,8 +165,7 @@
               <div class="ss-panel-title">Stats & traffic</div>
               <input class="button_gen button_gen_small" type="button" value="Server stats" @click.prevent="loadServerStats" />
               <input class="button_gen button_gen_small" type="button" value="Traffic" @click.prevent="loadTraffic" />
-              <pre class="ss-pre" v-if="statsHint">{{ statsHint }}</pre>
-              <pre class="ss-pre" v-if="trafficHint">{{ trafficHint }}</pre>
+              <div class="ss-hint">Opens StealthSurf modal (no router Please wait).</div>
             </div>
 
             <div class="ss-panel" v-if="(activeConfig._ss_source || 'config') === 'config'">
@@ -183,6 +182,7 @@
         </tr>
       </tbody>
     </table>
+    <ss-api-info-modal ref="infoModal" />
   </div>
 </template>
 
@@ -190,6 +190,8 @@
   import { computed, defineComponent, inject, onMounted, ref, Ref, watch } from 'vue';
   import axios from 'axios';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+  import SsApiInfoModal from '@modal/SsApiInfoModal.vue';
+  import { SS_API_BASE, ssApiGet } from '@/modules/StealthSurfApiClient';
   import {
     SS_PROTOCOLS,
     SsCatalogConfig,
@@ -200,8 +202,6 @@
     outboundSsId,
     parseCatalogPayload
   } from '@/modules/StealthSurfCatalog';
-
-  const SS_API_BASE = 'https://api.stealthsurf.net';
 
   interface BalanceRow {
     ok?: boolean;
@@ -238,6 +238,7 @@
 
   export default defineComponent({
     name: 'StealthSurfAccount',
+    components: { SsApiInfoModal },
     setup() {
       const apiKey = ref('');
       const apiLabel = ref('');
@@ -260,10 +261,9 @@
       const editAutoRenewal = ref(false);
       const editAutoRenewDays = ref(30);
       const autofitStatus = ref('');
-      const statsHint = ref('');
-      const trafficHint = ref('');
       const topupAmount = ref(100);
       const topupHint = ref('');
+      const infoModal = ref<{ showStats: (c: SsCatalogConfig) => Promise<void>; showTraffic: (c: SsCatalogConfig) => Promise<void> } | null>(null);
 
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
       const channelLabel = computed(() => {
@@ -311,8 +311,6 @@
         editChangeSni.value = false;
         editUseXhttp.value = false;
         editUseGrpc.value = false;
-        statsHint.value = '';
-        trafficHint.value = '';
         autofitStatus.value = '';
       };
 
@@ -483,16 +481,14 @@
 
       const loadServers = async () => {
         if (!activeConfig.value || editLocationId.value === '') return;
-        await engine.submit(
-          SubmitActions.ssAvailableServers,
-          { location_id: editLocationId.value, protocol: editProtocol.value },
-          3
-        );
         try {
-          const resp = await engine.getWebData<AvailableServer[]>('ss_available_servers');
-          availableServers.value = Array.isArray(resp?.data) ? resp.data : [];
-        } catch {
+          const data = await ssApiGet<AvailableServer[]>(
+            `/configs/available-servers?location_id=${editLocationId.value}&protocol=${encodeURIComponent(editProtocol.value)}`
+          );
+          availableServers.value = Array.isArray(data) ? data : [];
+        } catch (e: any) {
           availableServers.value = [];
+          alert(e?.response?.data?.message || e?.message || 'Could not load available servers');
         }
       };
 
@@ -541,38 +537,14 @@
 
       const loadServerStats = async () => {
         const c = activeConfig.value;
-        if (!c) return;
-        await engine.submit(
-          SubmitActions.ssServerStats,
-          { id: c.id, source: c._ss_source || 'config', parent_id: c._ss_parent_id || undefined },
-          4
-        );
-        try {
-          const resp = await engine.getWebData<{ data?: { host?: string; status?: string; uptime_days?: number; stats?: unknown[] } }>(
-            'ss_server_stats'
-          );
-          const d = resp?.data?.data;
-          statsHint.value = d
-            ? `${d.host || '?'} · ${d.status || '?'} · uptime ${d.uptime_days ?? '—'}d · points ${d.stats?.length ?? 0}`
-            : 'No stats';
-        } catch {
-          statsHint.value = 'Stats unavailable';
-        }
+        if (!c || !infoModal.value) return;
+        await infoModal.value.showStats(c);
       };
 
       const loadTraffic = async () => {
         const c = activeConfig.value;
-        const scope_type = (c?._ss_source || 'config') === 'paid_option' ? 'paid_option_config' : 'user_config';
-        await engine.submit(SubmitActions.ssTraffic, { scope_type, scope_id: c?.id, group_by: 'day' }, 4);
-        try {
-          const resp = await engine.getWebData<{ data?: { points?: { up?: number; down?: number }[] } }>('ss_traffic');
-          const points = resp?.data?.data?.points || [];
-          const up = points.reduce((s, p) => s + Number(p.up || 0), 0);
-          const down = points.reduce((s, p) => s + Number(p.down || 0), 0);
-          trafficHint.value = points.length ? `points=${points.length} up=${up} down=${down}` : 'No traffic points';
-        } catch {
-          trafficHint.value = 'Traffic unavailable';
-        }
+        if (!c || !infoModal.value) return;
+        await infoModal.value.showTraffic(c);
       };
 
       const saveAutoRenewal = async () => {
@@ -605,12 +577,11 @@
       };
 
       const doTopupCalc = async () => {
-        await engine.submit(SubmitActions.ssTopupCalc, { amount: topupAmount.value || 100 }, 3);
         try {
-          const resp = await engine.getWebData<unknown>('ss_topup_calc');
-          topupHint.value = `Calc: ${JSON.stringify(resp?.data || {}).slice(0, 180)}`;
-        } catch {
-          topupHint.value = 'Calc cached on router';
+          const data = await ssApiGet<unknown>(`/profile/balance/calculate?amount=${topupAmount.value || 100}`);
+          topupHint.value = `Calc: ${JSON.stringify(data || {}).slice(0, 220)}`;
+        } catch (e: any) {
+          topupHint.value = e?.response?.data?.message || e?.message || 'Calc failed';
         }
       };
 
@@ -647,10 +618,9 @@
         editAutoRenewal,
         editAutoRenewDays,
         autofitStatus,
-        statsHint,
-        trafficHint,
         topupAmount,
         topupHint,
+        infoModal,
         activeConfig,
         catalogTitle,
         catalogTag,

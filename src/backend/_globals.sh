@@ -11,7 +11,7 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.1.14"
+XRAYUI_VERSION="1.1.15"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 

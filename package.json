@@ -1,6 +1,6 @@
 {
   "name": "asuswrt-merlin-stealthsurf",
-  "version": "1.1.14",
+  "version": "1.1.15",
   "main": "index.js",
   "scripts": {
     "build": "cross-env NODE_ENV=production vite build",
@@ -13,7 +13,7 @@
     "lint": "eslint . --max-warnings 549",
     "lint:fix": "eslint . --fix",
     "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
-    "pack": "bash ./build.tar.sh 1.1.14 && mkdir -p packaged && mv -f asuswrt-merlin-stealthsurf.tar.gz packaged/"
+    "pack": "bash ./build.tar.sh 1.1.15 && mkdir -p packaged && mv -f asuswrt-merlin-stealthsurf.tar.gz packaged/"
   },
   "keywords": [
     "asuswrt-merlin",

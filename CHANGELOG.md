@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.15] - 2026-11-09
+
+### Stats / traffic modal (no Merlin Please wait)
+
+- **Server stats** and **Traffic** open the StealthSurf Vue modal and call the API from the browser
+- No more stuck `/start_apply.htm` «Please wait» for these read-only actions
+- Traffic query now sends required `from`/`to` (last 30 days); Load servers / top-up calc also go direct to API
+
+---
+
 ## [1.1.14] - 2026-11-09
 
 ### StealthSurf API control plane (catalog → PATCH → autofit → billing)
