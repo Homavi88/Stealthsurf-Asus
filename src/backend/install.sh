@@ -134,14 +134,27 @@ EOF
     update_loading_progress "Downloading XRAYUI geodata files builder..."
 
     # Companion tools stay upstream (XrayUI releases); only the addon tarball is ours.
+    # GitHub / proxy can flake once — retry before treating as hard failure.
     local release_url=$(github_proxy_url "https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz")
-
-    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" "$release_url"; then
-        tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract xraydatbuilder.tar.gz."
-        rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || log_error "Failed to remove xraydatbuilder.tar.gz."
-        chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || log_error "Failed to make xraydatbuilder executable."
-    else
-        log_error "Failed to download XRAYUI geodata files builder."
+    local builder_ok=0 attempt=1
+    while [ "$attempt" -le 2 ]; do
+        if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" "$release_url"; then
+            if tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR"; then
+                chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || true
+                builder_ok=1
+            else
+                log_error "Failed to extract xraydatbuilder.tar.gz."
+            fi
+            rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || true
+            [ "$builder_ok" -eq 1 ] && break
+        else
+            log_warn "Attempt $attempt: failed to download geodata files builder from GitHub."
+        fi
+        attempt=$((attempt + 1))
+        [ "$attempt" -le 2 ] && sleep 2
+    done
+    if [ "$builder_ok" -ne 1 ]; then
+        log_error "Failed to download XRAYUI geodata files builder (custom geodata recompile may be skipped)."
     fi
 
     # Install and setup v2dat (reverse geofile data extractor)

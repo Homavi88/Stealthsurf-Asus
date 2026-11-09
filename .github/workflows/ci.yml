@@ -34,7 +34,9 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.8"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.9"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'geodata_is_list_file' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          sh tests/backend/geodata_sanitize.spec.sh
           sh -n /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/stealthsurf/stealthsurf

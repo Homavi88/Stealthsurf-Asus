@@ -96,7 +96,7 @@ cron_geodata_add() {
         }
         log_ok "CRON job $CRU_GEOUPD_ID for $ADDON_TITLE added successfully"
     else
-        log_warn "CRON job $CRU_GEOUPD_ID for $ADDON_TITLE not added (geo_auto_update is false)"
+        log_info "CRON job $CRU_GEOUPD_ID skipped (geo_auto_update is false — enable in General Options → Geodata)"
     fi
 
 }
@@ -144,7 +144,7 @@ cron_subscription_refresh_add() {
         6h)  cron_expr="0 */6 * * *" ;;
         12h) cron_expr="0 */12 * * *" ;;
         *)
-            log_warn "CRON job $CRU_SUB_REFRESH_ID not added (subscription_auto_refresh=$subscription_auto_refresh)"
+            log_info "CRON job $CRU_SUB_REFRESH_ID skipped (subscription_auto_refresh=$subscription_auto_refresh)"
             return
             ;;
     esac
@@ -177,7 +177,7 @@ cron_subscription_fallback_add() {
         }
         log_ok "CRON job $CRU_SUB_FALLBACK_ID for $ADDON_TITLE added successfully"
     else
-        log_warn "CRON job $CRU_SUB_FALLBACK_ID not added (subscription_auto_fallback is false)"
+        log_info "CRON job $CRU_SUB_FALLBACK_ID skipped (subscription_auto_fallback is false)"
     fi
 }
 
@@ -315,7 +315,7 @@ cron_watchdog_add() {
         log_ok "CRON job $CRU_WATCHDOG_ID for $ADDON_TITLE added successfully"
     else
         rm -f "$WATCHDOG_STATE_FILE"
-        log_info "CRON job $CRU_WATCHDOG_ID not added (watchdog is disabled)"
+        log_info "CRON job $CRU_WATCHDOG_ID skipped (watchdog is disabled — enable in General Options)"
     fi
 }
 

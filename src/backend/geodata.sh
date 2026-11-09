@@ -90,11 +90,16 @@ get_custom_geodata_tagfiles() {
 
     local data_dir="$ADDON_SHARE_DIR/data"
 
-    local tagfiles_json=$(
+    local tagfiles_json
+    tagfiles_json=$(
         for f in "$data_dir"/*; do
-            [ -f "$f" ] && printf '%s\n' "${f##*/}"
-        done | sed 's/\.[^.]*$//' | sort | jq -R -s -c 'split("\n")[:-1]'
+            [ -f "$f" ] || continue
+            base=$(basename "$f")
+            geodata_is_list_file "$base" || continue
+            printf '%s\n' "${base%.*}"
+        done | sort | jq -R -s -c 'split("\n")[:-1]'
     )
+    [ -n "$tagfiles_json" ] || tagfiles_json='[]'
 
     UI_RESPONSE=$(echo "$UI_RESPONSE" | jq --argjson tags "$tagfiles_json" '.geodata["tags"] = $tags')
 
@@ -106,6 +111,17 @@ get_custom_geodata_tagfiles() {
     fi
 
     log_ok "Saved tagfiles to $UI_RESPONSE_FILE successfully."
+    return 0
+}
+
+geodata_is_list_file() {
+    # Custom geodata lists are plain text tag files (no extension / .list / .txt).
+    # JSON outbounds, fingerprints, backups must not sit next to them.
+    case "$1" in
+    outbound-* | *.json | *.asp | *.fp | *.bak | *.tmp | *.tar.gz | stealthsurf | xrayui | xraydatbuilder | v2dat)
+        return 1
+        ;;
+    esac
     return 0
 }
 
@@ -126,6 +142,7 @@ geodata_remount_to_web() {
     for tagfile in "$datadir"/*; do
         if [ -f "$tagfile" ]; then
             tagbasename=$(basename "$tagfile")
+            geodata_is_list_file "$tagbasename" || continue
             tagname="${tagbasename%.*}"
 
             symlink="$geodata_dir/$tagname.asp"
@@ -147,20 +164,21 @@ geodata_remount_to_web() {
 }
 
 geodata_sanitize_datadir() {
-    # Drop non-list junk (e.g. outbound-ss-* leftovers) that break xraydatbuilder:
-    # "invalid attribute: ss-230924" = space-separated token without leading @.
+    # Move non-list junk out of data/ — xraydatbuilder reads every file there.
+    # Leftover outbound-ss-*.json produced: Failed: invalid attribute: "ss-230924"
     local datadir="$ADDON_SHARE_DIR/data"
+    local junkdir="$ADDON_SHARE_DIR/data.junk"
     local f base
     [ -d "$datadir" ] || return 0
+    mkdir -p "$junkdir" 2>/dev/null || true
     for f in "$datadir"/*; do
         [ -f "$f" ] || continue
         base=$(basename "$f")
-        case "$base" in
-        outbound-* | *.json | *.fp | *.bak | *.tmp | stealthsurf | xrayui)
-            log_warn "Geodata: ignoring non-list file $base"
+        if ! geodata_is_list_file "$base"; then
+            log_warn "Geodata: moving non-list file out of data/: $base"
+            mv -f "$f" "$junkdir/$base" 2>/dev/null || rm -f "$f"
             continue
-            ;;
-        esac
+        fi
         # Lines with bare tokens after a domain (no @attr) break the builder — strip them.
         if grep -qE '[[:space:]]+[A-Za-z0-9_-]+' "$f" 2>/dev/null; then
             awk '

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.9] - 2026-11-09
+
+### Geodata sanitize + quieter install logs
+
+- **Fix:** custom geodata recompile no longer dies on leftover `outbound-ss-*.json` in `/opt/share/stealthsurf/data` (`invalid attribute: "ss-…"`) — junk is moved to `data.junk/`
+- Geodata web remount skips non-list files; datbuilder download retries once on GitHub flake
+- Cron skip messages are info (not warn) when auto-update / refresh / watchdog are intentionally off
+
+---
+
 ## [1.1.8] - 2026-11-09
 
 ### StealthSurf catalog autosync
