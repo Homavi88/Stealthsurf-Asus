@@ -500,14 +500,25 @@ export class XrayRoutingObject {
     return this;
   };
 
-  public basicBypass = (outboundTag: string): this => {
-    this.rules = [];
+  /** Stable names used by the Rules UI "popular services" button and import Basic bypass. */
+  static readonly POPULAR_DOMAIN_RULE = 'Common services (domains)';
+  static readonly POPULAR_IP_RULE = 'Common services (IPs)';
+  static readonly POPULAR_DISCORD_RULE = 'Discord voice/video';
 
-    const domainRule = this.create_rule('Common services (domains)', outboundTag, 'tcp,udp', [
+  /**
+   * Curated geosite/geoip preset for common blocked services (YouTube, Instagram/Meta,
+   * Telegram, Kinopub, …). Returns rules without mutating this.routing — callers add or replace.
+   */
+  public popularServiceRules = (outboundTag: string): XrayRoutingRuleObject[] => {
+    const domainRule = this.create_rule(XrayRoutingObject.POPULAR_DOMAIN_RULE, outboundTag, 'tcp,udp', [
+      'geosite:youtube',
       'geosite:google',
+      'geosite:instagram',
+      'geosite:facebook',
       'geosite:meta',
       'geosite:telegram',
       'geosite:x',
+      'geosite:twitter',
       'geosite:discord',
       'geosite:rutracker',
       'geosite:tiktok',
@@ -517,17 +528,39 @@ export class XrayRoutingObject {
       'geosite:category-media-ru',
       'geosite:kinopub',
       'geosite:akamai',
+      // Kinopub is not always present as a geosite tag — keep explicit domains as fallback
+      'domain:kino.pub',
+      'domain:kinopub.online',
+      'domain:gfw.ovh',
+      'domain:vjs.zencdn.net',
+      'domain:m.pushbr.com',
+      'domain:mos-gorsud.co',
+      'domain:zamerka.com',
+      'regexp:(\\w+)-static-[0-9]+\\.cdntogo\\.net$',
       'domain:themoviedb.org',
       'domain:ntc.party'
     ]);
-    this.rules.push(domainRule);
 
-    const ipRule = this.create_rule('Common services (IPs)', outboundTag, 'tcp,udp', [], ['geoip:telegram', 'geoip:cloudflare', '130.255.77.28']);
-    this.rules.push(ipRule);
+    const ipRule = this.create_rule(XrayRoutingObject.POPULAR_IP_RULE, outboundTag, 'tcp,udp', [], [
+      'geoip:telegram',
+      'geoip:cloudflare',
+      '130.255.77.28'
+    ]);
 
-    const discordPortsRule = this.create_rule('Discord voice/video', outboundTag, 'udp', [], [], '50000-51000,1400,3478-3481,5349,19294-19344');
-    this.rules.push(discordPortsRule);
+    const discordPortsRule = this.create_rule(
+      XrayRoutingObject.POPULAR_DISCORD_RULE,
+      outboundTag,
+      'udp',
+      [],
+      [],
+      '50000-51000,1400,3478-3481,5349,19294-19344'
+    );
 
+    return [domainRule, ipRule, discordPortsRule];
+  };
+
+  public basicBypass = (outboundTag: string): this => {
+    this.rules = this.popularServiceRules(outboundTag);
     return this;
   };
 }

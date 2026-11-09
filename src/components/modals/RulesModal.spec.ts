@@ -73,6 +73,66 @@ describe('RulesModal custom geodata lists', () => {
   });
 });
 
+describe('RulesModal popular services', () => {
+  interface PopularVm {
+    show: (onClose: () => void) => void;
+    createPopularRules: () => void;
+    rules: XrayRoutingRuleObject[];
+  }
+
+  let alertSpy: jest.SpyInstance;
+  let confirmSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    alertSpy = jest.spyOn(window, 'alert').mockImplementation(() => undefined);
+    confirmSpy = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  });
+
+  afterEach(() => {
+    alertSpy.mockRestore();
+    confirmSpy.mockRestore();
+    xrayConfig.outbounds = [];
+    xrayConfig.inbounds = [];
+  });
+
+  it('alerts when there is no proxy outbound', async () => {
+    xrayConfig.outbounds = [Object.assign(new XrayOutboundObject(), { tag: 'direct', protocol: 'freedom' })];
+    const wrapper = shallowMount(RulesModal, {
+      props: { rules: [], disabled_rules: [] },
+      global: { stubs: { modal: ModalStub, hint: true, draggable: true, teleport: true }, mocks: { $t: (k: string) => k } }
+    });
+    const vm = wrapper.vm as unknown as PopularVm;
+    vm.show(() => undefined);
+    await nextTick();
+    vm.createPopularRules();
+    expect(alertSpy).toHaveBeenCalledWith('com.RulesModal.alert_popular_no_proxy');
+    expect(vm.rules).toHaveLength(0);
+  });
+
+  it('adds domain + IP + Discord popular rules to the first proxy outbound', async () => {
+    xrayConfig.outbounds = [
+      Object.assign(new XrayOutboundObject(), { tag: 'direct', protocol: 'freedom' }),
+      Object.assign(new XrayOutboundObject(), { tag: 'ss-1', protocol: 'vless', _ss_title: 'NL' }),
+      Object.assign(new XrayOutboundObject(), { tag: 'block', protocol: 'blackhole' })
+    ];
+    const wrapper = shallowMount(RulesModal, {
+      props: { rules: [], disabled_rules: [] },
+      global: { stubs: { modal: ModalStub, hint: true, draggable: true, teleport: true }, mocks: { $t: (k: string) => k } }
+    });
+    const vm = wrapper.vm as unknown as PopularVm;
+    vm.show(() => undefined);
+    await nextTick();
+    vm.createPopularRules();
+
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(vm.rules).toHaveLength(3);
+    expect(vm.rules.map((r) => r.name)).toEqual(['Common services (domains)', 'Common services (IPs)', 'Discord voice/video']);
+    expect(vm.rules.every((r) => r.outboundTag === 'ss-1')).toBe(true);
+    expect(vm.rules[0].domain).toEqual(expect.arrayContaining(['geosite:youtube', 'geosite:telegram']));
+    expect(vm.rules[1].ip).toEqual(expect.arrayContaining(['geoip:telegram']));
+  });
+});
+
 describe('RulesModal outbound titles', () => {
   interface TitlesVm {
     show: (onClose: () => void) => void;

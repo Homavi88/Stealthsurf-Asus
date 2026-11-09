@@ -277,6 +277,29 @@ describe('CommonObjects', () => {
       expect(routing.rules?.some((r) => r.port === '50000-50100,6463-6472')).toBe(true);
     });
 
+    it('popularServiceRules returns domain + IP + Discord rules with geosite/geoip tags', () => {
+      const preset = routing.popularServiceRules('ss-1');
+      expect(preset).toHaveLength(3);
+      expect(preset.map((r) => r.name)).toEqual([
+        XrayRoutingObject.POPULAR_DOMAIN_RULE,
+        XrayRoutingObject.POPULAR_IP_RULE,
+        XrayRoutingObject.POPULAR_DISCORD_RULE
+      ]);
+      expect(preset[0].outboundTag).toBe('ss-1');
+      expect(preset[0].domain).toEqual(expect.arrayContaining(['geosite:youtube', 'geosite:instagram', 'geosite:telegram', 'domain:kino.pub']));
+      expect(preset[1].ip).toEqual(expect.arrayContaining(['geoip:telegram', 'geoip:cloudflare']));
+      expect(preset[2].network).toBe('udp');
+    });
+
+    it('basicBypass installs popularServiceRules onto routing.rules', () => {
+      routing.basicBypass('proxy');
+      expect(routing.rules?.map((r) => r.name)).toEqual([
+        XrayRoutingObject.POPULAR_DOMAIN_RULE,
+        XrayRoutingObject.POPULAR_IP_RULE,
+        XrayRoutingObject.POPULAR_DISCORD_RULE
+      ]);
+    });
+
     it('normalize filters empty system rules and sorts by idx', () => {
       const sysRule = routing.create_rule('sys:metrics', 'proxy');
       sysRule.domain = [];
