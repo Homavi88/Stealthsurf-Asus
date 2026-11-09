@@ -44,9 +44,10 @@
       "xray_running": "XRAY запущен",
       "unapplied_changes": "Изменения ещё не применены. На роутер они записываются только после нажатия «применить».",
       "confirm_unapplied_changes": "Часть изменений ещё не применена и будет потеряна. Продолжить без них?",
-      "xrayui_conflict": "XrayUI конфликт",
-      "xrayui_installed": "XrayUI установлен (остановлен)",
-      "xrayui_conflict_banner": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
+      "xrayui_conflict_title": "Конфликт с XrayUI",
+      "xrayui_conflict_pill": "XrayUI конфликт",
+      "xrayui_installed_pill": "XrayUI установлен (остановлен)",
+      "xrayui_conflict_message": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
     },
     "ServerStatus": {
       "configuration": "Конфигурация",

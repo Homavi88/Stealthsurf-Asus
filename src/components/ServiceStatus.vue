@@ -1,50 +1,67 @@
 <template>
-  <table width="100%" class="FormTable">
-    <thead>
-      <tr>
-        <td colspan="2">
-          {{ $t('com.ClientStatus.configuration') }}
-          <xray-version></xray-version>
-        </td>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <th>{{ $t('com.ClientStatus.connection_status') }}</th>
-        <td>
-          <span class="label" :class="connectionClasses" v-text="statusLabel"></span>
-          <span v-if="xrayuiConflict" class="label label-error">{{ $t('com.ClientStatus.xrayui_conflict') }}</span>
-          <span v-else-if="xrayuiInstalled" class="label label-warning">{{ $t('com.ClientStatus.xrayui_installed') }}</span>
-          <span v-if="!isRunning">
-            <a class="button_gen button_gen_small button_info" href="#" @click.prevent="testConfig()" title="try to retrieve a server-side error">!</a>
-          </span>
-          <span class="row-buttons">
-            <a v-if="!isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(connect)">{{ $t('labels.start') }} </a>
-            <a v-if="isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(reconnect)">{{ $t('labels.restart') }} </a>
-            <a v-if="isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(stop)">{{ $t('labels.stop') }}</a>
-            <input class="button_gen button_gen_small" type="button" :value="$t('labels.show_config')" @click.prevent="show_config_modal()" />
-          </span>
-          <config-modal ref="configModal" />
-          <div v-if="xrayuiConflict" class="ss-conflict-banner">
-            <b>{{ $t('com.ClientStatus.xrayui_conflict') }}</b> — {{ xrayuiMessage }}
-          </div>
-        </td>
-      </tr>
-      <profiles />
-      <process-uptime />
-      <import-config v-model:config="config" />
-      <tr>
-        <th>{{ $t('com.ClientStatus.general_options') }}</th>
-        <td>
-          <span class="row-buttons">
-            <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click.prevent="manage_general_options()" v-show="uiResponse?.xray" />
-          </span>
-          <general-options-modal ref="generalOptionsModal" v-model:config="config"></general-options-modal>
-        </td>
-      </tr>
-      <backup />
-    </tbody>
-  </table>
+  <div>
+    <div v-if="xrayuiConflict" class="ss-conflict-banner" role="alert">
+      <b>{{ $t('com.ClientStatus.xrayui_conflict_title') }}</b>
+      — {{ conflictMessage }}
+    </div>
+    <table width="100%" class="FormTable">
+      <thead>
+        <tr>
+          <td colspan="2">
+            {{ $t('com.ClientStatus.configuration') }}
+            <xray-version></xray-version>
+          </td>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th>{{ $t('com.ClientStatus.connection_status') }}</th>
+          <td>
+            <span class="label" :class="connectionClasses" v-text="statusLabel"></span>
+            <span v-if="xrayuiConflict" class="label label-error ss-conflict-pill">{{ $t('com.ClientStatus.xrayui_conflict_pill') }}</span>
+            <span v-else-if="xrayuiInstalled" class="label label-warning ss-conflict-pill">{{ $t('com.ClientStatus.xrayui_installed_pill') }}</span>
+            <span v-if="!isRunning">
+              <a class="button_gen button_gen_small button_info" href="#" @click.prevent="testConfig()" title="try to retrieve a server-side error">!</a>
+            </span>
+            <span class="row-buttons">
+              <a
+                v-if="!isRunning"
+                class="button_gen button_gen_small"
+                :class="{ 'ss-btn-disabled': xrayuiConflict }"
+                href="#"
+                @click.prevent="handleStatus(connect)"
+                >{{ $t('labels.start') }}
+              </a>
+              <a
+                v-if="isRunning"
+                class="button_gen button_gen_small"
+                :class="{ 'ss-btn-disabled': xrayuiConflict }"
+                href="#"
+                @click.prevent="handleStatus(reconnect)"
+                >{{ $t('labels.restart') }}
+              </a>
+              <a v-if="isRunning" class="button_gen button_gen_small" href="#" @click.prevent="handleStatus(stop)">{{ $t('labels.stop') }}</a>
+              <input class="button_gen button_gen_small" type="button" :value="$t('labels.show_config')" @click.prevent="show_config_modal()" />
+            </span>
+            <config-modal ref="configModal" />
+          </td>
+        </tr>
+        <profiles />
+        <process-uptime />
+        <import-config v-model:config="config" />
+        <tr>
+          <th>{{ $t('com.ClientStatus.general_options') }}</th>
+          <td>
+            <span class="row-buttons">
+              <input class="button_gen button_gen_small" type="button" :value="$t('labels.manage')" @click.prevent="manage_general_options()" v-show="uiResponse?.xray" />
+            </span>
+            <general-options-modal ref="generalOptionsModal" v-model:config="config"></general-options-modal>
+          </td>
+        </tr>
+        <backup />
+      </tbody>
+    </table>
+  </div>
 </template>
 
 <script lang="ts">
@@ -95,6 +112,25 @@
 
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
 
+      const xrayuiConflict = computed(
+        () =>
+          uiResponse?.value?.conflict === 'xrayui' ||
+          uiResponse?.value?.xrayui?.running === true ||
+          uiResponse?.value?.xray?.xrayui?.running === true
+      );
+      const xrayuiInstalled = computed(
+        () =>
+          (uiResponse?.value?.xrayui?.installed === true || uiResponse?.value?.xray?.xrayui?.installed === true) &&
+          !xrayuiConflict.value
+      );
+      const conflictMessage = computed(
+        () =>
+          uiResponse?.value?.conflict_message ||
+          uiResponse?.value?.xrayui?.message ||
+          uiResponse?.value?.xray?.xrayui?.message ||
+          t('com.ClientStatus.xrayui_conflict_message')
+      );
+
       // Prefer StealthSurf-owned running state from backend (uptime/running), not Merlin pid.xray
       // which also matches stock XrayUI and makes Start/Stop look like no-ops.
       const isRunning = ref<boolean>(window.xray.server.isRunning);
@@ -130,13 +166,12 @@
         alert(users.xray?.test.replace(/\\"/g, '"'));
       };
 
-      const xrayuiConflict = computed(() => !!uiResponse.value?.xray?.xrayui?.running || uiResponse.value?.xray?.xrayui?.conflict === 'xrayui');
-      const xrayuiInstalled = computed(() => !!uiResponse.value?.xray?.xrayui?.installed);
-      const xrayuiMessage = computed(() => uiResponse.value?.xray?.xrayui?.message || t('com.ClientStatus.xrayui_conflict_banner'));
-
       const handleStatus = async (action: string) => {
-        if (action === SubmitActions.serverStart && xrayuiConflict.value) {
-          alert(xrayuiMessage.value);
+        if (
+          xrayuiConflict.value &&
+          (action === SubmitActions.serverStart || action === SubmitActions.serverRestart)
+        ) {
+          window.alert(conflictMessage.value);
           return;
         }
         if (engine.hasUnappliedChanges(config.value) && !window.confirm(t('com.ClientStatus.confirm_unapplied_changes'))) return;
@@ -158,7 +193,7 @@
         uiResponse,
         xrayuiConflict,
         xrayuiInstalled,
-        xrayuiMessage,
+        conflictMessage,
         show_config_modal,
         manage_general_options,
         testConfig,
@@ -172,14 +207,23 @@
     margin-left: 5px;
   }
   .ss-conflict-banner {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border-radius: 4px;
-    background: #5a2a2a;
-    color: #ffb0b0;
-    line-height: 1.4;
+    margin: 8px 0 12px;
+    padding: 10px 12px;
+    border: 1px solid #f66;
+    background: rgba(255, 68, 68, 0.14);
+    color: #ffb3b3;
+    font-size: 13px;
+    line-height: 1.45;
   }
   .ss-conflict-banner b {
     color: #ff8080;
+  }
+  .ss-conflict-pill {
+    margin-left: 6px;
+  }
+  .ss-btn-disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
   }
 </style>

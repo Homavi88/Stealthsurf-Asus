@@ -1,15 +1,34 @@
 # Changelog
 
+## [1.1.7] - 2026-11-09
+
+### API titles, catalog online status, DNS leak via StealthSurf
+
+- Imported configs show the **API title** (e.g. «Нидерланды VLESS XHTTP»), not only `ss-<id>`, plus an **in use** badge on the default route
+- Catalog **online/offline** from API keys is a green/red dot even while Xray is stopped; observatory 🟢/🔴 still appear after Start
+- Sync restamps titles/`is_online` onto already imported `ss-<id>` outbounds
+- Import enables **DNS leak protection** like stock XrayUI (`sys:dns-in` / `sys:dns-out` / port-53 hijack) through the imported proxy; if the only server was `localhost`, `1.1.1.1` is added
+
+---
+
+## [1.1.6] - 2026-11-09
+
+### XrayUI conflict guard
+
+- Detect stock XrayUI (pid `/var/run/xray.pid`, process on `/opt/etc/xray/config.json`, chains `XRAYUI`) and **refuse StealthSurf Start/Restart/autostart/watchdog** while it is running
+- WebUI red banner + status pill; Start/Restart disabled when conflict is active
+- Configs/marks/tables stay isolated, but two transparent proxies on one LAN still break routing — only one addon may redirect traffic at a time
+
+---
+
 ## [1.1.5] - 2026-11-09
 
-### API titles, live status, DNS, XrayUI conflict
+### Connections work + status badges + README
 
-- Imported StealthSurf configs keep the **API title** next to the outbound (not only `ss-<id>`), with an **in use** badge on the default route
-- Catalog **online/offline** from API keys is shown on each `ss-*` outbound (green/red dot), even while Xray is stopped; observatory delay dots still appear when connection check is on
-- Sync restamps titles/`is_online` onto already imported `ss-<id>` outbounds
-- Import enables **DNS leak protection** like stock XrayUI (`sys:dns-in` / `sys:dns-out` / port-53 hijack) and sends DNS upstream through the imported proxy, not `direct`. If the only DNS server was `localhost`, `1.1.1.1` is added so queries actually leave through the proxy
-- Import turns on **Check connection to xray server** so live outbound status is probed after Start
-- Stock **XrayUI conflict** is detected again: banner + blocked Start while XrayUI's transparent proxy is running
+- After API import: enable connection probes, rebuild observatory, restart if running — Outbounds show 🟢/🟡/🔴 for `ss-*`
+- Catch-all default route uses `ipsec=off` (full tunnel); `redirect` alone cannot carry a network-only rule
+- Outbounds list seeds yellow placeholders for new proxies before the first probe returns
+- GitHub README restored to the v1.0 landing style with 1.1 notes and screenshots
 
 ---
 

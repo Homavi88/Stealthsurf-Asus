@@ -285,6 +285,13 @@ cron_watchdog_run() {
     # Not started by XRAYUI, or stopped on purpose
     [ -f "$XRAY_DESIRED_STATE_FILE" ] || return 0
 
+    # Never fight stock XrayUI for transparent proxy on the same LAN
+    if ss_xrayui_running 2>/dev/null; then
+        log_warn "Watchdog: stock XrayUI is running — clearing StealthSurf desired state."
+        rm -f "$XRAY_DESIRED_STATE_FILE" "$WATCHDOG_STATE_FILE"
+        return 0
+    fi
+
     local attempts=0 last_ts=0 gave_up=0
     [ -f "$WATCHDOG_STATE_FILE" ] && read -r attempts last_ts gave_up <"$WATCHDOG_STATE_FILE"
     attempts=$(watchdog_sanitize_number "$attempts" 0)

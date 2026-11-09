@@ -40,9 +40,10 @@
       "xray_running": "XRAY 服务正在运行",
       "unapplied_changes": "更改尚未应用。只有点击“应用”后才会写入路由器。",
       "confirm_unapplied_changes": "部分更改尚未应用，将会丢失。是否继续？",
-      "xrayui_conflict": "与 XrayUI 冲突",
-      "xrayui_installed": "已安装 XrayUI（已停止）",
-      "xrayui_conflict_banner": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），然后再启动 StealthSurf。两个插件不能同时做透明代理，否则会中断局域网上网。"
+      "xrayui_conflict_title": "与 XrayUI 冲突",
+      "xrayui_conflict_pill": "XrayUI 冲突",
+      "xrayui_installed_pill": "已安装 XrayUI（已停止）",
+      "xrayui_conflict_message": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），再启动 StealthSurf。两个插件不能同时启用透明代理，否则会破坏局域网上网。"
     },
     "ServerStatus": {
       "configuration": "配置",

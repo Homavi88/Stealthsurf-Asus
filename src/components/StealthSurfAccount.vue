@@ -318,10 +318,12 @@
 
       const importSelected = async () => {
         if (!selectedIds.value.length) return;
-        await engine.submit(SubmitActions.ssImportConfigs, { ids: selectedIds.value }, 10);
-        await engine.loadXrayConfig();
+        await engine.executeWithLoadingProgress(async () => {
+          await engine.submit(SubmitActions.ssImportConfigs, { ids: selectedIds.value }, 10);
+          await engine.loadXrayConfig();
+        });
         await loadCaches();
-        alert('Imported into Outbounds with API titles. Apply / Start to use them. DNS leak protection and connection check are enabled.');
+        alert('Imported with API titles. DNS leak protection is on. After Start/Restart Outbounds show 🟢/🔴 and catalog online dots.');
       };
 
       onMounted(async () => {

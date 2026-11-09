@@ -35,6 +35,7 @@ import ./rtls.sh
 import ./b4sni.sh
 import ./stealthsurf_api.sh
 import ./cli_aliases.sh
+import ./xrayui_conflict.sh
 
 # Short CLI (ssurf up|dn|re|st|sy|ls|ap|…) + common long names
 ss_cli_dispatch "$@"
@@ -382,18 +383,36 @@ service_event)
             update_loading_progress "Starting Xray service..." 0
             with_restart_lock start
             case $? in
+            0)
+                update_loading_progress "Xray service started successfully." 100
+                ;;
             "$RESTART_LOCK_BUSY_RC")
                 update_loading_progress "Error: another start, stop or restart is still running. Nothing was changed. Try again." 100
                 ;;
             *)
-                update_loading_progress "Xray service started successfully." 100
+                if ss_xrayui_running force 2>/dev/null; then
+                    update_loading_progress "$(ss_xrayui_conflict_message)" 100
+                else
+                    update_loading_progress "Error: Xray did not start. See the system log." 100
+                fi
                 ;;
             esac
             ;;
         restart)
             update_loading_progress "Restarting Xray service..." 0
             restart
-            update_loading_progress "Xray service restarted successfully." 100
+            case $? in
+            0)
+                update_loading_progress "Xray service restarted successfully." 100
+                ;;
+            *)
+                if ss_xrayui_running force 2>/dev/null; then
+                    update_loading_progress "$(ss_xrayui_conflict_message)" 100
+                else
+                    update_loading_progress "Error: Xray did not restart. See the system log." 100
+                fi
+                ;;
+            esac
             ;;
         stop)
             update_loading_progress "Stopping Xray service..." 0

@@ -34,16 +34,25 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.4"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.7"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           sh -n /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_import_finalize' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'xray.running' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_refuse_if_xrayui' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss-conflict-banner' /tmp/ss-ci-pkg/stealthsurf/app.js
+          test -f docs/screenshots/01-status-running.png
+          test -f docs/screenshots/05-xrayui-conflict.png
           grep -q 'ss_cli_dispatch' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ssurf' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'XRAY_CONFIG_DIR="/opt/etc/xray/$ADDON_TAG"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'tproxy_mark=0x20000' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_fetch_balances' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_stamp_outbounds_from_catalog' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_ensure_dns_leak' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q '_ss_title' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -qE 'ssSetKey|api.stealthsurf.net|ownCustomSettings|ext:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp
           sh tests/backend/scaffold.spec.sh
+          sh tests/backend/test-xrayui-detect.sh
