@@ -11,6 +11,12 @@ start() {
         return 0
     fi
 
+    # Stock XrayUI transparent proxy and StealthSurf cannot run in parallel
+    if ! ss_refuse_if_xrayui; then
+        update_loading_progress "$(ss_xrayui_conflict_message)" 100
+        return 1
+    fi
+
     watchdog_mark_desired
 
     # Repair empty profiles so Start always has all-in/direct/block like XrayUI import

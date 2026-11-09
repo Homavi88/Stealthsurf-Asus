@@ -67,7 +67,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 | **Платформа XrayUI** | Полноценный WebUI: outbounds, routing, DNS, clients online, geodata, updates |
 | **API-ключи** | Несколько `stlth_…`, баланс/реферал (RUB), sync каталога, импорт → `ss-<id>` |
 | **Короткий CLI** | `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `bal` `h` `m` |
-| **Изоляция от XrayUI** | Свои config / PID / firewall mark / geodata — можно жить рядом (не оба transparent сразу) |
+| **Изоляция от XrayUI** | Свои config / PID / firewall mark / geodata; при работающем XrayUI — баннер и блокировка Start |
 | **Статус outbounds** | После импорта включаются probes — в списке 🟢 / 🟡 / 🔴 |
 | **Дефолтный профиль** | `all-in` + `direct` + `block`; импорт ставит выбранный узел default-маршрутом |
 
@@ -138,7 +138,11 @@ StealthSurf **1.1.1+** держит своё состояние:
 | Firewall | `STEALTHSURF*` · mark `0x20000` · table `78` | `XRAYUI*` · `0x10000` · `77` |
 
 Общее: `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat`.  
-**Не включайте transparent proxy у обоих аддонов одновременно.**
+**Не включайте transparent proxy у обоих аддонов одновременно** — StealthSurf покажет баннер «Конфликт с XrayUI» и запретит Start, пока XrayUI работает.
+
+<p align="center">
+  <img src="./docs/screenshots/05-xrayui-conflict.png" alt="XrayUI conflict banner" width="720">
+</p>
 
 ## Как устроено
 

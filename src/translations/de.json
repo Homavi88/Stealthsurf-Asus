@@ -38,7 +38,11 @@
       "xray_stopped": "XRAY ist gestoppt",
       "xray_running": "XRAY-Dienst läuft",
       "unapplied_changes": "Änderungen sind noch nicht angewendet. Sie werden erst mit „Anwenden“ auf den Router geschrieben.",
-      "confirm_unapplied_changes": "Einige Änderungen sind noch nicht angewendet und gehen verloren. Ohne sie fortfahren?"
+      "confirm_unapplied_changes": "Einige Änderungen sind noch nicht angewendet und gehen verloren. Ohne sie fortfahren?",
+      "xrayui_conflict_title": "Konflikt mit XrayUI",
+      "xrayui_conflict_pill": "XrayUI-Konflikt",
+      "xrayui_installed_pill": "XrayUI installiert (gestoppt)",
+      "xrayui_conflict_message": "XrayUI läuft. Stoppen Sie XrayUI (VPN → XrayUI → Stop) und starten Sie danach StealthSurf. Beide Add-ons dürfen nicht parallel als Transparent-Proxy laufen — sonst bricht das LAN-Internet."
     },
     "ServerStatus": {
       "configuration": "Konfiguration",

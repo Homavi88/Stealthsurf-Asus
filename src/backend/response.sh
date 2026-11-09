@@ -104,10 +104,14 @@ initial_response() {
     local has_scribe=false
     [ -f /jffs/scripts/scribe ] && has_scribe=true
 
+    local xrayui_json
+    xrayui_json=$(ss_xrayui_status_json 2>/dev/null || echo '{"installed":false,"running":false,"conflict":null,"message":null}')
+
     # Single jq call reading directly from file — avoids shell variable / pipe overhead
     local _tmp_response="/tmp/xray-response.$$.tmp"
     local _jq_err="/tmp/xray-jq-err.$$.tmp"
     if ! jq \
+        --argjson xrayui "$xrayui_json" \
         --arg geoip "$geoip_date" \
         --arg geosite "$geosite_date" \
         --arg geoipurl "$geoipurl" \
@@ -194,12 +198,16 @@ initial_response() {
         | .xray.profiles = $profiles
         | .xray.backups = $backups
         | .xray.debug = $debug
+        | .xrayui = $xrayui
+        | .conflict = $xrayui.conflict
+        | .conflict_message = $xrayui.message
         | if $has_scribe then .integration.scribe = { enabled: $integration_scribe } else . end
         | del(.loading)
         ' "$UI_RESPONSE_FILE" >"$_tmp_response" 2>"$_jq_err"; then
         log_error "Error: Failed to build initial response JSON. jq error: $(cat "$_jq_err" 2>/dev/null)"
         rm -f "$_tmp_response" "$_jq_err"
         if ! jq -n \
+            --argjson xrayui "$xrayui_json" \
             --arg geoipurl "$geoipurl" \
             --arg geositeurl "$geositeurl" \
             --arg geoip "$geoip_date" \
@@ -237,10 +245,13 @@ initial_response() {
             --argjson debug "$debug" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug }
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug },
+                xrayui: $xrayui,
+                conflict: $xrayui.conflict,
+                conflict_message: $xrayui.message
             }' >"$_tmp_response" 2>"$_jq_err"; then
             log_error "Error: jq -n also failed. jq error: $(cat "$_jq_err" 2>/dev/null). Writing bare minimum response."
-            echo '{"xray":{"ui_version":"'"$XRAYUI_VERSION"'","core_version":"'"$XRAY_VERSION"'","tested_core":"'"$XRAYUI_TESTED_CORE"'","profiles":[],"backups":[]}}' >"$_tmp_response"
+            echo '{"xray":{"ui_version":"'"$XRAYUI_VERSION"'","core_version":"'"$XRAY_VERSION"'","tested_core":"'"$XRAYUI_TESTED_CORE"'","profiles":[],"backups":[]},"xrayui":{"installed":false,"running":false,"conflict":null,"message":null},"conflict":null,"conflict_message":null}' >"$_tmp_response"
         fi
         rm -f "$_jq_err"
     else

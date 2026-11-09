@@ -217,6 +217,13 @@ export class EngineGeoTags {
   public xrayui?: string[] = [];
 }
 
+export class EngineXrayuiStatus {
+  public installed?: boolean;
+  public running?: boolean;
+  public conflict?: string | null;
+  public message?: string | null;
+}
+
 export class EngineResponseConfig {
   public wireguard?: EngineWireguard;
   public reality?: EngineReality;
@@ -228,6 +235,10 @@ export class EngineResponseConfig {
       enabled: boolean;
     };
   };
+  /** Stock XrayUI coexistence — parallel transparent proxy is forbidden. */
+  public xrayui?: EngineXrayuiStatus;
+  public conflict?: string | null;
+  public conflict_message?: string | null;
   public xray?: {
     ipsec: string;
     debug: boolean;

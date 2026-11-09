@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.6] - 2026-11-09
+
+### XrayUI conflict guard
+
+- Detect stock XrayUI (pid `/var/run/xray.pid`, process on `/opt/etc/xray/config.json`, chains `XRAYUI`) and **refuse StealthSurf Start/Restart/autostart/watchdog** while it is running
+- WebUI red banner + status pill; Start/Restart disabled when conflict is active
+- Configs/marks/tables stay isolated, but two transparent proxies on one LAN still break routing — only one addon may redirect traffic at a time
+
+---
+
 ## [1.1.5] - 2026-11-09
 
 ### Connections work + status badges + README
