@@ -29,35 +29,72 @@ update_xrayui_config() {
     fi
 }
 
-generate_xray_config() {
-    # Validate base configuration
+# XrayUI-shaped scaffold: dokodemo all-in + direct (first) + block.
+# Used for fresh configs and to repair empty profiles so Start/Stop control real traffic.
+ensure_xray_scaffold() {
+    load_xrayui_config
+    mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_LOGS_DIR" 2>/dev/null || true
     if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-        log_warn "Base configuration file not found. Creating a default config..."
-        mkdir -p "$XRAY_CONFIG_DIR"
-        cat >$XRAY_CONFIG_FILE <<EOF
+        cat >"$XRAY_CONFIG_FILE" <<EOF
 {
-    "log": {
-        "loglevel": "warning",
-        "access": "$ADDON_LOGS_DIR/xray_access.log",
-        "error": "$ADDON_LOGS_DIR/xray_error.log"
-    },
-    "inbounds":[],
-    "outbounds":[],
-    "routing": {
-        "rules": []
-    },
-    "dns": {
-        "servers": []
-    }
+  "log": {
+    "loglevel": "warning",
+    "access": "$ADDON_LOGS_DIR/xray_access.log",
+    "error": "$ADDON_LOGS_DIR/xray_error.log"
+  },
+  "inbounds": [],
+  "outbounds": [],
+  "routing": { "domainStrategy": "AsIs", "rules": [] },
+  "dns": { "servers": ["localhost"] }
 }
 EOF
-        if [ $? -eq 0 ]; then
-            log_ok "Default configuration created successfully."
+    fi
+
+    jq '
+      .log = (.log // {})
+      | .log.loglevel = (.log.loglevel // "warning")
+      | .inbounds = (.inbounds // [])
+      | .outbounds = (.outbounds // [])
+      | .routing = (.routing // {})
+      | .routing.domainStrategy = (.routing.domainStrategy // "AsIs")
+      | .routing.rules = (.routing.rules // [])
+      | .dns = (.dns // {})
+      | .dns.servers = (.dns.servers // ["localhost"])
+      | if ([.inbounds[] | select(.tag == "all-in")] | length) > 0 then .
+        else .inbounds += [{
+          "protocol": "dokodemo-door",
+          "listen": "127.0.0.1",
+          "port": 5599,
+          "tag": "all-in",
+          "settings": { "address": "", "network": "tcp,udp", "followRedirect": true },
+          "streamSettings": { "sockopt": { "tproxy": "tproxy" } },
+          "sniffing": { "enabled": true, "destOverride": ["http", "tls", "quic"] }
+        }] end
+      | if ([.outbounds[] | select(.tag == "direct" or .protocol == "freedom")] | length) > 0 then .
+        else .outbounds = [{ "protocol": "freedom", "tag": "direct", "settings": {} }] + .outbounds end
+      | if ([.outbounds[] | select(.tag == "block" or .protocol == "blackhole")] | length) > 0 then .
+        else .outbounds += [{ "protocol": "blackhole", "tag": "block", "settings": {} }] end
+    ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+
+    # Fresh installs: transparent proxy on (legacy 1.0). Respect an explicit user value.
+    if [ -z "${ipsec:-}" ]; then
+        update_xrayui_config "ipsec" "redirect"
+        ipsec="redirect"
+    fi
+}
+
+generate_xray_config() {
+    if [ ! -f "$XRAY_CONFIG_FILE" ]; then
+        log_warn "Base configuration file not found. Creating a default config..."
+        ensure_xray_scaffold
+        if [ -f "$XRAY_CONFIG_FILE" ]; then
+            log_ok "Default configuration created successfully (all-in + direct + block)."
         else
             log_error "Failed to create default configuration."
             exit 1
         fi
     else
         log_warn "Base configuration file already exists."
+        ensure_xray_scaffold
     fi
 }

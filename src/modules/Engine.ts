@@ -234,6 +234,8 @@ export class EngineResponseConfig {
     clients_check: boolean;
     test: string;
     uptime: number;
+    /** True when StealthSurf-owned xray is running (not stock XrayUI). */
+    running?: boolean;
     ui_version: string;
     core_version: string;
     core_error?: string;
@@ -812,7 +814,7 @@ export class Engine {
       if (axiosError.status === 404) {
         if (
           confirm(
-            'XRAY Configuration file not found in the /opt/etc/xray directory. Please check your configuration file. If you want to generate an empty configuration file, press OK.'
+            'StealthSurf configuration not found in /opt/etc/xray/stealthsurf. Generate a default config (all-in + direct + block)?'
           )
         ) {
           await this.submit(SubmitActions.configurationGenerateDefaultConfig);

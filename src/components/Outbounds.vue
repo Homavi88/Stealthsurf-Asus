@@ -416,7 +416,13 @@
         edit_proxy,
         remove_proxy,
         save_proxy,
-        isRunning: window.xray.server.isRunning
+        isRunning: computed(() => {
+          const running = uiResponse.value.xray?.running;
+          if (typeof running === 'boolean') return running;
+          const uptime = uiResponse.value.xray?.uptime;
+          if (typeof uptime === 'number') return uptime > 0;
+          return window.xray.server.isRunning;
+        })
       };
     }
   });

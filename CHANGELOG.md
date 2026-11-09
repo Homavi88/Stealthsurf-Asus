@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.4] - 2026-11-09
+
+### Controls + default outbound
+
+- WebUI Start/Stop/Restart now follows **StealthSurf-owned** xray (`running` / uptime), not Merlin `pid.xray` (which also matches stock XrayUI)
+- Default config scaffold like XrayUI import: `all-in` dokodemo + `direct` + `block`; fresh installs get `ipsec=redirect`
+- StealthSurf API import sets the imported `ss-<id>` as the default routing outbound and keeps `direct` first
+- `fixme` re-installs the `service-event` hook and repairs empty profiles; staged-payload cleanup matches `stealthsurf_*` keys
+
+---
+
 ## [1.1.3] - 2026-11-08
 
 ### Fix update/install ash syntax error
