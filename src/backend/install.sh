@@ -91,6 +91,7 @@ EOF
     fi
 
     generate_xray_config
+    ensure_xray_scaffold
 
     update_loading_progress "Configuring XRAY UI..."
 
@@ -103,7 +104,7 @@ EOF
     # Add or update post-mount
     setup_script_file "/jffs/scripts/post-mount" "/jffs/scripts/stealthsurf service_event startup & #stealthsurf"
 
-    # Add or update service-event
+    # Add or update service-event (Merlin passes custom action_script as $2)
     setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && /jffs/scripts/stealthsurf service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #stealthsurf"
 
     # Add or update dnsmasq.postconf

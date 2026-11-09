@@ -43,7 +43,7 @@
 </template>
 
 <script lang="ts">
-  import { defineComponent, ref, computed, inject, Ref } from 'vue';
+  import { defineComponent, ref, computed, inject, Ref, watch } from 'vue';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import GeneralOptionsModal from '@modal/GeneralOptionsModal.vue';
   import ImportConfig from './ImportConfig.vue';
@@ -90,7 +90,23 @@
 
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
 
+      // Prefer StealthSurf-owned running state from backend (uptime/running), not Merlin pid.xray
+      // which also matches stock XrayUI and makes Start/Stop look like no-ops.
       const isRunning = ref<boolean>(window.xray.server.isRunning);
+      watch(
+        () => [uiResponse?.value?.xray?.running, uiResponse?.value?.xray?.uptime] as const,
+        ([running, uptime]) => {
+          if (typeof running === 'boolean') {
+            isRunning.value = running;
+            window.xray.server.isRunning = running;
+          } else if (typeof uptime === 'number') {
+            const next = uptime > 0;
+            isRunning.value = next;
+            window.xray.server.isRunning = next;
+          }
+        },
+        { immediate: true }
+      );
 
       const show_config_modal = () => {
         configModal.value.show();

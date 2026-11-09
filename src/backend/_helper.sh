@@ -436,7 +436,7 @@ cleanup_payload() {
 }
 
 cleanup_staged_marker() {
-    grep -qE '^xray_stag(ed_session|e_)' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
+    grep -qE '^stealthsurf_stag(ed_session|e_)' /jffs/addons/custom_settings.txt 2>/dev/null || return 0
     custom_settings_drop '/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d'
 }
 
@@ -666,12 +666,16 @@ fixme() {
         log_warn "Consider removing old backups or logs before proceeding."
     fi
 
-    log_info "Removing XRAY broken payload settings..."
-    if grep -qE '^xray_(payload|staged_session|stage_)' /jffs/addons/custom_settings.txt 2>/dev/null; then
+    log_info "Removing StealthSurf broken payload settings..."
+    if grep -qE '^stealthsurf_(payload|staged_session|stage_)' /jffs/addons/custom_settings.txt 2>/dev/null; then
         custom_settings_drop '/^stealthsurf_payload/d;/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' || log_warn "Failed to remove broken payload settings"
     else
         log_info "No broken payload settings found."
     fi
+
+    # Re-assert service hooks so Start/Stop from WebUI always reach this addon
+    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && /jffs/scripts/stealthsurf service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #stealthsurf" 2>/dev/null || true
+    ensure_xray_scaffold 2>/dev/null || true
 
     log_info "Removing file $UI_RESPONSE_FILE..."
     rm -f "$UI_RESPONSE_FILE" || log_warn "Failed to remove $UI_RESPONSE_FILE"

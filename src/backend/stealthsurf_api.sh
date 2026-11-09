@@ -453,14 +453,36 @@ ss_api_import_config_to_xray() {
         return 1
     }
 
-    if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-        generate_xray_config
-    fi
+    ensure_xray_scaffold
+    # Upsert outbound; keep freedom/direct first; set catch-all default route to this proxy
     jq --argjson ob "$outbound" --arg tag "$tag" '
-      .outbounds = ((.outbounds // []) | map(select(.tag != $tag)) + [$ob])
+      .outbounds = ((.outbounds // []) | map(select(.tag != $tag)))
+      | .outbounds = (
+          ([.outbounds[] | select(.protocol == "freedom" or .tag == "direct")])
+          + [$ob]
+          + ([.outbounds[] | select(.protocol != "freedom" and .tag != "direct")])
+        )
+      | .routing //= {}
+      | .routing.rules //= []
+      | .routing.rules = (
+          (.routing.rules | map(select(.name != "stealthsurf-default" and .outboundTag != $tag)))
+          + [{
+              "type": "field",
+              "name": "stealthsurf-default",
+              "outboundTag": $tag,
+              "network": "tcp,udp",
+              "enabled": true
+            }]
+        )
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
     ln -sf "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" 2>/dev/null || true
-    log_ok "Imported StealthSurf config $config_id as outbound $tag ($title)"
+    # Enable transparent proxy when unset so Start redirects LAN traffic through the imported outbound
+    load_xrayui_config
+    if [ -z "${ipsec:-}" ]; then
+        update_xrayui_config "ipsec" "redirect"
+        ipsec="redirect"
+    fi
+    log_ok "Imported StealthSurf config $config_id as outbound $tag ($title) [default route]"
 }
 
 ss_api_import_enabled_batch() {

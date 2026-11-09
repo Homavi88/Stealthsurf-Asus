@@ -13,6 +13,9 @@ start() {
 
     watchdog_mark_desired
 
+    # Repair empty profiles so Start always has all-in/direct/block like XrayUI import
+    ensure_xray_scaffold
+
     migrate_tun_inbounds_config
 
     cleanup_stale_asdfiles

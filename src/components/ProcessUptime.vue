@@ -22,9 +22,14 @@
       let uptimeInterval: number | undefined;
 
       watch(
-        () => uiResponse?.value.xray?.uptime,
-        (newUptime) => {
-          if (newUptime) {
+        () => [uiResponse?.value.xray?.running, uiResponse?.value.xray?.uptime] as const,
+        ([running, newUptime]) => {
+          if (typeof running === 'boolean') {
+            isRunning.value = running;
+          } else if (typeof newUptime === 'number') {
+            isRunning.value = newUptime > 0;
+          }
+          if (typeof newUptime === 'number' && newUptime > 0) {
             seconds.value = newUptime;
           }
         },
