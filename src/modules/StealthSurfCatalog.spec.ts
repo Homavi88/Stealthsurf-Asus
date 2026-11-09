@@ -1,8 +1,22 @@
-import { catalogTitle, outboundApiOnline, outboundDisplayTitle, outboundSsId, parseCatalogPayload, ssIdFromTag } from './StealthSurfCatalog';
+import {
+  catalogTitle,
+  outboundApiOnline,
+  outboundDisplayTitle,
+  outboundSsId,
+  outboundTagDisplayTitle,
+  parseCatalogPayload,
+  ssIdFromTag
+} from './StealthSurfCatalog';
 
 const catalog = [
   { id: 69191, title: 'Нидерланды VLESS XHTTP', protocol: 'vless', is_online: true },
   { id: 228111, name: 'Hysteria NL', protocol: 'hysteria', is_online: false }
+];
+
+const outbounds = [
+  { tag: 'ss-69191', _ss_title: 'Saved title' },
+  { tag: 'ss-228111' },
+  { tag: 'direct' }
 ];
 
 describe('StealthSurfCatalog', () => {
@@ -19,6 +33,15 @@ describe('StealthSurfCatalog', () => {
     expect(outboundDisplayTitle({ tag: 'ss-228111' }, catalog)).toBe('Hysteria NL');
     expect(outboundDisplayTitle({ tag: 'ss-1' }, catalog)).toBe('ss-1');
     expect(outboundDisplayTitle({ tag: '' }, [])).toBe('no tag');
+  });
+
+  it('labels rule/balancer dropdown tags via outbound title lookup', () => {
+    expect(outboundTagDisplayTitle('ss-69191', outbounds, catalog)).toBe('Нидерланды VLESS XHTTP');
+    expect(outboundTagDisplayTitle('ss-69191', outbounds, [])).toBe('Saved title');
+    expect(outboundTagDisplayTitle('ss-228111', outbounds, catalog)).toBe('Hysteria NL');
+    expect(outboundTagDisplayTitle('direct', outbounds, [])).toBe('direct');
+    expect(outboundTagDisplayTitle('ss-missing', outbounds, [])).toBe('ss-missing');
+    expect(outboundTagDisplayTitle(undefined, outbounds, [])).toBe('no tag');
   });
 
   it('parses catalog payloads as a bare array or {data:[...]}', () => {

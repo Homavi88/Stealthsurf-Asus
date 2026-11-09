@@ -112,6 +112,7 @@
     outboundApiOnline,
     outboundDisplayTitle,
     outboundSsId,
+    outboundTagDisplayTitle,
     parseCatalogPayload
   } from '@/modules/StealthSurfCatalog';
 
@@ -190,6 +191,7 @@
       };
 
       const displayTitle = (proxy: XrayOutboundObject<IProtocolType>) => outboundDisplayTitle(proxy, catalog.value);
+      const titleForTag = (tag?: string) => outboundTagDisplayTitle(tag, config.value.outbounds, catalog.value);
       const apiOnline = (proxy: XrayOutboundObject<IProtocolType>) => outboundApiOnline(proxy, catalog.value);
       const ssIdBadge = (proxy: XrayOutboundObject<IProtocolType>) => {
         const id = outboundSsId(proxy);
@@ -259,13 +261,22 @@
         switch (view.kind) {
           case 'next': {
             let line = view.delay === undefined ? t('com.Outbounds.balancer_next_nodelay', [balancer]) : t('com.Outbounds.balancer_next', [balancer, view.delay]);
-            if (view.runnerUp) line += ' ' + t('com.Outbounds.balancer_runner_up', [view.runnerUp.tag, view.runnerUp.delay]);
+            if (view.runnerUp) line += ' ' + t('com.Outbounds.balancer_runner_up', [titleForTag(view.runnerUp.tag), view.runnerUp.delay]);
             if (dead) line += ' ' + t('com.Outbounds.balancer_target_dead');
             lines.push(line);
             break;
           }
           case 'tied':
-            lines.push(t('com.Outbounds.balancer_tied', [balancer, view.delay, view.tags.filter((x) => x !== tag).join(', ')]));
+            lines.push(
+              t('com.Outbounds.balancer_tied', [
+                balancer,
+                view.delay,
+                view.tags
+                  .filter((x) => x !== tag)
+                  .map((x) => titleForTag(x))
+                  .join(', ')
+              ])
+            );
             break;
           case 'rotating':
             lines.push(dead ? t('com.Outbounds.balancer_dead_share', [balancer]) : t('com.Outbounds.balancer_rotating', [balancer, view.tags.length]));

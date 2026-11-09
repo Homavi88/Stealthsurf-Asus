@@ -88,7 +88,7 @@
           <td>
             <select class="input_option" v-model="sockopt.dialerProxy">
               <option value="">none</option>
-              <option v-for="(opt, index) in outboundOptions" :key="index" :value="opt">{{ opt }}</option>
+              <option v-for="(opt, index) in outboundOptions" :key="index" :value="opt">{{ labelOutbound(opt) }}</option>
             </select>
           </td>
         </tr>
@@ -102,6 +102,7 @@
   import { XraySockoptObject, XrayStreamSettingsObject } from '@/modules/CommonObjects';
   import Hint from '@main/Hint.vue';
   import xrayConfig from '@modules/XrayConfig';
+  import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
   export default defineComponent({
     name: 'Sockopt',
     components: {
@@ -117,6 +118,7 @@
       const outboundOptions = computed(() => {
         return xrayConfig.outbounds.filter((outbound) => outbound.tag).map((outbound) => outbound.tag);
       });
+      const labelOutbound = (tag: string | undefined) => outboundTagDisplayTitle(tag, xrayConfig.outbounds);
       watch(
         () => props.transport,
         () => {
@@ -140,7 +142,8 @@
         keepAliveDefault,
         domainStrategyOptions: XraySockoptObject.domainStrategyOptions,
         tproxyOptions: XraySockoptObject.tproxyOptions,
-        outboundOptions
+        outboundOptions,
+        labelOutbound
       };
     }
   });

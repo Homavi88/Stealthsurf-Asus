@@ -2,6 +2,8 @@ import { shallowMount } from '@vue/test-utils';
 import { defineComponent, h, nextTick } from 'vue';
 import RulesModal from '@modal/RulesModal.vue';
 import { XrayRoutingRuleObject } from '@/modules/CommonObjects';
+import xrayConfig from '@/modules/XrayConfig';
+import { XrayOutboundObject } from '@/modules/OutboundObjects';
 
 jest.mock('vue-i18n', () => ({
   useI18n: () => ({ t: (k: string) => k })
@@ -68,6 +70,58 @@ describe('RulesModal custom geodata lists', () => {
     expect(vm.rules).toHaveLength(1);
     expect(vm.rules[0].domain).toEqual(['ext:stealthsurf:viber']);
     expect(vm.rules[0].ip).toEqual(['ext:geoip_custom.dat:viber', 'geoip:cloudflare']);
+  });
+});
+
+describe('RulesModal outbound titles', () => {
+  interface TitlesVm {
+    show: (onClose: () => void) => void;
+    targetOptions: { key: string; label: string }[];
+    usedTargets: { key: string; label: string; count: number }[];
+    reassignField: 'outbound' | 'inbound';
+    reassignFromOptions: { key: string; label: string; count: number }[];
+    labelOutbound: (tag: string | undefined) => string;
+    getRuleName: (rule: XrayRoutingRuleObject) => string;
+  }
+
+  afterEach(() => {
+    xrayConfig.outbounds = [];
+    xrayConfig.inbounds = [];
+    if (xrayConfig.routing) xrayConfig.routing.balancers = [];
+  });
+
+  it('shows API titles instead of ss-<id> in rule target dropdowns', async () => {
+    const titled = Object.assign(new XrayOutboundObject(), { tag: 'ss-69191', _ss_title: 'Нидерланды VLESS XHTTP' });
+    xrayConfig.outbounds = [
+      Object.assign(new XrayOutboundObject(), { tag: 'direct' }),
+      titled,
+      Object.assign(new XrayOutboundObject(), { tag: 'block' })
+    ];
+    xrayConfig.inbounds = [];
+    if (xrayConfig.routing) xrayConfig.routing.balancers = [];
+
+    const proxyRule = Object.assign(new XrayRoutingRuleObject(), {
+      idx: 0,
+      name: '',
+      outboundTag: 'ss-69191',
+      inboundTag: [],
+      domain: ['geosite:cn'],
+      enabled: true
+    });
+    const wrapper = shallowMount(RulesModal, {
+      props: { rules: [proxyRule], disabled_rules: [] },
+      global: { stubs: { modal: ModalStub, hint: true, draggable: true, teleport: true }, mocks: { $t: (k: string) => k } }
+    });
+    const vm = wrapper.vm as unknown as TitlesVm;
+    vm.show(() => undefined);
+    await nextTick();
+
+    expect(vm.labelOutbound('ss-69191')).toBe('Нидерланды VLESS XHTTP');
+    expect(vm.targetOptions.find((o) => o.key === 'o:ss-69191')?.label).toBe('Нидерланды VLESS XHTTP');
+    expect(vm.usedTargets.find((o) => o.key === 'o:ss-69191')?.label).toBe('Нидерланды VLESS XHTTP');
+    expect(vm.reassignFromOptions.find((o) => o.key === 'o:ss-69191')?.label).toBe('Нидерланды VLESS XHTTP');
+    expect(vm.getRuleName(proxyRule)).toContain('Нидерланды VLESS XHTTP');
+    expect(vm.getRuleName(proxyRule)).not.toContain('ss-69191');
   });
 });
 

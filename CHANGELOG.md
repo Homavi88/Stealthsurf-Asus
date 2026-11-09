@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.10] - 2026-11-09
+
+### Rule / balancer UI shows API titles
+
+- Routing rules, reassign dropdowns, balancers, SNI rule picker, sockopt dialer, and import replace targets show the StealthSurf **title** (e.g. «Нидерланды VLESS XHTTP») instead of only `ss-<id>`
+- Internal Xray tags stay `ss-<id>`; only the WebUI labels change
+
+---
+
 ## [1.1.9] - 2026-11-09
 
 ### Geodata sanitize + quieter install logs

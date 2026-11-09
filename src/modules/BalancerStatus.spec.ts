@@ -243,4 +243,15 @@ describe('helpers', () => {
     expect(describeViewShort({ kind: 'rotating', tags: ['a', 'b'], dead: ['b'], total: 3 }, t)).toBe('com.BalancerModal.now_rotating_dead:2|3|1');
     expect(describeViewShort({ kind: 'default', tags: ['direct'], dead: [], total: 0 }, t)).toBe('com.BalancerModal.now_default:direct');
   });
+
+  it('can describe views with human outbound titles instead of tags', () => {
+    const t = (key: string, args: unknown[]) => `${key}:${args.join('|')}`;
+    const label = (tag: string | undefined) => (tag === 'ss-69191' ? 'Нидерланды VLESS XHTTP' : tag || 'no tag');
+    expect(describeViewShort({ kind: 'next', tags: ['ss-69191'], dead: [], total: 1, delay: 12 }, t, label)).toBe(
+      'com.BalancerModal.now_next:Нидерланды VLESS XHTTP|12'
+    );
+    expect(describeViewShort({ kind: 'tied', tags: ['ss-69191', 'direct'], dead: [], total: 2, delay: 12 }, t, label)).toBe(
+      'com.BalancerModal.now_tied:Нидерланды VLESS XHTTP, direct|12'
+    );
+  });
 });
