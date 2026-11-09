@@ -476,13 +476,39 @@ ss_api_import_config_to_xray() {
         )
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
     ln -sf "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" 2>/dev/null || true
-    # Enable transparent proxy when unset so Start redirects LAN traffic through the imported outbound
     load_xrayui_config
-    if [ -z "${ipsec:-}" ]; then
-        update_xrayui_config "ipsec" "redirect"
-        ipsec="redirect"
+    # Catch-all stealthsurf-default needs full tunnel: redirect mode only matches PROXY ipsets
+    if jq -e '.routing.rules[]? | select(.name == "stealthsurf-default")' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        if [ -z "${ipsec:-}" ] || [ "$ipsec" = "redirect" ]; then
+            update_xrayui_config "ipsec" "off"
+            ipsec="off"
+        fi
+    elif [ -z "${ipsec:-}" ]; then
+        update_xrayui_config "ipsec" "off"
+        ipsec="off"
+    fi
+    if [ "${check_connection:-}" != "true" ]; then
+        update_xrayui_config "check_connection" "true"
+        check_connection="true"
     fi
     log_ok "Imported StealthSurf config $config_id as outbound $tag ($title) [default route]"
+}
+
+ss_api_import_finalize() {
+    # After imports: rebuild observatory selectors and restart so status badges appear
+    load_xrayui_config
+    update_xrayui_config "check_connection" "true"
+    check_connection="true"
+    if [ -z "${ipsec:-}" ]; then
+        update_xrayui_config "ipsec" "off"
+        ipsec="off"
+    fi
+    api_apply_configuration 2>/dev/null || true
+    if [ -n "$(get_xray_daemon_pid 2>/dev/null || true)" ]; then
+        log_info "Restarting Xray so new outbounds are probed for connection status..."
+        restart || log_warn "Restart after import finished with warnings"
+    fi
+    initial_response 2>/dev/null || true
 }
 
 ss_api_import_enabled_batch() {
@@ -499,8 +525,13 @@ ss_api_import_enabled_batch() {
             ok=$((ok + 1))
         fi
     done
-    log_ok "Imported $ok configs into Xray"
-    [ "$ok" -gt 0 ]
+    if [ "$ok" -gt 0 ]; then
+        ss_api_import_finalize
+        log_ok "Imported $ok configs into Xray (status probes enabled)"
+        return 0
+    fi
+    log_error "No configs imported"
+    return 1
 }
 
 ss_api_handle_setkey() {

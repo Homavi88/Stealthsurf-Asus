@@ -193,8 +193,11 @@ ss_cli_dispatch() {
         return $?
         ;;
     ic | imp | ap | a | apply | import-config | import)
-        ss_api_import_config_to_xray "$2"
-        return $?
+        if ss_api_import_config_to_xray "$2"; then
+            ss_api_import_finalize
+            return 0
+        fi
+        return 1
         ;;
     bak | backup)
         backup_configuration

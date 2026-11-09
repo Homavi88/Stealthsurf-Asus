@@ -168,8 +168,17 @@
           clearLiveStatus();
           return;
         }
-        if (!(await refreshLiveStatus())) return;
+        // Seed yellow placeholders for every probeable outbound so ss-* show status immediately
         const map: Record<string, OutboundStatus> = {};
+        (config.value.outbounds || []).forEach((proxy) => {
+          if (!proxy.tag || proxy.protocol === XrayProtocol.BLACKHOLE || proxy.protocol === XrayProtocol.FREEDOM) return;
+          if (proxy.tag.startsWith('sys:')) return;
+          map[proxy.tag] = { alive: undefined };
+        });
+        if (!(await refreshLiveStatus())) {
+          connectionStatus.value = map;
+          return;
+        }
         Object.values(liveStatus.observatory).forEach((entry) => {
           if (!entry?.outbound_tag) return;
           map[entry.outbound_tag] = { alive: entry.alive === true, delay: entry.delay, reason: entry.last_error_reason };
