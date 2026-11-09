@@ -60,7 +60,7 @@
           <th>Configs</th>
           <td>
             <div class="ss-hint">{{ configsStatus }}</div>
-            <div style="max-height: 320px; overflow: auto; margin-top: 8px">
+            <div style="max-height: 360px; overflow: auto; margin-top: 8px">
               <table class="FormTable" v-if="configs.length">
                 <thead>
                   <tr>
@@ -72,16 +72,12 @@
                     <th>Expires</th>
                     <th>Renew</th>
                     <th>Online</th>
+                    <th></th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr
-                    v-for="c in configs"
-                    :key="catalogTag(c)"
-                    :class="{ 'ss-row-active': selectedDetailTag === catalogTag(c) }"
-                    @click="selectConfig(c)"
-                  >
-                    <td @click.stop>
+                  <tr v-for="c in configs" :key="catalogTag(c)">
+                    <td>
                       <input type="checkbox" v-model="selectedIds" :value="importKey(c)" />
                     </td>
                     <td>
@@ -90,7 +86,7 @@
                     </td>
                     <td>{{ catalogSourceLabel(c) }}</td>
                     <td>{{ c.protocol || '—' }}</td>
-                    <td>{{ c._ss_location_title || c.location_id || '—' }}</td>
+                    <td :title="c.location_id != null ? 'id ' + c.location_id : ''">{{ catalogLocationLabel(c, locations) }}</td>
                     <td>{{ formatExpiresAt(c.expires_at) }}</td>
                     <td>{{ c.auto_renewal ? (c.auto_renewal_days ? c.auto_renewal_days + 'd' : 'on') : '—' }}</td>
                     <td>
@@ -98,13 +94,16 @@
                         c.is_online ? 'online' : 'offline'
                       }}</span>
                     </td>
+                    <td>
+                      <input class="button_gen button_gen_small" type="button" value="Manage" @click.prevent="openManage(c)" />
+                    </td>
                   </tr>
                 </tbody>
               </table>
               <div v-else class="ss-hint">No catalog yet — add an API key and Sync.</div>
             </div>
             <div class="ss-hint" style="margin-top: 6px">
-              Auto-poll + rebuild on provider changes: General Options → StealthSurf → Auto-sync catalog. Paid/cloud rows appear after Sync.
+              Auto-poll + rebuild: General Options → StealthSurf. Manage opens settings/stats in a modal.
             </div>
             <input
               class="button_gen button_gen_small"
@@ -116,92 +115,32 @@
             />
           </td>
         </tr>
-        <tr v-if="activeConfig">
-          <th>Selected</th>
-          <td>
-            <div class="ss-selected-title">{{ catalogTitle(activeConfig) }} · {{ catalogTag(activeConfig) }}</div>
-            <div class="ss-hint">
-              id={{ activeConfig.id }} · location={{ activeConfig.location_id || '—' }} · server={{ activeConfig.server_id || '—' }}
-            </div>
-
-            <div class="ss-panel" v-if="(activeConfig._ss_source || 'config') === 'config'">
-              <div class="ss-panel-title">Change settings (PATCH)</div>
-              <label class="ss-field">
-                Protocol
-                <select v-model="editProtocol" class="input_option">
-                  <option v-for="p in protocols" :key="p" :value="p">{{ p }}</option>
-                </select>
-              </label>
-              <label class="ss-field">
-                Location id
-                <select v-model.number="editLocationId" class="input_option">
-                  <option v-for="loc in locations" :key="loc.id" :value="loc.id">
-                    {{ loc.title || loc.code || loc.id }}
-                  </option>
-                </select>
-              </label>
-              <label class="ss-field">
-                Server id
-                <select v-model="editServerId" class="input_option">
-                  <option value="">auto</option>
-                  <option v-for="s in availableServers" :key="s.id" :value="String(s.id)">
-                    {{ s.id }} · {{ s.ip || '?' }} (slots {{ s.available_slots ?? '—' }})
-                  </option>
-                </select>
-              </label>
-              <label class="ss-check"><input type="checkbox" v-model="editDisableReality" /> disable REALITY</label>
-              <label class="ss-check"><input type="checkbox" v-model="editChangeSni" /> change SNI</label>
-              <label class="ss-check"><input type="checkbox" v-model="editUseXhttp" /> XHTTP</label>
-              <label class="ss-check"><input type="checkbox" v-model="editUseGrpc" /> gRPC</label>
-              <div>
-                <input class="button_gen button_gen_small" type="button" value="Load servers" @click.prevent="loadServers" />
-                <input class="button_gen button_gen_small" type="button" value="Apply settings" @click.prevent="applySettings" />
-                <input class="button_gen button_gen_small" type="button" value="Autofit (ISP)" @click.prevent="runAutofit" />
-              </div>
-              <div class="ss-hint" v-if="autofitStatus">{{ autofitStatus }}</div>
-            </div>
-
-            <div class="ss-panel">
-              <div class="ss-panel-title">Stats & traffic</div>
-              <input class="button_gen button_gen_small" type="button" value="Server stats" @click.prevent="loadServerStats" />
-              <input class="button_gen button_gen_small" type="button" value="Traffic" @click.prevent="loadTraffic" />
-              <pre class="ss-pre" v-if="statsHint">{{ statsHint }}</pre>
-              <pre class="ss-pre" v-if="trafficHint">{{ trafficHint }}</pre>
-            </div>
-
-            <div class="ss-panel" v-if="(activeConfig._ss_source || 'config') === 'config'">
-              <div class="ss-panel-title">Billing</div>
-              <label class="ss-check">
-                <input type="checkbox" v-model="editAutoRenewal" /> auto-renewal
-              </label>
-              <input type="number" class="input_6_table" v-model.number="editAutoRenewDays" min="1" style="width: 60px" />
-              days
-              <input class="button_gen button_gen_small" type="button" value="Save renewal" @click.prevent="saveAutoRenewal" />
-              <input class="button_gen button_gen_small" type="button" value="Renew now" @click.prevent="renewNow" />
-            </div>
-          </td>
-        </tr>
       </tbody>
     </table>
+    <ss-api-info-modal ref="infoModal" />
+    <ss-config-manage-modal ref="manageModal" :locations="locations" @stats="onStats" @traffic="onTraffic" @updated="onManagedUpdated" />
   </div>
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, inject, onMounted, ref, Ref, watch } from 'vue';
+  import { computed, defineComponent, inject, onMounted, ref, Ref } from 'vue';
   import axios from 'axios';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+  import SsApiInfoModal from '@modal/SsApiInfoModal.vue';
+  import SsConfigManageModal from '@modal/SsConfigManageModal.vue';
+  import { SS_API_BASE, ssApiGet } from '@/modules/StealthSurfApiClient';
   import {
-    SS_PROTOCOLS,
     SsCatalogConfig,
+    SsLocation,
+    catalogLocationLabel,
     catalogSourceLabel,
     catalogTag,
     catalogTitle,
+    enrichCatalogWithLocations,
     formatExpiresAt,
     outboundSsId,
     parseCatalogPayload
   } from '@/modules/StealthSurfCatalog';
-
-  const SS_API_BASE = 'https://api.stealthsurf.net';
 
   interface BalanceRow {
     ok?: boolean;
@@ -224,20 +163,9 @@
     message?: string;
   }
 
-  interface SsLocation {
-    id: number;
-    title?: string;
-    code?: string;
-  }
-
-  interface AvailableServer {
-    id: number;
-    ip?: string;
-    available_slots?: number;
-  }
-
   export default defineComponent({
     name: 'StealthSurfAccount',
+    components: { SsApiInfoModal, SsConfigManageModal },
     setup() {
       const apiKey = ref('');
       const apiLabel = ref('');
@@ -246,24 +174,11 @@
       const configs = ref<SsCatalogConfig[]>([]);
       const locations = ref<SsLocation[]>([]);
       const selectedIds = ref<(number | string)[]>([]);
-      const selectedDetailTag = ref('');
       const configsStatus = ref('');
-      const availableServers = ref<AvailableServer[]>([]);
-      const protocols = SS_PROTOCOLS;
-      const editProtocol = ref('vless');
-      const editLocationId = ref<number | ''>('');
-      const editServerId = ref('');
-      const editDisableReality = ref(false);
-      const editChangeSni = ref(false);
-      const editUseXhttp = ref(false);
-      const editUseGrpc = ref(false);
-      const editAutoRenewal = ref(false);
-      const editAutoRenewDays = ref(30);
-      const autofitStatus = ref('');
-      const statsHint = ref('');
-      const trafficHint = ref('');
       const topupAmount = ref(100);
       const topupHint = ref('');
+      const infoModal = ref<{ showStats: (c: SsCatalogConfig) => Promise<void>; showTraffic: (c: SsCatalogConfig) => Promise<void> } | null>(null);
+      const manageModal = ref<{ show: (c: SsCatalogConfig) => void } | null>(null);
 
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
       const channelLabel = computed(() => {
@@ -283,7 +198,6 @@
 
       const isImported = (c: SsCatalogConfig) => importedTags.value.has(catalogTag(c)) || importedTags.value.has(`ss-${c.id}`);
       const importKey = (c: SsCatalogConfig) => catalogTag(c);
-      const activeConfig = computed(() => configs.value.find((c) => catalogTag(c) === selectedDetailTag.value) || null);
 
       const formatRub = (n: number | null | undefined) => {
         if (n == null || Number.isNaN(Number(n))) return '—';
@@ -300,20 +214,20 @@
         return `balance: ${formatRub(data.total_balance)} (${ok.length} keys)`;
       });
 
-      const selectConfig = (c: SsCatalogConfig) => {
-        selectedDetailTag.value = catalogTag(c);
-        editProtocol.value = c.protocol || 'vless';
-        editLocationId.value = c.location_id != null ? Number(c.location_id) : '';
-        editServerId.value = c.server_id != null ? String(c.server_id) : '';
-        editAutoRenewal.value = !!c.auto_renewal;
-        editAutoRenewDays.value = c.auto_renewal_days || 30;
-        editDisableReality.value = false;
-        editChangeSni.value = false;
-        editUseXhttp.value = false;
-        editUseGrpc.value = false;
-        statsHint.value = '';
-        trafficHint.value = '';
-        autofitStatus.value = '';
+      const applyLocations = (locs: SsLocation[]) => {
+        locations.value = locs;
+        if (configs.value.length && locs.length) {
+          configs.value = enrichCatalogWithLocations(configs.value, locs);
+        }
+      };
+
+      const loadLocationsBrowser = async (): Promise<SsLocation[] | null> => {
+        try {
+          const data = await ssApiGet<SsLocation[]>('/locations');
+          return Array.isArray(data) ? data : null;
+        } catch {
+          return null;
+        }
       };
 
       const loadCaches = async () => {
@@ -326,23 +240,35 @@
         } catch {
           /* empty */
         }
+
+        let nextConfigs: SsCatalogConfig[] = [];
         try {
           const cfg = await engine.getWebData<SsCatalogConfig[] | { data?: SsCatalogConfig[] }>('ss_configs');
-          const next = parseCatalogPayload(cfg?.data);
-          if (next.length) {
-            configs.value = next;
-            configsStatus.value = `${next.length} configs in catalog`;
-            if (!selectedDetailTag.value && next[0]) selectConfig(next[0]);
-          }
+          nextConfigs = parseCatalogPayload(cfg?.data);
         } catch {
           configsStatus.value = 'Catalog not loaded';
         }
+
+        let nextLocs: SsLocation[] = [];
         try {
           const loc = await engine.getWebData<SsLocation[] | { data?: SsLocation[] }>('ss_locations');
           const raw = loc?.data;
-          locations.value = Array.isArray(raw) ? raw : Array.isArray((raw as { data?: SsLocation[] })?.data) ? (raw as { data: SsLocation[] }).data : [];
+          nextLocs = Array.isArray(raw) ? raw : Array.isArray((raw as { data?: SsLocation[] })?.data) ? (raw as { data: SsLocation[] }).data : [];
         } catch {
-          locations.value = [];
+          nextLocs = [];
+        }
+
+        if (!nextLocs.length) {
+          const browserLocs = await loadLocationsBrowser();
+          if (browserLocs?.length) nextLocs = browserLocs;
+        }
+
+        locations.value = nextLocs;
+        if (nextConfigs.length) {
+          configs.value = enrichCatalogWithLocations(nextConfigs, nextLocs);
+          configsStatus.value = `${configs.value.length} configs` + (nextLocs.length ? ` · ${nextLocs.length} locations` : '');
+        } else if (!configsStatus.value) {
+          configsStatus.value = 'No catalog yet — add an API key and Sync.';
         }
       };
 
@@ -468,7 +394,6 @@
 
       const importSelected = async () => {
         if (!selectedIds.value.length) return;
-        // Backend accepts ids; pass numeric ids when possible, else tags (catalog lookup supports both).
         const ids = selectedIds.value.map((v) => {
           const c = configs.value.find((x) => importKey(x) === v || String(x.id) === String(v));
           return c ? c.id : v;
@@ -478,119 +403,13 @@
           await engine.loadXrayConfig();
         });
         await loadCaches();
-        alert('Imported. After Start/Restart Outbounds show 🟢/🔴. Paid/cloud use ss-po-* / ss-cs-* tags.');
+        alert('Imported. After Start/Restart Outbounds show 🟢/🔴.');
       };
 
-      const loadServers = async () => {
-        if (!activeConfig.value || editLocationId.value === '') return;
-        await engine.submit(
-          SubmitActions.ssAvailableServers,
-          { location_id: editLocationId.value, protocol: editProtocol.value },
-          3
-        );
-        try {
-          const resp = await engine.getWebData<AvailableServer[]>('ss_available_servers');
-          availableServers.value = Array.isArray(resp?.data) ? resp.data : [];
-        } catch {
-          availableServers.value = [];
-        }
-      };
-
-      const applySettings = async () => {
-        const c = activeConfig.value;
-        if (!c) return;
-        if (!confirm('PATCH settings recreates the provider config. Continue?')) return;
-        const body: Record<string, unknown> = {
-          id: c.id,
-          source: c._ss_source || 'config',
-          parent_id: c._ss_parent_id || undefined,
-          location_id: editLocationId.value,
-          protocol: editProtocol.value
-        };
-        if (editServerId.value) body.server_id = Number(editServerId.value);
-        if (editDisableReality.value) body.disable_reality = true;
-        if (editChangeSni.value) body.change_sni = true;
-        if (editUseXhttp.value) body.use_xhttp = true;
-        if (editUseGrpc.value) body.use_grpc = true;
-        await engine.executeWithLoadingProgress(async () => {
-          await engine.submit(SubmitActions.ssUpdateSettings, body, 15);
-          await engine.loadXrayConfig();
-        });
-        await loadCaches();
-      };
-
-      const runAutofit = async () => {
-        const c = activeConfig.value;
-        if (!c) return;
-        if (!confirm('Autofit will try servers/protocols/flags via API until Observatory is green. Continue?')) return;
-        autofitStatus.value = 'Running autofit…';
-        await engine.executeWithLoadingProgress(async () => {
-          await engine.submit(SubmitActions.ssAutofit, { id: c.id }, 90);
-          await engine.loadXrayConfig();
-        });
-        try {
-          const resp = await engine.getWebData<{ status?: string; winner?: unknown; attempts?: unknown[] }>('ss_autofit');
-          const st = resp?.data?.status || 'unknown';
-          autofitStatus.value =
-            st === 'ok' ? `OK — ${JSON.stringify(resp.data?.winner || {})}` : `Finished: ${st} (${resp?.data?.attempts?.length || 0} attempts)`;
-        } catch {
-          autofitStatus.value = 'Autofit finished (see system log)';
-        }
-        await loadCaches();
-      };
-
-      const loadServerStats = async () => {
-        const c = activeConfig.value;
-        if (!c) return;
-        await engine.submit(
-          SubmitActions.ssServerStats,
-          { id: c.id, source: c._ss_source || 'config', parent_id: c._ss_parent_id || undefined },
-          4
-        );
-        try {
-          const resp = await engine.getWebData<{ data?: { host?: string; status?: string; uptime_days?: number; stats?: unknown[] } }>(
-            'ss_server_stats'
-          );
-          const d = resp?.data?.data;
-          statsHint.value = d
-            ? `${d.host || '?'} · ${d.status || '?'} · uptime ${d.uptime_days ?? '—'}d · points ${d.stats?.length ?? 0}`
-            : 'No stats';
-        } catch {
-          statsHint.value = 'Stats unavailable';
-        }
-      };
-
-      const loadTraffic = async () => {
-        const c = activeConfig.value;
-        const scope_type = (c?._ss_source || 'config') === 'paid_option' ? 'paid_option_config' : 'user_config';
-        await engine.submit(SubmitActions.ssTraffic, { scope_type, scope_id: c?.id, group_by: 'day' }, 4);
-        try {
-          const resp = await engine.getWebData<{ data?: { points?: { up?: number; down?: number }[] } }>('ss_traffic');
-          const points = resp?.data?.data?.points || [];
-          const up = points.reduce((s, p) => s + Number(p.up || 0), 0);
-          const down = points.reduce((s, p) => s + Number(p.down || 0), 0);
-          trafficHint.value = points.length ? `points=${points.length} up=${up} down=${down}` : 'No traffic points';
-        } catch {
-          trafficHint.value = 'Traffic unavailable';
-        }
-      };
-
-      const saveAutoRenewal = async () => {
-        const c = activeConfig.value;
-        if (!c) return;
-        await engine.submit(
-          SubmitActions.ssAutoRenewal,
-          { id: c.id, enabled: editAutoRenewal.value, days: editAutoRenewDays.value },
-          4
-        );
-        await loadCaches();
-      };
-
-      const renewNow = async () => {
-        const c = activeConfig.value;
-        if (!c) return;
-        if (!confirm(`Request renewal for ${catalogTitle(c)}?`)) return;
-        await engine.submit(SubmitActions.ssRenew, { id: c.id }, 6);
+      const openManage = (c: SsCatalogConfig) => manageModal.value?.show(c);
+      const onStats = async (c: SsCatalogConfig) => infoModal.value?.showStats(c);
+      const onTraffic = async (c: SsCatalogConfig) => infoModal.value?.showTraffic(c);
+      const onManagedUpdated = async () => {
         await loadCaches();
       };
 
@@ -600,23 +419,18 @@
           return;
         }
         await engine.submit(SubmitActions.ssTopup, { amount: topupAmount.value }, 6);
-        topupHint.value = 'Top-up requested — check payment link in ss_topup.json / account';
+        topupHint.value = 'Top-up requested — check payment link / account';
         await refreshBalances(true);
       };
 
       const doTopupCalc = async () => {
-        await engine.submit(SubmitActions.ssTopupCalc, { amount: topupAmount.value || 100 }, 3);
         try {
-          const resp = await engine.getWebData<unknown>('ss_topup_calc');
-          topupHint.value = `Calc: ${JSON.stringify(resp?.data || {}).slice(0, 180)}`;
-        } catch {
-          topupHint.value = 'Calc cached on router';
+          const data = await ssApiGet<unknown>(`/profile/balance/calculate?amount=${topupAmount.value || 100}`);
+          topupHint.value = `Calc: ${JSON.stringify(data || {}).slice(0, 220)}`;
+        } catch (e: any) {
+          topupHint.value = e?.response?.data?.message || e?.message || 'Calc failed';
         }
       };
-
-      watch(editProtocol, () => {
-        availableServers.value = [];
-      });
 
       onMounted(async () => {
         await loadCaches();
@@ -632,49 +446,33 @@
         configs,
         configsStatus,
         selectedIds,
-        selectedDetailTag,
         channelLabel,
         locations,
-        availableServers,
-        protocols,
-        editProtocol,
-        editLocationId,
-        editServerId,
-        editDisableReality,
-        editChangeSni,
-        editUseXhttp,
-        editUseGrpc,
-        editAutoRenewal,
-        editAutoRenewDays,
-        autofitStatus,
-        statsHint,
-        trafficHint,
         topupAmount,
         topupHint,
-        activeConfig,
+        infoModal,
+        manageModal,
         catalogTitle,
         catalogTag,
         catalogSourceLabel,
+        catalogLocationLabel,
         formatExpiresAt,
         formatRub,
         isImported,
         importKey,
-        selectConfig,
         saveKey,
         addKey,
         removeKey,
         syncCatalog,
         refreshBalances,
         importSelected,
-        loadServers,
-        applySettings,
-        runAutofit,
-        loadServerStats,
-        loadTraffic,
-        saveAutoRenewal,
-        renewNow,
+        openManage,
+        onStats,
+        onTraffic,
+        onManagedUpdated,
         doTopup,
-        doTopupCalc
+        doTopupCalc,
+        applyLocations
       };
     }
   });
@@ -691,37 +489,5 @@
   }
   .ss-account .button_gen_small {
     margin: 4px 4px 0 0;
-  }
-  .ss-row-active td {
-    background: rgba(47, 111, 237, 0.12);
-  }
-  .ss-selected-title {
-    font-weight: 600;
-    margin-bottom: 4px;
-  }
-  .ss-panel {
-    margin-top: 12px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(160, 167, 167, 0.35);
-  }
-  .ss-panel-title {
-    font-weight: 600;
-    margin-bottom: 6px;
-  }
-  .ss-field {
-    display: inline-block;
-    margin: 4px 12px 4px 0;
-    font-size: 12px;
-  }
-  .ss-check {
-    display: inline-block;
-    margin: 4px 12px 4px 0;
-    font-size: 12px;
-  }
-  .ss-pre {
-    margin-top: 6px;
-    white-space: pre-wrap;
-    font-size: 11px;
-    color: #c9d1d9;
   }
 </style>

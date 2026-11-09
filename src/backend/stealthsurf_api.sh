@@ -366,7 +366,7 @@ ss_api_sync_configs_one() {
 }
 
 ss_api_enrich_catalog_locations() {
-    # Stamp human location titles onto unified catalog entries.
+    # Stamp human location titles/codes onto unified catalog entries.
     local file="${1:-$SS_CACHE_CONFIGS}"
     [ -f "$file" ] || return 0
     [ -f "$SS_CACHE_LOCATIONS" ] || return 0
@@ -375,7 +375,10 @@ ss_api_enrich_catalog_locations() {
       map(
         . as $c |
         ($L | map(select((.id | tostring) == (($c.location_id // "") | tostring))) | first) as $hit |
-        $c + { _ss_location_title: ($hit.title // $hit.code // $c._ss_location_title // null) }
+        $c + {
+          _ss_location_title: ($hit.title // $hit.caption // $hit.code // $c._ss_location_title // null),
+          _ss_location_code: ($hit.code // $c._ss_location_code // null)
+        }
       )
     ' "$file" >"$file.tmp" && mv -f "$file.tmp" "$file"
 }
