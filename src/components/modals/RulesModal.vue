@@ -62,6 +62,7 @@
       <label class="rule-filter">
         <input type="text" placeholder="rule filter" v-model="filterText" @input="filter_rules" />
       </label>
+      <input class="button_gen button_gen_small" type="button" :value="$t('com.RulesModal.create_popular')" @click.prevent="createPopularRules" />
       <input class="button_gen button_gen_small" type="button" :value="$t('com.RulesModal.reassign')" :disabled="!usedTargets.length" @click.prevent="openReassign" />
       <input class="button_gen button_gen_small" type="button" :value="$t('com.RulesModal.add_new_rule')" @click.prevent="addRule" />
     </template>
@@ -305,7 +306,7 @@
   import { defineComponent, ref, computed, nextTick, watch, Ref } from 'vue';
   import Modal from '@main/Modal.vue';
   import xrayConfig from '@/modules/XrayConfig';
-  import { XrayRoutingRuleObject } from '@/modules/CommonObjects';
+  import { XrayRoutingObject, XrayRoutingRuleObject } from '@/modules/CommonObjects';
   import Hint from '@main/Hint.vue';
   import draggable from 'vuedraggable';
   import { useI18n } from 'vue-i18n';
@@ -313,6 +314,7 @@
   import { balancerNow } from '@/modules/LiveStatus';
   import { describeViewShort } from '@/modules/BalancerStatus';
   import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
+  import { XrayProtocol } from '@/modules/Options';
 
   export default defineComponent({
     name: 'RulesModal',
@@ -497,6 +499,48 @@
         currentRule.value.user = [];
         targetType.value = 'outbound';
         modalAdd.value?.show(() => {});
+      };
+
+      const popularRuleNames = new Set([
+        XrayRoutingObject.POPULAR_DOMAIN_RULE,
+        XrayRoutingObject.POPULAR_IP_RULE,
+        XrayRoutingObject.POPULAR_DISCORD_RULE
+      ]);
+
+      const pickPopularOutboundTag = (): string | undefined => {
+        const proxy = xrayConfig.outbounds.find(
+          (o) =>
+            !!o.tag &&
+            !o.isSystem() &&
+            o.protocol !== XrayProtocol.FREEDOM &&
+            o.protocol !== XrayProtocol.BLACKHOLE &&
+            o.protocol !== XrayProtocol.DNS
+        );
+        return proxy?.tag;
+      };
+
+      const createPopularRules = () => {
+        const outboundTag = pickPopularOutboundTag();
+        if (!outboundTag) {
+          alert(t('com.RulesModal.alert_popular_no_proxy'));
+          return;
+        }
+
+        const existing = userRules.value.filter((r) => r.name && popularRuleNames.has(r.name));
+        if (existing.length) {
+          if (!confirm(t('com.RulesModal.alert_popular_replace', [labelOutbound(outboundTag)]))) return;
+          for (const r of existing) {
+            const arr = r.enabled ? rules : disabledRules;
+            const idx = arr.value.indexOf(r);
+            if (idx >= 0) arr.value.splice(idx, 1);
+          }
+        } else if (!confirm(t('com.RulesModal.alert_popular_confirm', [labelOutbound(outboundTag)]))) {
+          return;
+        }
+
+        const preset = new XrayRoutingObject().popularServiceRules(outboundTag);
+        rules.value.push(...preset);
+        reindexRules();
       };
 
       const editRule = (rule: XrayRoutingRuleObject) => {
@@ -790,6 +834,7 @@
         activeField,
         deleteRule,
         addRule,
+        createPopularRules,
         editRule,
         saveRule,
         show,
