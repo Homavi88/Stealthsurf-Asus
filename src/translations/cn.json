@@ -135,7 +135,11 @@
       "warn_auto_fallback_requires_observatory": "需要在\"通用\"选项卡中启用 Xray 连接检查。",
       "label_subscription_filters": "轮换过滤器",
       "hint_subscription_filters": "按名称过滤用于自动故障转移轮换的订阅链接。<hr/>输入逗号分隔的关键词（例如 <code>Canada, Denmark</code>）。<hr/>仅使用名称包含至少一个关键词的链接。<hr/>如果为空，则使用完整的订阅池。",
-      "placeholder_subscription_filters": "例如 Canada, Denmark, Japan"
+      "placeholder_subscription_filters": "例如 Canada, Denmark, Japan",
+      "tab_stealthsurf": "StealthSurf",
+      "label_ss_catalog_auto_sync": "自动同步目录",
+      "hint_ss_catalog_auto_sync": "定期拉取 StealthSurf API 目录，并比较已导入的 <code>ss-*</code> 代理连接设置（URL、协议、服务器、xray/awg）。<hr/>若提供商侧有变更，会自动重建这些出站；若 Xray 正在运行则重启。<hr/>标题与在线状态每次同步都会更新且无需重启。手动 <b>Sync catalog</b> 也会做同样的比较。",
+      "ss_sync_15m": "每 15 分钟"
     },
     "ImportConfig": {
       "import_config_file": "导入配置"

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.1.8] - 2026-11-09
+
+### StealthSurf catalog autosync
+
+- **General Options → StealthSurf**: interval for automatic catalog poll (`15m` … `12h`, or disabled)
+- Cron pulls `/configs`, fingerprints connection fields of imported `ss-*` outbounds, and rebuilds only when URL/protocol/server/xray/awg changed
+- Manual **Sync catalog** uses the same compare-and-refresh path; title/`is_online` still stamp without a restart when unchanged
+
+---
+
 ## [1.1.7] - 2026-11-09
 
 ### API titles, catalog online status, DNS leak via StealthSurf

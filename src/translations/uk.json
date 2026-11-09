@@ -135,7 +135,11 @@
       "warn_auto_fallback_requires_observatory": "Потрібно увімкнути перевірку з'єднань Xray у вкладці «Загальні».",
       "label_subscription_filters": "Фільтри ротації",
       "hint_subscription_filters": "Фільтрувати посилання підписок для авто-ротації за назвою.<hr/>Введіть ключові слова через кому (напр. <code>Canada, Denmark</code>).<hr/>Будуть використовуватись тільки посилання, що містять хоча б одне ключове слово.<hr/>Якщо порожньо, використовується весь пул підписок.",
-      "placeholder_subscription_filters": "напр. Canada, Denmark, Japan"
+      "placeholder_subscription_filters": "напр. Canada, Denmark, Japan",
+      "tab_stealthsurf": "StealthSurf",
+      "label_ss_catalog_auto_sync": "Автосинхронізація каталогу",
+      "hint_ss_catalog_auto_sync": "Періодично запитувати каталог StealthSurf API і порівнювати налаштування вже імпортованих проксі <code>ss-*</code> (URL, протокол, сервер, xray/awg).<hr/>Якщо у провайдера щось змінилося — outbound-и перезбираються автоматично, а Xray перезапускається, якщо він запущений.<hr/>Назва та online оновлюються при кожному sync без перезапуску. Ручний <b>Sync catalog</b> робить те саме порівняння.",
+      "ss_sync_15m": "Кожні 15 хвилин"
     },
     "ImportConfig": {
       "import_config_file": "Імпортувати файл конфігурації"

@@ -34,7 +34,7 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.7"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.8"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           sh -n /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
@@ -51,8 +51,13 @@ jobs:
           grep -q 'ss_api_fetch_balances' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_stamp_outbounds_from_catalog' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'ss_api_ensure_dns_leak' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_api_apply_provider_connection_changes' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'cron_ss_catalog_sync_add' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q '_ss_title' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -qE 'ssSetKey|api.stealthsurf.net|ownCustomSettings|ext:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/app.js
+          grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp
           sh tests/backend/scaffold.spec.sh
+          sh tests/backend/ss_catalog_sync.spec.sh
           sh tests/backend/test-xrayui-detect.sh

@@ -139,7 +139,11 @@
       "warn_auto_fallback_requires_observatory": "Requires Xray Connection Check to be enabled in the General tab.",
       "label_subscription_filters": "Rotation Filters",
       "hint_subscription_filters": "Filter subscription links for auto-failover rotation by name.<hr/>Enter comma-separated keywords (e.g. <code>Canada, Denmark</code>).<hr/>Only links whose name contains at least one keyword will be used.<hr/>If empty, the full subscription pool is used.",
-      "placeholder_subscription_filters": "e.g. Canada, Denmark, Japan"
+      "placeholder_subscription_filters": "e.g. Canada, Denmark, Japan",
+      "tab_stealthsurf": "StealthSurf",
+      "label_ss_catalog_auto_sync": "Auto-sync catalog",
+      "hint_ss_catalog_auto_sync": "Periodically pull the StealthSurf API catalog and compare connection settings of already imported <code>ss-*</code> proxies (URL, protocol, server, xray/awg config).<hr/>When something changed at the provider, those outbounds are rebuilt automatically and Xray is restarted if it is running.<hr/>Title and online status are stamped on every sync without a restart. Manual <b>Sync catalog</b> also applies the same comparison.",
+      "ss_sync_15m": "Every 15 minutes"
     },
     "ImportConfig": {
       "import_config_file": "Import config file"

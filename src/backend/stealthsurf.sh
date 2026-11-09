@@ -67,7 +67,7 @@ subscriptions)
     ;;
 cron)
     case "$2" in
-    logrotate | geodata | subscription_refresh | subscription_fallback | ipset_save | watchdog)
+    logrotate | geodata | subscription_refresh | subscription_fallback | ss_catalog_sync | ipset_save | watchdog)
         cron_job_lock "$2" || exit 0
         update_loading_progress() { :; }
         ;;
@@ -90,6 +90,9 @@ cron)
         ;;
     subscription_fallback)
         failover_check
+        ;;
+    ss_catalog_sync)
+        cron_ss_catalog_sync_run
         ;;
     watchdog)
         cron_watchdog_run

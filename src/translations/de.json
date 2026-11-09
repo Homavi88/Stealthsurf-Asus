@@ -133,7 +133,11 @@
       "hint_subscription_fallback_interval": "Wie oft die Erreichbarkeit der Pool-verwalteten Outbounds überprüft werden soll.",
       "label_subscription_filters": "Rotationsfilter",
       "hint_subscription_filters": "Abonnement-Links für die automatische Failover-Rotation nach Name filtern.<hr/>Kommagetrennte Schlüsselwörter (z.B. <code>Canada, Denmark</code>).<hr/>Nur Links, deren Name mindestens ein Schlüsselwort enthält, werden verwendet.<hr/>Wenn leer, wird der gesamte Abonnement-Pool verwendet.",
-      "placeholder_subscription_filters": "z.B. Canada, Denmark, Japan"
+      "placeholder_subscription_filters": "z.B. Canada, Denmark, Japan",
+      "tab_stealthsurf": "StealthSurf",
+      "label_ss_catalog_auto_sync": "Katalog automatisch synchronisieren",
+      "hint_ss_catalog_auto_sync": "Holt periodisch den StealthSurf-API-Katalog und vergleicht die Verbindungseinstellungen bereits importierter <code>ss-*</code>-Proxys (URL, Protokoll, Server, xray/awg).<hr/>Bei Änderungen beim Anbieter werden diese Outbounds neu aufgebaut und Xray neu gestartet, falls es läuft.<hr/>Titel und Online-Status werden bei jedem Sync ohne Neustart aktualisiert. Manuelles <b>Sync catalog</b> macht denselben Vergleich.",
+      "ss_sync_15m": "Alle 15 Minuten"
     },
     "ImportConfig": {
       "import_config_file": "Konfigurationsdatei importieren"

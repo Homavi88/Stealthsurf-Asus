@@ -5,6 +5,7 @@ CRU_GEOUPD_ID="stealthsurf_geodataupdate"
 CRU_LR_ID="stealthsurf_logrotate"
 CRU_SUB_REFRESH_ID="stealthsurf_subscription_refresh"
 CRU_SUB_FALLBACK_ID="stealthsurf_subscription_fallback"
+CRU_SS_CATALOG_SYNC_ID="stealthsurf_catalog_sync"
 CRU_IPSET_SAVE_ID="stealthsurf_ipset_save"
 CRU_WATCHDOG_ID="stealthsurf_watchdog"
 XRAY_DESIRED_STATE_FILE="/tmp/stealthsurf_xray.desired"
@@ -120,8 +121,8 @@ cron_job_delete() {
 
 cron_jobs_clear() {
     log_info "Clearing cron jobs for $ADDON_TITLE"
-    # Delete all cru jobs whose name starts with xrayui
-    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep '^xrayui' |
+    # Delete all cru jobs whose name starts with stealthsurf (legacy xrayui kept for safety)
+    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep -E '^(stealthsurf|xrayui)' |
         while read -r id; do
             log_warn " - Deleting cron job $id"
             cru d "$id"
@@ -180,6 +181,58 @@ cron_subscription_fallback_add() {
     fi
 }
 
+cron_ss_catalog_sync_add() {
+    log_info "Configuring $CRU_SS_CATALOG_SYNC_ID cron job for $ADDON_TITLE"
+
+    load_xrayui_config
+    local ss_catalog_auto_sync="${ss_catalog_auto_sync:-disabled}"
+    cron_job_delete "$CRU_SS_CATALOG_SYNC_ID"
+
+    local cron_expr=""
+    case "$ss_catalog_auto_sync" in
+    15m) cron_expr="*/15 * * * *" ;;
+    30m) cron_expr="*/30 * * * *" ;;
+    1h) cron_expr="0 * * * *" ;;
+    3h) cron_expr="0 */3 * * *" ;;
+    6h) cron_expr="0 */6 * * *" ;;
+    12h) cron_expr="0 */12 * * *" ;;
+    *)
+        log_info "CRON job $CRU_SS_CATALOG_SYNC_ID not added (ss_catalog_auto_sync=$ss_catalog_auto_sync)"
+        return
+        ;;
+    esac
+
+    cru a "$CRU_SS_CATALOG_SYNC_ID" "$cron_expr $ADDON_SCRIPT cron ss_catalog_sync" || {
+        log_error "Failed to add CRU job $CRU_SS_CATALOG_SYNC_ID"
+        return
+    }
+    log_ok "CRON job $CRU_SS_CATALOG_SYNC_ID for $ADDON_TITLE added successfully ($ss_catalog_auto_sync)"
+}
+
+cron_ss_catalog_sync_run() {
+    update_loading_progress() { :; }
+    load_xrayui_config
+    local ss_catalog_auto_sync="${ss_catalog_auto_sync:-disabled}"
+    case "$ss_catalog_auto_sync" in
+    15m | 30m | 1h | 3h | 6h | 12h) ;;
+    *)
+        log_info "StealthSurf catalog autosync disabled — skip"
+        return 0
+        ;;
+    esac
+    if ! ss_require_key 2>/dev/null; then
+        log_info "StealthSurf catalog autosync: no API key — skip"
+        return 0
+    fi
+    log_info "StealthSurf catalog autosync starting…"
+    if ss_api_sync_all; then
+        log_ok "StealthSurf catalog autosync finished"
+        return 0
+    fi
+    log_warn "StealthSurf catalog autosync failed"
+    return 1
+}
+
 cron_job_lock() {
     local lockfile="/tmp/stealthsurf_cron_$1.lock"
     which flock >/dev/null 2>&1 || return 0
@@ -202,6 +255,7 @@ cron_jobs_add() {
     cron_geodata_add
     cron_subscription_refresh_add
     cron_subscription_fallback_add
+    cron_ss_catalog_sync_add
     cron_ipset_save_add
     cron_watchdog_add
 }

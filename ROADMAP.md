@@ -22,7 +22,7 @@ plus StealthSurf API control plane (keys, balances, catalog, import).
 - [ ] Router smoke on Merlin models (redirect/tproxy + API sync)
 - [ ] Safer Web exposure of API keys (browser CORS balance without shipping full keys)
 - [ ] PATCH config settings from UI (protocol/location) → rebuild
-- [ ] Autosync cron for StealthSurf catalog fingerprint
+- [x] Autosync cron for StealthSurf catalog fingerprint (General Options → StealthSurf)
 - [ ] Optional simple-mode presets tailored to StealthSurf catalog
 - [ ] Docs refresh (INSTALL / CLI) for 1.1 paths
 
