@@ -14,12 +14,12 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.9-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.10-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#установка"><strong>Установка</strong></a> ·
-  <a href="#что-нового-в-118"><strong>1.1.9</strong></a> ·
+  <a href="#что-нового-в-118"><strong>1.1.10</strong></a> ·
   <a href="#возможности"><strong>Возможности</strong></a> ·
   <a href="#веб-интерфейс"><strong>WebUI</strong></a> ·
   <a href="#cli-за-минуту"><strong>CLI</strong></a> ·
@@ -30,7 +30,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf: без клиента на телефонах, с балансом/каталогом из API, импортом в outbounds и коротким CLI `ssurf`. Вкладка **VPN → StealthSurf**.
 
-Актуальная версия **1.1.9** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
+Актуальная версия **1.1.10** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
 
 ## Установка
 
@@ -64,6 +64,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 
 | | |
 | --- | --- |
+| **1.1.10 titles** | В правилах / балансировщиках / SNI / sockopt / import — title из API вместо только `ss-<id>` |
 | **1.1.9 geodata** | Мусор `outbound-ss-*.json` убирается из `data/` — больше нет `invalid attribute: ss-…` при recompile |
 | **Автосинк каталога** | General Options → StealthSurf: опрос API по интервалу, сравнение настроек `ss-*`, автообновление при изменениях у провайдера |
 | **Платформа XrayUI** | Полноценный WebUI: outbounds, routing, DNS, clients online, geodata, updates |
@@ -129,7 +130,7 @@ ssurf h                # справка · ssurf m — меню
 
 ## Рядом с XrayUI
 
-StealthSurf **1.1.9** держит своё состояние:
+StealthSurf **1.1.10** держит своё состояние:
 
 | | StealthSurf | Stock XrayUI |
 | --- | --- | --- |

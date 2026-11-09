@@ -79,7 +79,7 @@
             </th>
             <td>
               <select v-model="state.replaceTag" class="input_option">
-                <option v-for="outbound in replaceableOutbounds" :key="outbound.tag" :value="outbound.tag">{{ outbound.tag }} ({{ outbound.protocol }})</option>
+                <option v-for="outbound in replaceableOutbounds" :key="outbound.tag" :value="outbound.tag">{{ displayTitle(outbound) }} ({{ outbound.protocol }})</option>
               </select>
             </td>
           </tr>
@@ -133,6 +133,7 @@
   import { XrayBlackholeOutboundObject, XrayFreedomOutboundObject, XrayOutboundObject } from '@/modules/OutboundObjects';
   import { XrayProtocol } from '@/modules/Options';
   import { IProtocolType } from '@/modules/Interfaces';
+  import { outboundDisplayTitle } from '@/modules/StealthSurfCatalog';
   import { useI18n } from 'vue-i18n';
 
   type ImportType = 'qr' | 'url' | 'json' | 'file';
@@ -173,6 +174,7 @@
       const replaceableOutbounds = computed(() =>
         props.config.outbounds.filter((o) => o.tag && !o.isSystem() && ![XrayProtocol.FREEDOM, XrayProtocol.BLACKHOLE].includes(o.protocol))
       );
+      const displayTitle = (outbound: XrayOutboundObject<IProtocolType>) => outboundDisplayTitle(outbound);
 
       watch(
         () => state.importMode,
@@ -387,6 +389,7 @@
         isReplace,
         isComplete,
         replaceableOutbounds,
+        displayTitle,
         show,
         onImport,
         onQrFile,

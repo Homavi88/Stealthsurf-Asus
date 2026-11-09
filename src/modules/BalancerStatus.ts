@@ -321,15 +321,17 @@ export const sameBalancer = (edited: unknown, running: RunningBalancer | undefin
 };
 
 export type Translate = (key: string, args: unknown[]) => string;
+export type TagLabel = (tag: string | undefined) => string;
 
-const tagLabel = (tag: string | undefined) => tag || 'no tag';
+const defaultTagLabel: TagLabel = (tag) => tag || 'no tag';
 
-export const describeViewShort = (view: BalancerView, t: Translate): string => {
+export const describeViewShort = (view: BalancerView, t: Translate, labelTag: TagLabel = defaultTagLabel): string => {
+  const tagLabel = (tag: string | undefined) => labelTag(tag) || 'no tag';
   switch (view.kind) {
     case 'next':
       return view.delay === undefined ? tagLabel(view.tags[0]) : t('com.BalancerModal.now_next', [tagLabel(view.tags[0]), view.delay]);
     case 'tied':
-      return t('com.BalancerModal.now_tied', [view.tags.join(', '), view.delay]);
+      return t('com.BalancerModal.now_tied', [view.tags.map((tag) => tagLabel(tag)).join(', '), view.delay]);
     case 'rotating':
       return view.dead.length
         ? t('com.BalancerModal.now_rotating_dead', [view.tags.length, view.total, view.dead.length])

@@ -234,7 +234,7 @@
                 <label v-for="r in availableRules" :key="r.idx" class="rule-option" :class="{ selected: selectedRuleIdx === r.idx }" @click="selectedRuleIdx = r.idx">
                   <input type="radio" :value="r.idx" v-model="selectedRuleIdx" />
                   <span class="rule-name">{{ r.name }}</span>
-                  <span class="rule-outbound">{{ r.outboundTag }}</span>
+                  <span class="rule-outbound">{{ labelOutbound(r.outboundTag) }}</span>
                 </label>
               </div>
               <div v-else class="no-rules-hint">{{ $t('com.SniLogs.no_rules_available') }}</div>
@@ -247,7 +247,7 @@
                 <div v-if="selectedRuleIdx === -1" class="new-rule-fields">
                   <input type="text" v-model="newRuleName" :placeholder="$t('com.SniLogs.rule_name')" class="input-small" />
                   <select v-model="selectedOutbound" class="input_option input-small">
-                    <option v-for="tag in outboundTags" :key="tag" :value="tag">{{ tag }}</option>
+                    <option v-for="tag in outboundTags" :key="tag" :value="tag">{{ labelOutbound(tag) }}</option>
                   </select>
                 </div>
               </div>
@@ -286,9 +286,11 @@
   import engine, { SubmitActions } from '@modules/Engine';
   import xrayConfig from '@/modules/XrayConfig';
   import { XrayRoutingRuleObject, XrayRoutingObject } from '@/modules/CommonObjects';
+  import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
+  const labelOutbound = (tag: string | undefined) => outboundTagDisplayTitle(tag, xrayConfig.outbounds);
 
   // ─── Interfaces ───────────────────────────────────────────────
   interface SniLogEntry {

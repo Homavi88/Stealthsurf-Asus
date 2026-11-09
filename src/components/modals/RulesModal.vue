@@ -147,7 +147,7 @@
           <td>
             <select class="input_option" v-model="currentRule.outboundTag">
               <option v-for="opt in outbounds" :key="opt" :value="opt">
-                {{ opt }}
+                {{ labelOutbound(opt) }}
               </option>
             </select>
           </td>
@@ -312,6 +312,7 @@
   import { EngineGeoTags } from '@modules/Engine';
   import { balancerNow } from '@/modules/LiveStatus';
   import { describeViewShort } from '@/modules/BalancerStatus';
+  import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
 
   export default defineComponent({
     name: 'RulesModal',
@@ -354,11 +355,13 @@
       const targetType = ref<'outbound' | 'balancer'>('outbound');
       const filterText = ref<string>('');
 
+      const labelOutbound = (tag: string | undefined) => outboundTagDisplayTitle(tag, xrayConfig.outbounds);
+
       const balancerNowText = (r: XrayRoutingRuleObject) => {
         if (!r.balancerTag || r.outboundTag || r.enabled === false) return '';
         const edited = (xrayConfig.routing?.balancers || []).find((b) => b.tag === r.balancerTag);
         const now = balancerNow(edited);
-        return now.state === 'view' ? describeViewShort(now.view, (key, args) => t(key, args)) : '';
+        return now.state === 'view' ? describeViewShort(now.view, (key, args) => t(key, args), labelOutbound) : '';
       };
 
       const modalReassign = ref<InstanceType<typeof Modal> | null>(null);
@@ -369,11 +372,11 @@
 
       // one list for both target kinds; a rule routes to exactly one of them
       const targetOptions = computed(() => [
-        ...outbounds.value.map((tag) => ({ key: `o:${tag}`, label: tag })),
+        ...outbounds.value.map((tag) => ({ key: `o:${tag}`, label: labelOutbound(tag) })),
         ...balancerTags.value.map((tag) => ({ key: `b:${tag}`, label: `⚖ ${tag}` }))
       ]);
       const targetKey = (r: XrayRoutingRuleObject) => (r.balancerTag ? `b:${r.balancerTag}` : `o:${r.outboundTag ?? ''}`);
-      const targetLabel = (key: string) => (key.startsWith('b:') ? `⚖ ${key.slice(2)}` : key.slice(2));
+      const targetLabel = (key: string) => (key.startsWith('b:') ? `⚖ ${key.slice(2)}` : labelOutbound(key.slice(2)));
 
       // edits the shared rule objects in place, as the rule editor's v-model does
       const retarget = (targets: XrayRoutingRuleObject[], key: string) => {
@@ -563,7 +566,7 @@
           return arr.length > 3 ? arr.slice(0, 3).join(', ') + ' …' : arr.join(', ');
         };
 
-        const outbound = rule.balancerTag ? `⚖ ${rule.balancerTag}` : rule.outboundTag || 'n/a';
+        const outbound = rule.balancerTag ? `⚖ ${rule.balancerTag}` : rule.outboundTag ? labelOutbound(rule.outboundTag) : 'n/a';
         const domains = summarize(rule.domain);
         const ips = summarize(rule.ip);
 
@@ -671,6 +674,7 @@
           rule.filtered =
             rule.name?.toLowerCase().includes(pattern) ||
             rule.outboundTag?.toLowerCase().includes(pattern) ||
+            (!!rule.outboundTag && labelOutbound(rule.outboundTag).toLowerCase().includes(pattern)) ||
             rule.domain?.some((d) => d.toLowerCase().includes(pattern)) ||
             rule.ip?.some((ip) => ip.toLowerCase().includes(pattern)) ||
             rule.source?.some((s) => s.toLowerCase().includes(pattern)) ||
@@ -763,6 +767,7 @@
         targetOptions,
         targetKey,
         targetLabel,
+        labelOutbound,
         retarget,
         usedTargets,
         openReassign,

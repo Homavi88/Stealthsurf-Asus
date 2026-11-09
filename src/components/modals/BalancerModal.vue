@@ -151,7 +151,7 @@
               <textarea v-model="selectorText" rows="6" :placeholder="$t('com.BalancerModal.placeholder_selector')"></textarea>
             </div>
             <div class="hint-color" v-if="matchingOutbounds.length">
-              {{ $t('com.BalancerModal.label_matching') }}: {{ matchingOutbounds.join(', ') }}
+              {{ $t('com.BalancerModal.label_matching') }}: {{ matchingOutboundLabels.join(', ') }}
             </div>
           </td>
         </tr>
@@ -164,7 +164,7 @@
             <select class="input_option" v-model="currentBalancer.fallbackTag">
               <option value="">{{ $t('com.BalancerModal.none') }}</option>
               <option v-for="opt in outboundTags" :key="opt" :value="opt">
-                {{ opt }}
+                {{ labelOutbound(opt) }}
               </option>
             </select>
           </td>
@@ -187,6 +187,7 @@
   import { EngineResponseConfig } from '@/modules/Engine';
   import { balancerNow } from '@/modules/LiveStatus';
   import { describeViewShort, toSelector } from '@/modules/BalancerStatus';
+  import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
 
   export default defineComponent({
     name: 'BalancerModal',
@@ -206,6 +207,8 @@
       const modalAdd = ref<InstanceType<typeof Modal> | null>(null);
       const selectorText = ref('');
 
+      const labelOutbound = (tag: string | undefined) => outboundTagDisplayTitle(tag, xrayConfig.outbounds);
+
       const outboundTags = computed(() =>
         xrayConfig.outbounds
           .filter((o) => !o.isSystem())
@@ -221,6 +224,7 @@
         if (!prefixes.length) return [];
         return outboundTags.value.filter((tag) => prefixes.some((prefix) => tag.startsWith(prefix)));
       });
+      const matchingOutboundLabels = computed(() => matchingOutbounds.value.map((tag) => labelOutbound(tag)));
 
       const nowText = (b: XrayBalancerObject) => {
         if (!uiResponse?.value?.xray?.check_connection) return t('com.BalancerModal.now_needs_check');
@@ -233,7 +237,7 @@
           case 'unused':
             return t('com.BalancerModal.now_unused');
           default:
-            return describeViewShort(now.view, (key, args) => t(key, args));
+            return describeViewShort(now.view, (key, args) => t(key, args), labelOutbound);
         }
       };
 
@@ -329,6 +333,8 @@
         selectorText,
         outboundTags,
         matchingOutbounds,
+        matchingOutboundLabels,
+        labelOutbound,
         strategyOptions: XrayBalancerStrategyObject.typeOptions,
         burst,
         autoFallback,

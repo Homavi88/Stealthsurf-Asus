@@ -35,14 +35,24 @@ export const outboundSsId = (proxy: { tag?: string; _ss_id?: string | number }):
   return ssIdFromTag(proxy.tag);
 };
 
-export const outboundDisplayTitle = (
-  proxy: { tag?: string; _ss_title?: string; _ss_id?: string | number },
-  catalog: SsCatalogConfig[] = []
-): string => {
+export type OutboundTitleSource = { tag?: string; _ss_title?: string; _ss_id?: string | number };
+
+export const outboundDisplayTitle = (proxy: OutboundTitleSource, catalog: SsCatalogConfig[] = []): string => {
   const hit = catalogById(catalog, outboundSsId(proxy));
   if (hit) return catalogTitle(hit);
   if (proxy._ss_title) return proxy._ss_title;
   return proxy.tag && proxy.tag !== '' ? proxy.tag : 'no tag';
+};
+
+/** Resolve a routing/balancer tag to the human title shown in Outbounds. */
+export const outboundTagDisplayTitle = (
+  tag: string | undefined,
+  outbounds: OutboundTitleSource[] = [],
+  catalog: SsCatalogConfig[] = []
+): string => {
+  if (!tag) return 'no tag';
+  const proxy = outbounds.find((o) => o.tag === tag);
+  return proxy ? outboundDisplayTitle(proxy, catalog) : tag;
 };
 
 export const outboundApiOnline = (
