@@ -16,7 +16,7 @@ describe('Engine.getWebData', () => {
 
     expect(response.data).toEqual({ log: {} });
     expect(get).toHaveBeenCalledTimes(1);
-    expect(get.mock.calls[0][0]).toBe('/ext/xrayui/xray-config.cab');
+    expect(get.mock.calls[0][0]).toBe('/ext/stealthsurf/xray-config.cab');
     expect(get.mock.calls[0][1].headers).toMatchObject({ 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0' });
   });
 
@@ -26,7 +26,7 @@ describe('Engine.getWebData', () => {
     const response = await engine.getWebData('subscriptions');
 
     expect(response.data).toEqual({ vless: [] });
-    expect(get.mock.calls.map((call) => call[0])).toEqual(['/ext/xrayui/subscriptions.cab', expect.stringMatching(/^\/ext\/xrayui\/subscriptions\.json\?_=\d+$/)]);
+    expect(get.mock.calls.map((call) => call[0])).toEqual(['/ext/stealthsurf/subscriptions.cab', expect.stringMatching(/^\/ext\/stealthsurf\/subscriptions\.json\?_=\d+$/)]);
   });
 
   it('keeps the not found error when neither name exists', async () => {

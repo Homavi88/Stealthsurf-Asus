@@ -82,8 +82,9 @@ initial_response() {
     [ -z "$XRAY_VERSION" ] && log_warn "Failed to get Xray version: $XRAYUI_CORE_ERR"
 
     local profiles
+    local config_dir="${XRAY_CONFIG_DIR:-$(dirname "$XRAY_CONFIG_FILE")}"
     profiles=$(
-        for f in "$XRAY_CONFIG_DIR"/*.json; do
+        for f in "$config_dir"/*.json; do
             [ -f "$f" ] && printf '%s\n' "${f##*/}"
         done | jq -R -s -c 'split("\n")[:-1]' 2>/dev/null
     )
@@ -99,6 +100,12 @@ initial_response() {
             done | jq -R -s -c 'split("\n")[:-1]' 2>/dev/null
     )
     [ -z "$backups" ] && backups="[]"
+
+    local xrayui_json
+    xrayui_json=$(ss_xrayui_status_json 2>/dev/null || true)
+    if ! printf '%s' "$xrayui_json" | jq -e . >/dev/null 2>&1; then
+        xrayui_json='{"installed":false,"running":false,"conflict":null,"message":null}'
+    fi
 
     # integrations
     local has_scribe=false
@@ -150,6 +157,7 @@ initial_response() {
         --argjson debug "$debug" \
         --argjson has_scribe "$has_scribe" \
         --argjson integration_scribe "$integration_scribe" \
+        --argjson xrayui "$xrayui_json" \
         '
         .geodata.geoip_url = $geoipurl
         | .geodata.geosite_url = $geositeurl
@@ -194,6 +202,7 @@ initial_response() {
         | .xray.profiles = $profiles
         | .xray.backups = $backups
         | .xray.debug = $debug
+        | .xray.xrayui = $xrayui
         | if $has_scribe then .integration.scribe = { enabled: $integration_scribe } else . end
         | del(.loading)
         ' "$UI_RESPONSE_FILE" >"$_tmp_response" 2>"$_jq_err"; then
@@ -235,9 +244,10 @@ initial_response() {
             --argjson profiles "${profiles:-[]}" \
             --argjson backups "${backups:-[]}" \
             --argjson debug "$debug" \
+            --argjson xrayui "$xrayui_json" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug }
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui }
             }' >"$_tmp_response" 2>"$_jq_err"; then
             log_error "Error: jq -n also failed. jq error: $(cat "$_jq_err" 2>/dev/null). Writing bare minimum response."
             echo '{"xray":{"ui_version":"'"$XRAYUI_VERSION"'","core_version":"'"$XRAY_VERSION"'","tested_core":"'"$XRAYUI_TESTED_CORE"'","profiles":[],"backups":[]}}' >"$_tmp_response"

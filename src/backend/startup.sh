@@ -33,6 +33,13 @@ startup() {
     local xray_pid=$(get_xray_daemon_pid)
 
     if [ "$(am_settings_get stealthsurf_startup)" = "y" ]; then
+        if ! ss_refuse_if_xrayui; then
+            log_warn "Startup skipped: stock XrayUI is running."
+            rm -f "$STARTUP_LOCK"
+            trap - EXIT
+            initial_response
+            return 0
+        fi
         log_ok "Xray service is enabled by XRAYUI. Starting Xray service..."
 
         if [ "$skipwait" = "false" ]; then

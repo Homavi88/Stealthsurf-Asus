@@ -43,7 +43,10 @@
       "xray_stopped": "XRAY остановлен",
       "xray_running": "XRAY запущен",
       "unapplied_changes": "Изменения ещё не применены. На роутер они записываются только после нажатия «применить».",
-      "confirm_unapplied_changes": "Часть изменений ещё не применена и будет потеряна. Продолжить без них?"
+      "confirm_unapplied_changes": "Часть изменений ещё не применена и будет потеряна. Продолжить без них?",
+      "xrayui_conflict": "XrayUI конфликт",
+      "xrayui_installed": "XrayUI установлен (остановлен)",
+      "xrayui_conflict_banner": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
     },
     "ServerStatus": {
       "configuration": "Конфигурация",
@@ -384,7 +387,11 @@
       "balancer_next_nodelay": "Балансировщик {0} направляет сюда новые соединения.",
       "balancer_fallback_nomatch": "Балансировщик {0} не находит ни одного outbound, поэтому новые соединения идут в его резервный outbound.",
       "balancer_default_nomatch": "Балансировщик {0} не находит ни одного outbound, а резервный outbound не задан, поэтому новые соединения идут в первый outbound списка.",
-      "alert_delete_last_balancer_outbound": "Этот outbound ({1}) — единственный, который выбирают эти балансировщики, а резервный outbound у них не задан: {0}. Без него Xray отправит их трафик через первый outbound списка, а это может быть direct. Перед удалением добавьте другой outbound, подходящий под их селектор, или задайте резервный outbound."
+      "alert_delete_last_balancer_outbound": "Этот outbound ({1}) — единственный, который выбирают эти балансировщики, а резервный outbound у них не задан: {0}. Без него Xray отправит их трафик через первый outbound списка, а это может быть direct. Перед удалением добавьте другой outbound, подходящий под их селектор, или задайте резервный outbound.",
+      "api_online": "Доступен в каталоге StealthSurf (API)",
+      "api_offline": "Недоступен в каталоге StealthSurf (API)",
+      "in_use": "используется",
+      "hint_ss_id": "Конфиг StealthSurf #{0}"
     },
     "StreamSettingsModal": {
       "title": "Настройки транспорта",

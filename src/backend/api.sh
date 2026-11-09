@@ -38,7 +38,7 @@ api_add_outbound() {
 
   tmp_file="/tmp/xray_api_ado.$$.json"
   printf '%s' "$outbound_json" |
-    jq -c '{outbounds: [del(.subPool, .surl)]}' >"$tmp_file" 2>/dev/null || {
+    jq -c '{outbounds: [del(.subPool, .surl, ._stealthsurf, ._ss_title, ._ss_id, ._ss_online)]}' >"$tmp_file" 2>/dev/null || {
     rm -f "$tmp_file"
     log_error "API: failed to prepare outbound JSON"
     return 1

@@ -38,7 +38,10 @@
       "xray_stopped": "XRAY ist gestoppt",
       "xray_running": "XRAY-Dienst läuft",
       "unapplied_changes": "Änderungen sind noch nicht angewendet. Sie werden erst mit „Anwenden“ auf den Router geschrieben.",
-      "confirm_unapplied_changes": "Einige Änderungen sind noch nicht angewendet und gehen verloren. Ohne sie fortfahren?"
+      "confirm_unapplied_changes": "Einige Änderungen sind noch nicht angewendet und gehen verloren. Ohne sie fortfahren?",
+      "xrayui_conflict": "XrayUI-Konflikt",
+      "xrayui_installed": "XrayUI installiert (gestoppt)",
+      "xrayui_conflict_banner": "XrayUI läuft. Stoppen Sie XrayUI (VPN → XrayUI → Stop) und starten Sie dann StealthSurf. Beide Add-ons dürfen den Transparent Proxy nicht gleichzeitig nutzen."
     },
     "ServerStatus": {
       "configuration": "Konfiguration",
@@ -320,7 +323,11 @@
       "alert_delete_confirm": "Diesen Ausgang löschen?",
       "alert_delete_tag_in_dialer_proxy_use": "Diese ausgehende Verbindung ({1}) ist der Ausgehende Proxy der ausgehenden Verbindungen ({0}). Ändere zuerst deren Ausgehenden Proxy (Transport → Sockopt) und lösche dann die ausgehende Verbindung.",
       "hint_pool_inactive": "Auto-Fallback ist in den allgemeinen Einstellungen deaktiviert, daher wird dieser Outbound nicht automatisch umgeschaltet.",
-      "status_unreachable": "Nicht erreichbar"
+      "status_unreachable": "Nicht erreichbar",
+      "api_online": "Im StealthSurf-Katalog verfügbar (API)",
+      "api_offline": "Im StealthSurf-Katalog nicht verfügbar (API)",
+      "in_use": "aktiv",
+      "hint_ss_id": "StealthSurf-Config #{0}"
     },
     "OutboundCommon": {
       "warn_auto_fallback_global_off": "Inaktiv: Auto-Fallback ist in den allgemeinen Einstellungen deaktiviert."

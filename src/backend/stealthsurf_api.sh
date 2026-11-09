@@ -410,13 +410,90 @@ ss_api_sync_all() {
     SS_LAST_SYNC=$(date +%s)
     update_xrayui_config "SS_LAST_SYNC" "$SS_LAST_SYNC"
     ss_api_fetch_balances 1 >/dev/null || true
+    ss_api_stamp_outbounds_from_catalog
     log_ok "Full StealthSurf sync complete"
 }
 
+# Stamp API titles / online flags onto already imported ss-<id> outbounds.
+ss_api_stamp_outbounds_from_catalog() {
+    load_xrayui_config
+    [ -f "$SS_CACHE_CONFIGS" ] || return 0
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    jq --slurpfile cat "$SS_CACHE_CONFIGS" '
+      ($cat[0] // []) as $c |
+      .outbounds = ((.outbounds // []) | map(
+        if ((.tag // "") | test("^ss-[0-9]+$")) then
+          ((.tag | sub("^ss-"; "")) as $id |
+          ($c | map(select((.id | tostring) == $id)) | first) as $m |
+          if $m != null then
+            . + {
+              _stealthsurf: true,
+              _ss_id: $m.id,
+              _ss_title: ($m.title // $m.name // .tag),
+              _ss_online: ($m.is_online // false)
+            }
+          else . end)
+        else . end
+      ))
+    ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+    ln -sf "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" 2>/dev/null || true
+}
+
+# Built-in DNS like stock XrayUI leak-protection: sys:dns-in / sys:dns-out + hijack,
+# with DNS upstream going through the StealthSurf default proxy (not direct).
+ss_api_ensure_dns_leak() {
+    local proxy_tag="$1"
+    [ -n "$proxy_tag" ] || return 0
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    jq --arg tag "$proxy_tag" '
+      .dns //= {}
+      | .dns.tag = (.dns.tag // "dnsQuery")
+      | .dns.servers = (
+          (.dns.servers // []) as $s
+          | if ($s | length) == 0 then ["1.1.1.1", "localhost"]
+            elif (($s | map(if type == "string" then . else (.address // "") end) | unique) == ["localhost"]) then ["1.1.1.1"] + $s
+            else $s end
+        )
+      | if ([.inbounds[]? | select(.tag == "sys:dns-in")] | length) > 0 then .
+        else .inbounds += [{
+          "protocol": "dokodemo-door",
+          "listen": "127.0.0.1",
+          "port": 53000,
+          "tag": "sys:dns-in",
+          "settings": { "address": "1.1.1.1", "port": 53, "network": "tcp,udp", "followRedirect": false }
+        }] end
+      | if ([.outbounds[]? | select(.tag == "sys:dns-out")] | length) > 0 then .
+        else .outbounds += [{ "protocol": "dns", "tag": "sys:dns-out", "settings": {} }] end
+      | .routing //= {}
+      | .routing.rules //= []
+      | .routing.rules = (.routing.rules | map(select(.name != "sys:dns.intercept" and .name != "sys:dns.upstream" and .name != "sys:dns.hijack")))
+      | ([.inbounds[]? | select(.tag != "sys:dns-in" and ((.streamSettings.sockopt.tproxy // "") == "tproxy") and ((.tag // "") != ""))] | map(.tag)) as $tp
+      | .routing.rules = (
+          [
+            { "type": "field", "name": "sys:dns.intercept", "idx": -3, "inboundTag": ["sys:dns-in"], "outboundTag": "sys:dns-out", "enabled": true },
+            { "type": "field", "name": "sys:dns.upstream", "idx": -2, "inboundTag": [(.dns.tag // "dnsQuery")], "outboundTag": $tag, "enabled": true }
+          ]
+          + (if ($tp | length) > 0 then
+              [{ "type": "field", "name": "sys:dns.hijack", "idx": -1, "inboundTag": $tp, "port": "53", "network": "tcp,udp", "outboundTag": "sys:dns-out", "enabled": true }]
+            else [] end)
+          + .routing.rules
+        )
+    ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+}
+
+ss_api_enable_connection_check() {
+    load_xrayui_config
+    if [ "${check_connection:-false}" != "true" ]; then
+        update_xrayui_config "check_connection" "true"
+        check_connection="true"
+        log_info "Enabled connection check so outbound status is probed"
+    fi
+}
+
 ss_api_import_config_to_xray() {
-    # Import one StealthSurf config id into Xray outbounds (tag ss-<id>).
+    # Import one StealthSurf config id into Xray outbounds (tag ss-<id>, title from API).
     local config_id="$1"
-    local cfg link outbound tag title
+    local cfg link outbound tag title online
     load_xrayui_config
     ss_api_ensure_caches
     [ -n "$config_id" ] || {
@@ -431,21 +508,24 @@ ss_api_import_config_to_xray() {
     }
     link=$(printf '%s' "$cfg" | jq -r '.connection_url // empty')
     title=$(printf '%s' "$cfg" | jq -r '.title // .name // ("ss-" + (.id|tostring))')
+    online=$(printf '%s' "$cfg" | jq -r 'if .is_online == true then "true" else "false" end')
     tag="ss-$config_id"
     if [ -z "$link" ]; then
         # Prefer provider-ready xray outbound fragment when URL missing
         if printf '%s' "$cfg" | jq -e '.xray_config' >/dev/null 2>&1; then
-            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" '
+            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" '
                 (.xray_config | if type=="string" then (try fromjson catch .) else . end) as $x |
                 (if ($x|type)=="object" and ($x.outbounds|type)=="array" then $x.outbounds[0]
                  elif ($x|type)=="object" and ($x.protocol != null) then $x
-                 else empty end) | select(. != null) | . + {tag:$tag, _stealthsurf:true, _ss_title:$title}
+                 else empty end) | select(. != null)
+                | . + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}
             ')
         fi
     else
         outbound=$(subscription_parse_link_to_outbound "$link") || outbound=""
         if [ -n "$outbound" ]; then
-            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" '. + {tag:$tag, _stealthsurf:true, _ss_title:$title}')
+            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" \
+                '. + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}')
         fi
     fi
     [ -n "$outbound" ] || {
@@ -475,6 +555,8 @@ ss_api_import_config_to_xray() {
             }]
         )
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+    ss_api_ensure_dns_leak "$tag"
+    ss_api_enable_connection_check
     ln -sf "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" 2>/dev/null || true
     # Enable transparent proxy when unset so Start redirects LAN traffic through the imported outbound
     load_xrayui_config

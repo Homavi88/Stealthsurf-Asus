@@ -265,6 +265,12 @@ export class EngineResponseConfig {
     subscription_auto_refresh?: string;
     subscription_auto_fallback?: boolean;
     subscription_fallback_interval?: number;
+    xrayui?: {
+      installed?: boolean;
+      running?: boolean;
+      conflict?: string | null;
+      message?: string | null;
+    };
   };
   public geodata?: EngineGeodatConfig = new EngineGeodatConfig();
   public loading?: EngineLoadingProgress;

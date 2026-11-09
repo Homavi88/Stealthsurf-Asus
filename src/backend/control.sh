@@ -13,6 +13,12 @@ start() {
 
     watchdog_mark_desired
 
+    if ! ss_refuse_if_xrayui; then
+        update_loading_progress "$(ss_xrayui_conflict_message)" 100
+        watchdog_clear_desired
+        return 1
+    fi
+
     # Repair empty profiles so Start always has all-in/direct/block like XrayUI import
     ensure_xray_scaffold
 

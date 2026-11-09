@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.5] - 2026-11-09
+
+### API titles, live status, DNS, XrayUI conflict
+
+- Imported StealthSurf configs keep the **API title** next to the outbound (not only `ss-<id>`), with an **in use** badge on the default route
+- Catalog **online/offline** from API keys is shown on each `ss-*` outbound (green/red dot), even while Xray is stopped; observatory delay dots still appear when connection check is on
+- Sync restamps titles/`is_online` onto already imported `ss-<id>` outbounds
+- Import enables **DNS leak protection** like stock XrayUI (`sys:dns-in` / `sys:dns-out` / port-53 hijack) and sends DNS upstream through the imported proxy, not `direct`. If the only DNS server was `localhost`, `1.1.1.1` is added so queries actually leave through the proxy
+- Import turns on **Check connection to xray server** so live outbound status is probed after Start
+- Stock **XrayUI conflict** is detected again: banner + blocked Start while XrayUI's transparent proxy is running
+
+---
+
 ## [1.1.4] - 2026-11-09
 
 ### Controls + default outbound

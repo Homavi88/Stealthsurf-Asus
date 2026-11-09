@@ -49,6 +49,22 @@ describe('DnsLeakProtection', () => {
     expect(upstream?.outboundTag).toBe('proxy');
   });
 
+  it('routes DNS upstream through the StealthSurf default outbound when set', () => {
+    const config = makeConfig();
+    const imported = new XrayOutboundObject<XrayVlessOutboundObject>(XrayProtocol.VLESS, new XrayVlessOutboundObject());
+    imported.tag = 'ss-69191';
+    config.outbounds.push(imported);
+    config.routing = new XrayRoutingObject();
+    const def = new XrayRoutingRuleObject();
+    def.name = 'stealthsurf-default';
+    def.outboundTag = 'ss-69191';
+    config.routing.rules = [def];
+
+    DnsLeakProtection.enable(config);
+    const upstream = config.routing.rules!.find((r) => r.name === dnsLeakTags.RULE_UPSTREAM);
+    expect(upstream?.outboundTag).toBe('ss-69191');
+  });
+
   it('pins the system DNS rules ahead of user rules after normalize(), even when a user rule has idx 0', () => {
     const config = makeConfig(true);
     config.routing = new XrayRoutingObject();

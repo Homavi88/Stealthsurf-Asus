@@ -229,6 +229,7 @@ service_event)
     sync)
         if ss_api_sync_all; then
             ss_api_public_keys_view
+            initial_response
             update_loading_progress "StealthSurf catalog synced." 100
         else
             update_loading_progress "Error: sync failed." 100
@@ -236,6 +237,7 @@ service_event)
         ;;
     importconfigs)
         if ss_api_import_enabled_batch; then
+            initial_response
             update_loading_progress "Configs imported into Xray outbounds." 100
         else
             update_loading_progress "Error: import failed." 100

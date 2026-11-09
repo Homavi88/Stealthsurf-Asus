@@ -67,10 +67,13 @@
                 <tbody>
                   <tr v-for="c in configs" :key="c.id">
                     <td><input type="checkbox" v-model="selectedIds" :value="c.id" /></td>
-                    <td>{{ c.title || c.name || 'ss-' + c.id }}</td>
+                    <td>
+                      {{ c.title || c.name || 'ss-' + c.id }}
+                      <span v-if="isImported(c.id)" class="label label-success" style="margin-left: 6px">imported</span>
+                    </td>
                     <td>{{ c.protocol || '—' }}</td>
                     <td>
-                      <span :class="c.is_online ? 'label label-success' : 'label'">{{ c.is_online ? 'online' : '—' }}</span>
+                      <span :class="c.is_online ? 'label label-success' : 'label label-error'">{{ c.is_online ? 'online' : 'offline' }}</span>
                     </td>
                   </tr>
                 </tbody>
@@ -93,9 +96,10 @@
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, onMounted, ref } from 'vue';
+  import { computed, defineComponent, inject, onMounted, ref, Ref } from 'vue';
   import axios from 'axios';
-  import engine, { SubmitActions } from '@/modules/Engine';
+  import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+  import { outboundSsId, parseCatalogPayload } from '@/modules/StealthSurfCatalog';
 
   const SS_API_BASE = 'https://api.stealthsurf.net';
 
@@ -139,7 +143,20 @@
       const configs = ref<SsConfig[]>([]);
       const selectedIds = ref<(number | string)[]>([]);
       const configsStatus = ref('');
-      const channelLabel = '1.1.0 beta';
+      const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
+      const channelLabel = computed(() => {
+        const v = uiResponse.value?.xray?.ui_version;
+        return v ? `${v} beta` : '1.1.x beta';
+      });
+      const importedIds = computed(() => {
+        const ids = new Set<string>();
+        (engine.xrayConfig.outbounds || []).forEach((o) => {
+          const id = outboundSsId(o);
+          if (id) ids.add(id);
+        });
+        return ids;
+      });
+      const isImported = (id: number | string) => importedIds.value.has(String(id));
 
       const formatRub = (n: number | null | undefined) => {
         if (n == null || Number.isNaN(Number(n))) return '—';
@@ -167,10 +184,11 @@
           /* empty */
         }
         try {
-          const cfg = await engine.getWebData<SsConfig[]>('ss_configs');
-          if (Array.isArray(cfg?.data)) {
-            configs.value = cfg.data;
-            configsStatus.value = `${cfg.data.length} configs in catalog`;
+          const cfg = await engine.getWebData<SsConfig[] | { data?: SsConfig[] }>('ss_configs');
+          const next = parseCatalogPayload(cfg?.data);
+          if (next.length) {
+            configs.value = next;
+            configsStatus.value = `${next.length} configs in catalog`;
           }
         } catch {
           configsStatus.value = 'Catalog not loaded';
@@ -301,7 +319,9 @@
       const importSelected = async () => {
         if (!selectedIds.value.length) return;
         await engine.submit(SubmitActions.ssImportConfigs, { ids: selectedIds.value }, 10);
-        alert('Imported into Outbounds. Open Outbounds / Apply to use them.');
+        await engine.loadXrayConfig();
+        await loadCaches();
+        alert('Imported into Outbounds with API titles. Apply / Start to use them. DNS leak protection and connection check are enabled.');
       };
 
       onMounted(async () => {
@@ -319,6 +339,7 @@
         configsStatus,
         selectedIds,
         channelLabel,
+        isImported,
         formatRub,
         saveKey,
         addKey,

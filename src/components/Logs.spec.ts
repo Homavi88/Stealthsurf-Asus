@@ -49,11 +49,11 @@ describe('Logs.vue', () => {
     get.mockResolvedValue({ data: 'line' });
     const wrapper = await open();
 
-    expect(get).toHaveBeenCalledWith('/ext/xrayui/xray_access_partial.cab', { responseType: 'text', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } });
-    await wrapper.find('select').setValue('/ext/xrayui/xray_error_partial.cab');
+    expect(get).toHaveBeenCalledWith('/ext/stealthsurf/xray_access_partial.cab', { responseType: 'text', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } });
+    await wrapper.find('select').setValue('/ext/stealthsurf/xray_error_partial.cab');
     jest.advanceTimersByTime(2000);
     await flushPromises();
-    expect(get).toHaveBeenLastCalledWith('/ext/xrayui/xray_error_partial.cab', expect.anything());
+    expect(get).toHaveBeenLastCalledWith('/ext/stealthsurf/xray_error_partial.cab', expect.anything());
   });
 
   it('opens the shown log as plain text and never the other file', async () => {
@@ -64,7 +64,7 @@ describe('Logs.vue', () => {
     expect(engine.openText).toHaveBeenLastCalledWith('access line');
 
     get.mockResolvedValueOnce({ data: '' });
-    await wrapper.find('select').setValue('/ext/xrayui/xray_error_partial.cab');
+    await wrapper.find('select').setValue('/ext/stealthsurf/xray_error_partial.cab');
     await wrapper.find('input[value="raw"]').trigger('click');
     expect(engine.openText).toHaveBeenLastCalledWith('');
   });

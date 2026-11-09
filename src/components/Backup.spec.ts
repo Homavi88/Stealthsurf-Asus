@@ -127,8 +127,8 @@ describe('Backup.vue', () => {
       answer('text/txt');
       await wrapper.vm.download('xrayui-20260926-101500.tar.gz');
 
-      expect(global.fetch).toHaveBeenCalledWith('/ext/xrayui/backup/xrayui-20260926-101500.tar.gz.cab', { method: 'HEAD', cache: 'no-store' });
-      expect(clicked).toEqual([{ href: '/ext/xrayui/backup/xrayui-20260926-101500.tar.gz.cab', download: 'xrayui-20260926-101500.tar.gz' }]);
+      expect(global.fetch).toHaveBeenCalledWith('/ext/stealthsurf/backup/xrayui-20260926-101500.tar.gz.cab', { method: 'HEAD', cache: 'no-store' });
+      expect(clicked).toEqual([{ href: '/ext/stealthsurf/backup/xrayui-20260926-101500.tar.gz.cab', download: 'xrayui-20260926-101500.tar.gz' }]);
     });
 
     it('does not save the login page as a backup when the session has expired', async () => {

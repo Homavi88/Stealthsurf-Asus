@@ -3,6 +3,7 @@ import { XrayInboundObject, XrayDokodemoDoorInboundObject } from './InboundObjec
 import { XrayOutboundObject, XrayDnsOutboundObject } from './OutboundObjects';
 import { XrayDnsObject, XrayRoutingObject, XrayRoutingRuleObject } from './CommonObjects';
 import { XrayProtocol } from './Options';
+import { SS_DEFAULT_RULE } from './StealthSurfCatalog';
 
 const DNS_IN_TAG = 'sys:dns-in';
 const DNS_OUT_TAG = 'sys:dns-out';
@@ -28,8 +29,17 @@ export const isEnabled = (config: XrayObject): boolean => !!findInbound(config) 
 export const hasFallbackServer = (config: XrayObject): boolean =>
   (config.dns?.servers ?? []).some((s) => typeof s === 'string' || (!s.domains?.length && !s.rules?.length));
 
-const firstProxyTag = (config: XrayObject): string | undefined =>
-  config.outbounds.find((o) => !o.isSystem() && o.protocol !== XrayProtocol.FREEDOM && o.protocol !== XrayProtocol.BLACKHOLE && o.protocol !== XrayProtocol.DNS && !!o.tag)?.tag;
+const isProxyOutbound = (o: { isSystem: () => boolean; protocol?: string; tag?: string }): boolean =>
+  !o.isSystem() && o.protocol !== XrayProtocol.FREEDOM && o.protocol !== XrayProtocol.BLACKHOLE && o.protocol !== XrayProtocol.DNS && !!o.tag;
+
+const firstProxyTag = (config: XrayObject): string | undefined => {
+  const defaultTag = config.routing?.rules?.find((r) => r.name === SS_DEFAULT_RULE)?.outboundTag;
+  if (defaultTag) {
+    const match = config.outbounds.find((o) => o.tag === defaultTag && isProxyOutbound(o));
+    if (match?.tag) return match.tag;
+  }
+  return config.outbounds.find(isProxyOutbound)?.tag;
+};
 
 const ensureRule = (config: XrayObject, name: string, inboundTag: string, outboundTag: string, idx: number) => {
   removeRule(config, name);

@@ -30,6 +30,11 @@ export class XrayOutboundObject<TProxy extends IProtocolType> {
   public tag?: string;
   public surl?: string;
   public subPool?: SubPoolMetadata;
+  /** StealthSurf catalog metadata — ignored by Xray, used by the WebUI. */
+  public _stealthsurf?: boolean;
+  public _ss_title?: string;
+  public _ss_id?: number | string;
+  public _ss_online?: boolean;
   public settings?: TProxy;
 
   public streamSettings?: XrayStreamSettingsObject = new XrayStreamSettingsObject();

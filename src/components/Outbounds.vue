@@ -35,7 +35,15 @@
             <th class="drag-handle" aria-label="Drag to reorder">
               <span class="grip drag-handle" aria-hidden="true"></span>
               {{ proxy.surl ? '🔗' : '' }}<span v-if="proxy.subPool?.enabled && !proxy.surl" :class="{ 'pool-inactive': !fallbackActive }" :title="fallbackActive ? '' : $t('com.Outbounds.hint_pool_inactive')">🔄</span>
-              <span class="proxy-tag">{{ proxy.tag == '' ? 'no tag' : proxy.tag! }}</span>
+              <span
+                v-if="apiOnline(proxy) !== undefined"
+                class="ss-api-dot"
+                :class="apiOnline(proxy) ? 'on' : 'off'"
+                :title="apiOnline(proxy) ? $t('com.Outbounds.api_online') : $t('com.Outbounds.api_offline')"
+              ></span>
+              <span class="proxy-tag">{{ displayTitle(proxy) }}</span>
+              <span v-if="ssIdBadge(proxy)" class="ss-id-badge" :title="$t('com.Outbounds.hint_ss_id', [ssIdBadge(proxy)])">ss-{{ ssIdBadge(proxy) }}</span>
+              <span v-if="isDefaultRoute(proxy)" class="ss-inuse-badge" :title="$t('com.Outbounds.in_use')">{{ $t('com.Outbounds.in_use') }}</span>
               <span
                 v-for="item in balancerMarks[proxy.tag]?.items ?? []"
                 :key="item.balancer"
@@ -98,6 +106,14 @@
   import { liveStatus, refreshLiveStatus, clearLiveStatus, observationAge } from '@/modules/LiveStatus';
   import { computeOutboundMarks, OutboundMark, OutboundMarkItem } from '@/modules/BalancerStatus';
   import { balancersWithoutOutbounds } from '@/modules/ApplyChecks';
+  import {
+    SS_DEFAULT_RULE,
+    SsCatalogConfig,
+    outboundApiOnline,
+    outboundDisplayTitle,
+    outboundSsId,
+    parseCatalogPayload
+  } from '@/modules/StealthSurfCatalog';
 
   import FreedomOutbound from '@obd/FreedomOutbound.vue';
   import BlackholeOutbound from '@obd/BlackholeOutbound.vue';
@@ -139,6 +155,7 @@
       const proxyModal = ref();
       const proxyRef = ref();
       const parserModal = ref();
+      const catalog = ref<SsCatalogConfig[]>([]);
 
       watch(
         () => config.value.outbounds.length,
@@ -162,7 +179,29 @@
         },
         { immediate: true }
       );
+      const refreshCatalog = async () => {
+        try {
+          const cfg = await engine.getWebData<SsCatalogConfig[] | { data?: SsCatalogConfig[] }>('ss_configs');
+          const next = parseCatalogPayload(cfg?.data);
+          if (next.length) catalog.value = next;
+        } catch {
+          /* catalog is optional until an API key is synced */
+        }
+      };
+
+      const displayTitle = (proxy: XrayOutboundObject<IProtocolType>) => outboundDisplayTitle(proxy, catalog.value);
+      const apiOnline = (proxy: XrayOutboundObject<IProtocolType>) => outboundApiOnline(proxy, catalog.value);
+      const ssIdBadge = (proxy: XrayOutboundObject<IProtocolType>) => {
+        const id = outboundSsId(proxy);
+        const title = displayTitle(proxy);
+        if (!id) return '';
+        return title === `ss-${id}` || title === (proxy.tag || '') ? '' : id;
+      };
+      const isDefaultRoute = (proxy: XrayOutboundObject<IProtocolType>) =>
+        !!proxy.tag && (config.value.routing?.rules ?? []).some((r) => r.name === SS_DEFAULT_RULE && r.outboundTag === proxy.tag);
+
       const fetchStatus = async () => {
+        await refreshCatalog();
         if (!check_connection.value) {
           connectionStatus.value = {};
           clearLiveStatus();
@@ -416,6 +455,10 @@
         edit_proxy,
         remove_proxy,
         save_proxy,
+        displayTitle,
+        apiOnline,
+        ssIdBadge,
+        isDefaultRoute,
         isRunning: computed(() => {
           const running = uiResponse.value.xray?.running;
           if (typeof running === 'boolean') return running;
@@ -432,6 +475,44 @@
   .connection-status {
     float: right;
     margin: 0 4px 0 10px;
+  }
+  .ss-api-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin: 0 6px 0 2px;
+    border-radius: 50%;
+    background: #7a868a;
+    vertical-align: middle;
+    cursor: help;
+    &.on {
+      background: #3dcc3d;
+      box-shadow: 0 0 6px #3dcc3d;
+    }
+    &.off {
+      background: #d9534f;
+    }
+  }
+  .ss-id-badge,
+  .ss-inuse-badge {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: normal;
+    line-height: 15px;
+    white-space: nowrap;
+  }
+  .ss-id-badge {
+    color: #c5d0d4;
+    border: 1px solid rgba(197, 208, 212, 0.35);
+    background: rgba(0, 0, 0, 0.15);
+  }
+  .ss-inuse-badge {
+    color: #fff;
+    background: #2e7d32;
+    border: 1px solid #43a047;
   }
   .pool-inactive {
     opacity: 0.35;

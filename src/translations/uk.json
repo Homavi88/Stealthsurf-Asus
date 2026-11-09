@@ -39,7 +39,10 @@
       "xray_stopped": "XRAY зупинено",
       "xray_running": "Сервіс XRAY працює",
       "unapplied_changes": "Зміни ще не застосовано. На роутер вони записуються лише після натискання «застосувати».",
-      "confirm_unapplied_changes": "Частину змін ще не застосовано, і їх буде втрачено. Продовжити без них?"
+      "confirm_unapplied_changes": "Частину змін ще не застосовано, і їх буде втрачено. Продовжити без них?",
+      "xrayui_conflict": "Конфлікт XrayUI",
+      "xrayui_installed": "XrayUI встановлено (зупинено)",
+      "xrayui_conflict_banner": "XrayUI зараз працює. Зупиніть XrayUI (VPN → XrayUI → Stop), потім запускайте StealthSurf. Одночасно обидва аддони не можна: два transparent-proxy ламають інтернет у LAN."
     },
     "ServerStatus": {
       "configuration": "Конфігурація",
@@ -380,7 +383,11 @@
       "balancer_next_nodelay": "Балансувальник {0} спрямовує сюди нові з'єднання.",
       "balancer_fallback_nomatch": "Балансувальник {0} не знаходить жодного outbound, тому нові з'єднання йдуть до його резервного outbound.",
       "balancer_default_nomatch": "Балансувальник {0} не знаходить жодного outbound, а резервний outbound не задано, тому нові з'єднання йдуть до першого outbound у списку.",
-      "alert_delete_last_balancer_outbound": "Цей outbound ({1}) — єдиний, який вибирають ці балансувальники, а резервний outbound у них не задано: {0}. Без нього Xray надсилатиме їхній трафік через перший outbound у списку, а це може бути direct. Перед видаленням додайте інший outbound, що підходить під їхній селектор, або задайте резервний outbound."
+      "alert_delete_last_balancer_outbound": "Цей outbound ({1}) — єдиний, який вибирають ці балансувальники, а резервний outbound у них не задано: {0}. Без нього Xray надсилатиме їхній трафік через перший outbound у списку, а це може бути direct. Перед видаленням додайте інший outbound, що підходить під їхній селектор, або задайте резервний outbound.",
+      "api_online": "Доступний у каталозі StealthSurf (API)",
+      "api_offline": "Недоступний у каталозі StealthSurf (API)",
+      "in_use": "використовується",
+      "hint_ss_id": "Конфіг StealthSurf #{0}"
     },
     "StreamSettingsModal": {
       "title": "Налаштування транспорту",

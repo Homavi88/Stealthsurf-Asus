@@ -39,7 +39,10 @@
       "xray_stopped": "XRAY 已停止",
       "xray_running": "XRAY 服务正在运行",
       "unapplied_changes": "更改尚未应用。只有点击“应用”后才会写入路由器。",
-      "confirm_unapplied_changes": "部分更改尚未应用，将会丢失。是否继续？"
+      "confirm_unapplied_changes": "部分更改尚未应用，将会丢失。是否继续？",
+      "xrayui_conflict": "与 XrayUI 冲突",
+      "xrayui_installed": "已安装 XrayUI（已停止）",
+      "xrayui_conflict_banner": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），然后再启动 StealthSurf。两个插件不能同时做透明代理，否则会中断局域网上网。"
     },
     "ServerStatus": {
       "configuration": "配置",
@@ -380,7 +383,11 @@
       "balancer_next_nodelay": "负载均衡器 {0} 将新连接发送到此处。",
       "balancer_fallback_nomatch": "负载均衡器 {0} 没有匹配到任何出站，因此新连接发往其备用出站。",
       "balancer_default_nomatch": "负载均衡器 {0} 没有匹配到任何出站且未设置备用出站，因此新连接发往列表中的第一个出站。",
-      "alert_delete_last_balancer_outbound": "此出站 ({1}) 是这些负载均衡器唯一匹配的出站，且它们未设置备用出站：{0}。删除后，Xray 会将它们的流量发往列表中的第一个出站，该出站可能是 direct。删除前请添加另一个匹配其选择器的出站，或设置备用出站。"
+      "alert_delete_last_balancer_outbound": "此出站 ({1}) 是这些负载均衡器唯一匹配的出站，且它们未设置备用出站：{0}。删除后，Xray 会将它们的流量发往列表中的第一个出站，该出站可能是 direct。删除前请添加另一个匹配其选择器的出站，或设置备用出站。",
+      "api_online": "StealthSurf 目录中可用（API）",
+      "api_offline": "StealthSurf 目录中不可用（API）",
+      "in_use": "使用中",
+      "hint_ss_id": "StealthSurf 配置 #{0}"
     },
     "StreamSettingsModal": {
       "title": "传输设置",

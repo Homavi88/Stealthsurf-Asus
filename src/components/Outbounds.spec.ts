@@ -8,7 +8,8 @@ jest.mock('@/modules/Engine', () => ({
   default: {
     get xrayConfig() {
       return mockConfig;
-    }
+    },
+    getWebData: async () => ({ data: [{ id: 69191, title: 'Нидерланды VLESS XHTTP', is_online: true }] })
   }
 }));
 jest.mock('@/modules/Polling', () => ({ createPoller: () => ({ start: () => undefined, stop: () => undefined }) }));
@@ -32,9 +33,12 @@ const ModalStub = defineComponent({
 });
 
 interface OutboundsVm {
-  config: { outbounds: { tag: string }[] };
+  config: { outbounds: { tag: string; _ss_title?: string }[] };
   proxyModal: { close: () => void };
   edit_proxy: (proxy: { tag: string }) => Promise<void>;
+  displayTitle: (proxy: { tag?: string; _ss_title?: string }) => string;
+  apiOnline: (proxy: { tag?: string; _ss_online?: boolean }) => boolean | undefined;
+  isDefaultRoute: (proxy: { tag?: string }) => boolean;
 }
 
 describe('Outbounds renaming an outbound', () => {
@@ -80,6 +84,26 @@ describe('Outbounds renaming an outbound', () => {
     expect(routing.rules.map((r) => r.outboundTag)).toEqual(['proxy2', 'proxy']);
     expect(routing.disabled_rules[0].outboundTag).toBe('proxy2');
     expect(routing.balancers[0].fallbackTag).toBe('proxy2');
+  });
+
+  it('shows the StealthSurf API title instead of ss-<id> when _ss_title is set', () => {
+    const { vm } = setup();
+    expect(vm.displayTitle({ tag: 'ss-69191', _ss_title: 'Нидерланды VLESS XHTTP' })).toBe('Нидерланды VLESS XHTTP');
+    expect(vm.displayTitle({ tag: 'direct' })).toBe('direct');
+  });
+
+  it('reads snapshot API online when the catalog poll has not run', () => {
+    const { vm } = setup();
+    expect(vm.apiOnline({ tag: 'ss-69191', _ss_online: true })).toBe(true);
+    expect(vm.apiOnline({ tag: 'ss-69191', _ss_online: false })).toBe(false);
+    expect(vm.apiOnline({ tag: 'direct' })).toBeUndefined();
+  });
+
+  it('marks the stealthsurf-default outbound as in use', () => {
+    const { vm, routing } = setup();
+    routing.rules.push({ name: 'stealthsurf-default', outboundTag: 'ss-69191' } as { outboundTag: string; name: string });
+    expect(vm.isDefaultRoute({ tag: 'ss-69191' })).toBe(true);
+    expect(vm.isDefaultRoute({ tag: 'direct' })).toBe(false);
   });
 
   it('changes a tag that another outbound already has back instead of merging their rules', async () => {

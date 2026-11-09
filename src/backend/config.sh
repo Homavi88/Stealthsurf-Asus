@@ -81,6 +81,20 @@ EOF
         update_xrayui_config "ipsec" "redirect"
         ipsec="redirect"
     fi
+
+    # Overlay API titles / is_online onto already imported ss-<id> outbounds.
+    if type ss_api_stamp_outbounds_from_catalog >/dev/null 2>&1; then
+        ss_api_stamp_outbounds_from_catalog || true
+    fi
+
+    # Repair DNS leak wiring if it is already enabled (do not re-enable a user disable).
+    if type ss_api_ensure_dns_leak >/dev/null 2>&1 &&
+        jq -e '(.outbounds // []) | any(.tag == "sys:dns-out")' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        def_tag=$(jq -r '.routing.rules[]? | select(.name=="stealthsurf-default") | .outboundTag // empty' "$XRAY_CONFIG_FILE" 2>/dev/null | head -1)
+        if [ -n "$def_tag" ]; then
+            ss_api_ensure_dns_leak "$def_tag" || true
+        fi
+    fi
 }
 
 generate_xray_config() {
