@@ -80,6 +80,9 @@
               </table>
               <div v-else class="ss-hint">No catalog yet — add an API key and Sync.</div>
             </div>
+            <div class="ss-hint" style="margin-top: 6px">
+              Auto-poll + rebuild on provider changes: General Options → StealthSurf → Auto-sync catalog.
+            </div>
             <input
               class="button_gen button_gen_small"
               type="button"

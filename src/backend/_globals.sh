@@ -11,7 +11,7 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.1.7"
+XRAYUI_VERSION="1.1.8"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -55,7 +55,10 @@ SS_CACHE_CONFIGS="$ADDON_SHARE_DIR/ss_configs.json"
 SS_CACHE_LOCATIONS="$ADDON_SHARE_DIR/ss_locations.json"
 SS_CACHE_PROFILE="$ADDON_SHARE_DIR/ss_profile.json"
 SS_CACHE_SUBSCRIPTIONS="$ADDON_SHARE_DIR/ss_subscriptions.json"
+SS_IMPORTED_FP_FILE="$ADDON_SHARE_DIR/imported-configs.fp"
 SS_LAST_SYNC=""
+# disabled | 15m | 30m | 1h | 3h | 6h | 12h
+ss_catalog_auto_sync="disabled"
 ADDON_CHANNEL="beta"
 ADDON_REPO="Homavi88/Stealthsurf-Asus"
 

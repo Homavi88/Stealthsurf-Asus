@@ -411,7 +411,159 @@ ss_api_sync_all() {
     update_xrayui_config "SS_LAST_SYNC" "$SS_LAST_SYNC"
     ss_api_fetch_balances 1 >/dev/null || true
     ss_api_stamp_outbounds_from_catalog
+    ss_api_apply_provider_connection_changes
     log_ok "Full StealthSurf sync complete"
+}
+
+ss_api_imported_config_ids() {
+    # Ids of already imported StealthSurf outbounds (ss-<id> tags or _ss_id).
+    [ -f "$XRAY_CONFIG_FILE" ] || {
+        echo ""
+        return 0
+    }
+    jq -r '
+      [.outbounds[]?
+        | select(._stealthsurf == true or ((.tag // "") | test("^ss-[0-9]+$")))
+        | (._ss_id // (if ((.tag // "") | test("^ss-[0-9]+$")) then (.tag | sub("^ss-"; "")) else empty end))
+        | select(. != null and . != "")
+        | tostring
+      ] | unique | .[]
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null
+}
+
+ss_api_connection_fingerprint() {
+    # Hash of provider fields that change the proxy endpoint for imported configs.
+    # Title / is_online are stamped separately and do not force a rebuild.
+    local ids
+    ids=$(ss_api_imported_config_ids | tr '\n' ' ')
+    ids=$(printf '%s' "$ids" | awk '{$1=$1};1')
+    [ -f "$SS_CACHE_CONFIGS" ] || {
+        echo "none"
+        return 0
+    }
+    if [ -z "$ids" ]; then
+        echo "none"
+        return 0
+    fi
+    jq -c --arg ids "$ids" '
+      ($ids | split(" ") | map(select(length > 0))) as $want |
+      [ .[]
+        | select(. != null)
+        | . as $c
+        | select(($want | index(($c.id | tostring))) != null)
+        | {
+            id: ($c.id | tostring),
+            protocol: $c.protocol,
+            location_id: $c.location_id,
+            server_id: $c.server_id,
+            connection_url: $c.connection_url,
+            xray_config: $c.xray_config,
+            awg_config: $c.awg_config
+          }
+      ] | sort_by(.id)
+    ' "$SS_CACHE_CONFIGS" | {
+        if command -v md5sum >/dev/null 2>&1; then md5sum
+        elif command -v md5 >/dev/null 2>&1; then md5
+        else cksum
+        fi
+    } | awk '{print $1}'
+}
+
+ss_api_build_outbound_from_catalog() {
+    # Prints one outbound JSON for config id, or fails.
+    local config_id="$1"
+    local cfg link outbound tag title online
+    [ -n "$config_id" ] || return 1
+    [ -f "$SS_CACHE_CONFIGS" ] || return 1
+    cfg=$(jq -c --arg id "$config_id" 'map(select(. != null and (.id|tostring) == $id)) | first // empty' "$SS_CACHE_CONFIGS")
+    [ -n "$cfg" ] || return 1
+    link=$(printf '%s' "$cfg" | jq -r '.connection_url // empty')
+    title=$(printf '%s' "$cfg" | jq -r '.title // .name // ("ss-" + (.id|tostring))')
+    online=$(printf '%s' "$cfg" | jq -r 'if .is_online == true then "true" else "false" end')
+    tag="ss-$config_id"
+    outbound=""
+    if [ -z "$link" ]; then
+        if printf '%s' "$cfg" | jq -e '.xray_config' >/dev/null 2>&1; then
+            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" '
+                (.xray_config | if type=="string" then (try fromjson catch .) else . end) as $x |
+                (if ($x|type)=="object" and ($x.outbounds|type)=="array" then $x.outbounds[0]
+                 elif ($x|type)=="object" and ($x.protocol != null) then $x
+                 else empty end) | select(. != null)
+                | . + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}
+            ')
+        fi
+    else
+        outbound=$(subscription_parse_link_to_outbound "$link") || outbound=""
+        if [ -n "$outbound" ]; then
+            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" \
+                '. + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}')
+        fi
+    fi
+    [ -n "$outbound" ] || return 1
+    printf '%s' "$outbound"
+}
+
+ss_api_refresh_outbound_from_catalog() {
+    # Replace an existing ss-<id> outbound in place without changing routing/default.
+    local config_id="$1"
+    local outbound tag
+    outbound=$(ss_api_build_outbound_from_catalog "$config_id") || {
+        log_warn "Catalog refresh: could not build outbound for $config_id"
+        return 1
+    }
+    tag=$(printf '%s' "$outbound" | jq -r '.tag // empty')
+    [ -n "$tag" ] || return 1
+    [ -f "$XRAY_CONFIG_FILE" ] || return 1
+    if ! jq -e --arg tag "$tag" '[.outbounds[]? | select(.tag == $tag)] | length > 0' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        log_warn "Catalog refresh: outbound $tag not present — skip"
+        return 1
+    fi
+    jq --argjson ob "$outbound" --arg tag "$tag" '
+      .outbounds = ((.outbounds // []) | map(if .tag == $tag then $ob else . end))
+    ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+    ln -sf "$XRAY_CONFIG_FILE" "$ADDON_WEB_DIR/xray-config.json" 2>/dev/null || true
+    log_ok "Refreshed outbound $tag from StealthSurf catalog"
+    return 0
+}
+
+ss_api_apply_provider_connection_changes() {
+    # After catalog sync: if connection settings for imported proxies changed, rebuild them.
+    local prev new id ok=0 fail=0
+    load_xrayui_config
+    ss_api_ensure_caches
+    mkdir -p "$ADDON_SHARE_DIR" 2>/dev/null
+    prev=$(cat "$SS_IMPORTED_FP_FILE" 2>/dev/null || echo "")
+    new=$(ss_api_connection_fingerprint)
+
+    if [ -z "$(ss_api_imported_config_ids)" ]; then
+        printf '%s\n' "$new" >"$SS_IMPORTED_FP_FILE"
+        log_info "Catalog sync: no imported ss-* outbounds (fingerprint=$new)"
+        return 0
+    fi
+
+    if [ -n "$prev" ] && [ "$prev" = "$new" ]; then
+        log_info "Catalog sync: connection settings unchanged for imported proxies"
+        return 0
+    fi
+
+    log_info "Provider connection settings changed — refreshing imported outbounds (prev=${prev:-none} new=$new)"
+    for id in $(ss_api_imported_config_ids); do
+        if ss_api_refresh_outbound_from_catalog "$id"; then
+            ok=$((ok + 1))
+        else
+            fail=$((fail + 1))
+        fi
+    done
+
+    if [ "$ok" -gt 0 ]; then
+        ss_api_import_finalize
+        printf '%s\n' "$new" >"$SS_IMPORTED_FP_FILE"
+        log_ok "Auto-updated $ok imported proxy(ies) from provider (fail=$fail)"
+        return 0
+    fi
+
+    log_warn "Provider settings changed but no outbound could be refreshed (fail=$fail) — will retry next sync"
+    return 1
 }
 
 # Stamp API titles / online flags onto already imported ss-<id> outbounds.
@@ -493,7 +645,7 @@ ss_api_enable_connection_check() {
 ss_api_import_config_to_xray() {
     # Import one StealthSurf config id into Xray outbounds (tag ss-<id>, title from API).
     local config_id="$1"
-    local cfg link outbound tag title online
+    local outbound tag title
     load_xrayui_config
     ss_api_ensure_caches
     [ -n "$config_id" ] || {
@@ -501,37 +653,12 @@ ss_api_import_config_to_xray() {
         return 1
     }
     [ -f "$SS_CACHE_CONFIGS" ] || ss_api_sync_configs >/dev/null || return 1
-    cfg=$(jq -c --argjson id "$config_id" 'map(select(. != null and (.id|tostring) == ($id|tostring))) | first // empty' "$SS_CACHE_CONFIGS")
-    [ -n "$cfg" ] || {
-        log_error "Config $config_id not in catalog — sync first"
+    outbound=$(ss_api_build_outbound_from_catalog "$config_id") || {
+        log_error "Could not parse connection for config $config_id (sync first / missing URL)"
         return 1
     }
-    link=$(printf '%s' "$cfg" | jq -r '.connection_url // empty')
-    title=$(printf '%s' "$cfg" | jq -r '.title // .name // ("ss-" + (.id|tostring))')
-    online=$(printf '%s' "$cfg" | jq -r 'if .is_online == true then "true" else "false" end')
-    tag="ss-$config_id"
-    if [ -z "$link" ]; then
-        # Prefer provider-ready xray outbound fragment when URL missing
-        if printf '%s' "$cfg" | jq -e '.xray_config' >/dev/null 2>&1; then
-            outbound=$(printf '%s' "$cfg" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" '
-                (.xray_config | if type=="string" then (try fromjson catch .) else . end) as $x |
-                (if ($x|type)=="object" and ($x.outbounds|type)=="array" then $x.outbounds[0]
-                 elif ($x|type)=="object" and ($x.protocol != null) then $x
-                 else empty end) | select(. != null)
-                | . + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}
-            ')
-        fi
-    else
-        outbound=$(subscription_parse_link_to_outbound "$link") || outbound=""
-        if [ -n "$outbound" ]; then
-            outbound=$(printf '%s' "$outbound" | jq -c --arg tag "$tag" --arg title "$title" --arg id "$config_id" --argjson online "$online" \
-                '. + {tag:$tag, _stealthsurf:true, _ss_title:$title, _ss_id:$id, _ss_online:$online}')
-        fi
-    fi
-    [ -n "$outbound" ] || {
-        log_error "Could not parse connection for config $config_id"
-        return 1
-    }
+    tag=$(printf '%s' "$outbound" | jq -r '.tag // empty')
+    title=$(printf '%s' "$outbound" | jq -r '._ss_title // .tag')
 
     ensure_xray_scaffold
     # Upsert outbound; keep freedom/direct first; set catch-all default route to this proxy
@@ -573,6 +700,8 @@ ss_api_import_config_to_xray() {
         update_xrayui_config "check_connection" "true"
         check_connection="true"
     fi
+    # Seed fingerprint so the next sync only rebuilds when provider connection fields change
+    printf '%s\n' "$(ss_api_connection_fingerprint)" >"$SS_IMPORTED_FP_FILE" 2>/dev/null || true
     log_ok "Imported StealthSurf config $config_id as outbound $tag ($title) [default route]"
 }
 

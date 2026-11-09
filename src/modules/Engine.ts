@@ -276,6 +276,7 @@ export class EngineResponseConfig {
     subscription_auto_refresh?: string;
     subscription_auto_fallback?: boolean;
     subscription_fallback_interval?: number;
+    ss_catalog_auto_sync?: string;
     xrayui?: {
       installed?: boolean;
       running?: boolean;

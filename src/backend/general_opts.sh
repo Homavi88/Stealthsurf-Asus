@@ -28,6 +28,7 @@ apply_general_options() {
     local subscription_auto_refresh subscription_auto_fallback
     local subscription_fallback_interval probe_url probe_interval subscription_filters
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
+    local ss_catalog_auto_sync
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -62,6 +63,7 @@ apply_general_options() {
         "watchdog=" + ((.watchdog // "false") | tostring | @sh) + "\n" +
         "watchdog_interval=" + ((.watchdog_interval // 2) | tostring | @sh) + "\n" +
         "watchdog_max_attempts=" + ((.watchdog_max_attempts // 5) | tostring | @sh) + "\n" +
+        "ss_catalog_auto_sync=" + ((.ss_catalog_auto_sync // "disabled") | tostring | @sh) + "\n" +
         "subscription_filters=" + (((.subscriptions.filters // []) | join("|")) | @sh)
     '); then
         log_error "Failed to parse general options payload."
@@ -127,6 +129,11 @@ apply_general_options() {
     update_xrayui_config "watchdog" "$watchdog"
     update_xrayui_config "watchdog_interval" "$(watchdog_sanitize_interval "$watchdog_interval")"
     update_xrayui_config "watchdog_max_attempts" "$(watchdog_sanitize_attempts "$watchdog_max_attempts")"
+    case "$ss_catalog_auto_sync" in
+    15m | 30m | 1h | 3h | 6h | 12h) ;;
+    *) ss_catalog_auto_sync="disabled" ;;
+    esac
+    update_xrayui_config "ss_catalog_auto_sync" "$ss_catalog_auto_sync"
 
     update_xrayui_config "subscription_filters" "$subscription_filters"
 
@@ -144,6 +151,7 @@ apply_general_options() {
     cron_geodata_add
     cron_subscription_refresh_add
     cron_subscription_fallback_add
+    cron_ss_catalog_sync_add
     cron_ipset_save_add
     cron_watchdog_add
 

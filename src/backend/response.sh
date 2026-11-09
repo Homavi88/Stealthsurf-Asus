@@ -52,6 +52,11 @@ initial_response() {
     local subscription_auto_fallback="${subscription_auto_fallback:-false}"
     local subscription_fallback_interval="${subscription_fallback_interval:-5}"
     local subscription_filters="${subscription_filters:-""}"
+    local ss_catalog_auto_sync="${ss_catalog_auto_sync:-disabled}"
+    case "$ss_catalog_auto_sync" in
+    15m | 30m | 1h | 3h | 6h | 12h) ;;
+    *) ss_catalog_auto_sync="disabled" ;;
+    esac
     local probe_url="${probe_url:-https://www.google.com/generate_204}"
     local probe_interval=$(sanitize_probe_interval "$probe_interval")
 
@@ -145,6 +150,7 @@ initial_response() {
         --arg saf "$subscription_auto_fallback" \
         --arg sfi "$subscription_fallback_interval" \
         --arg sf "$subscription_filters" \
+        --arg ss_cas "$ss_catalog_auto_sync" \
         --arg hook_before_firewall_start "$hook_before_firewall_start" \
         --arg after_firewall_start "$after_firewall_start" \
         --arg after_firewall_cleanup "$after_firewall_cleanup" \
@@ -189,6 +195,7 @@ initial_response() {
         | .xray.subscription_auto_refresh = $sar
         | .xray.subscription_auto_fallback = ($saf == "true")
         | .xray.subscription_fallback_interval = ($sfi | tonumber)
+        | .xray.ss_catalog_auto_sync = $ss_cas
         | .xray.subscriptions.filters = (if $sf == "" then [] else ($sf | split("|")) end)
         | .xray.hooks = {
             before_firewall_start: $hook_before_firewall_start,
@@ -240,6 +247,7 @@ initial_response() {
             --arg sar "$subscription_auto_refresh" \
             --arg saf "$subscription_auto_fallback" \
             --arg sfi "$subscription_fallback_interval" \
+            --arg ss_cas "$ss_catalog_auto_sync" \
             --arg xrayui_ver "$XRAYUI_VERSION" \
             --arg xray_ver "$XRAY_VERSION" \
             --arg xray_err "$XRAYUI_CORE_ERR" \
@@ -250,7 +258,7 @@ initial_response() {
             --argjson xrayui "$xrayui_json" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
                 xrayui: $xrayui,
                 conflict: $xrayui.conflict,
                 conflict_message: $xrayui.message

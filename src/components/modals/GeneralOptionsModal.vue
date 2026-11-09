@@ -390,6 +390,29 @@
           </tbody>
         </table>
       </div>
+      <div v-show="currentTab.n === 'stealthsurf'">
+        <table class="FormTable modal-form-table">
+          <tbody>
+            <tr>
+              <th>
+                {{ $t('com.GeneralOptionsModal.label_ss_catalog_auto_sync') }}
+                <hint v-html="$t('com.GeneralOptionsModal.hint_ss_catalog_auto_sync')"></hint>
+              </th>
+              <td>
+                <select class="input_option" v-model="options.ss_catalog_auto_sync">
+                  <option value="disabled">{{ $t('labels.disabled') }}</option>
+                  <option value="15m">{{ $t('com.GeneralOptionsModal.ss_sync_15m') }}</option>
+                  <option value="30m">{{ $t('com.GeneralOptionsModal.sub_refresh_30m') }}</option>
+                  <option value="1h">{{ $t('com.GeneralOptionsModal.sub_refresh_1h') }}</option>
+                  <option value="3h">{{ $t('com.GeneralOptionsModal.sub_refresh_3h') }}</option>
+                  <option value="6h">{{ $t('com.GeneralOptionsModal.sub_refresh_6h') }}</option>
+                  <option value="12h">{{ $t('com.GeneralOptionsModal.sub_refresh_12h') }}</option>
+                </select>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <template #footer>
@@ -422,7 +445,8 @@
     { n: 'geodata', t: t('com.GeneralOptionsModal.tab_geodata') },
     { n: 'hooks', t: t('com.GeneralOptionsModal.tab_hooks') },
     { n: 'logs', t: t('com.GeneralOptionsModal.tab_logs') },
-    { n: 'subscriptions', t: t('com.GeneralOptionsModal.tab_subscriptions') }
+    { n: 'subscriptions', t: t('com.GeneralOptionsModal.tab_subscriptions') },
+    { n: 'stealthsurf', t: t('com.GeneralOptionsModal.tab_stealthsurf') }
   ];
   const currentTab = ref(tabs[0]);
 
