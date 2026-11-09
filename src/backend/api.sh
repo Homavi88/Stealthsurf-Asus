@@ -125,13 +125,13 @@ api_write_config() {
 {
   "api": {
     "tag": "sys:api",
-    "listen": "127.0.0.1:10085",
+    "listen": "127.0.0.1:10185",
     "services": ["HandlerService", "LoggerService", "StatsService", "ReflectionService"]
   },
   "inbounds": [
     {
       "listen": "127.0.0.1",
-      "port": 10086,
+      "port": 10186,
       "protocol": "dokodemo-door",
       "settings": {
         "address": "127.0.0.1"

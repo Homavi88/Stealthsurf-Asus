@@ -2,10 +2,11 @@
 # TUN inbound routing configuration for XRAYUI
 # shellcheck disable=SC2034
 
-# TUN routing table and rule priorities
-tun_table=250
-tun_rule_priority_local=49 # Local traffic stays local
-tun_rule_priority_tun=51   # Other LAN traffic goes to TUN table
+# TUN routing — isolated from stock XrayUI (table 250, priorities 49/51, ifaces xrayN)
+tun_table=251
+tun_rule_priority_local=47 # Local traffic stays local
+tun_rule_priority_tun=53   # Other LAN traffic goes to TUN table
+tun_default_ifname="ss0"
 
 tun_routing_marker="/tmp/stealthsurf-tun-routing-owned"
 
@@ -20,22 +21,21 @@ is_tun_device() {
     [ -n "$1" ] && [ -e "/sys/class/net/$1/tun_flags" ]
 }
 
+# Interfaces declared in OUR config only — never enumerate stock xrayN devices
+tun_configured_interface_names() {
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    jq -r --arg def "$tun_default_ifname" '
+        .inbounds[]?
+        | select(.protocol == "tun"
+          and ((.tag // "") | startswith("sys:") | not)
+        )
+        | (.settings.name // $def)
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null | sed '/^$/d' | sort -u
+}
+
+# Back-compat alias used by configure path
 tun_interface_names() {
-    local configured=""
-    if [ -f "$XRAY_CONFIG_FILE" ]; then
-        configured=$(jq -r '
-            .inbounds[]?
-            | select(.protocol == "tun"
-              and ((.tag // "") | startswith("sys:") | not)
-            )
-            | (.settings.name // "xray0")
-        ' "$XRAY_CONFIG_FILE" 2>/dev/null)
-    fi
-
-    local existing
-    existing=$(ip -o link show 2>/dev/null | awk -F': ' '{print $2}' | grep -E '^xray[0-9]*$')
-
-    printf '%s\n%s\n' "$configured" "$existing" | sed '/^$/d' | sort -u
+    tun_configured_interface_names
 }
 
 migrate_tun_inbounds_config() {
@@ -146,7 +146,7 @@ configure_tun_inbounds() {
         local _tun_vars
         if ! _tun_vars=$(echo "$inbound" | jq -r '
             "tag=" + ((.tag // "tun-inbound") | tostring | @sh) + "\n" +
-            "tun_name=" + ((.settings.name // "xray0") | tostring | @sh)
+            "tun_name=" + ((.settings.name // "ss0") | tostring | @sh)
         '); then
             log_warn "Skipping malformed TUN inbound: failed to parse JSON"
             continue
@@ -274,39 +274,37 @@ configure_tun_inbounds() {
 cleanup_tun_inbounds() {
     log_info "Cleaning up TUN inbound routing..."
 
-    if [ -f "$tun_routing_marker" ]; then
-        # Remove IP rules for TUN table (priorities 49 and 51)
-        for fam in -4 -6; do
-            [ "$fam" = "-6" ] && ! is_ipv6_enabled && continue
-
-            # Remove rules with priority 49 (local traffic)
-            local guard=0
-            while ip $fam rule list | grep -qE "^$tun_rule_priority_local:.*lookup main" && [ $guard -lt 64 ]; do
-                ip $fam rule del priority $tun_rule_priority_local table main 2>/dev/null || break
-                guard=$((guard + 1))
-            done
-
-            # Remove rules with priority 51 (TUN traffic)
-            guard=0
-            while ip $fam rule list | grep -q "lookup $tun_table" && [ $guard -lt 64 ]; do
-                ip $fam rule del table $tun_table 2>/dev/null || break
-                guard=$((guard + 1))
-            done
-        done
-
-        # Flush TUN routing table
-        ip -4 route flush table $tun_table 2>/dev/null
-        if is_ipv6_enabled; then
-            ip -6 route flush table $tun_table 2>/dev/null
-        fi
-
-        rm -f "$tun_routing_marker"
-    else
-        log_debug "XRAYUI did not install TUN policy routing; leaving ip rules and table $tun_table untouched."
+    # Without our ownership marker we must not touch table/rules/ifaces —
+    # stock XrayUI may own table 250 / xray0 independently.
+    if [ ! -f "$tun_routing_marker" ]; then
+        log_debug "StealthSurf did not install TUN policy routing; leaving ip rules and interfaces untouched."
+        return 0
     fi
 
-    # Remove IP addresses from TUN interfaces and bring them down
-    for tun_if in $(tun_interface_names); do
+    # Only remove rules that look up OUR table (251), never stock 250
+    for fam in -4 -6; do
+        [ "$fam" = "-6" ] && ! is_ipv6_enabled && continue
+
+        local guard=0
+        while ip $fam rule list | grep -qE "^$tun_rule_priority_local:" && [ $guard -lt 64 ]; do
+            ip $fam rule del priority $tun_rule_priority_local 2>/dev/null || break
+            guard=$((guard + 1))
+        done
+
+        guard=0
+        while ip $fam rule list | grep -q "lookup $tun_table" && [ $guard -lt 64 ]; do
+            ip $fam rule del table $tun_table 2>/dev/null || break
+            guard=$((guard + 1))
+        done
+    done
+
+    ip -4 route flush table $tun_table 2>/dev/null
+    if is_ipv6_enabled; then
+        ip -6 route flush table $tun_table 2>/dev/null
+    fi
+
+    # Only interfaces from OUR profile (default ss0). Marker gate above protects stock xrayN.
+    for tun_if in $(tun_configured_interface_names); do
         if ! is_tun_device "$tun_if"; then
             if [ -d "/sys/class/net/$tun_if" ]; then
                 log_warn "Skipping cleanup of $tun_if: it exists but is not a TUN device."
@@ -318,5 +316,6 @@ cleanup_tun_inbounds() {
         ip link set "$tun_if" down 2>/dev/null
     done
 
+    rm -f "$tun_routing_marker"
     log_ok "TUN inbound routing cleaned up."
 }

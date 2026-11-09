@@ -127,8 +127,8 @@ const DAEMON_CMDLINES = [
   'xray'
 ];
 const HELPER_CMDLINES = [
-  'xray api statsquery -s 127.0.0.1:10085 -pattern user>>> -reset ',
-  'xray api rmo -s 127.0.0.1:10085 proxy ',
+  'xray api statsquery -s 127.0.0.1:10185 -pattern user>>> -reset ',
+  'xray api rmo -s 127.0.0.1:10185 proxy ',
   'xray tls ping example.com ',
   'xray x25519 ',
   'xray version ',

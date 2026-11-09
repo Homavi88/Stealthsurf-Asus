@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.16] - 2026-11-09
+
+### Safe coexistence with stock XrayUI
+
+- **Uninstall** never deletes stock `/opt/etc/xrayui.conf`, `/opt/sbin/xrayui`, stock logrotate, or shared `/opt/sbin/xray` + `/opt/etc/xray` when XrayUI is installed; only removes StealthSurf profile/settings/share
+- **cron_jobs_clear** deletes only `stealthsurf*` cru jobs (no longer wipes `xrayui*`)
+- **TUN** uses table `251`, priorities `47/53`, default iface `ss0`; cleanup is gated on our ownership marker and never downs foreign `xrayN`
+- **dnsmasq**: strip `#stealthsurf` block on stop/configure-even-when-daemon-down; never touch `#xrayui`
+- **Scribe** writes `/opt/etc/syslog-ng.d/stealthsurf` (not stock `xrayui`); ASD cleanup only `stealthsurf_*`
+- **b4sni / rtls**: kill by our share-dir cmdline path instead of `killall`
+- Isolated ports: dokodemo `5699`, API `10185`, metrics `10186` (stock keeps `5599` / `10085` / `10086`)
+- Backup archives named `stealthsurf-*.tar.gz`
+
+---
+
 ## [1.1.15] - 2026-11-09
 
 ### Stats / traffic modal (no Merlin Please wait)

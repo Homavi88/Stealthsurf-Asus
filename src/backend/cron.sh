@@ -121,8 +121,8 @@ cron_job_delete() {
 
 cron_jobs_clear() {
     log_info "Clearing cron jobs for $ADDON_TITLE"
-    # Delete all cru jobs whose name starts with stealthsurf (legacy xrayui kept for safety)
-    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep -E '^(stealthsurf|xrayui)' |
+    # Only our jobs — never delete stock XrayUI cru entries (xrayui*)
+    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep -E '^stealthsurf' |
         while read -r id; do
             log_warn " - Deleting cron job $id"
             cru d "$id"

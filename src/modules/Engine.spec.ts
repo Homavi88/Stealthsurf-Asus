@@ -36,7 +36,7 @@ describe('XrayConfig', () => {
       expect(xrayConfig?.inbounds.length).toBe(3);
 
       const firstInbound = xrayConfig?.inbounds[0]!;
-      expect(firstInbound.port).toBe(5599);
+      expect(firstInbound.port).toBe(5699);
       expect(firstInbound.protocol).toBe(XrayProtocol.DOKODEMODOOR);
       expect(firstInbound).toBeInstanceOf(XrayInboundObject<XrayDokodemoDoorInboundObject>);
       expect(firstInbound.settings).toBeInstanceOf(XrayDokodemoDoorInboundObject);

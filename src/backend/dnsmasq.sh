@@ -4,6 +4,20 @@
 DNSMASQ_PRIME_LIMIT=200
 DNSMASQ_PRIME_SHARE_MIN=20
 
+# Remove only our #stealthsurf block — never touch #xrayui blocks
+dnsmasq_strip_addon_block() {
+    local CONFIG="${1:-/etc/dnsmasq.conf}"
+    [ -f "$CONFIG" ] || return 0
+    grep -q "^#${ADDON_TAG} start$" "$CONFIG" 2>/dev/null || return 0
+    local CONFIG_TMP="${CONFIG}.stealthsurf.strip.$$"
+    if sed "/^#${ADDON_TAG} start$/,/^#${ADDON_TAG} end$/d" "$CONFIG" >"$CONFIG_TMP" && mv -f "$CONFIG_TMP" "$CONFIG"; then
+        log_debug "dnsmasq: stripped #${ADDON_TAG} block from $CONFIG"
+        return 0
+    fi
+    rm -f "$CONFIG_TMP"
+    return 1
+}
+
 dnsmasq_configure() {
     # Fallback to /etc/dnsmasq.conf if $1 is empty (can happen when another
     # addon sourced in dnsmasq.postconf clobbers the positional parameters)
@@ -14,20 +28,22 @@ dnsmasq_configure() {
 
     log_info "Configuring dnsmasq..."
 
-    # Check if the 'xray' daemon is running
-    local xray_pid=$(get_xray_daemon_pid)
-    if [ -z "$xray_pid" ]; then
-        log_warn "Xray daemon not found. Skipping dnsmasq configuration."
-        return
-    fi
-
     log_debug "config: $CONFIG"
     log_debug "XRAY_CONFIG_FILE: $XRAY_CONFIG_FILE"
     log_debug "logs_dnsmasq setting: $logs_dnsmasq"
 
     touch "$CONFIG"
-    local CONFIG_TMP="${CONFIG}.xrayui.new"
-    sed "/^#${ADDON_TAG} start$/,/^#${ADDON_TAG} end$/d" "$CONFIG" >"$CONFIG_TMP" && mv -f "$CONFIG_TMP" "$CONFIG"
+    # Always strip our previous block first (even when daemon is down on stop)
+    dnsmasq_strip_addon_block "$CONFIG"
+
+    # Check if OUR xray daemon is running — if not, leave conf clean for XrayUI
+    local xray_pid=$(get_xray_daemon_pid)
+    if [ -z "$xray_pid" ]; then
+        log_warn "Xray daemon not found. Cleared our dnsmasq block; skipping reconfigure."
+        return
+    fi
+
+    local CONFIG_TMP="${CONFIG}.stealthsurf.new"
 
     pc_append "" "$CONFIG"
     pc_append "#$ADDON_TAG start" "$CONFIG"

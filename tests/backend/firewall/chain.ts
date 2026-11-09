@@ -34,7 +34,7 @@ const addrType = (ip: string): string[] => {
   return types;
 };
 
-export function parseChain(dump: string, family: 'iptables' | 'ip6tables', table: string, chain = 'XRAYUI'): string[][] {
+export function parseChain(dump: string, family: 'iptables' | 'ip6tables', table: string, chain = 'STEALTHSURF'): string[][] {
   const lines = dump.split('\n');
   const header = lines.indexOf(`== ${family} -t ${table}`);
   if (header === -1) return [];

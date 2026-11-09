@@ -11,7 +11,7 @@
     {
       "protocol": "dokodemo-door",
       "listen": "127.0.0.1",
-      "port": 5599,
+      "port": 5699,
       "tag": "all-in",
       "settings": {
         "address": "",

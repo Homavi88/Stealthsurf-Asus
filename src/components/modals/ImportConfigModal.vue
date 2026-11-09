@@ -239,7 +239,7 @@
         in_doko.tag = 'all-in';
         in_doko.settings = new XrayDokodemoDoorInboundObject();
         in_doko.protocol = XrayProtocol.DOKODEMODOOR;
-        in_doko.port = 5599;
+        in_doko.port = 5699;
         in_doko.listen = '127.0.0.1';
         in_doko.settings.network = 'tcp,udp';
         if (in_doko.streamSettings) {
