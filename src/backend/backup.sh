@@ -41,9 +41,9 @@ backup_configuration() {
 
     local backup_file
     if [ -n "$custom_name" ]; then
-        backup_file="$backup_dir/xrayui-${timestamp}-${custom_name}.tar.gz"
+        backup_file="$backup_dir/stealthsurf-${timestamp}-${custom_name}.tar.gz"
     else
-        backup_file="$backup_dir/xrayui-$timestamp.tar.gz"
+        backup_file="$backup_dir/stealthsurf-$timestamp.tar.gz"
     fi
 
     local items_list=""

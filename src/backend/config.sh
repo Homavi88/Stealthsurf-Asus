@@ -64,7 +64,7 @@ EOF
         else .inbounds += [{
           "protocol": "dokodemo-door",
           "listen": "127.0.0.1",
-          "port": 5599,
+          "port": 5699,
           "tag": "all-in",
           "settings": { "address": "", "network": "tcp,udp", "followRedirect": true },
           "streamSettings": { "sockopt": { "tproxy": "tproxy" } },

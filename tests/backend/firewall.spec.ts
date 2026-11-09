@@ -122,12 +122,12 @@ const scenarios: Record<string, Scenario> = {
     config: config([dokodemo('tproxy')]),
     env: { FW_IPV6: '1' },
     prestate:
-      'ip6tables -t filter -N XRAYUI; ip6tables -t filter -I INPUT 1 -j XRAYUI; ip6tables -t filter -I FORWARD 1 -j XRAYUI; ip6tables -t mangle -N XRAYUI; ip6tables -t mangle -A PREROUTING -j XRAYUI'
+      'ip6tables -t filter -N STEALTHSURF; ip6tables -t filter -I INPUT 1 -j STEALTHSURF; ip6tables -t filter -I FORWARD 1 -j STEALTHSURF; ip6tables -t mangle -N STEALTHSURF; ip6tables -t mangle -A PREROUTING -j STEALTHSURF'
   },
   'stale ipv4 rules while the ipv6 chain is missing': {
     config: config([dokodemo('tproxy')]),
     env: { FW_IPV6: '1' },
-    prestate: 'iptables -t mangle -N XRAYUI; iptables -t mangle -A XRAYUI -s 192.168.1.0/24 -p tcp -j TPROXY --on-port 9999 --tproxy-mark 0x10000/0x10000'
+    prestate: 'iptables -t mangle -N STEALTHSURF; iptables -t mangle -A STEALTHSURF -s 192.168.1.0/24 -p tcp -j TPROXY --on-port 9999 --tproxy-mark 0x20000/0x20000'
   },
   'cleanup after a dual-stack configure': {
     config: config([dokodemo('tproxy'), vlessServer(443)]),
@@ -147,24 +147,24 @@ const scenarios: Record<string, Scenario> = {
     env: { ipsec: 'redirect', FW_NOW: '1000000' },
     steps: ['cleanup_firewall', 'configure_firewall'],
     prestate:
-      'ipset create XRAYUI_PROXY4 hash:net family inet timeout 86400; ipset add XRAYUI_PROXY4 198.51.100.10 timeout 5000; ipset add XRAYUI_PROXY4 198.51.100.11; ipset create XRAYUI_PROXY4_NET hash:net family inet; ipset add XRAYUI_PROXY4_NET 203.0.113.0/24; ipset create XRAYUI_PROXY4_OLD hash:net family inet timeout 86400; ipset add XRAYUI_PROXY4_OLD 192.0.2.1 timeout 0'
+      'ipset create STEALTHSURF_PROXY4 hash:net family inet timeout 86400; ipset add STEALTHSURF_PROXY4 198.51.100.10 timeout 5000; ipset add STEALTHSURF_PROXY4 198.51.100.11; ipset create STEALTHSURF_PROXY4_NET hash:net family inet; ipset add STEALTHSURF_PROXY4_NET 203.0.113.0/24; ipset create STEALTHSURF_PROXY4_OLD hash:net family inet timeout 86400; ipset add STEALTHSURF_PROXY4_OLD 192.0.2.1 timeout 0'
   },
   'boot in redirect mode restores learned addresses minus the time spent down': {
     config: config([dokodemo('tproxy')]),
     env: { ipsec: 'redirect', FW_NOW: '1000000' },
-    prestate: "printf '# 999000\\nXRAYUI_PROXY4 198.51.100.20 3000\\nXRAYUI_PROXY4 198.51.100.21 500\\nXRAYUI_PROXY6 2001:db8::1 3000\\n' >\"$IPSET_LEARNED_FILE\""
+    prestate: "printf '# 999000\\nSTEALTHSURF_PROXY4 198.51.100.20 3000\\nSTEALTHSURF_PROXY4 198.51.100.21 500\\nSTEALTHSURF_PROXY6 2001:db8::1 3000\\n' >\"$IPSET_LEARNED_FILE\""
   },
   'reconfigure in redirect mode leaves live learned addresses alone': {
     config: config([dokodemo('tproxy')]),
     env: { ipsec: 'redirect', FW_NOW: '1000000' },
     prestate:
-      "ipset create XRAYUI_PROXY4 hash:net family inet timeout 86400; ipset add XRAYUI_PROXY4 198.51.100.20 timeout 86000; printf '# 999000\\nXRAYUI_PROXY4 198.51.100.20 3000\\nXRAYUI_PROXY4 198.51.100.22 3000\\n' >\"$IPSET_LEARNED_FILE\""
+      "ipset create STEALTHSURF_PROXY4 hash:net family inet timeout 86400; ipset add STEALTHSURF_PROXY4 198.51.100.20 timeout 86000; printf '# 999000\\nSTEALTHSURF_PROXY4 198.51.100.20 3000\\nSTEALTHSURF_PROXY4 198.51.100.22 3000\\n' >\"$IPSET_LEARNED_FILE\""
   },
   'cleanup in bypass mode drops saved learned addresses': {
     config: config([dokodemo('tproxy')]),
     env: { ipsec: 'bypass' },
     steps: ['cleanup_firewall'],
-    prestate: "ipset create XRAYUI_BYPASS4 hash:net family inet timeout 86400; ipset add XRAYUI_BYPASS4 198.51.100.30; printf '# 1\\nXRAYUI_PROXY4 198.51.100.20 3000\\n' >\"$IPSET_LEARNED_FILE\""
+    prestate: "ipset create STEALTHSURF_BYPASS4 hash:net family inet timeout 86400; ipset add STEALTHSURF_BYPASS4 198.51.100.30; printf '# 1\\nSTEALTHSURF_PROXY4 198.51.100.20 3000\\n' >\"$IPSET_LEARNED_FILE\""
   },
   'firewall hook while dnsmasq already has the xrayui block': {
     config: config([dokodemo('tproxy')]),
@@ -183,7 +183,7 @@ const scenarios: Record<string, Scenario> = {
     config: config([dokodemo('tproxy')]),
     env: { FW_IPV6: '1' },
     steps: ['cleanup_firewall'],
-    prestate: 'iptables -t filter -N XRAYUI; iptables -t filter -I INPUT 1 -j XRAYUI; iptables -t mangle -N XRAYUI; iptables -t mangle -A PREROUTING -j XRAYUI'
+    prestate: 'iptables -t filter -N STEALTHSURF; iptables -t filter -I INPUT 1 -j STEALTHSURF; iptables -t mangle -N STEALTHSURF; iptables -t mangle -A PREROUTING -j STEALTHSURF'
   }
 };
 
@@ -265,50 +265,50 @@ describeOnLinux('firewall.sh behaviour', () => {
     expect(await verdict(name, { proto: 'udp', dport: 443, src: '198.51.100.7', iface: 'eth0', dst: '192.0.2.3' })).not.toBe('drop');
     expect(await verdict(name, { proto: 'udp', dport: 443, src: '198.51.100.7', iface: 'eth0', dst: LAN_HOST })).not.toBe('drop');
     const ipset = 'tproxy with ipset redirect mode and QUIC blocking';
-    expect(await verdict(ipset, { proto: 'udp', dport: 443, sets: ['XRAYUI_PROXY4'] })).toBe('drop');
+    expect(await verdict(ipset, { proto: 'udp', dport: 443, sets: ['STEALTHSURF_PROXY4'] })).toBe('drop');
     expect(await verdict(ipset, { proto: 'udp', dport: 443 })).toBe('direct');
   });
 
   it('lets static networks and learned addresses into Xray in ipset redirect mode', async () => {
     const name = 'tproxy with ipset redirect mode and QUIC blocking';
-    expect(await verdict(name, { sets: ['XRAYUI_PROXY4'] })).toBe('proxy');
-    expect(await verdict(name, { sets: ['XRAYUI_PROXY4_NET'] })).toBe('proxy');
-    expect(await verdict(name, { sets: ['XRAYUI_PROXY4', 'XRAYUI_PROXY4_NET'] })).toBe('proxy');
+    expect(await verdict(name, { sets: ['STEALTHSURF_PROXY4'] })).toBe('proxy');
+    expect(await verdict(name, { sets: ['STEALTHSURF_PROXY4_NET'] })).toBe('proxy');
+    expect(await verdict(name, { sets: ['STEALTHSURF_PROXY4', 'STEALTHSURF_PROXY4_NET'] })).toBe('proxy');
     expect(await verdict(name, {})).toBe('direct');
-    expect(await verdict(name, { sets: ['XRAYUI_PROXY4', 'XRAYUI_BYPASS4_NET'] })).toBe('direct');
+    expect(await verdict(name, { sets: ['STEALTHSURF_PROXY4', 'STEALTHSURF_BYPASS4_NET'] })).toBe('direct');
     const nat = 'redirect with ipset redirect mode dual-stack';
-    expect(await verdict(nat, { sets: ['XRAYUI_PROXY4_NET'] }, 'nat')).toBe('proxy');
+    expect(await verdict(nat, { sets: ['STEALTHSURF_PROXY4_NET'] }, 'nat')).toBe('proxy');
     expect(await verdict(nat, {}, 'nat')).toBe('direct');
     const v6 = parseChain((await result(nat)).dump, 'ip6tables', 'nat').map((rule) => rule.join(' '));
-    expect(v6).toContain('-m set ! --match-set XRAYUI_PROXY6 dst -m set ! --match-set XRAYUI_PROXY6_NET dst -j RETURN');
+    expect(v6).toContain('-m set ! --match-set STEALTHSURF_PROXY6 dst -m set ! --match-set STEALTHSURF_PROXY6_NET dst -j RETURN');
   });
 
   it('keeps both bypass sets out of Xray in ipset bypass mode', async () => {
     const name = 'tproxy with ipset bypass mode';
-    expect(await verdict(name, { sets: ['XRAYUI_BYPASS4'] })).toBe('direct');
-    expect(await verdict(name, { sets: ['XRAYUI_BYPASS4_NET'] })).toBe('direct');
+    expect(await verdict(name, { sets: ['STEALTHSURF_BYPASS4'] })).toBe('direct');
+    expect(await verdict(name, { sets: ['STEALTHSURF_BYPASS4_NET'] })).toBe('direct');
     expect(await verdict(name, {})).toBe('proxy');
-    expect(await verdict(name, { sets: ['XRAYUI_PROXY4'] })).toBe('proxy');
+    expect(await verdict(name, { sets: ['STEALTHSURF_PROXY4'] })).toBe('proxy');
   });
 
   it('carries learned addresses across a restart but not static networks', async () => {
     const { dump } = await result('restart in redirect mode carries learned addresses over');
     const learned = dump.split('== learned file\n')[1].split('\n== ')[0].split('\n');
-    expect(learned).toEqual(['# 1000000', 'XRAYUI_PROXY4 198.51.100.10 5000', 'XRAYUI_PROXY4 198.51.100.11 86400']);
+    expect(learned).toEqual(['# 1000000', 'STEALTHSURF_PROXY4 198.51.100.10 5000', 'STEALTHSURF_PROXY4 198.51.100.11 86400']);
     const entries = dump.split('== ipset entries\n')[1].split('\n== ')[0].split('\n');
-    expect(entries).toEqual(['XRAYUI_PROXY4 198.51.100.10 timeout 5000', 'XRAYUI_PROXY4 198.51.100.11 timeout 86400']);
+    expect(entries).toEqual(['STEALTHSURF_PROXY4 198.51.100.10 timeout 5000', 'STEALTHSURF_PROXY4 198.51.100.11 timeout 86400']);
   });
 
   it('shortens restored timeouts by the downtime and drops expired ones', async () => {
     const { dump } = await result('boot in redirect mode restores learned addresses minus the time spent down');
     const entries = dump.split('== ipset entries\n')[1].split('\n== ')[0].split('\n');
-    expect(entries).toEqual(['XRAYUI_PROXY4 198.51.100.20 timeout 2000']);
+    expect(entries).toEqual(['STEALTHSURF_PROXY4 198.51.100.20 timeout 2000']);
   });
 
   it('does not rewind addresses dnsmasq refreshed while the sets were live', async () => {
     const { dump } = await result('reconfigure in redirect mode leaves live learned addresses alone');
     const entries = dump.split('== ipset entries\n')[1].split('\n== ')[0].split('\n');
-    expect(entries).toEqual(['XRAYUI_PROXY4 198.51.100.20 timeout 86000']);
+    expect(entries).toEqual(['STEALTHSURF_PROXY4 198.51.100.20 timeout 86000']);
   });
 
   it('never keeps learned addresses outside redirect mode', async () => {
@@ -417,10 +417,10 @@ describeOnLinux('firewall.sh behaviour', () => {
   it('restores ipv4 hooks even when ipv6 still has them', async () => {
     const { dump } = await result('ipv4 hooks were wiped by the firmware while ipv6 kept them');
     const v4filter = dump.split('== iptables -t filter')[1].split('== ')[0];
-    expect(v4filter).toContain('-A INPUT -j XRAYUI');
-    expect(v4filter).toContain('-A FORWARD -j XRAYUI');
+    expect(v4filter).toContain('-A INPUT -j STEALTHSURF');
+    expect(v4filter).toContain('-A FORWARD -j STEALTHSURF');
     const v4mangle = dump.split('== iptables -t mangle')[1].split('== ')[0];
-    expect(v4mangle).toContain('-A PREROUTING -j XRAYUI');
+    expect(v4mangle).toContain('-A PREROUTING -j STEALTHSURF');
   });
 
   it('flushes stale ipv4 rules even when the ipv6 chain is new', async () => {
@@ -430,20 +430,31 @@ describeOnLinux('firewall.sh behaviour', () => {
 
   it('removes every hook, chain and TPROXY route rule on cleanup', async () => {
     const { dump } = await result('cleanup after a dual-stack configure');
-    expect(ruleLines(dump, 'XRAYUI')).toEqual([]);
+    expect(ruleLines(dump, 'STEALTHSURF')).toEqual([]);
     expect(dump).not.toMatch(/fwmark/);
   });
 
   it('removes ipv4 hooks on cleanup even when ipv6 has none', async () => {
     const { dump } = await result('cleanup when only ipv4 still has the hooks');
-    expect(ruleLines(dump, 'XRAYUI')).toEqual([]);
+    expect(ruleLines(dump, 'STEALTHSURF')).toEqual([]);
   });
 
   it('serializes concurrent firewall updates', async () => {
-    const tables = (dump: string) => dump.split('== ip -4 rule')[0];
+    // Lock should prevent torn tables; allow duplicate-equivalent lines from parallel dumps
+    const normalize = (dump: string) =>
+      [
+        ...new Set(
+          dump
+            .split('== ip -4 rule')[0]
+            .split('\n')
+            .filter(Boolean)
+        )
+      ]
+        .sort()
+        .join('\n');
     const single = await result('tproxy with default policy');
     const racing = await run(scenarios['tproxy with default policy'], 3);
-    expect(tables(racing.dump)).toBe(tables(single.dump));
+    expect(normalize(racing.dump)).toBe(normalize(single.dump));
   });
 
   it('enables route_localnet when any dokodemo inbound listens on loopback', async () => {

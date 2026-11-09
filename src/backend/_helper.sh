@@ -783,7 +783,7 @@ get_or_create_hwid() {
 }
 
 cleanup_stale_asdfiles() {
-    # Purge orphaned xrayui staging files and any ASD (Asus Self Defense) backups
+    # Purge only StealthSurf staging / ASD leftovers — never stock xrayui_* backups
     local asdbk="/jffs/.asdbk"
 
     rm -f /tmp/stealthsurf_*.tmp.* 2>/dev/null
@@ -793,9 +793,28 @@ cleanup_stale_asdfiles() {
     rm -f /tmp/stealthsurf_script.* /tmp/stealthsurf_payload* 2>/dev/null
 
     if [ -d "$asdbk" ]; then
-        rm -f "$asdbk"/xrayui_*_bk "$asdbk"/*xrayui*.tmp.*_bk 2>/dev/null
+        rm -f "$asdbk"/stealthsurf_*_bk "$asdbk"/*stealthsurf*.tmp.*_bk 2>/dev/null
     fi
 
+}
+
+# Kill processes whose cmdline contains our path (never bare killall by shared name)
+ss_kill_by_cmdline_path() {
+    local needle="$1"
+    local sig="${2:--TERM}"
+    local p cmd pid
+    [ -n "$needle" ] || return 0
+    for p in /proc/[0-9]*; do
+        [ -r "$p/cmdline" ] || continue
+        cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+        case "$cmd" in
+        *"$needle"*)
+            pid=${p##*/}
+            [ "$pid" = "$$" ] && continue
+            kill "$sig" "$pid" 2>/dev/null || true
+            ;;
+        esac
+    done
 }
 
 urldecode_pct() {

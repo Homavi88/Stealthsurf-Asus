@@ -14,12 +14,12 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.15-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.1.16-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#установка"><strong>Установка</strong></a> ·
-  <a href="#что-нового-в-118"><strong>1.1.15</strong></a> ·
+  <a href="#что-нового-в-118"><strong>1.1.16</strong></a> ·
   <a href="#возможности"><strong>Возможности</strong></a> ·
   <a href="#веб-интерфейс"><strong>WebUI</strong></a> ·
   <a href="#cli-за-минуту"><strong>CLI</strong></a> ·
@@ -30,7 +30,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf: без клиента на телефонах, с балансом/каталогом из API, импортом в outbounds и коротким CLI `ssurf`. Вкладка **VPN → StealthSurf**.
 
-Актуальная версия **1.1.15** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
+Актуальная версия **1.1.16** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
 
 ## Установка
 
@@ -64,6 +64,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 
 | | |
 | --- | --- |
+| **1.1.16 Coexistence** | Удаление/стоп SS не трогает XrayUI (cron, TUN, dnsmasq, scribe, uninstall); порты `5699`/`10185`/`10186`; TUN table `251` |
 | **1.1.15 Account UX** | Stats/Traffic в Vue-модалке (без Please wait); локация как страна (`Netherlands (NL)`); настройки/billing за кнопкой **Manage** |
 | **1.1.14 API control** | Каталог: expires/локация/auto-renew + paid/cloud; PATCH settings; autofit под ISP; traffic/stats; renew/top-up; CLI `ssurf autofit|patch|stats|traffic|renew|topup` |
 | **1.1.13 probe diagnosis** | У 🔴 outbound — короткая причина (timeout/reality/udp…), tooltip с подсказкой, кнопка **API ↻** пересобирает `ss-*` из каталога; CLI `ssurf refresh <id>` |
@@ -136,7 +137,7 @@ ssurf h                # справка · ssurf m — меню
 
 ## Рядом с XrayUI
 
-StealthSurf **1.1.15** держит своё состояние:
+StealthSurf **1.1.16** держит своё состояние и **безопасен при удалении/остановке** рядом с stock XrayUI:
 
 | | StealthSurf | Stock XrayUI |
 | --- | --- | --- |
@@ -145,8 +146,12 @@ StealthSurf **1.1.15** держит своё состояние:
 | Settings | `stealthsurf_*` | `xray_*` |
 | PID | `/var/run/stealthsurf-xray.pid` | `/var/run/xray.pid` |
 | Firewall | `STEALTHSURF*` · mark `0x20000` · table `78` | `XRAYUI*` · `0x10000` · `77` |
+| TUN | table `251` · prio `47/53` · iface `ss0` | table `250` · `49/51` · `xray0` |
+| Ports | dokodemo `5699` · API `10185` · metrics `10186` | `5599` · `10085` · `10086` |
+| Cron / Scribe | `stealthsurf*` · `syslog-ng.d/stealthsurf` | `xrayui*` · `syslog-ng.d/xrayui` |
 
-Общее: `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat`.  
+Общее: `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat` (uninstall SS их не удаляет, если XrayUI установлен).  
+Стоп SS снимает только `#stealthsurf` из dnsmasq и свои firewall/TUN правила.  
 **Не включайте transparent proxy у обоих аддонов одновременно** — StealthSurf покажет баннер «Конфликт с XrayUI» и запретит Start, пока XrayUI работает.
 
 <p align="center">
@@ -156,7 +161,7 @@ StealthSurf **1.1.15** держит своё состояние:
 ## Как устроено
 
 ```text
-LAN / Wi‑Fi ──► iptables TPROXY ──► Xray (all-in :5599)
+LAN / Wi‑Fi ──► iptables TPROXY ──► Xray (all-in :5699)
                                       │
                outbounds ss-<id>  ◄────┤  routing (stealthsurf-default)
                                       ▼

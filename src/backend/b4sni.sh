@@ -63,8 +63,10 @@ b4sni_stop() {
         rm -f "$pid_file"
     fi
 
-    # Fallback to killall if PIDs don't work
-    killall "b4sni" 2>/dev/null
+    # Fallback: only processes started from OUR share dir (never stock XrayUI's b4sni)
+    if type ss_kill_by_cmdline_path >/dev/null 2>&1; then
+        ss_kill_by_cmdline_path "$ADDON_SHARE_DIR/b4sni"
+    fi
 }
 
 b4sni_log_manager() {

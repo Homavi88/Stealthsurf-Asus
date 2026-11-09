@@ -6,7 +6,7 @@ shift
 LC_ALL=C
 export LC_ALL
 
-mkdir -p "$RS_STATE/opt/etc/xray/xrayui" "$RS_STATE/share"
+mkdir -p "$RS_STATE/opt/etc/xray/stealthsurf" "$RS_STATE/share"
 sed -e '/^import /d' -e "s#/opt/#$RS_STATE/opt/#g" "$REPO_DIR/src/backend/api.sh" >"$RS_STATE/api.$$.sh"
 . "$RS_STATE/api.$$.sh"
 
@@ -34,7 +34,8 @@ xray() {
     cat "$RS_STATE/stats.json"
 }
 
-XRAY_CONFIG_FILE="$RS_STATE/opt/etc/xray/config.json"
+XRAY_CONFIG_DIR="$RS_STATE/opt/etc/xray/stealthsurf"
+XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/config.json"
 XRAYUI_CONNECTION_STATUS_FILE="$RS_STATE/share/xray_connection_status.json"
 ADDON_SHARE_DIR="$RS_STATE/share"
 XRAYUI_CLIENTS_FILE="$RS_STATE/share/clients-online.json"

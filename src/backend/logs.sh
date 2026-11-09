@@ -247,16 +247,27 @@ EOF
   cron_logrotate_add
 }
 
+# Isolated from stock XrayUI (/opt/etc/syslog-ng.d/xrayui)
+SS_SCRIBE_CONF="/opt/etc/syslog-ng.d/${ADDON_TAG:-stealthsurf}"
+
+logs_scribe_remove() {
+  rm -f "$SS_SCRIBE_CONF" 2>/dev/null
+  # Migrate: old builds wrongly used stock path — remove only if it filters STEALTHSURF
+  if [ -f /opt/etc/syslog-ng.d/xrayui ] && grep -q 'STEALTHSURF\|stealthsurf' /opt/etc/syslog-ng.d/xrayui 2>/dev/null; then
+    rm -f /opt/etc/syslog-ng.d/xrayui 2>/dev/null
+  fi
+}
+
 logs_scribe_integration() {
   load_xrayui_config
   # Check if integration is enabled first, before any other checks
   if [ "$integration_scribe" != "true" ]; then
     log_debug "Scribe integration is disabled in the configuration."
-    rm -f /opt/etc/syslog-ng.d/xrayui 2>/dev/null
+    logs_scribe_remove
     return 0
   fi
 
-  log_info "Setting up XRAYUI syslog integration for Scribe..."
+  log_info "Setting up StealthSurf syslog integration for Scribe..."
 
   if [ ! -f /jffs/scripts/scribe ]; then
     log_warn "Scribe script not found. Please install Scribe first."
@@ -268,22 +279,23 @@ logs_scribe_integration() {
     return 0
   fi
 
-  log_debug "Scribe integration is enabled. Creating syslog-ng configuration for XRAYUI."
+  log_debug "Scribe integration is enabled. Creating syslog-ng configuration for StealthSurf."
 
-  cat >/opt/etc/syslog-ng.d/xrayui <<EOF
-# syslog-ng configuration for XRAYUI
-destination d_xrayui { 
-    file("/opt/var/log/xrayui.log");
+  # Never write stock /opt/etc/syslog-ng.d/xrayui
+  cat >"$SS_SCRIBE_CONF" <<EOF
+# syslog-ng configuration for StealthSurf (isolated from XrayUI)
+destination d_stealthsurf {
+    file("/opt/var/log/stealthsurf.log");
 };
 
-filter f_xrayui {
-    message("XRAYUI");
+filter f_stealthsurf {
+    message("STEALTHSURF") or message("StealthSurf");
 };
 
 log {
     source(src);
-    filter(f_xrayui);
-    destination(d_xrayui);
+    filter(f_stealthsurf);
+    destination(d_stealthsurf);
     flags(final);
 };
 
@@ -292,5 +304,5 @@ EOF
 
   /jffs/scripts/scribe restart || { log_error "Failed to reload Scribe configuration." && return 1; }
 
-  log_ok "Scribe integration for XRAYUI logs configured successfully."
+  log_ok "Scribe integration for StealthSurf logs configured successfully."
 }

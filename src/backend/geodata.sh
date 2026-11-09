@@ -34,6 +34,8 @@ update_community_geodata() {
         return 0
     fi
 
+    # Shared community dats next to /opt/sbin/xray — both addons benefit.
+    # Custom dat stays isolated as /opt/sbin/stealthsurf (never /opt/sbin/xrayui).
     mv -f "$ADDON_TMP_DIR/geosite.dat" "$xray_dir/geosite.dat"
     mv -f "$ADDON_TMP_DIR/geoip.dat" "$xray_dir/geoip.dat"
 

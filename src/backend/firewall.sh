@@ -968,6 +968,8 @@ cleanup_firewall_rules() {
     ipt mangle -D "$FW_DIVERT_CHAIN" -j ACCEPT 2>/dev/null
 
     ipt_remove mangle PREROUTING -p tcp -m socket --transparent -j "$FW_DIVERT_CHAIN"
+    ipt mangle -F "$FW_DIVERT_CHAIN" 2>/dev/null
+    ipt mangle -X "$FW_DIVERT_CHAIN" 2>/dev/null
 
     for fam in -4 -6; do
         [ "$fam" = "-6" ] && ! is_ipv6_enabled && continue
@@ -1012,7 +1014,15 @@ cleanup_firewall_rules() {
         "$script" "$XRAY_CONFIG_FILE" 9>&- || log_error "Error executing $script."
     fi
 
-    if [ "$POST_RESTART_DNSMASQ" = "false" ] && dnsmasq_has_xrayui_block; then
+    # Strip our dnsmasq hijack on stop so stock XrayUI is not left with no-resolv leftovers
+    local had_dnsmasq_block=false
+    if dnsmasq_has_xrayui_block; then
+        had_dnsmasq_block=true
+    fi
+    if type dnsmasq_strip_addon_block >/dev/null 2>&1; then
+        dnsmasq_strip_addon_block /etc/dnsmasq.conf
+    fi
+    if [ "$POST_RESTART_DNSMASQ" = "false" ] && [ "$had_dnsmasq_block" = "true" ]; then
         dnsmasq_restart
     fi
 

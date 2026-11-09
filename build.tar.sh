@@ -1,6 +1,6 @@
 #!/bin/bash
 
-XRAYUI_VERSION=${1:-"1.1.15"}
+XRAYUI_VERSION=${1:-"1.1.16"}
 
 NODE_ENV=production npx vite build
 

@@ -39,6 +39,18 @@ rtls_scan_start() {
 
 rtls_scan_stop() {
     log_info "Stopping RTLS scanning..."
-    killall rtls-scanner
+    # Only our binary path — never killall (would hit stock XrayUI's scanner)
+    if type ss_kill_by_cmdline_path >/dev/null 2>&1; then
+        ss_kill_by_cmdline_path "$ADDON_SHARE_DIR/rtls-scanner"
+    else
+        local p cmd
+        for p in /proc/[0-9]*; do
+            [ -r "$p/cmdline" ] || continue
+            cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+            case "$cmd" in
+            *"$ADDON_SHARE_DIR/rtls-scanner"*) kill "${p##*/}" 2>/dev/null || true ;;
+            esac
+        done
+    fi
     log_ok "RTLS scanning stopped."
 }

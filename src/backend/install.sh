@@ -326,18 +326,27 @@ uninstall() {
     log_info "Removing XRAY UI geodata files builder..."
     rm -rf "$ADDON_SHARE_DIR/xraydatbuilder" || log_debug "Failed to remove $ADDON_SHARE_DIR/xraydatbuilder."
 
+    # Detect stock XrayUI so we never delete its shared resources
+    local stock_xrayui=false
+    if type ss_xrayui_installed >/dev/null 2>&1 && ss_xrayui_installed; then
+        stock_xrayui=true
+        log_info "Stock XrayUI detected — shared Xray/geodata/xrayui.conf will be preserved."
+    fi
+
     echo
-    log_warn "Do you want to remove custom GEODATA? (yes/no)"
+    log_warn "Do you want to remove StealthSurf custom GEODATA? (yes/no)"
     read -r user_input
 
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        log_info "Removing custom GEODATA..."
+        log_info "Removing StealthSurf custom GEODATA..."
         rm -rf "$ADDON_SHARE_DIR" || log_debug "Failed to remove $ADDON_SHARE_DIR."
-
-        #Remove XRAY custom geodata
-        rm -rf /opt/sbin/xrayui /opt/sbin/stealthsurf || log_debug "Failed to remove geodata helper binary."
-        rm -rf /opt/sbin/geosite.dat || log_debug "Failed to remove /opt/sbin/geosite.dat."
-        rm -rf /opt/sbin/geoip.dat || log_debug "Failed to remove /opt/sbin/geoip.dat."
+        # Only our custom dat helper — never /opt/sbin/xrayui (stock XrayUI)
+        rm -f /opt/sbin/stealthsurf || log_debug "Failed to remove /opt/sbin/stealthsurf."
+        if [ "$stock_xrayui" = "true" ]; then
+            log_info "Keeping shared community geodata (geoip.dat/geosite.dat) for stock XrayUI."
+        else
+            rm -f /opt/sbin/geosite.dat /opt/sbin/geoip.dat || log_debug "Failed to remove community geodata."
+        fi
     else
         log_info "Keeping custom GEODATA."
     fi
@@ -345,67 +354,83 @@ uninstall() {
 
     # Ask user if they want to remove backups
     echo
-    log_warn "Do you want to remove BACKUPS? (yes/no)"
+    log_warn "Do you want to remove StealthSurf BACKUPS? (yes/no)"
     read -r user_input
 
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        log_info "Removing  BACKUPS..."
+        log_info "Removing StealthSurf BACKUPS..."
         backup_clear
     else
-        log_info "Keeping  BACKUPS."
+        log_info "Keeping StealthSurf BACKUPS."
     fi
     user_input=""
 
-    # Ask user if they want to remove XRAY (opkg) and its configs
-    echo
-    log_warn "Do you want to remove XRAY (installed via opkg) and its configurations? (yes/no)"
-    read -r user_input
-
-    if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        # Remove XRAY from Entware if installed
-        if opkg list-installed | grep -q '^xray$'; then
-            log_info "Removing XRAY from Entware..."
-            if opkg remove xray; then
-                log_info "XRAY removed successfully."
-            else
-                log_error "Failed to remove XRAY."
-                exit 1
-            fi
-        else
-            log_info "XRAY is not installed."
-        fi
-
-        rm -f /opt/sbin/xray || log_debug "Failed to remove /opt/sbin/xray."
-        rm -f /opt/sbin/geoip.dat || log_debug "Failed to remove /opt/sbin/geoip.dat."
-        rm -f /opt/sbin/geosite.dat || log_debug "Failed to remove /opt/sbin/geosite.dat."
-
-        # Remove XRAY configuration files
-        log_info "Removing XRAY configuration files..."
-        rm -rf /opt/etc/xray || log_debug "Failed to remove /opt/etc/xray."
-        if [ $? -eq 0 ]; then
-            log_info "XRAY configuration files removed successfully."
-        else
-            log_error "Failed to remove XRAY configuration files."
-            exit 1
-        fi
-    else
-        log_info "Keeping XRAY and its configuration files."
+    # Profile tree is always ours — safe even when XrayUI is installed
+    if [ -d "$XRAY_CONFIG_DIR" ]; then
+        log_info "Removing StealthSurf profile tree $XRAY_CONFIG_DIR..."
+        rm -rf "$XRAY_CONFIG_DIR" || log_debug "Failed to remove $XRAY_CONFIG_DIR."
     fi
 
-    # Ask user to remove xrayui settings
+    if [ "$stock_xrayui" = "true" ]; then
+        log_info "Keeping shared /opt/sbin/xray and /opt/etc/xray (stock XrayUI still needs them)."
+    else
+        echo
+        log_warn "Do you want to remove XRAY core (/opt/sbin/xray) and remaining /opt/etc/xray? (yes/no)"
+        read -r user_input
+
+        if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
+            if opkg list-installed 2>/dev/null | grep -q '^xray$'; then
+                log_info "Removing XRAY from Entware..."
+                if opkg remove xray; then
+                    log_info "XRAY removed successfully."
+                else
+                    log_error "Failed to remove XRAY."
+                    exit 1
+                fi
+            else
+                log_info "XRAY is not installed via opkg."
+            fi
+
+            rm -f /opt/sbin/xray /opt/sbin/geoip.dat /opt/sbin/geosite.dat || log_debug "Failed to remove xray binaries/geodata."
+            # Only remove remaining tree if empty of stock files; never if config.json exists
+            if [ -f /opt/etc/xray/config.json ]; then
+                log_warn "Keeping /opt/etc/xray because stock config.json is present."
+            else
+                log_info "Removing remaining XRAY configuration under /opt/etc/xray..."
+                rm -rf /opt/etc/xray || log_debug "Failed to remove /opt/etc/xray."
+            fi
+        else
+            log_info "Keeping XRAY and its configuration files."
+        fi
+        user_input=""
+    fi
+
     echo
     log_warn "Do you want to remove StealthSurf settings ($XRAYUI_CONFIG_FILE)? (yes/no)"
     read -r user_input
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
         log_info "Removing StealthSurf settings..."
-        rm -f "$XRAYUI_CONFIG_FILE" /opt/etc/stealthsurf.conf /opt/etc/xrayui.conf || log_debug "Failed to remove settings conf."
+        # Never delete stock /opt/etc/xrayui.conf
+        rm -f "$XRAYUI_CONFIG_FILE" /opt/etc/stealthsurf.conf || log_debug "Failed to remove settings conf."
     else
         log_info "Keeping StealthSurf settings ($XRAYUI_CONFIG_FILE)."
     fi
 
+    # Strip leftover dnsmasq hijack before hooks are gone
+    if type dnsmasq_strip_addon_block >/dev/null 2>&1; then
+        dnsmasq_strip_addon_block /etc/dnsmasq.conf
+    fi
+    if type logs_scribe_remove >/dev/null 2>&1; then
+        logs_scribe_remove
+    else
+        rm -f "/opt/etc/syslog-ng.d/${ADDON_TAG}" 2>/dev/null
+    fi
+
     cron_jobs_clear
 
-    rm -rf /opt/etc/logrotate.d/stealthsurf /opt/etc/logrotate.d/xrayui || log_debug "Failed to remove logrotate config."
+    # Only our logrotate stanza — never stock xrayui
+    rm -f /opt/etc/logrotate.d/stealthsurf || log_debug "Failed to remove logrotate config."
+    rm -f /opt/bin/stealthsurf /opt/bin/ssurf /opt/bin/ss 2>/dev/null
     rm -rf /jffs/scripts/stealthsurf || log_debug "Failed to remove /jffs/scripts/stealthsurf."
 
     log_box "Uninstallation process completed successfully."

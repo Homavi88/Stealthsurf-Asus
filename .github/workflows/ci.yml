@@ -34,7 +34,7 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.15"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.1.16"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           grep -q 'available-servers' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'Manage' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q '_ss_location_code\|catalogLocationLabel\|locations' /tmp/ss-ci-pkg/stealthsurf/app.js
@@ -73,3 +73,7 @@ jobs:
           sh tests/backend/ss_catalog_sync.spec.sh
           sh tests/backend/ss_catalog_enrich.spec.sh
           sh tests/backend/test-xrayui-detect.sh
+          sh tests/backend/test-coexistence.sh
+          grep -q 'tun_table=251' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'dnsmasq_strip_addon_block' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q '10185' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
