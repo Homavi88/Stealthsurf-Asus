@@ -5,8 +5,8 @@
 <h1 align="center">StealthSurf</h1>
 
 <p align="center">
-  <strong>VPN провайдера — на весь дом через роутер Asuswrt-Merlin</strong><br>
-  WebUI как у нативных аддонов Merlin · sync с API · transparent proxy · routing · CLI <code>ssurf</code>
+  <strong>Своя панель на роутере Asuswrt-Merlin — по аналогии с официальным StealthSurf</strong><br>
+  Отдельный адрес <code>LAN:1131</code> (официальный — <code>:8800</code>) · вкладка Merlin · API · transparent proxy · CLI <code>ssurf</code>
 </p>
 
 <p align="center">
@@ -14,23 +14,23 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.1.16-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.2.0-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
   <a href="#установка"><strong>Установка</strong></a> ·
-  <a href="#что-нового-в-118"><strong>1.1.16</strong></a> ·
+  <a href="#панель-1131"><strong>Панель :1131</strong></a> ·
+  <a href="#что-нового-в-118"><strong>Changelog</strong></a> ·
   <a href="#возможности"><strong>Возможности</strong></a> ·
-  <a href="#веб-интерфейс"><strong>WebUI</strong></a> ·
   <a href="#cli-за-минуту"><strong>CLI</strong></a> ·
   <a href="#рядом-с-xrayui"><strong>XrayUI</strong></a>
 </p>
 
 ---
 
-Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf: без клиента на телефонах, с балансом/каталогом из API, импортом в outbounds и коротким CLI `ssurf`. Вкладка **VPN → StealthSurf**.
+Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf. С **1.2.0** основной UI — **своя панель** на IP роутера и порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Вкладка **VPN → StealthSurf** в Merlin тоже остаётся.
 
-Актуальная версия **1.1.16** (платформа 1.1.x) — ребренд и доработка [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) (Vue 3 + shell): полноценные inbounds/outbounds, routing, DNS, geodata, firewall/TPROXY + StealthSurf API.
+Актуальная версия **1.2.0** — платформа [asuswrt-merlin-xrayui](https://github.com/DanielLavrushin/asuswrt-merlin-xrayui) + StealthSurf API + standalone BusyBox httpd panel.
 
 ## Установка
 
@@ -40,10 +40,29 @@
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
-Затем: logout → login в WebUI → **VPN → StealthSurf**  
-Актуальный пакет: [**Releases → latest**](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest) (`asuswrt-merlin-stealthsurf.tar.gz`).
+Затем откройте панель:
+
+```text
+http://192.168.50.1:1131/
+```
+
+(подставьте свой LAN IP; рядом официальный StealthSurf может слушать `:8800`).  
+Опционально: logout → login в WebUI → **VPN → StealthSurf**.  
+Пакет: [**Releases → latest**](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest).
 
 Обновление с 1.0.x / 1.1.x — тем же именем пакета; ключи `stlth_…` мигрируют из `/opt/etc/stealthsurf.conf`.
+
+### Панель :1131
+
+| | |
+| --- | --- |
+| URL | `http://<lan_ip>:1131/` |
+| Служба | `ssurf panel start\|stop\|restart\|status` |
+| Пароль | `ssurf panel set-password` (Basic Auth, опционально) |
+| Отдельный IP | в `/opt/etc/stealthsurf.conf`: `panel_ip=192.168.50.2` → alias на `br0`, панель только там |
+| Порт | `panel_port=1131` (по умолчанию) |
+
+Официальный пакет (`curl …/merlin.sh`, демон `stealthsurf-routerd` на `:8800`) **не заменяется** — это другой продукт. Наш аддон сосуществует по порту/IP и своим firewall mark’ам.
 
 Если CLI «битый» и не запускается — восстановление:
 
@@ -64,6 +83,7 @@ cd /tmp && curl -fsSL -o ss.tgz \
 
 | | |
 | --- | --- |
+| **1.2.0 Standalone panel** | Своя панель на `LAN:1131` (аналог официального `:8800`); CGI API; опциональный secondary IP `panel_ip`; CLI `ssurf panel` |
 | **1.1.16 Coexistence** | Удаление/стоп SS не трогает XrayUI (cron, TUN, dnsmasq, scribe, uninstall); порты `5699`/`10185`/`10186`; TUN table `251` |
 | **1.1.15 Account UX** | Stats/Traffic в Vue-модалке (без Please wait); локация как страна (`Netherlands (NL)`); настройки/billing за кнопкой **Manage** |
 | **1.1.14 API control** | Каталог: expires/локация/auto-renew + paid/cloud; PATCH settings; autofit под ISP; traffic/stats; renew/top-up; CLI `ssurf autofit|patch|stats|traffic|renew|topup` |

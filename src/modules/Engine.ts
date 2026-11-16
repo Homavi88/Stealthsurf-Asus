@@ -457,7 +457,16 @@ export class Engine {
   private readonly stagingChunkSize = 2048;
   private readonly stagingInterChunkDelay = 1200;
 
+  /** Standalone panel on :1131 (not Merlin ASP /start_apply.htm). */
+  private isStandalonePanel(): boolean {
+    return Boolean((window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__);
+  }
+
   public async submit(action: string, payload: object | string | number | null | undefined = undefined, delay = 1000): Promise<void> {
+    if (this.isStandalonePanel()) {
+      return this.postPanelApi(action, payload, delay);
+    }
+
     if (payload === undefined || payload === null) {
       return this.postForm(action, false, delay);
     }
@@ -483,6 +492,40 @@ export class Engine {
       delete window.xray.custom_settings[`stealthsurf_payload${idx}`];
     });
     return this.submitStaged(action, payloadString, delay);
+  }
+
+  private async postPanelApi(
+    action: string,
+    payload: object | string | number | null | undefined,
+    delay: number
+  ): Promise<void> {
+    const settings: Record<string, string> = { ...this.ownCustomSettings() };
+
+    if (payload !== undefined && payload !== null) {
+      Object.keys(settings).forEach((k) => {
+        if (k.startsWith('stealthsurf_payload') || k.startsWith('stealthsurf_stage')) {
+          delete settings[k];
+        }
+      });
+      const payloadString = this.compressPayload(JSON.stringify(payload));
+      const chunks = this.splitPayload(payloadString, this.nvramChunkSize);
+      chunks.forEach((chunk: string, idx) => {
+        settings[`stealthsurf_payload${idx}`] = chunk;
+      });
+    }
+
+    await axios.post(
+      '/cgi-bin/api',
+      { action, settings },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 60000
+      }
+    );
+
+    if (delay > 0) {
+      await this.delay(delay);
+    }
   }
 
   private compressPayload(raw: string): string {

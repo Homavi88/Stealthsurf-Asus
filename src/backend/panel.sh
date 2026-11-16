@@ -1,0 +1,473 @@
+#!/bin/sh
+# shellcheck disable=SC2034  # codacy:Unused variables
+#
+# Standalone control panel (official StealthSurf analogy: lan_ip:8800).
+# Ours listens on a dedicated router IP:port — default lan_ip:1131 — so it can
+# sit next to the stock StealthSurf panel on :8800 without sharing Merlin's ASP UI.
+
+PANEL_DEFAULT_PORT=1131
+PANEL_PIDFILE=/var/run/stealthsurf-panel.pid
+PANEL_LOG=/tmp/stealthsurf/panel.log
+PANEL_HTTPD_CONF="$ADDON_JFFS_ADN_DIR/panel/httpd.conf"
+PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
+PANEL_CGI_DIR="$PANEL_WEB_ROOT/cgi-bin"
+PANEL_SECONDARY_TAG="stealthsurf-panel"
+
+panel_load_settings() {
+    load_xrayui_config 2>/dev/null || true
+
+    PANEL_PORT="${panel_port:-$PANEL_DEFAULT_PORT}"
+    case "$PANEL_PORT" in
+    '' | *[!0-9]*) PANEL_PORT=$PANEL_DEFAULT_PORT ;;
+    esac
+    if [ "$PANEL_PORT" -lt 1 ] || [ "$PANEL_PORT" -gt 65535 ]; then
+        PANEL_PORT=$PANEL_DEFAULT_PORT
+    fi
+
+    PANEL_LAN_IP=$(nvram get lan_ipaddr 2>/dev/null)
+    [ -n "$PANEL_LAN_IP" ] || PANEL_LAN_IP="192.168.50.1"
+
+    # Optional dedicated/secondary IPv4 on the LAN bridge (br0). When set and
+    # different from lan_ipaddr, we add an alias and bind the panel only there.
+    PANEL_IP="${panel_ip:-}"
+    if [ -z "$PANEL_IP" ]; then
+        PANEL_IP=$PANEL_LAN_IP
+        PANEL_USE_SECONDARY=0
+    elif [ "$PANEL_IP" = "$PANEL_LAN_IP" ]; then
+        PANEL_USE_SECONDARY=0
+    else
+        PANEL_USE_SECONDARY=1
+    fi
+
+    PANEL_BIND="${panel_bind:-$PANEL_IP}"
+    PANEL_IFACE="${panel_iface:-br0}"
+}
+
+panel_find_httpd() {
+    # Prefer Entware/BusyBox applet — never the stock Asus /usr/sbin/httpd.
+    if [ -x /opt/bin/busybox ] && /opt/bin/busybox 2>&1 | head -n1 | grep -qi busybox; then
+        if /opt/bin/busybox httpd --help >/dev/null 2>&1 || /opt/bin/busybox 2>&1 | grep -qw httpd; then
+            echo "/opt/bin/busybox httpd"
+            return 0
+        fi
+    fi
+    if type busybox >/dev/null 2>&1; then
+        if busybox 2>&1 | head -n1 | grep -qi busybox; then
+            echo "busybox httpd"
+            return 0
+        fi
+    fi
+    if [ -x /bin/busybox ] && /bin/busybox 2>&1 | head -n1 | grep -qi busybox; then
+        echo "/bin/busybox httpd"
+        return 0
+    fi
+    return 1
+}
+
+panel_ensure_secondary_ip() {
+    panel_load_settings
+    [ "$PANEL_USE_SECONDARY" = "1" ] || return 0
+
+    if ! ip -4 addr show dev "$PANEL_IFACE" 2>/dev/null | grep -q "inet ${PANEL_IP}/"; then
+        local mask
+        mask=$(nvram get lan_netmask 2>/dev/null)
+        [ -n "$mask" ] || mask="255.255.255.0"
+        local prefix
+        prefix=$(panel_netmask_to_prefix "$mask")
+        log_info "Adding secondary panel IP ${PANEL_IP}/${prefix} on $PANEL_IFACE"
+        ip addr add "${PANEL_IP}/${prefix}" dev "$PANEL_IFACE" label "${PANEL_IFACE}:${PANEL_SECONDARY_TAG}" 2>/dev/null ||
+            ip addr add "${PANEL_IP}/${prefix}" dev "$PANEL_IFACE" 2>/dev/null ||
+            log_warn "Could not add secondary IP $PANEL_IP on $PANEL_IFACE"
+    fi
+}
+
+panel_remove_secondary_ip() {
+    panel_load_settings
+    [ "$PANEL_USE_SECONDARY" = "1" ] || return 0
+    ip addr del "${PANEL_IP}/32" dev "$PANEL_IFACE" 2>/dev/null || true
+    # Try common prefix lengths if /32 was not how it was added
+    local mask prefix
+    mask=$(nvram get lan_netmask 2>/dev/null)
+    [ -n "$mask" ] || mask="255.255.255.0"
+    prefix=$(panel_netmask_to_prefix "$mask")
+    ip addr del "${PANEL_IP}/${prefix}" dev "$PANEL_IFACE" 2>/dev/null || true
+}
+
+panel_netmask_to_prefix() {
+    # BusyBox-friendly dotted → CIDR for common LAN masks
+    case "$1" in
+    255.255.255.0) echo 24 ;;
+    255.255.0.0) echo 16 ;;
+    255.0.0.0) echo 8 ;;
+    255.255.255.128) echo 25 ;;
+    255.255.255.192) echo 26 ;;
+    255.255.255.224) echo 27 ;;
+    255.255.255.240) echo 28 ;;
+    *) echo 24 ;;
+    esac
+}
+
+panel_write_cgi() {
+    mkdir -p "$PANEL_CGI_DIR" || return 1
+
+    cat >"$PANEL_CGI_DIR/bootstrap" <<'CGI'
+#!/bin/sh
+echo "Content-Type: application/json"
+echo "Cache-Control: no-store"
+echo ""
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+if [ -x "$ADDON_SCRIPT" ]; then
+  "$ADDON_SCRIPT" panel bootstrap
+else
+  echo '{"ok":false,"error":"stealthsurf missing"}'
+fi
+CGI
+
+    cat >"$PANEL_CGI_DIR/api" <<'CGI'
+#!/bin/sh
+echo "Content-Type: application/json"
+echo "Cache-Control: no-store"
+echo ""
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+export CONTENT_LENGTH REQUEST_METHOD
+if [ -x "$ADDON_SCRIPT" ]; then
+  "$ADDON_SCRIPT" panel api
+else
+  echo '{"ok":false,"error":"stealthsurf missing"}'
+fi
+CGI
+
+    chmod 0755 "$PANEL_CGI_DIR/bootstrap" "$PANEL_CGI_DIR/api" || true
+}
+
+panel_prepare_webroot() {
+    panel_load_settings
+    mkdir -p "$PANEL_WEB_ROOT/ext/stealthsurf" "$PANEL_CGI_DIR" /tmp/stealthsurf || return 1
+
+    # Static SPA
+    if [ -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ]; then
+        :
+    elif [ -f "$ADDON_JFFS_ADN_DIR/index.panel.html" ]; then
+        cp -f "$ADDON_JFFS_ADN_DIR/index.panel.html" "$PANEL_WEB_ROOT/index.html"
+    fi
+
+    # Prefer panel-local app.js; fall back to shared addon copy
+    if [ ! -f "$PANEL_WEB_ROOT/app.js" ] && [ -f "$ADDON_JFFS_ADN_DIR/app.js" ]; then
+        ln -s -f "$ADDON_JFFS_ADN_DIR/app.js" "$PANEL_WEB_ROOT/app.js"
+    fi
+
+    # Same JSON/cab surface the Merlin UI uses under /ext/stealthsurf/
+    if [ -d "$ADDON_WEB_DIR" ]; then
+        ln -sfn "$ADDON_WEB_DIR" "$PANEL_WEB_ROOT/ext/stealthsurf-files" 2>/dev/null || true
+        # BusyBox httpd does not follow a directory symlink as document root child
+        # reliably on all builds — mirror individual files as symlinks.
+        local f
+        for f in "$ADDON_WEB_DIR"/*; do
+            [ -e "$f" ] || continue
+            ln -s -f "$f" "$PANEL_WEB_ROOT/ext/stealthsurf/${f##*/}" 2>/dev/null || true
+        done
+    fi
+
+    panel_write_cgi
+
+    # BusyBox httpd.conf: optional Basic auth when panel_password_hash is set.
+    # Auth line format: /:user:encrypted
+    {
+        echo "I:index.html"
+        if [ -n "${panel_password_hash:-}" ]; then
+            echo "/:${panel_user:-admin}:${panel_password_hash}"
+        fi
+    } >"$PANEL_HTTPD_CONF"
+
+    # BusyBox runs any executable under cgi-bin/ as CGI.
+    chmod 0755 "$PANEL_CGI_DIR"/* 2>/dev/null || true
+}
+
+panel_url() {
+    panel_load_settings
+    echo "http://${PANEL_BIND}:${PANEL_PORT}/"
+}
+
+panel_is_running() {
+    local pid
+    pid=$(cat "$PANEL_PIDFILE" 2>/dev/null) || return 1
+    case "$pid" in
+    '' | *[!0-9]*) return 1 ;;
+    esac
+    kill -0 "$pid" 2>/dev/null || return 1
+    # Confirm it is our panel httpd (listen arg contains our port)
+    if [ -r "/proc/$pid/cmdline" ]; then
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|:${PANEL_PORT}\| $PANEL_PORT " || {
+            # Still accept if pidfile matches a live httpd we started
+            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qi httpd || return 1
+        }
+    fi
+    return 0
+}
+
+panel_stop() {
+    panel_load_settings
+    if [ -f "$PANEL_PIDFILE" ]; then
+        local pid
+        pid=$(cat "$PANEL_PIDFILE" 2>/dev/null)
+        if [ -n "$pid" ]; then
+            kill "$pid" 2>/dev/null || true
+            local i=0
+            while [ "$i" -lt 20 ] && kill -0 "$pid" 2>/dev/null; do
+                sleep 1
+                i=$((i + 1))
+            done
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+        rm -f "$PANEL_PIDFILE"
+    fi
+    # Strays bound to our port
+    if type netstat >/dev/null 2>&1; then
+        local p
+        for p in $(netstat -lntp 2>/dev/null | awk -v port=":$PANEL_PORT" '$4 ~ port { split($7,a,"/"); print a[1] }'); do
+            case "$p" in
+            '' | *[!0-9]* | 1) ;;
+            *) kill "$p" 2>/dev/null || true ;;
+            esac
+        done
+    fi
+    log_info "Standalone panel stopped"
+}
+
+panel_start() {
+    panel_load_settings
+    panel_prepare_webroot || {
+        log_error "panel: failed to prepare web root"
+        return 1
+    }
+    panel_ensure_secondary_ip
+
+    if panel_is_running; then
+        log_info "Standalone panel already running on $(panel_url)"
+        return 0
+    fi
+
+    local httpd_cmd
+    httpd_cmd=$(panel_find_httpd) || {
+        log_error "panel: BusyBox httpd not found. Install Entware busybox or use a firmware build that includes it."
+        return 1
+    }
+
+    mkdir -p /tmp/stealthsurf
+    : >"$PANEL_LOG"
+
+    # -p [IP:]PORT  -h home  -c config
+    # Run in background; record PID.
+    # shellcheck disable=SC2086
+    $httpd_cmd -p "${PANEL_BIND}:${PANEL_PORT}" -h "$PANEL_WEB_ROOT" -c "$PANEL_HTTPD_CONF" >>"$PANEL_LOG" 2>&1 &
+    echo $! >"$PANEL_PIDFILE"
+
+    sleep 1
+    if panel_is_running; then
+        log_ok "Standalone panel listening on $(panel_url)"
+        am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+        return 0
+    fi
+
+    log_error "panel: failed to start httpd (see $PANEL_LOG)"
+    rm -f "$PANEL_PIDFILE"
+    return 1
+}
+
+panel_restart() {
+    panel_stop
+    panel_start
+}
+
+panel_status() {
+    panel_load_settings
+    if panel_is_running; then
+        echo "panel: running  $(panel_url)  pid=$(cat "$PANEL_PIDFILE" 2>/dev/null)"
+        return 0
+    fi
+    echo "panel: stopped  (would listen on $(panel_url))"
+    return 1
+}
+
+# JSON bootstrap for the SPA (replaces Merlin ASP <% nvram_get %> blocks).
+panel_bootstrap_json() {
+    panel_load_settings
+    load_xrayui_config 2>/dev/null || true
+
+    local productid firmver lang territory wan_ip link_internet rc_support extendno
+    productid=$(nvram get productid 2>/dev/null)
+    firmver=$(nvram get firmver 2>/dev/null)
+    lang=$(nvram get preferred_lang 2>/dev/null)
+    [ -n "$lang" ] || lang="en"
+    territory=$(nvram get territory_code 2>/dev/null)
+    wan_ip=$(nvram get wan_ipaddr 2>/dev/null)
+    link_internet=$(nvram get link_internet 2>/dev/null)
+    rc_support=$(nvram get rc_support 2>/dev/null)
+    extendno=$(nvram get extendno 2>/dev/null)
+
+    local wan_connected=false
+    [ "$link_internet" = "2" ] && wan_connected=true
+
+    local is_gnuton=false
+    case "$extendno" in
+    *gnuton*) is_gnuton=true ;;
+    esac
+
+    local xray_running=false
+    if [ -n "$(get_xray_daemon_pid 2>/dev/null)" ]; then
+        xray_running=true
+    fi
+
+    local b4sni_running=false
+    if pidof b4sni >/dev/null 2>&1; then
+        b4sni_running=true
+    fi
+
+    local cpu
+    cpu=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null) || cpu=1
+
+    local custom_settings="{}"
+    if [ -f /jffs/addons/custom_settings.txt ]; then
+        custom_settings=$(
+            awk -F= '
+              BEGIN { printf "{" }
+              /^stealthsurf_/ {
+                key=$1
+                val=substr($0, index($0,"=")+1)
+                gsub(/\\/,"\\\\",val); gsub(/"/,"\\\"",val); gsub(/\r/,"",val)
+                if (n++) printf ","
+                printf "\"%s\":\"%s\"", key, val
+              }
+              END { printf "}" }
+            ' /jffs/addons/custom_settings.txt 2>/dev/null
+        )
+        [ -n "$custom_settings" ] || custom_settings="{}"
+    fi
+
+    # Devices: best-effort empty objects (full client DB stays on Merlin ASP path)
+    jq -nc \
+        --arg name "$productid" \
+        --arg firmware "$firmver" \
+        --arg language "$lang" \
+        --arg ip "$PANEL_LAN_IP" \
+        --arg panel_ip "$PANEL_IP" \
+        --argjson panel_port "$PANEL_PORT" \
+        --arg territory "$territory" \
+        --arg wan_ip "$wan_ip" \
+        --argjson wan_connected "$wan_connected" \
+        --arg features "$rc_support" \
+        --argjson is_gnuton "$is_gnuton" \
+        --argjson isRunning "$xray_running" \
+        --argjson b4sni_isRunning "$b4sni_running" \
+        --argjson cpu "$cpu" \
+        --argjson custom_settings "$custom_settings" \
+        '{
+          ok: true,
+          standalone: true,
+          panel: { url: ("http://" + $panel_ip + ":" + ($panel_port|tostring) + "/"), ip: $panel_ip, port: $panel_port },
+          xray: {
+            router: {
+              name: $name,
+              firmware: $firmware,
+              language: $language,
+              ip: $ip,
+              territory: $territory,
+              wan_ip: $wan_ip,
+              wan_connected: $wan_connected,
+              features: $features,
+              is_gnuton: $is_gnuton,
+              cpu: $cpu,
+              devices_online: {},
+              devices: {}
+            },
+            server: { isRunning: $isRunning, b4sni_isRunning: $b4sni_isRunning },
+            custom_settings: $custom_settings
+          }
+        }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
+}
+
+# Accept POST JSON: { "action": "stealthsurf_…", "settings": { … } }
+panel_api_handle() {
+    local body=""
+    if [ "${REQUEST_METHOD:-GET}" = "POST" ]; then
+        if [ -n "${CONTENT_LENGTH:-}" ]; then
+            body=$(dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null)
+        else
+            body=$(cat)
+        fi
+    fi
+
+    if [ -z "$body" ]; then
+        echo '{"ok":false,"error":"empty body"}'
+        return 1
+    fi
+
+    local action settings
+    action=$(printf '%s' "$body" | jq -r '.action // empty' 2>/dev/null)
+    settings=$(printf '%s' "$body" | jq -c '.settings // {}' 2>/dev/null)
+
+    case "$action" in
+    stealthsurf_*) ;;
+    *)
+        echo '{"ok":false,"error":"invalid action"}'
+        return 1
+        ;;
+    esac
+
+    # Apply stealthsurf_* settings (payload chunks etc.) like Merlin amng_custom
+    if [ -n "$settings" ] && [ "$settings" != "{}" ] && [ "$settings" != "null" ]; then
+        printf '%s' "$settings" | jq -r 'to_entries[] | select(.key|startswith("stealthsurf_")) | "\(.key)\t\(.value|tostring)"' 2>/dev/null |
+            while IFS=$(printf '\t') read -r key val; do
+                [ -n "$key" ] || continue
+                am_settings_set "$key" "$val" 2>/dev/null || true
+            done
+    fi
+
+    # Map stealthsurf_configuration_apply → service_event configuration apply
+    local rest
+    rest=$(printf '%s' "$action" | cut -d'_' -f2- | tr '_' ' ')
+    /jffs/scripts/stealthsurf service_event $rest >/tmp/stealthsurf/panel-api.log 2>&1 &
+
+    echo '{"ok":true,"queued":true,"action":"'"$action"'"}'
+}
+
+panel_set_password() {
+    # Usage: panel set-password  (reads password from stdin, one line)
+    panel_load_settings
+    local password
+    IFS= read -r password || true
+    local len=${#password}
+    if [ "$len" -lt 8 ] || [ "$len" -gt 128 ]; then
+        echo "Password must be 8–128 characters" >&2
+        return 1
+    fi
+    local hash user
+    user="${panel_user:-admin}"
+    if type openssl >/dev/null 2>&1; then
+        hash=$(openssl passwd -1 "$password" 2>/dev/null)
+    elif type mkpasswd >/dev/null 2>&1; then
+        hash=$(mkpasswd -m md5crypt "$password" 2>/dev/null)
+    else
+        echo "openssl or mkpasswd required to hash the panel password" >&2
+        return 1
+    fi
+    [ -n "$hash" ] || {
+        echo "Failed to hash password" >&2
+        return 1
+    }
+
+    # Persist into stealthsurf.conf
+    touch "$XRAYUI_CONFIG_FILE" 2>/dev/null || true
+    if grep -q '^panel_password_hash=' "$XRAYUI_CONFIG_FILE" 2>/dev/null; then
+        sed -i "s|^panel_password_hash=.*|panel_password_hash=$hash|" "$XRAYUI_CONFIG_FILE"
+    else
+        echo "panel_password_hash=$hash" >>"$XRAYUI_CONFIG_FILE"
+    fi
+    if grep -q '^panel_user=' "$XRAYUI_CONFIG_FILE" 2>/dev/null; then
+        sed -i "s|^panel_user=.*|panel_user=$user|" "$XRAYUI_CONFIG_FILE"
+    else
+        echo "panel_user=$user" >>"$XRAYUI_CONFIG_FILE"
+    fi
+    panel_restart
+    echo "Panel password saved for user '$user'. Open $(panel_url)"
+}

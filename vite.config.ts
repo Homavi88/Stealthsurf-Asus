@@ -135,7 +135,14 @@ export default defineConfig(({ mode }) => {
             fs.writeFileSync(distScript, mergedContent, { mode: 0o755 });
 
             fs.copyFileSync(join(__dirname, 'src', 'App.html'), join(__dirname, 'dist', 'index.asp'));
-            console.log('Files copied successfully.');
+
+            // Standalone panel (lan_ip:1131) — same app.js, own HTML shell
+            const panelDir = join(__dirname, 'dist', 'panel');
+            fs.mkdirSync(panelDir, { recursive: true });
+            fs.copyFileSync(join(__dirname, 'src', 'panel', 'index.html'), join(panelDir, 'index.html'));
+            fs.copyFileSync(join(__dirname, 'src', 'panel', 'index.html'), join(__dirname, 'dist', 'index.panel.html'));
+            fs.copyFileSync(join(__dirname, 'dist', 'app.js'), join(panelDir, 'app.js'));
+            console.log('Files copied successfully (Merlin ASP + standalone panel).');
           } catch (e) {
             // Fail the build rather than leaving dist/ in a half-written state that would then be deployed.
             this.error(`File copy error: ${e instanceof Error ? e.message : String(e)}`);
