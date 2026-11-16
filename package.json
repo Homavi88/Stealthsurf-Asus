@@ -1,6 +1,6 @@
 {
   "name": "asuswrt-merlin-stealthsurf",
-  "version": "1.1.16",
+  "version": "1.2.0",
   "main": "index.js",
   "scripts": {
     "build": "cross-env NODE_ENV=production vite build",
@@ -13,17 +13,18 @@
     "lint": "eslint . --max-warnings 549",
     "lint:fix": "eslint . --fix",
     "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
-    "pack": "bash ./build.tar.sh 1.1.16 && mkdir -p packaged && mv -f asuswrt-merlin-stealthsurf.tar.gz packaged/"
+    "pack": "bash ./build.tar.sh 1.2.0 && mkdir -p packaged && mv -f asuswrt-merlin-stealthsurf.tar.gz packaged/"
   },
   "keywords": [
     "asuswrt-merlin",
     "stealthsurf",
     "xray",
-    "xrayui"
+    "xrayui",
+    "panel"
   ],
   "author": "",
   "license": "CC-BY-NC-SA-4.0",
-  "description": "StealthSurf VPN control panel for Asuswrt-Merlin (XrayUI platform + StealthSurf API)",
+  "description": "Own StealthSurf-compatible Merlin addon: standalone panel on :1131 + XrayUI platform + StealthSurf API",
   "dependencies": {
     "axios": "^1.20.0",
     "class-transformer": "^0.5.1",

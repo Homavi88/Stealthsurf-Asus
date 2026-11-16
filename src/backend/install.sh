@@ -258,14 +258,28 @@ EOF
         chmod 0755 /jffs/scripts/service-event 2>/dev/null || true
     fi
 
-    log_ok "Installed $(show_version) (StealthSurf $XRAYUI_VERSION beta on XrayUI platform)"
-    log_box "Installation process completed successfully."
+    # Standalone panel on dedicated IP:1131 (coexists with official StealthSurf :8800)
+    if [ ! -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ] && [ -f "$ADDON_JFFS_ADN_DIR/index.panel.html" ]; then
+        mkdir -p "$ADDON_JFFS_ADN_DIR/panel"
+        cp -f "$ADDON_JFFS_ADN_DIR/index.panel.html" "$ADDON_JFFS_ADN_DIR/panel/index.html"
+    fi
+    panel_prepare_webroot 2>/dev/null || true
+    panel_start 2>/dev/null || log_warn "Standalone panel did not start (BusyBox httpd missing?). Try: ssurf panel start"
+    local _panel_url
+    _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
 
-    update_loading_progress "Installation completed successfully."
+    log_ok "Installed $(show_version) (StealthSurf $XRAYUI_VERSION — Merlin tab + panel :1131)"
+    log_box "Installation completed. Open panel: $_panel_url"
+    log_info "Merlin WebUI: VPN → StealthSurf  ·  CLI: ssurf panel status"
+
+    update_loading_progress "Installation completed. Panel: $_panel_url"
 }
 
 uninstall() {
     log_info "Starting XRAY UI uninstallation process."
+
+    panel_stop 2>/dev/null || true
+    panel_remove_secondary_ip 2>/dev/null || true
 
     # Stop XRAY service if running
     if [ -f "$XRAY_PIDFILE" ]; then

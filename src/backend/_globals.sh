@@ -11,7 +11,7 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.1.16"
+XRAYUI_VERSION="1.2.0"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -23,6 +23,11 @@ ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_TAG"
 ADDON_USER_SCRIPTS_DIR="/jffs/${ADDON_TAG}_custom"
 ADDON_LOGS_DIR="$ADDON_SHARE_DIR/logs"
 ADDON_TMP_DIR="$ADDON_SHARE_DIR/tmp"
+
+# Standalone panel (official StealthSurf analogy on :8800 → ours on :1131)
+PANEL_DEFAULT_PORT=1131
+PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
+PANEL_PIDFILE=/var/run/stealthsurf-panel.pid
 
 ADDON_DEBUG="false"
 

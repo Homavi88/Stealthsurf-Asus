@@ -37,6 +37,7 @@ import ./stealthsurf_api.sh
 import ./stealthsurf_api_ops.sh
 import ./cli_aliases.sh
 import ./xrayui_conflict.sh
+import ./panel.sh
 
 # Short CLI (ssurf up|dn|re|st|sy|ls|ap|…) + common long names
 ss_cli_dispatch "$@"
@@ -515,6 +516,41 @@ service_event)
     *) ;;
     esac
     exit 0
+    ;;
+panel)
+    case "$2" in
+    start)
+        panel_start
+        ;;
+    stop)
+        panel_stop
+        ;;
+    restart)
+        panel_restart
+        ;;
+    status)
+        panel_status
+        ;;
+    bootstrap)
+        panel_bootstrap_json
+        ;;
+    api)
+        panel_api_handle
+        ;;
+    set-password | password)
+        panel_set_password
+        ;;
+    url)
+        panel_url
+        ;;
+    prepare)
+        panel_prepare_webroot
+        ;;
+    *)
+        echo "usage: stealthsurf panel {start|stop|restart|status|url|set-password}" >&2
+        exit 1
+        ;;
+    esac
     ;;
 *)
     ss_cli_help

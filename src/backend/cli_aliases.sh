@@ -22,6 +22,7 @@ ss_cli_status() {
     else
         ss_cli_echo "xray: stopped  config=$XRAY_CONFIG_FILE"
     fi
+    panel_status 2>/dev/null || ss_cli_echo "panel: (unavailable)"
     if [ -f "$SS_CACHE_CONFIGS" ]; then
         ss_cli_echo "catalog: $(jq 'length' "$SS_CACHE_CONFIGS" 2>/dev/null || echo 0) configs  last_sync=${SS_LAST_SYNC:-—}"
     fi
@@ -65,6 +66,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   upd [ver]      update         uf             update latest
   v|ver          version        fix|doctor     fixme
   un --yes       uninstall
+  panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 
 ── Полные имена ───────────────────────────────────────────
@@ -72,12 +74,14 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   set-key add-key remove-key balances sync import-config
   refresh-outbound update-settings autofit server-stats traffic
   renew topup backup diagnostics mount_ui remount_ui
+  panel start|stop|restart|status|url|set-password
 
 Примеры:
   ssurf up
   ssurf key 'stlth_…'
   ssurf sy && ssurf ls
   ssurf ic 101 && ssurf re
+  ssurf panel status          # http://LAN:1131/
   ssurf refresh 69191
   ssurf autofit 69191
   ssurf st
@@ -175,6 +179,25 @@ ss_cli_dispatch() {
     st | status)
         ss_cli_status
         return 0
+        ;;
+    panel | pan)
+        shift
+        case "${1:-status}" in
+        start) panel_start ;;
+        stop) panel_stop ;;
+        restart) panel_restart ;;
+        status | '') panel_status ;;
+        url) panel_url ;;
+        set-password | password) panel_set_password ;;
+        bootstrap) panel_bootstrap_json ;;
+        api) panel_api_handle ;;
+        prepare) panel_prepare_webroot ;;
+        *)
+            ss_cli_echo "usage: ssurf panel {start|stop|restart|status|url|set-password}"
+            return 1
+            ;;
+        esac
+        return $?
         ;;
     sy | sync)
         ss_api_sync_all

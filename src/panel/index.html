@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Cache-Control" content="no-cache" />
+    <meta name="theme-color" content="#1a2428" />
+    <title>StealthSurf Panel</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #1a2428;
+        color: #e8eef0;
+        font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+      }
+      #ss-panel-boot {
+        max-width: 28rem;
+        margin: 20vh auto 0;
+        padding: 1.5rem;
+        text-align: center;
+        opacity: 0.85;
+      }
+      #ss-panel-boot[hidden] {
+        display: none;
+      }
+      #ss-panel-boot .err {
+        color: #ff8a80;
+        margin-top: 1rem;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body class="ss-standalone-panel">
+    <div id="ss-panel-boot">
+      <div>StealthSurf</div>
+      <div style="margin-top: 0.5rem; font-size: 0.95rem">Загрузка панели…</div>
+      <div id="ss-panel-boot-err" class="err" hidden></div>
+    </div>
+
+    <div id="Loading" class="popup_bg" style="visibility: hidden">
+      <table cellpadding="5" id="loadingBlock" class="loadingBlock" style="margin: auto; width: 100%; height: 100%">
+        <tr>
+          <td>
+            <div id="proceeding_main_txt"></div>
+            <div id="proceeding_txt" style="margin-top: 0.5rem"></div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div id="overDiv" style="position: absolute; visibility: hidden; z-index: 10000"></div>
+
+    <div id="stealthsurf-app"></div>
+    <div id="stealthsurf-modals"></div>
+
+    <script>
+      window.__SS_PANEL__ = true;
+      window.xray = {
+        router: { name: '', firmware: '', language: 'ru', ip: '', features: '', devices_online: {}, devices: {} },
+        server: { isRunning: false, b4sni_isRunning: false },
+        custom_settings: {}
+      };
+      window.show_menu = function () {};
+      window.showtext = function (el, html) {
+        if (el) el.innerHTML = html || '';
+      };
+      window.hideLoading = function () {
+        var loading = document.getElementById('Loading');
+        if (loading) loading.style.visibility = 'hidden';
+      };
+      window.overlib = function (msg) {
+        var el = document.getElementById('overDiv');
+        if (!el) return;
+        el.innerHTML = msg || '';
+        el.style.visibility = msg ? 'visible' : 'hidden';
+      };
+
+      (function bootstrap() {
+        var errEl = document.getElementById('ss-panel-boot-err');
+        var boot = document.getElementById('ss-panel-boot');
+        function fail(msg) {
+          if (errEl) {
+            errEl.hidden = false;
+            errEl.textContent = msg;
+          }
+        }
+        fetch('/cgi-bin/bootstrap', { cache: 'no-store' })
+          .then(function (r) {
+            if (!r.ok) throw new Error('bootstrap HTTP ' + r.status);
+            return r.json();
+          })
+          .then(function (data) {
+            if (!data || !data.ok || !data.xray) throw new Error((data && data.error) || 'bad bootstrap');
+            window.xray = data.xray;
+            window.__SS_PANEL_META__ = data.panel || {};
+            if (boot) boot.hidden = true;
+            var s = document.createElement('script');
+            s.type = 'module';
+            s.src = './app.js';
+            s.onerror = function () {
+              fail('Не удалось загрузить app.js');
+            };
+            document.body.appendChild(s);
+          })
+          .catch(function (e) {
+            fail('Панель не ответила: ' + (e && e.message ? e.message : e));
+          });
+      })();
+    </script>
+  </body>
+</html>

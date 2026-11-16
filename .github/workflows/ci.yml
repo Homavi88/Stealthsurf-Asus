@@ -34,7 +34,13 @@ jobs:
           test -x /tmp/ss-ci-pkg/stealthsurf/stealthsurf
           test -f /tmp/ss-ci-pkg/stealthsurf/index.asp
           test -f /tmp/ss-ci-pkg/stealthsurf/app.js
-          grep -q 'XRAYUI_VERSION="1.1.16"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          test -f /tmp/ss-ci-pkg/stealthsurf/panel/index.html
+          test -f /tmp/ss-ci-pkg/stealthsurf/panel/app.js
+          test -f /tmp/ss-ci-pkg/stealthsurf/index.panel.html
+          grep -q 'XRAYUI_VERSION="1.2.0"' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'panel_start' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q 'PANEL_DEFAULT_PORT=1131' /tmp/ss-ci-pkg/stealthsurf/stealthsurf
+          grep -q '__SS_PANEL__' /tmp/ss-ci-pkg/stealthsurf/panel/index.html
           grep -q 'available-servers' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'Manage' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q '_ss_location_code\|catalogLocationLabel\|locations' /tmp/ss-ci-pkg/stealthsurf/app.js
@@ -69,6 +75,7 @@ jobs:
           grep -q 'ssAutofit\|ssUpdateSettings' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'ss_catalog_auto_sync' /tmp/ss-ci-pkg/stealthsurf/app.js
           grep -q 'page:stealthsurf' /tmp/ss-ci-pkg/stealthsurf/index.asp
+          grep -q 'isStandalonePanel\|/cgi-bin/api' /tmp/ss-ci-pkg/stealthsurf/app.js
           sh tests/backend/scaffold.spec.sh
           sh tests/backend/ss_catalog_sync.spec.sh
           sh tests/backend/ss_catalog_enrich.spec.sh

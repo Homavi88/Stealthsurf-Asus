@@ -30,6 +30,9 @@ startup() {
     remount_ui
     cron_jobs_add
 
+    # Standalone panel (lan_ip or panel_ip :1131) — independent of Merlin ASP UI
+    panel_start 2>/dev/null || log_warn "Standalone panel start skipped or failed"
+
     local xray_pid=$(get_xray_daemon_pid)
 
     if ss_xrayui_running force 2>/dev/null; then
