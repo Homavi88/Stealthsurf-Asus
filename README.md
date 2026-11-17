@@ -14,7 +14,7 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.2.1-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.3.0-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы StealthSurf. Основной UI — **своя панель** на порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Файлы лежат в `/jffs/addons/ssurf` и **не трогают** официальный `/jffs/addons/stealthsurf`.
 
-Актуальная версия **1.2.1**.
+Актуальная версия **1.3.0**.
 
 ## Установка
 
@@ -90,6 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 | | |
 | --- | --- |
+| **1.3.0 Light panel** | Светлая главная `:1131` (статус, скорость, объём, ЦП/ОЗУ, Старт/Стоп) + настройки по разделам; Merlin-вкладка без изменений |
 | **1.2.1 Path fix** | Пакет в `/jffs/addons/ssurf` — больше не затирает официальный `/jffs/addons/stealthsurf` (`:8800`) |
 | **1.2.0 Standalone panel** | Своя панель на `LAN:1131`; CGI API; опциональный secondary IP `panel_ip`; CLI `ssurf panel` |
 | **1.1.16 Coexistence** | Удаление/стоп SS не трогает XrayUI (cron, TUN, dnsmasq, scribe, uninstall); порты `5699`/`10185`/`10186`; TUN table `251` |
@@ -122,7 +123,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 ## Веб-интерфейс
 
-Основной UI — **своя панель** на `http://<lan_ip>:1131/` (FormTable / Apply, как у XrayUI). Опционально та же форма во вкладке Merlin **VPN → StealthSurf**.
+Основной UI — **светлая панель** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → StealthSurf** сохраняет классический FormTable.
 
 <p align="center">
   <img src="./docs/screenshots/06-routing-builder.png" alt="Routing rule builder" width="900">

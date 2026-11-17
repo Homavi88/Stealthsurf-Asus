@@ -1,8 +1,14 @@
 <template>
-  <top-banner />
-  <loading />
-  <main-form />
-  <asus-footer />
+  <template v-if="standalone">
+    <loading />
+    <panel-app />
+  </template>
+  <template v-else>
+    <top-banner />
+    <loading />
+    <main-form />
+    <asus-footer />
+  </template>
 </template>
 
 <script lang="ts">
@@ -11,6 +17,7 @@
   import Loading from './components/asus/Loading.vue';
   import AsusFooter from './components/asus/Footer.vue';
   import MainForm from './components/MainForm.vue';
+  import PanelApp from './components/panel/PanelApp.vue';
 
   import engine, { EngineResponseConfig, SubmitActions } from '@modules/Engine';
   import { setCoreVersion, setTestedCore } from '@modules/CoreVersion';
@@ -21,11 +28,15 @@
       TopBanner,
       Loading,
       MainForm,
-      AsusFooter
+      AsusFooter,
+      PanelApp
     },
     setup() {
       const uiResponse = ref(new EngineResponseConfig());
-      window.scrollTo = () => {};
+      const standalone = Boolean((window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__);
+      if (!standalone) {
+        window.scrollTo = () => {};
+      }
 
       onMounted(async () => {
         try {
@@ -35,9 +46,9 @@
           await engine.loadXrayConfig();
           await engine.submit(SubmitActions.initResponse, null, 0);
 
-          const maxRetries = 10;
+          const maxRetries = standalone ? 4 : 10;
           for (let i = 0; i < maxRetries; i++) {
-            await engine.delay(1000);
+            await engine.delay(standalone ? 400 : 1000);
             try {
               const response = await engine.getXrayResponse();
               if (response?.xray?.core_version) {
@@ -63,7 +74,8 @@
       provide('uiResponse', uiResponse);
 
       return {
-        engine
+        engine,
+        standalone
       };
     }
   });

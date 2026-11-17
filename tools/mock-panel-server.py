@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.parse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
@@ -33,7 +34,7 @@ BOOTSTRAP = {
         },
         "server": {"isRunning": True, "b4sni_isRunning": False},
         "custom_settings": {
-            "stealthsurf_version": "1.2.1",
+            "stealthsurf_version": "1.3.0",
             "stealthsurf_startup": "y",
             "stealthsurf_page": "user2.asp",
         },
@@ -44,7 +45,7 @@ UI_RESPONSE = {
     "xray": {
         "core_version": "26.9.9",
         "tested_core": "26.9.9",
-        "ui_version": "1.2.1",
+        "ui_version": "1.3.0",
         "running": True,
         "uptime": 3600,
         "profile": "config.json",
@@ -181,6 +182,36 @@ class Handler(SimpleHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path.rstrip("/") == "/cgi-bin/bootstrap":
             body = json.dumps(BOOTSTRAP).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if path.rstrip("/") == "/cgi-bin/status":
+            now = time.time()
+            # Rising counters so the UI can show non-zero rates between polls
+            base = int(now * 40)
+            body = json.dumps(
+                {
+                    "ok": True,
+                    "running": True,
+                    "pid": 4242,
+                    "cpu_pct": 6 + int(now) % 5,
+                    "mem_used_mb": 820,
+                    "mem_total_mb": 2048,
+                    "app_rss_mb": 93,
+                    "wan_ip": "5.231.117.209",
+                    "traffic": {
+                        "vpn_up": base + 1200,
+                        "vpn_down": base * 3 + 5000,
+                        "direct_up": base // 4,
+                        "direct_down": base // 8,
+                    },
+                    "ts": int(now),
+                }
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Cache-Control", "no-store")
