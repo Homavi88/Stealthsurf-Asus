@@ -63,14 +63,28 @@
         server: { isRunning: false, b4sni_isRunning: false },
         custom_settings: {}
       };
+      // Merlin overlib globals used by Hint.vue
+      window.OFFSETX = 8;
+      window.OFFSETY = 8;
+      window.RIGHT = 2;
+      window.LEFT = 1;
+      window.DELAY = 4;
+      window.WIDTH = 10;
+      window.STICKY = 16;
+      window.CAPTION = 1;
       window.show_menu = function () {};
       window.showtext = function (el, html) {
         if (el) el.innerHTML = html || '';
       };
       window.hideLoading = function () {
         var loading = document.getElementById('Loading');
-        if (loading) loading.style.visibility = 'hidden';
+        if (loading) {
+          loading.style.visibility = 'hidden';
+          loading.style.display = 'none';
+          loading.style.pointerEvents = 'none';
+        }
       };
+      window.showLoading = function () {};
       window.overlib = function (msg) {
         var el = document.getElementById('overDiv');
         if (!el) return;

@@ -122,7 +122,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 ## Веб-интерфейс
 
-Нативная оболочка Merlin: FormTable, кнопки справа, **Apply**, footer версии.
+Основной UI — **своя панель** на `http://<lan_ip>:1131/` (FormTable / Apply, как у XrayUI). Опционально та же форма во вкладке Merlin **VPN → StealthSurf**.
 
 <p align="center">
   <img src="./docs/screenshots/06-routing-builder.png" alt="Routing rule builder" width="900">
@@ -132,9 +132,9 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 | --- | --- |
 | ![Каталог](./docs/screenshots/02-catalog.png) | ![Suggest](./docs/screenshots/07-routing-suggest.png) |
 
-| Mode / DNS | Настройки |
+| DNS | General Options |
 | --- | --- |
-| ![Mode](./docs/screenshots/04-mode-dns.png) | ![Settings](./docs/screenshots/08-settings-modal.png) |
+| ![DNS](./docs/screenshots/04-mode-dns.png) | ![Settings](./docs/screenshots/08-settings-modal.png) |
 
 ## Старт за 5 шагов
 

@@ -91,7 +91,7 @@ window.updateLoadingProgress = (progress?: EngineLoadingProgress) => {
   }
 };
 
-document.addEventListener('DOMContentLoaded', () => {
+const mountStealthSurfApp = () => {
   const currentLanguage = (window.xray.router.language || 'en').toLowerCase();
 
   const i18n = createI18n({
@@ -110,4 +110,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   createApp(App).use(i18n).mount('#stealthsurf-app');
-});
+};
+
+// Merlin ASP loads app.js as a classic script before DOMContentLoaded.
+// Standalone panel (:1131) injects app.js after bootstrap — DOM is already ready.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', mountStealthSurfApp);
+} else {
+  mountStealthSurfApp();
+}
