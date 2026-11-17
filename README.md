@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/screenshots/01-status-running.png" alt="StealthSurf on Asuswrt-Merlin" width="920">
+  <img src="./docs/screenshots/01-status-running.png" alt="StealthSurf light panel on :1131" width="420">
 </p>
 
 <h1 align="center">StealthSurf</h1>
@@ -126,16 +126,16 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 Основной UI — **светлая панель** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → StealthSurf** сохраняет классический FormTable.
 
 <p align="center">
-  <img src="./docs/screenshots/06-routing-builder.png" alt="Routing rule builder" width="900">
+  <img src="./docs/screenshots/08-settings-modal.png" alt="StealthSurf settings — account and catalog" width="920">
 </p>
 
-| Каталог | Подсказки доменов |
+| Главная | Настройки · маршрутизация |
 | --- | --- |
-| ![Каталог](./docs/screenshots/02-catalog.png) | ![Suggest](./docs/screenshots/07-routing-suggest.png) |
+| ![Главная](./docs/screenshots/01-status-running.png) | ![Маршрутизация](./docs/screenshots/03-routing.png) |
 
-| DNS | General Options |
+| Сеть / DNS | Конфликт с XrayUI |
 | --- | --- |
-| ![DNS](./docs/screenshots/04-mode-dns.png) | ![Settings](./docs/screenshots/08-settings-modal.png) |
+| ![Сеть](./docs/screenshots/04-mode-dns.png) | ![Конфликт](./docs/screenshots/05-xrayui-conflict.png) |
 
 ## Старт за 5 шагов
 
