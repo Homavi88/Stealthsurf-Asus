@@ -87,7 +87,7 @@
         type="button"
         class="ss-primary-btn"
         :class="running ? 'stop' : 'start'"
-        :disabled="busy || conflict"
+        :disabled="busy || (!running && conflict)"
         @click="toggle"
       >
         {{ busy ? '…' : running ? 'Стоп' : 'Старт' }}

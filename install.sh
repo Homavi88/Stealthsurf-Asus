@@ -1,5 +1,5 @@
 #!/bin/sh
-# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.2+ installer for Asuswrt-Merlin (Entware required).
+# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.3+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
@@ -21,7 +21,7 @@ OUR_DIR="$JFFS_ADDONS/ssurf"
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> SurfGate installer (1.4.2+ — panel :1131, path /jffs/addons/ssurf)"
+echo "==> SurfGate installer (1.4.3+ — panel :1131, path /jffs/addons/ssurf)"
 
 if [ ! -d /jffs ]; then
   echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2

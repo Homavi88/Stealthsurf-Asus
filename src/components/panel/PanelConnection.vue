@@ -178,7 +178,7 @@
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, inject, onMounted, PropType, Ref, ref, watch } from 'vue';
+  import { computed, defineComponent, inject, onBeforeUnmount, onMounted, PropType, Ref, ref, watch } from 'vue';
   import { useI18n } from 'vue-i18n';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import { XrayObject } from '@/modules/XrayConfig';
@@ -198,20 +198,17 @@
       const { options, ipset_options: ipsetOptions, hydrate, persist } = useGeneralOptions(props.config, uiResponse);
       const busy = ref(false);
 
-      const isRunning = ref(!!window.xray?.server?.isRunning);
-      watch(
-        () => [uiResponse?.value?.xray?.running, uiResponse?.value?.xray?.uptime] as const,
-        ([running, uptime]) => {
-          if (typeof running === 'boolean') {
-            isRunning.value = running;
-            window.xray.server.isRunning = running;
-          } else if (typeof uptime === 'number') {
-            isRunning.value = uptime > 0;
-            window.xray.server.isRunning = uptime > 0;
-          }
-        },
-        { immediate: true }
-      );
+      // Prefer live Home poll (`window.xray.server.isRunning`) over stale uiResponse.
+      const liveTick = ref(0);
+      let liveTimer: ReturnType<typeof setInterval> | null = null;
+      const isRunning = computed(() => {
+        liveTick.value;
+        if (typeof window.xray?.server?.isRunning === 'boolean') return window.xray.server.isRunning;
+        const running = uiResponse?.value?.xray?.running;
+        if (typeof running === 'boolean') return running;
+        const uptime = uiResponse?.value?.xray?.uptime;
+        return typeof uptime === 'number' && uptime > 0;
+      });
 
       const xrayuiConflict = computed(
         () =>
@@ -299,7 +296,7 @@
         }
         busy.value = true;
         try {
-          await persist();
+          await persist('connection');
           window.xray.custom_settings.stealthsurf_startup = options.startup ? 'y' : 'n';
         } finally {
           busy.value = false;
@@ -336,6 +333,13 @@
       onMounted(() => {
         hydrate();
         ensureBoolDefaults();
+        liveTimer = setInterval(() => {
+          liveTick.value += 1;
+        }, 2000);
+      });
+      onBeforeUnmount(() => {
+        if (liveTimer) clearInterval(liveTimer);
+        liveTimer = null;
       });
       watch(
         () => uiResponse?.value,

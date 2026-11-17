@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.3] - 2026-11-17
+
+### Addon functionality hardening
+
+- Engine → Manage startup checkbox uses absolute `setstartup` on the standalone panel (same fix as Connection)
+- Panel API clears stale `stealthsurf_payload*` / stage keys before writing a shorter payload
+- Connection Save no longer rewrites subscriptions/hooks (avoids wiping sources on thin uiResponse)
+- Home Start button still blocked on XrayUI conflict; Stop remains available
+- Connection status prefers live `window.xray.server.isRunning` from Home poll
+- General options restart-after-save also checks the live Xray PID, not only the pidfile
+
+---
+
 ## [1.4.2] - 2026-11-17
 
 ### Reliable VPN autostart after router reboot

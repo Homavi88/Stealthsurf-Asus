@@ -39,10 +39,17 @@ export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineRespons
 
   const hydrate = () => Object.assign(options, makeBase());
 
-  const persist = async () => {
+  const persist = async (mode: 'full' | 'connection' = 'full') => {
     await engine.executeWithLoadingProgress(async () => {
       options = options.normalise();
-      await engine.submit(SubmitActions.generalOptionsApply, toRaw(options));
+      const raw = { ...toRaw(options) } as Record<string, unknown>;
+      // Connection pane must not rewrite subscriptions/hooks — incomplete uiResponse
+      // would otherwise wipe catalog/subscription sources on Save.
+      if (mode === 'connection') {
+        delete raw.subscriptions;
+        delete raw.hooks;
+      }
+      await engine.submit(SubmitActions.generalOptionsApply, raw);
     });
   };
 
