@@ -1,6 +1,6 @@
 {
   "name": "asuswrt-merlin-surfgate",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "main": "index.js",
   "scripts": {
     "build": "cross-env NODE_ENV=production vite build",
@@ -13,7 +13,7 @@
     "lint": "eslint . --max-warnings 549",
     "lint:fix": "eslint . --fix",
     "verify": "pnpm run typecheck && pnpm run lint && pnpm run test",
-    "pack": "bash ./build.tar.sh 1.4.3 && mkdir -p packaged && mv -f asuswrt-merlin-surfgate.tar.gz packaged/"
+    "pack": "bash ./build.tar.sh 1.4.4 && mkdir -p packaged && mv -f asuswrt-merlin-surfgate.tar.gz packaged/"
   },
   "keywords": [
     "asuswrt-merlin",

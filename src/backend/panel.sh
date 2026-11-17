@@ -43,24 +43,76 @@ panel_load_settings() {
     PANEL_IFACE="${panel_iface:-br0}"
 }
 
-panel_find_httpd() {
-    # Prefer Entware/BusyBox applet — never the stock Asus /usr/sbin/httpd.
-    if [ -x /opt/bin/busybox ] && /opt/bin/busybox 2>&1 | head -n1 | grep -qi busybox; then
-        if /opt/bin/busybox httpd --help >/dev/null 2>&1 || /opt/bin/busybox 2>&1 | grep -qw httpd; then
-            echo "/opt/bin/busybox httpd"
-            return 0
-        fi
+# True when $1 (busybox binary) actually includes the httpd applet.
+# Firmware BusyBox on Merlin often omits httpd; Entware busybox usually has it.
+panel_busybox_has_httpd() {
+    local bb="$1"
+    [ -n "$bb" ] || return 1
+    if [ "$bb" = "busybox" ]; then
+        command -v busybox >/dev/null 2>&1 || return 1
+    else
+        [ -x "$bb" ] || return 1
     fi
-    if type busybox >/dev/null 2>&1; then
-        if busybox 2>&1 | head -n1 | grep -qi busybox; then
-            echo "busybox httpd"
-            return 0
-        fi
-    fi
-    if [ -x /bin/busybox ] && /bin/busybox 2>&1 | head -n1 | grep -qi busybox; then
-        echo "/bin/busybox httpd"
+
+    # Applet list in banner (most builds)
+    if "$bb" 2>&1 | grep -Eq '(^|[[:space:]])httpd([[:space:]]|$)'; then
         return 0
     fi
+
+    # Probe invoke: missing applet → "applet not found"; present → usage/help
+    local err
+    err=$("$bb" httpd 2>&1) || true
+    case "$err" in
+    *applet\ not\ found* | *Unknown\ applet* | *unknown\ applet*)
+        return 1
+        ;;
+    esac
+    # Empty output with failure is inconclusive — require a hint of httpd usage
+    case "$err" in
+    *[Hh]ttpd* | *Usage:* | *-p\ * | *-h\ *)
+        return 0
+        ;;
+    esac
+    return 1
+}
+
+panel_find_httpd() {
+    # Prefer Entware BusyBox httpd — never the stock Asus /usr/sbin/httpd.
+    local cand
+    for cand in /opt/bin/busybox busybox /bin/busybox /sbin/busybox; do
+        panel_busybox_has_httpd "$cand" || continue
+        echo "$cand httpd"
+        return 0
+    done
+    return 1
+}
+
+# Install Entware busybox when firmware BusyBox has no httpd applet.
+panel_ensure_httpd() {
+    mkdir -p /tmp/stealthsurf 2>/dev/null || true
+    if panel_find_httpd >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if [ ! -x /opt/bin/opkg ]; then
+        log_error "panel: BusyBox httpd not found and Entware (/opt/bin/opkg) is missing."
+        printf '%s\n' "BusyBox httpd applet not found; Entware opkg unavailable." >>"$PANEL_LOG"
+        return 1
+    fi
+
+    log_warn "panel: BusyBox httpd missing — installing Entware package 'busybox'..."
+    printf '%s\n' "==> opkg update / install busybox (for httpd applet)" >>"$PANEL_LOG"
+    opkg update >>"$PANEL_LOG" 2>&1 || log_warn "panel: opkg update failed; trying install anyway"
+    if ! opkg install busybox >>"$PANEL_LOG" 2>&1; then
+        opkg install --force-reinstall busybox >>"$PANEL_LOG" 2>&1 || true
+    fi
+
+    if panel_find_httpd >/dev/null 2>&1; then
+        log_ok "panel: Entware busybox httpd is available"
+        return 0
+    fi
+
+    log_error "panel: still no httpd after opkg install busybox (see $PANEL_LOG)"
     return 1
 }
 
@@ -247,8 +299,24 @@ panel_stop() {
     log_info "Standalone panel stopped"
 }
 
+panel_start_httpd_once() {
+    # $1 = bind arg for -p (IP:PORT or PORT)
+    local bind_arg="$1"
+    local httpd_cmd="$2"
+
+    # -c is relative to -h on some BusyBox builds; conf lives in PANEL_WEB_ROOT.
+    # shellcheck disable=SC2086
+    $httpd_cmd -p "$bind_arg" -h "$PANEL_WEB_ROOT" -c httpd.conf >>"$PANEL_LOG" 2>&1 &
+    echo $! >"$PANEL_PIDFILE"
+    sleep 1
+    panel_is_running
+}
+
 panel_start() {
     panel_load_settings
+    mkdir -p /tmp/stealthsurf
+    : >"$PANEL_LOG"
+
     panel_prepare_webroot || {
         log_error "panel: failed to prepare web root"
         return 1
@@ -260,29 +328,38 @@ panel_start() {
         return 0
     fi
 
-    local httpd_cmd
-    httpd_cmd=$(panel_find_httpd) || {
-        log_error "panel: BusyBox httpd not found. Install Entware busybox or use a firmware build that includes it."
+    panel_ensure_httpd || {
+        log_error "panel: BusyBox httpd not found. On the router run: opkg update && opkg install busybox"
         return 1
     }
 
-    mkdir -p /tmp/stealthsurf
-    : >"$PANEL_LOG"
+    local httpd_cmd
+    httpd_cmd=$(panel_find_httpd) || {
+        log_error "panel: BusyBox httpd not found after ensure."
+        return 1
+    }
 
-    # -p [IP:]PORT  -h home  -c config
-    # Run in background; record PID.
-    # shellcheck disable=SC2086
-    $httpd_cmd -p "${PANEL_BIND}:${PANEL_PORT}" -h "$PANEL_WEB_ROOT" -c "$PANEL_HTTPD_CONF" >>"$PANEL_LOG" 2>&1 &
-    echo $! >"$PANEL_PIDFILE"
+    printf '%s\n' "==> starting: $httpd_cmd -p ${PANEL_BIND}:${PANEL_PORT} -h $PANEL_WEB_ROOT -c httpd.conf" >>"$PANEL_LOG"
 
-    sleep 1
-    if panel_is_running; then
+    # Prefer bind to panel IP; fall back to all-interfaces if address is not ready.
+    if panel_start_httpd_once "${PANEL_BIND}:${PANEL_PORT}" "$httpd_cmd"; then
         log_ok "Standalone panel listening on $(panel_url)"
         am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
         return 0
     fi
 
+    printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry -p ${PANEL_PORT}" >>"$PANEL_LOG"
+    rm -f "$PANEL_PIDFILE"
+    if panel_start_httpd_once "$PANEL_PORT" "$httpd_cmd"; then
+        log_ok "Standalone panel listening on port $PANEL_PORT (all interfaces)"
+        am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+        return 0
+    fi
+
     log_error "panel: failed to start httpd (see $PANEL_LOG)"
+    if [ -s "$PANEL_LOG" ]; then
+        log_error "panel.log: $(tr '\n' ' ' <"$PANEL_LOG" | cut -c1-240)"
+    fi
     rm -f "$PANEL_PIDFILE"
     return 1
 }
