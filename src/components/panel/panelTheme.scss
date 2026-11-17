@@ -357,30 +357,33 @@
   opacity: 0.85;
 }
 
+.ss-settings-title {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
 .ss-settings-pane {
-  background: var(--ss-card);
-  border-radius: var(--ss-radius);
-  box-shadow: var(--ss-shadow);
-  padding: 16px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
   min-height: 320px;
   overflow: auto;
 }
 
-.ss-settings-pane h2 {
-  margin: 0 0 12px;
-  font-size: 20px;
+.ss-settings-pane.is-native {
+  background: transparent;
 }
 
-/* Legacy Merlin FormTable inside light settings */
-.ss-panel-legacy {
-  color: #e8eef0;
-  background: #4d595d;
-  border-radius: 12px;
-  padding: 8px;
-}
-
-.ss-panel-legacy .FormTable {
-  width: 100%;
+.ss-pane-heading {
+  margin: 0 0 14px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--ss-text);
+  text-align: center;
 }
 
 .ss-back-link {
@@ -392,4 +395,297 @@
   cursor: pointer;
   padding: 0;
   margin-bottom: 10px;
+}
+
+.ss-section-label {
+  margin: 18px 4px 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ss-muted);
+}
+
+.ss-section-label:first-child {
+  margin-top: 0;
+}
+
+.ss-set-card {
+  background: var(--ss-card);
+  border-radius: 18px;
+  box-shadow: var(--ss-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.ss-set-row {
+  padding: 0;
+}
+
+.ss-set-row.has-divider {
+  border-bottom: 1px solid var(--ss-line);
+}
+
+.ss-set-row.has-divider:last-child {
+  border-bottom: 0;
+}
+
+.ss-set-row.is-disabled {
+  opacity: 0.55;
+}
+
+.ss-set-row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.ss-set-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ss-set-row-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ss-text);
+  line-height: 1.25;
+}
+
+.ss-set-row-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--ss-muted);
+}
+
+.ss-set-row-control {
+  flex-shrink: 0;
+}
+
+.ss-set-row-detail {
+  padding: 0 16px 14px;
+}
+
+.ss-set-row-detail.is-locked {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+.ss-set-row-detail fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.ss-field {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--ss-muted);
+  font-weight: 600;
+}
+
+.ss-field input,
+.ss-field select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 12px;
+  background: #eef2f7;
+  color: var(--ss-text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.ss-field input:focus,
+.ss-field select:focus {
+  box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
+}
+
+.ss-toggle {
+  position: relative;
+  width: 51px;
+  height: 31px;
+  border: 0;
+  border-radius: 999px;
+  background: #e1e6ee;
+  padding: 0;
+  cursor: pointer;
+  transition: background 0.18s ease;
+  flex-shrink: 0;
+}
+
+.ss-toggle.is-on {
+  background: var(--ss-blue);
+}
+
+.ss-toggle.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ss-toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgba(20, 40, 80, 0.22);
+  transition: transform 0.18s ease;
+}
+
+.ss-toggle.is-on .ss-toggle-thumb {
+  transform: translateX(20px);
+}
+
+.ss-chip-btn {
+  border: 0;
+  border-radius: 999px;
+  background: var(--ss-blue-soft);
+  color: var(--ss-blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.ss-chip-btn.danger {
+  background: #fde8e8;
+  color: var(--ss-danger);
+}
+
+.ss-chip-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ss-set-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ss-alert {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: #fff8e8;
+  border: 1px solid #f0c36a;
+  color: #7a5a10;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.ss-conn-footer,
+.ss-apply-wrap {
+  margin-top: 16px;
+}
+
+.ss-conn-footer .ss-primary-btn,
+.ss-apply-wrap .ss-primary-btn {
+  width: 100%;
+}
+
+/* Light restyle of Merlin FormTable inside settings */
+.ss-panel-light {
+  color: var(--ss-text);
+}
+
+.ss-panel-light .FormTable,
+.ss-panel-light table.FormTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--ss-card);
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: var(--ss-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  margin-bottom: 12px;
+}
+
+.ss-panel-light .FormTable th,
+.ss-panel-light .FormTable td,
+.ss-panel-light .FormTable thead td {
+  background: transparent !important;
+  color: var(--ss-text) !important;
+  border-color: var(--ss-line) !important;
+  font-family: inherit;
+}
+
+.ss-panel-light .FormTable th {
+  width: 42%;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--ss-text) !important;
+  vertical-align: top;
+}
+
+.ss-panel-light .FormTable thead td {
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  padding: 14px 16px !important;
+}
+
+.ss-panel-light .FormTable tbody th,
+.ss-panel-light .FormTable tbody td {
+  padding: 12px 16px !important;
+}
+
+.ss-panel-light .FormTable input[type='text'],
+.ss-panel-light .FormTable input[type='number'],
+.ss-panel-light .FormTable input[type='password'],
+.ss-panel-light .FormTable select,
+.ss-panel-light .FormTable textarea {
+  background: #eef2f7 !important;
+  border: 0 !important;
+  border-radius: 12px !important;
+  color: var(--ss-text) !important;
+  padding: 10px 12px !important;
+}
+
+.ss-panel-light .FormTable .button_gen,
+.ss-panel-light .FormTable input.button_gen {
+  background: var(--ss-blue-soft) !important;
+  color: var(--ss-blue) !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+
+.ss-panel-light .label-success {
+  background: #e6f7ee !important;
+  color: var(--ss-green) !important;
+}
+
+.ss-panel-light .label-error {
+  background: #fde8e8 !important;
+  color: var(--ss-danger) !important;
+}
+
+.ss-panel-light .hint,
+.ss-panel-light .hint-color,
+.ss-panel-light .hint-color a {
+  color: var(--ss-muted) !important;
+}
+
+.ss-panel-light .ss-conflict-banner {
+  background: #fff8e8;
+  border: 1px solid #f0c36a;
+  color: #7a5a10;
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
 }

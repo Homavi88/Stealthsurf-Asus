@@ -122,6 +122,16 @@ try {
     await shotShell(page, s.file);
   }
 
+  // Connection with an expanded gated block (watchdog ON)
+  await openSection(page, 'Подключение');
+  const watchdog = page.locator('.ss-set-row', { hasText: 'Автоперезапуск' }).locator('.ss-toggle');
+  if (await watchdog.count()) {
+    const on = await watchdog.getAttribute('aria-checked');
+    if (on !== 'true') await watchdog.click({ force: true });
+    await page.waitForTimeout(400);
+    await shotShell(page, '09b-settings-connection-open.png');
+  }
+
   fs.copyFileSync(path.join(OUT, '08-settings-account.png'), path.join(OUT, '08-settings-modal.png'));
   fs.copyFileSync(path.join(OUT, '03-routing.png'), path.join(OUT, '06-routing-builder.png'));
   fs.copyFileSync(path.join(OUT, '04-mode-dns.png'), path.join(OUT, '07-routing-suggest.png'));

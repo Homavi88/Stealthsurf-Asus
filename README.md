@@ -130,7 +130,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
   <img src="./docs/screenshots/01-status-running.png" alt="SurfGate home — connected" width="420">
 </p>
 
-| Аккаунт / каталог | Подключение |
+| Аккаунт / каталог | Подключение (тумблеры) |
 | --- | --- |
 | ![Аккаунт](./docs/screenshots/08-settings-account.png) | ![Подключение](./docs/screenshots/09-settings-connection.png) |
 

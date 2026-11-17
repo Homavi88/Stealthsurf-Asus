@@ -1,7 +1,7 @@
 <template>
   <div>
     <button type="button" class="ss-back-link" @click="$emit('back')">← На главную</button>
-    <h2 style="margin: 0 0 14px; font-size: 22px">Настройки</h2>
+    <h2 class="ss-settings-title">Настройки</h2>
 
     <div class="ss-settings-layout">
       <aside>
@@ -46,36 +46,36 @@
         </div>
       </aside>
 
-      <section class="ss-settings-pane">
-        <h2>{{ currentLabel }}</h2>
+      <section class="ss-settings-pane" :class="{ 'is-native': section === 'connection' || section === 'account' }">
+        <h2 class="ss-pane-heading">{{ currentLabel }}</h2>
 
-        <div v-if="section === 'account'">
+        <div v-if="section === 'account'" class="ss-panel-light">
           <stealth-surf-account />
         </div>
 
-        <div v-else-if="section === 'connection'" class="ss-panel-legacy">
-          <service-status :config="config" />
+        <div v-else-if="section === 'connection'">
+          <panel-connection :config="config" />
         </div>
 
-        <div v-else-if="section === 'routing'" class="ss-panel-legacy">
+        <div v-else-if="section === 'routing'" class="ss-panel-light">
           <routing />
         </div>
 
-        <div v-else-if="section === 'network'" class="ss-panel-legacy">
+        <div v-else-if="section === 'network'" class="ss-panel-light">
           <inbounds @show-transport="emitTransport" @show-sniffing="emitSniffing" />
           <dns />
           <reverse-proxy />
         </div>
 
-        <div v-else-if="section === 'outbounds'" class="ss-panel-legacy">
+        <div v-else-if="section === 'outbounds'" class="ss-panel-light">
           <outbounds @show-transport="emitTransport" />
         </div>
 
-        <div v-else-if="section === 'engine'" class="ss-panel-legacy">
+        <div v-else-if="section === 'engine'" class="ss-panel-light">
           <service-status :config="config" />
         </div>
 
-        <div v-else-if="section === 'logs'" class="ss-panel-legacy">
+        <div v-else-if="section === 'logs'" class="ss-panel-light">
           <logs-manager
             v-if="config.log?.access != 'none' || config.log?.error != 'none'"
             v-model:logs="config.log!"
@@ -83,16 +83,16 @@
           <sni-logs />
         </div>
 
-        <div v-else-if="section === 'clients'" class="ss-panel-legacy">
+        <div v-else-if="section === 'clients'" class="ss-panel-light">
           <clients-online />
         </div>
 
-        <div v-else-if="section === 'updates'" class="ss-panel-legacy">
+        <div v-else-if="section === 'updates'" class="ss-panel-light">
           <version />
         </div>
 
-        <div class="apply_gen" style="margin-top: 16px; text-align: center" v-if="needsApply">
-          <input class="button_gen" type="button" value="Применить" @click.prevent="$emit('apply')" />
+        <div class="ss-apply-wrap" v-if="needsApply">
+          <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">Применить</button>
         </div>
       </section>
     </div>
@@ -113,6 +113,7 @@
   import LogsManager from '../Logs.vue';
   import SniLogs from '../SniLogs.vue';
   import Version from '../Version.vue';
+  import PanelConnection from './PanelConnection.vue';
 
   type SectionId =
     | 'account'
@@ -138,14 +139,15 @@
       ClientsOnline,
       LogsManager,
       SniLogs,
-      Version
+      Version,
+      PanelConnection
     },
     props: {
       config: { type: Object as PropType<XrayObject>, required: true }
     },
     emits: ['back', 'apply', 'show-transport', 'show-sniffing'],
     setup(_props, { emit }) {
-      const section = ref<SectionId>('account');
+      const section = ref<SectionId>('connection');
       const navPrimary = [
         { id: 'account' as const, label: 'Подписка / Аккаунт', icon: '🎁' },
         { id: 'connection' as const, label: 'Подключение', icon: '⏻' },
@@ -164,7 +166,8 @@
 
       const all = [...navPrimary, ...navEngine, ...navMore];
       const currentLabel = computed(() => all.find((i) => i.id === section.value)?.label || 'Настройки');
-      const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine', 'connection'].includes(section.value));
+      // Connection has its own Save; avoid double Apply
+      const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 
       const emitTransport = (payload: unknown) => emit('show-transport', payload);
       const emitSniffing = (payload: unknown) => emit('show-sniffing', payload);
