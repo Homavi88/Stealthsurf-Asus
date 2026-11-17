@@ -66,6 +66,14 @@ jobs:
           grep -q 'ss-conflict-banner' /tmp/ss-ci-pkg/ssurf/app.js
           test -f docs/screenshots/01-status-running.png
           test -f docs/screenshots/05-xrayui-conflict.png
+          test -f docs/screenshots/08-settings-account.png
+          test -f docs/screenshots/09-settings-connection.png
+          test -f docs/screenshots/10-settings-outbounds.png
+          test -f docs/screenshots/11-settings-engine.png
+          test -f docs/screenshots/12-settings-logs.png
+          test -f docs/screenshots/13-settings-clients.png
+          test -f docs/screenshots/14-settings-updates.png
+          grep -q 'SurfGate' docs/screenshots/../README.md
           grep -q 'ss_cli_dispatch' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'surfgate' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ssurf' /tmp/ss-ci-pkg/ssurf/stealthsurf
