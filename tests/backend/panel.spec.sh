@@ -12,13 +12,14 @@ if [ ! -s "$SCRIPT" ]; then
 fi
 
 tar -xzf "$SCRIPT" -C "$TMP"
-BIN="$TMP/stealthsurf/stealthsurf"
+BIN="$TMP/ssurf/stealthsurf"
 test -f "$BIN"
 grep -q 'PANEL_DEFAULT_PORT=1131' "$BIN"
 grep -q 'panel_start()' "$BIN"
 grep -q 'panel_bootstrap_json' "$BIN"
 grep -q 'panel_api_handle' "$BIN"
 grep -q 'panel_ensure_secondary_ip' "$BIN"
-test -f "$TMP/stealthsurf/panel/index.html"
-grep -q '__SS_PANEL__' "$TMP/stealthsurf/panel/index.html"
+grep -q 'ADDON_PKG_NAME="ssurf"' "$BIN"
+test -f "$TMP/ssurf/panel/index.html"
+grep -q '__SS_PANEL__' "$TMP/ssurf/panel/index.html"
 echo "panel.spec.sh OK"

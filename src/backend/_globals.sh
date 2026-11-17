@@ -11,7 +11,7 @@ ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
 ADDON_TITLE="StealthSurf"
 
-XRAYUI_VERSION="1.2.0"
+XRAYUI_VERSION="1.2.1"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -19,7 +19,12 @@ ADDON_WEB_DIR="/www/user/$ADDON_TAG"
 
 ADDON_SCRIPT="/jffs/scripts/$ADDON_TAG"
 ADDON_SHARE_DIR="/opt/share/$ADDON_TAG"
-ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_TAG"
+# Package files live under /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf
+# (that path is reserved for official StealthSurf VPN / stealthsurf-routerd :8800).
+ADDON_PKG_NAME="ssurf"
+ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_PKG_NAME"
+OFFICIAL_SS_JFFS_DIR="/jffs/addons/stealthsurf"
+OFFICIAL_SS_DAEMON="$OFFICIAL_SS_JFFS_DIR/sbin/stealthsurf-routerd"
 ADDON_USER_SCRIPTS_DIR="/jffs/${ADDON_TAG}_custom"
 ADDON_LOGS_DIR="$ADDON_SHARE_DIR/logs"
 ADDON_TMP_DIR="$ADDON_SHARE_DIR/tmp"

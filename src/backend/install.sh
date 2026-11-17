@@ -259,6 +259,9 @@ EOF
     fi
 
     # Standalone panel on dedicated IP:1131 (coexists with official StealthSurf :8800)
+    if [ -x "$OFFICIAL_SS_DAEMON" ]; then
+        log_ok "Official StealthSurf VPN detected at $OFFICIAL_SS_JFFS_DIR — files kept untouched."
+    fi
     if [ ! -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ] && [ -f "$ADDON_JFFS_ADN_DIR/index.panel.html" ]; then
         mkdir -p "$ADDON_JFFS_ADN_DIR/panel"
         cp -f "$ADDON_JFFS_ADN_DIR/index.panel.html" "$ADDON_JFFS_ADN_DIR/panel/index.html"
@@ -268,9 +271,10 @@ EOF
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
 
-    log_ok "Installed $(show_version) (StealthSurf $XRAYUI_VERSION — Merlin tab + panel :1131)"
+    log_ok "Installed $(show_version) (files in $ADDON_JFFS_ADN_DIR, panel :1131)"
     log_box "Installation completed. Open panel: $_panel_url"
     log_info "Merlin WebUI: VPN → StealthSurf  ·  CLI: ssurf panel status"
+    log_info "Official :8800 path is $OFFICIAL_SS_JFFS_DIR (never removed by this addon)."
 
     update_loading_progress "Installation completed. Panel: $_panel_url"
 }
@@ -291,10 +295,17 @@ uninstall() {
         log_warn "XRAY service is not running."
     fi
 
-    # Remove XRAY UI files
-    log_info "Removing XRAY UI files..."
+    # Remove our files only — never /jffs/addons/stealthsurf when official VPN is there
+    log_info "Removing XRAY UI files from $ADDON_JFFS_ADN_DIR..."
     rm -rf "$ADDON_WEB_DIR" || log_warn "Failed to remove $ADDON_WEB_DIR."
     rm -rf "$ADDON_JFFS_ADN_DIR" || log_warn "Failed to remove $ADDON_JFFS_ADN_DIR."
+    if [ -x "$OFFICIAL_SS_DAEMON" ]; then
+        log_ok "Official StealthSurf VPN at $OFFICIAL_SS_JFFS_DIR left in place."
+    elif [ -d "$OFFICIAL_SS_JFFS_DIR" ] && { [ -f "$OFFICIAL_SS_JFFS_DIR/index.asp" ] || [ -f "$OFFICIAL_SS_JFFS_DIR/app.js" ]; }; then
+        log_warn "Cleaning mistaken Homavi88 leftovers from $OFFICIAL_SS_JFFS_DIR (no official daemon)."
+        rm -rf "$OFFICIAL_SS_JFFS_DIR/index.asp" "$OFFICIAL_SS_JFFS_DIR/app.js" \
+            "$OFFICIAL_SS_JFFS_DIR/index.panel.html" "$OFFICIAL_SS_JFFS_DIR/panel" 2>/dev/null || true
+    fi
     rm -rf "$ADDON_SHARE_DIR"/*.json || log_warn "Failed to remove $ADDON_SHARE_DIR/*.json."
     rm -rf "$ADDON_SHARE_DIR/logs" || log_warn "Failed to remove $ADDON_SHARE_DIR/logs."
 
