@@ -76,8 +76,29 @@ panel_busybox_has_httpd() {
     return 1
 }
 
-panel_find_httpd() {
-    # Prefer Entware BusyBox httpd — never the stock Asus /usr/sbin/httpd.
+# Bundled static panel-httpd from the package (works offline; no opkg).
+panel_bundled_httpd() {
+    local arch bin
+    arch=$(uname -m 2>/dev/null || echo unknown)
+    case "$arch" in
+    aarch64 | arm64)
+        bin="$ADDON_JFFS_ADN_DIR/bin/panel-httpd.aarch64"
+        ;;
+    armv7* | armv6* | armv5* | arm)
+        bin="$ADDON_JFFS_ADN_DIR/bin/panel-httpd.armv7"
+        ;;
+    *)
+        return 1
+        ;;
+    esac
+    [ -f "$bin" ] || return 1
+    chmod 0755 "$bin" 2>/dev/null || true
+    [ -x "$bin" ] || return 1
+    echo "$bin"
+}
+
+panel_find_busybox_httpd() {
+    # Entware/firmware BusyBox — never the stock Asus /usr/sbin/httpd.
     local cand
     for cand in /opt/bin/busybox busybox /bin/busybox /sbin/busybox; do
         panel_busybox_has_httpd "$cand" || continue
@@ -85,6 +106,11 @@ panel_find_httpd() {
         return 0
     done
     return 1
+}
+
+# Back-compat name used by older callers/tests.
+panel_find_httpd() {
+    panel_find_busybox_httpd
 }
 
 panel_find_lighttpd() {
@@ -104,41 +130,29 @@ panel_opkg_install() {
     opkg install "$@" >>"$PANEL_LOG" 2>&1
 }
 
-# Ensure a usable panel web server: BusyBox httpd applet, else Entware lighttpd+cgi.
+# Ensure a usable panel web server. Prefer bundled binary (no network/opkg).
 panel_ensure_httpd() {
     mkdir -p /tmp/stealthsurf 2>/dev/null || true
-    if panel_find_httpd >/dev/null 2>&1 || panel_find_lighttpd >/dev/null 2>&1; then
+    if panel_bundled_httpd >/dev/null 2>&1; then
+        return 0
+    fi
+    if panel_find_busybox_httpd >/dev/null 2>&1 || panel_find_lighttpd >/dev/null 2>&1; then
         return 0
     fi
 
-    if [ ! -x /opt/bin/opkg ]; then
-        log_error "panel: no web server and Entware (/opt/bin/opkg) is missing."
-        printf '%s\n' "No BusyBox httpd / lighttpd; Entware opkg unavailable." >>"$PANEL_LOG"
-        return 1
+    # Optional: try Entware if feeds work (often fail on routers without WAN DNS).
+    if [ -x /opt/bin/opkg ]; then
+        log_warn "panel: no bundled/BusyBox httpd — trying Entware lighttpd once..."
+        printf '%s\n' "==> opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias" >>"$PANEL_LOG"
+        panel_opkg_install lighttpd lighttpd-mod-cgi lighttpd-mod-alias || true
+        if panel_find_lighttpd >/dev/null 2>&1; then
+            log_ok "panel: Entware lighttpd is available"
+            return 0
+        fi
     fi
 
-    # Entware busybox is often essential but built WITHOUT the httpd applet.
-    log_warn "panel: BusyBox httpd missing — trying Entware busybox, then lighttpd..."
-    printf '%s\n' "==> opkg install busybox (httpd applet — often absent)" >>"$PANEL_LOG"
-    panel_opkg_install busybox || true
-    if panel_find_httpd >/dev/null 2>&1; then
-        log_ok "panel: Entware busybox httpd is available"
-        return 0
-    fi
-
-    printf '%s\n' "==> opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias" >>"$PANEL_LOG"
-    if panel_opkg_install lighttpd lighttpd-mod-cgi lighttpd-mod-alias; then
-        :
-    else
-        opkg install --force-reinstall lighttpd lighttpd-mod-cgi lighttpd-mod-alias >>"$PANEL_LOG" 2>&1 || true
-    fi
-
-    if panel_find_lighttpd >/dev/null 2>&1; then
-        log_ok "panel: Entware lighttpd is available"
-        return 0
-    fi
-
-    log_error "panel: no BusyBox httpd and lighttpd install failed (see $PANEL_LOG)"
+    log_error "panel: no web server (bundled panel-httpd missing for $(uname -m 2>/dev/null))"
+    printf '%s\n' "No panel-httpd binary for this arch; opkg lighttpd unavailable." >>"$PANEL_LOG"
     return 1
 }
 
@@ -308,10 +322,10 @@ panel_is_running() {
     '' | *[!0-9]*) return 1 ;;
     esac
     kill -0 "$pid" 2>/dev/null || return 1
-    # Confirm it is our panel server (BusyBox httpd or lighttpd)
+    # Confirm it is our panel server (bundled panel-httpd, BusyBox httpd, or lighttpd)
     if [ -r "/proc/$pid/cmdline" ]; then
-        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|:${PANEL_PORT}\| $PANEL_PORT \|lighttpd.conf" || {
-            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qiE 'httpd|lighttpd' || return 1
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|panel-httpd\|:${PANEL_PORT}\| $PANEL_PORT \|lighttpd.conf" || {
+            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qiE 'httpd|lighttpd|panel-httpd' || return 1
         }
     fi
     return 0
@@ -346,6 +360,16 @@ panel_stop() {
     log_info "Standalone panel stopped"
 }
 
+panel_start_bundled_once() {
+    # $1 = listen addr (IP:PORT or :PORT); $2 = panel-httpd binary
+    local listen_arg="$1"
+    local bin="$2"
+    "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" >>"$PANEL_LOG" 2>&1 &
+    echo $! >"$PANEL_PIDFILE"
+    sleep 1
+    panel_is_running
+}
+
 panel_start_busybox_once() {
     # $1 = bind arg for -p (IP:PORT or PORT); $2 = "busybox httpd" command
     local bind_arg="$1"
@@ -372,6 +396,11 @@ panel_start_lighttpd_once() {
     panel_is_running
 }
 
+panel_mark_started() {
+    log_ok "Standalone panel listening on $(panel_url)"
+    am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+}
+
 panel_start() {
     panel_load_settings
     mkdir -p /tmp/stealthsurf
@@ -389,43 +418,58 @@ panel_start() {
     fi
 
     panel_ensure_httpd || {
-        log_error "panel: no web server. On the router run: opkg update && opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias && surfgate panel start"
+        log_error "panel: no web server. Reinstall 1.4.7+ package (includes bin/panel-httpd) or: opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias"
         return 1
     }
 
-    local httpd_cmd lighttpd_bin
-    httpd_cmd=$(panel_find_httpd 2>/dev/null) || httpd_cmd=""
+    local bundled httpd_cmd lighttpd_bin
+    bundled=$(panel_bundled_httpd 2>/dev/null) || bundled=""
+    httpd_cmd=$(panel_find_busybox_httpd 2>/dev/null) || httpd_cmd=""
     lighttpd_bin=$(panel_find_lighttpd 2>/dev/null) || lighttpd_bin=""
 
-    if [ -n "$httpd_cmd" ]; then
-        printf '%s\n' "==> starting busybox: $httpd_cmd -p ${PANEL_BIND}:${PANEL_PORT}" >>"$PANEL_LOG"
-        if panel_start_busybox_once "${PANEL_BIND}:${PANEL_PORT}" "$httpd_cmd"; then
-            log_ok "Standalone panel listening on $(panel_url)"
-            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+    # 1) Bundled static panel-httpd (preferred — no opkg)
+    if [ -n "$bundled" ]; then
+        printf '%s\n' "==> starting bundled: $bundled -listen ${PANEL_BIND}:${PANEL_PORT}" >>"$PANEL_LOG"
+        if panel_start_bundled_once "${PANEL_BIND}:${PANEL_PORT}" "$bundled"; then
+            panel_mark_started
             return 0
         fi
-        printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry -p ${PANEL_PORT}" >>"$PANEL_LOG"
+        printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry :${PANEL_PORT}" >>"$PANEL_LOG"
         rm -f "$PANEL_PIDFILE"
-        if panel_start_busybox_once "$PANEL_PORT" "$httpd_cmd"; then
-            log_ok "Standalone panel listening on port $PANEL_PORT (all interfaces)"
-            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+        if panel_start_bundled_once ":${PANEL_PORT}" "$bundled"; then
+            panel_mark_started
             return 0
         fi
         rm -f "$PANEL_PIDFILE"
     fi
 
+    # 2) BusyBox httpd applet
+    if [ -n "$httpd_cmd" ]; then
+        printf '%s\n' "==> starting busybox: $httpd_cmd -p ${PANEL_BIND}:${PANEL_PORT}" >>"$PANEL_LOG"
+        if panel_start_busybox_once "${PANEL_BIND}:${PANEL_PORT}" "$httpd_cmd"; then
+            panel_mark_started
+            return 0
+        fi
+        printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry -p ${PANEL_PORT}" >>"$PANEL_LOG"
+        rm -f "$PANEL_PIDFILE"
+        if panel_start_busybox_once "$PANEL_PORT" "$httpd_cmd"; then
+            panel_mark_started
+            return 0
+        fi
+        rm -f "$PANEL_PIDFILE"
+    fi
+
+    # 3) Entware lighttpd
     if [ -n "$lighttpd_bin" ]; then
         printf '%s\n' "==> starting lighttpd: $lighttpd_bin (bind $PANEL_BIND)" >>"$PANEL_LOG"
         if panel_start_lighttpd_once "$PANEL_BIND" "$lighttpd_bin"; then
-            log_ok "Standalone panel (lighttpd) listening on $(panel_url)"
-            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            panel_mark_started
             return 0
         fi
         printf '%s\n' "==> lighttpd bind $PANEL_BIND failed; retry all interfaces" >>"$PANEL_LOG"
         rm -f "$PANEL_PIDFILE"
         if panel_start_lighttpd_once "" "$lighttpd_bin"; then
-            log_ok "Standalone panel (lighttpd) listening on port $PANEL_PORT (all interfaces)"
-            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            panel_mark_started
             return 0
         fi
         rm -f "$PANEL_PIDFILE"

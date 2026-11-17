@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.7] - 2026-11-17
+
+### Bundled panel-httpd (no opkg)
+
+- Package ships static `bin/panel-httpd.aarch64` / `.armv7` (Go) for the standalone panel
+- Panel prefers the bundled binary before BusyBox httpd / lighttpd / opkg
+- Works when `opkg update` fails (common when WAN/DNS is unavailable during install)
+
+---
+
 ## [1.4.5] - 2026-11-17
 
 ### Installer HTTPS on Merlin
