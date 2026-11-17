@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.4] - 2026-11-17
+
+### Standalone panel httpd on Merlin
+
+- Detect BusyBox **httpd applet** properly (firmware BusyBox often has no `httpd`)
+- Auto-install Entware `busybox` via `opkg` when the applet is missing
+- Panel start: relative `httpd.conf`, bind fallback to all interfaces, clearer `/tmp/stealthsurf/panel.log`
+- Install prints `opkg install busybox && surfgate panel start` if panel still fails
+
+---
+
 ## [1.4.3] - 2026-11-17
 
 ### Addon functionality hardening
