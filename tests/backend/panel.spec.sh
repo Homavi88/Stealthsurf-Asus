@@ -2,7 +2,7 @@
 # Smoke-check panel helpers are present in the inlined stealthsurf script.
 set -e
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-SCRIPT="$ROOT/packaged/asuswrt-merlin-stealthsurf.tar.gz"
+SCRIPT="$ROOT/packaged/asuswrt-merlin-surfgate.tar.gz"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 

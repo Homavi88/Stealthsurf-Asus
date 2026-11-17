@@ -244,14 +244,15 @@ EOF
     ss_api_public_keys_view 2>/dev/null || true
     ss_cli_ensure_bin_links 2>/dev/null || {
         ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+        ln -sf "$ADDON_SCRIPT" /opt/bin/surfgate 2>/dev/null || true
         ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
         ln -sf "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
     }
     # Clear legacy 1.0.x service-event block if present (replaced by #stealthsurf hook)
-    if [ -f /jffs/scripts/service-event ] && grep -q 'StealthSurf UI hook' /jffs/scripts/service-event 2>/dev/null; then
+    if [ -f /jffs/scripts/service-event ] && grep -qE 'StealthSurf UI hook|SurfGate UI hook' /jffs/scripts/service-event 2>/dev/null; then
         awk '
-          /StealthSurf UI hook begin/ {skip=1; next}
-          skip && /StealthSurf UI hook end/ {skip=0; next}
+          /StealthSurf UI hook begin|SurfGate UI hook begin/ {skip=1; next}
+          skip && (/StealthSurf UI hook end/ || /SurfGate UI hook end/) {skip=0; next}
           skip {next}
           {print}
         ' /jffs/scripts/service-event >/tmp/stealthsurf_se.$$ && mv /tmp/stealthsurf_se.$$ /jffs/scripts/service-event
@@ -273,7 +274,7 @@ EOF
 
     log_ok "Installed $(show_version) (files in $ADDON_JFFS_ADN_DIR, panel :1131)"
     log_box "Installation completed. Open panel: $_panel_url"
-    log_info "Merlin WebUI: VPN → StealthSurf  ·  CLI: ssurf panel status"
+    log_info "Merlin WebUI: VPN → $ADDON_TITLE  ·  CLI: surfgate panel status"
     log_info "Official :8800 path is $OFFICIAL_SS_JFFS_DIR (never removed by this addon)."
 
     update_loading_progress "Installation completed. Panel: $_panel_url"
@@ -359,11 +360,11 @@ uninstall() {
     fi
 
     echo
-    log_warn "Do you want to remove StealthSurf custom GEODATA? (yes/no)"
+    log_warn "Do you want to remove SurfGate custom GEODATA? (yes/no)"
     read -r user_input
 
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        log_info "Removing StealthSurf custom GEODATA..."
+        log_info "Removing SurfGate custom GEODATA..."
         rm -rf "$ADDON_SHARE_DIR" || log_debug "Failed to remove $ADDON_SHARE_DIR."
         # Only our custom dat helper — never /opt/sbin/xrayui (stock XrayUI)
         rm -f /opt/sbin/stealthsurf || log_debug "Failed to remove /opt/sbin/stealthsurf."
@@ -379,20 +380,20 @@ uninstall() {
 
     # Ask user if they want to remove backups
     echo
-    log_warn "Do you want to remove StealthSurf BACKUPS? (yes/no)"
+    log_warn "Do you want to remove SurfGate BACKUPS? (yes/no)"
     read -r user_input
 
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        log_info "Removing StealthSurf BACKUPS..."
+        log_info "Removing SurfGate BACKUPS..."
         backup_clear
     else
-        log_info "Keeping StealthSurf BACKUPS."
+        log_info "Keeping SurfGate BACKUPS."
     fi
     user_input=""
 
     # Profile tree is always ours — safe even when XrayUI is installed
     if [ -d "$XRAY_CONFIG_DIR" ]; then
-        log_info "Removing StealthSurf profile tree $XRAY_CONFIG_DIR..."
+        log_info "Removing SurfGate profile tree $XRAY_CONFIG_DIR..."
         rm -rf "$XRAY_CONFIG_DIR" || log_debug "Failed to remove $XRAY_CONFIG_DIR."
     fi
 
@@ -431,14 +432,14 @@ uninstall() {
     fi
 
     echo
-    log_warn "Do you want to remove StealthSurf settings ($XRAYUI_CONFIG_FILE)? (yes/no)"
+    log_warn "Do you want to remove SurfGate settings ($XRAYUI_CONFIG_FILE)? (yes/no)"
     read -r user_input
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
-        log_info "Removing StealthSurf settings..."
+        log_info "Removing SurfGate settings..."
         # Never delete stock /opt/etc/xrayui.conf
         rm -f "$XRAYUI_CONFIG_FILE" /opt/etc/stealthsurf.conf || log_debug "Failed to remove settings conf."
     else
-        log_info "Keeping StealthSurf settings ($XRAYUI_CONFIG_FILE)."
+        log_info "Keeping SurfGate settings ($XRAYUI_CONFIG_FILE)."
     fi
 
     # Strip leftover dnsmasq hijack before hooks are gone
@@ -455,7 +456,7 @@ uninstall() {
 
     # Only our logrotate stanza — never stock xrayui
     rm -f /opt/etc/logrotate.d/stealthsurf || log_debug "Failed to remove logrotate config."
-    rm -f /opt/bin/stealthsurf /opt/bin/ssurf /opt/bin/ss 2>/dev/null
+    rm -f /opt/bin/stealthsurf /opt/bin/surfgate /opt/bin/ssurf /opt/bin/ss 2>/dev/null
     rm -rf /jffs/scripts/stealthsurf || log_debug "Failed to remove /jffs/scripts/stealthsurf."
 
     log_box "Uninstallation process completed successfully."

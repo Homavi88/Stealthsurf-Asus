@@ -885,7 +885,7 @@ export class Engine {
       if (axiosError.status === 404) {
         if (
           confirm(
-            'StealthSurf configuration not found in /opt/etc/xray/stealthsurf. Generate a default config (all-in + direct + block)?'
+            'SurfGate configuration not found in /opt/etc/xray/stealthsurf. Generate a default config (all-in + direct + block)?'
           )
         ) {
           await this.submit(SubmitActions.configurationGenerateDefaultConfig);

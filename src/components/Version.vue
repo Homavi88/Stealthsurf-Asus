@@ -2,7 +2,7 @@
   <div class="version">
     <a href="#" @click.prevent="open_update">
       <span class="button_gen button_gen_small button_info" :title="$t('com.Version.tooltip_update_avialable')" v-if="hasUpdate">!</span>
-      StealthSurf v{{ current_version }}</a
+      SurfGate v{{ current_version }}</a
     >
   </div>
   <modal ref="updateModal" width="760" :title="$t('com.Version.modal_title')">

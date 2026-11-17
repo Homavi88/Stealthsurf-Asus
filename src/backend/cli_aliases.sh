@@ -1,6 +1,6 @@
 #!/bin/sh
 # shellcheck disable=SC2034
-# Short CLI aliases (ssurf …) for StealthSurf 1.1.x
+# Short CLI aliases (surfgate / ssurf …) for SurfGate
 
 ss_cli_echo() {
     printf '%s\n' "$*"
@@ -8,6 +8,7 @@ ss_cli_echo() {
 
 ss_cli_ensure_bin_links() {
     ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
+    ln -sf "$ADDON_SCRIPT" /opt/bin/surfgate 2>/dev/null || true
     ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
     ln -sf "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
 }
@@ -34,7 +35,7 @@ ss_cli_status() {
 ss_cli_list_configs() {
     ss_api_ensure_caches
     if [ ! -f "$SS_CACHE_CONFIGS" ] || [ "$(jq 'length' "$SS_CACHE_CONFIGS" 2>/dev/null || echo 0)" = "0" ]; then
-        ss_cli_echo "Catalog empty — run: ssurf sy"
+        ss_cli_echo "Catalog empty — run: surfgate sy"
         return 1
     fi
     jq -r '
@@ -47,8 +48,8 @@ ss_cli_help() {
     cat <<EOF
 $ADDON_TITLE $XRAYUI_VERSION — CLI
 
-Вызов:  ssurf <к> …    или    stealthsurf <к> …    или    ss <к> …
-Справка: ssurf h       Меню: ssurf m
+Вызов:  surfgate <к> …    или    ssurf <к> …    или    ss <к> …
+Справка: surfgate h       Меню: surfgate m
 
 ── Коротко ────────────────────────────────────────────────
   up|on          start          dn|off         stop
@@ -77,15 +78,15 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   panel start|stop|restart|status|url|set-password
 
 Примеры:
-  ssurf up
-  ssurf key 'stlth_…'
-  ssurf sy && ssurf ls
-  ssurf ic 101 && ssurf re
-  ssurf panel status          # http://LAN:1131/
-  ssurf refresh 69191
-  ssurf autofit 69191
-  ssurf st
-  ssurf m
+  surfgate up
+  surfgate key 'stlth_…'
+  surfgate sy && surfgate ls
+  surfgate ic 101 && surfgate re
+  surfgate panel status          # http://LAN:1131/
+  surfgate refresh 69191
+  surfgate autofit 69191
+  surfgate st
+  surfgate m
 EOF
 }
 
@@ -193,7 +194,7 @@ ss_cli_dispatch() {
         api) panel_api_handle ;;
         prepare) panel_prepare_webroot ;;
         *)
-            ss_cli_echo "usage: ssurf panel {start|stop|restart|status|url|set-password}"
+            ss_cli_echo "usage: surfgate panel {start|stop|restart|status|url|set-password}"
             return 1
             ;;
         esac
@@ -341,7 +342,7 @@ ss_cli_dispatch() {
             return $?
             ;;
         *)
-            log_error "Short uninstall needs confirmation. Run: ssurf un --yes"
+            log_error "Short uninstall needs confirmation. Run: surfgate un --yes"
             return 1
             ;;
         esac

@@ -21,22 +21,26 @@ update() {
         return 1
     fi
 
-    local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/asuswrt-merlin-stealthsurf.tar.gz")
+    local asset="asuswrt-merlin-surfgate.tar.gz"
+    local asset_legacy="asuswrt-merlin-stealthsurf.tar.gz"
+    local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset")
+    local url_legacy=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset_legacy")
 
     if [ "$specific_version" != "latest" ]; then
-
-        local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/asuswrt-merlin-stealthsurf.tar.gz")
-
+        url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset")
+        url_legacy=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset_legacy")
     fi
 
     mkdir -p "$ADDON_TMP_DIR" 2>/dev/null
-    local temp_file="$ADDON_TMP_DIR/asuswrt-merlin-stealthsurf.tar.gz"
+    local temp_file="$ADDON_TMP_DIR/$asset"
     local jffs_addons_path="/jffs/addons"
 
     log_info "Downloading the version:$specific_version..."
     update_loading_progress "Downloading the version:$specific_version..."
     if wget -q --show-progress -O "$temp_file" "$url"; then
         log_info "Download completed successfully."
+    elif wget -q --show-progress -O "$temp_file" "$url_legacy"; then
+        log_info "Download completed via legacy asset $asset_legacy."
     else
         log_error "Failed to download the $specific_version version. Exiting."
         return 1

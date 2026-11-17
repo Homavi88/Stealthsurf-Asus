@@ -236,7 +236,7 @@ service_event)
         if ss_api_sync_all; then
             ss_api_public_keys_view
             initial_response
-            update_loading_progress "StealthSurf catalog synced." 100
+            update_loading_progress "SurfGate catalog synced." 100
         else
             update_loading_progress "Error: sync failed." 100
         fi

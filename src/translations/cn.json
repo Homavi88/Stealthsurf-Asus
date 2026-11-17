@@ -27,7 +27,7 @@
     "disabled": "禁用",
     "items": "项目: {0}",
     "help": "帮助",
-    "xrayui_desc": "本图形化控制页可简便管理监控 X-ray 核心配置与状态。"
+    "xrayui_desc": "SurfGate — 基于 XrayUI 的控制面板，支持 StealthSurf API 密钥：余额、连接目录与导入到 outbounds。"
   },
   "com": {
     "ClientStatus": {
@@ -43,7 +43,7 @@
       "xrayui_conflict_title": "与 XrayUI 冲突",
       "xrayui_conflict_pill": "XrayUI 冲突",
       "xrayui_installed_pill": "已安装 XrayUI（已停止）",
-      "xrayui_conflict_message": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），再启动 StealthSurf。两个插件不能同时启用透明代理，否则会破坏局域网上网。"
+      "xrayui_conflict_message": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），再启动 SurfGate。两个插件不能同时启用透明代理，否则会破坏局域网上网。"
     },
     "ServerStatus": {
       "configuration": "配置",
@@ -136,7 +136,7 @@
       "label_subscription_filters": "轮换过滤器",
       "hint_subscription_filters": "按名称过滤用于自动故障转移轮换的订阅链接。<hr/>输入逗号分隔的关键词（例如 <code>Canada, Denmark</code>）。<hr/>仅使用名称包含至少一个关键词的链接。<hr/>如果为空，则使用完整的订阅池。",
       "placeholder_subscription_filters": "例如 Canada, Denmark, Japan",
-      "tab_stealthsurf": "StealthSurf",
+      "tab_stealthsurf": "SurfGate",
       "label_ss_catalog_auto_sync": "自动同步目录",
       "hint_ss_catalog_auto_sync": "定期拉取 StealthSurf API 目录，并比较已导入的 <code>ss-*</code> 代理连接设置（URL、协议、服务器、xray/awg）。<hr/>若提供商侧有变更，会自动重建这些出站；若 Xray 正在运行则重启。<hr/>标题与在线状态每次同步都会更新且无需重启。手动 <b>Sync catalog</b> 也会做同样的比较。",
       "ss_sync_15m": "每 15 分钟"

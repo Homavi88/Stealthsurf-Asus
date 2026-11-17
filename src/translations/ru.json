@@ -27,7 +27,7 @@
     "disabled": "отключено",
     "items": "элем.: {0}",
     "help": "помощь",
-    "xrayui_desc": "StealthSurf UI (beta 1.1) — панель на базе <a href='https://github.com/DanielLavrushin/asuswrt-merlin-xrayui' class='hint' target='_blank'>XrayUI</a> с API-ключами StealthSurf: баланс, каталог подключений и импорт в outbounds."
+    "xrayui_desc": "SurfGate — панель на базе <a href='https://github.com/DanielLavrushin/asuswrt-merlin-xrayui' class='hint' target='_blank'>XrayUI</a> с API-ключами StealthSurf: баланс, каталог подключений и импорт в outbounds."
   },
   "guide": {
     "dns_leak": "https://daniellavrushin.github.io/asuswrt-merlin-xrayui/ru/dns-leak",
@@ -47,7 +47,7 @@
       "xrayui_conflict_title": "Конфликт с XrayUI",
       "xrayui_conflict_pill": "XrayUI конфликт",
       "xrayui_installed_pill": "XrayUI установлен (остановлен)",
-      "xrayui_conflict_message": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте StealthSurf. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
+      "xrayui_conflict_message": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте SurfGate. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
     },
     "ServerStatus": {
       "configuration": "Конфигурация",
@@ -140,7 +140,7 @@
       "label_subscription_filters": "Фильтры ротации",
       "hint_subscription_filters": "Фильтровать ссылки подписок для авто-ротации по имени.<hr/>Введите ключевые слова через запятую (напр. <code>Canada, Denmark</code>).<hr/>Будут использоваться только ссылки, содержащие хотя бы одно ключевое слово.<hr/>Если пусто, используется весь пул подписок.",
       "placeholder_subscription_filters": "напр. Canada, Denmark, Japan",
-      "tab_stealthsurf": "StealthSurf",
+      "tab_stealthsurf": "SurfGate",
       "label_ss_catalog_auto_sync": "Автосинхронизация каталога",
       "hint_ss_catalog_auto_sync": "Периодически запрашивать каталог StealthSurf API и сравнивать настройки уже импортированных прокси <code>ss-*</code> (URL, протокол, сервер, xray/awg).<hr/>Если у провайдера что-то изменилось — outbound-ы пересобираются автоматически, а Xray перезапускается, если он запущен.<hr/>Название и online обновляются при каждом sync без перезапуска. Ручной <b>Sync catalog</b> делает то же сравнение.",
       "ss_sync_15m": "Каждые 15 минут"

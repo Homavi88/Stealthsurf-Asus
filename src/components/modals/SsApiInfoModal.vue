@@ -118,7 +118,7 @@
     components: { Modal },
     setup() {
       const modal = ref<{ show: () => void; close: () => void } | null>(null);
-      const title = ref('StealthSurf');
+      const title = ref('SurfGate');
       const subtitle = ref('');
       const kind = ref<'stats' | 'traffic'>('stats');
       const loading = ref(false);
