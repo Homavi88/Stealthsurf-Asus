@@ -572,8 +572,22 @@
   };
 
   const updatestartup = async () => {
-    await engine.submit(SubmitActions.toggleStartupOption);
-    window.xray.custom_settings.stealthsurf_startup = window.xray.custom_settings.stealthsurf_startup === 'y' ? 'n' : 'y';
+    // @click runs before v-model: options.startup is still the previous value.
+    const nextOn = !options.startup;
+    const previousFlag = window.xray.custom_settings.stealthsurf_startup;
+    window.xray.custom_settings.stealthsurf_startup = nextOn ? 'y' : 'n';
+    try {
+      // Standalone panel must set absolute NVRAM (write-then-flip desyncs).
+      // Merlin ASP path still uses the classic flip without rewriting settings first.
+      if ((window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__) {
+        await engine.submit(SubmitActions.setStartupOption);
+      } else {
+        await engine.submit(SubmitActions.toggleStartupOption);
+      }
+    } catch {
+      window.xray.custom_settings.stealthsurf_startup = previousFlag;
+      options.startup = !nextOn;
+    }
   };
 
   const validateCheckConOption = () => {

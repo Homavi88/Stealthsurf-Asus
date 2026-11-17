@@ -49,8 +49,9 @@ apply_general_options() {
         "geosite_url=" + ((.geo_site_url // "") | tostring | @sh) + "\n" +
         "geoip_url=" + ((.geo_ip_url // "") | tostring | @sh) + "\n" +
         "geo_auto_update=" + ((.geo_auto_update // "false") | tostring | @sh) + "\n" +
-        "hooks=" + ((.hooks // {}) | tojson | @sh) + "\n" +
-        "subscriptionLinks=" + (((.subscriptions.links // []) | join("|")) | @sh) + "\n" +
+        "hooks=" + (if has("hooks") then ((.hooks // {}) | tojson | @sh) else "'__omit__'" end) + "\n" +
+        "subscriptionLinks=" + (if (has("subscriptions") and (.subscriptions | has("links"))) then (((.subscriptions.links // []) | join("|")) | @sh) else "'__omit__'" end) + "\n" +
+        "subscription_filters=" + (if (has("subscriptions") and (.subscriptions | has("filters"))) then (((.subscriptions.filters // []) | join("|")) | @sh) else "'__omit__'" end) + "\n" +
         "xray_dns_only=" + ((.dns_only // "false") | tostring | @sh) + "\n" +
         "xray_block_quic=" + ((.block_quic // "false") | tostring | @sh) + "\n" +
         "integration_scribe=" + ((.logs_scribe // "false") | tostring | @sh) + "\n" +
@@ -64,8 +65,7 @@ apply_general_options() {
         "watchdog_interval=" + ((.watchdog_interval // 2) | tostring | @sh) + "\n" +
         "watchdog_max_attempts=" + ((.watchdog_max_attempts // 5) | tostring | @sh) + "\n" +
         "ss_catalog_auto_sync=" + ((.ss_catalog_auto_sync // "disabled") | tostring | @sh) + "\n" +
-        "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh) + "\n" +
-        "subscription_filters=" + (((.subscriptions.filters // []) | join("|")) | @sh)
+        "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
     '); then
         log_error "Failed to parse general options payload."
         update_loading_progress "Error: failed to read the settings. Nothing was changed." 100
@@ -123,7 +123,6 @@ apply_general_options() {
         log_ok "stealthsurf_startup set to 'disabled' from general options."
     fi
     update_xrayui_config "xray_sleep_time" "$xray_sleep_time"
-    update_xrayui_config "subscriptionLinks" "$subscriptionLinks"
     update_xrayui_config "xray_dns_only" "$xray_dns_only"
     update_xrayui_config "xray_block_quic" "$xray_block_quic"
     update_xrayui_config "integration_scribe" "$integration_scribe"
@@ -144,14 +143,19 @@ apply_general_options() {
     esac
     update_xrayui_config "ss_catalog_auto_sync" "$ss_catalog_auto_sync"
 
-    update_xrayui_config "subscription_filters" "$subscription_filters"
-
-    # Clean up subscription files when no sources are configured
-    if [ -z "$subscriptionLinks" ]; then
-        rm -f "$XRAYUI_SUBSCRIPTIONS_FILE"
+    # Omit keeps existing conf when the panel payload did not include these keys.
+    if [ "$subscriptionLinks" != "__omit__" ]; then
+        update_xrayui_config "subscriptionLinks" "$subscriptionLinks"
+        if [ -z "$subscriptionLinks" ]; then
+            rm -f "$XRAYUI_SUBSCRIPTIONS_FILE"
+        fi
     fi
-
-    apply_general_options_hooks "$hooks"
+    if [ "$subscription_filters" != "__omit__" ]; then
+        update_xrayui_config "subscription_filters" "$subscription_filters"
+    fi
+    if [ "$hooks" != "__omit__" ]; then
+        apply_general_options_hooks "$hooks"
+    fi
 
     # Update the logrotate configuration with the new max size
     logrotate_setup
@@ -175,9 +179,14 @@ apply_general_options() {
         update_community_geodata
     fi
 
-    if [ -f "$XRAY_PIDFILE" ] && [ "$GEODATA_RESTARTED" != "true" ]; then
-        update_loading_progress "Restarting Xray service..."
-        restart
+    # Prefer live daemon PID when the pidfile is missing/stale so firewall toggles apply.
+    if [ "$GEODATA_RESTARTED" != "true" ]; then
+        local running_pid=""
+        running_pid=$(get_xray_daemon_pid 2>/dev/null || true)
+        if [ -n "$running_pid" ] || [ -f "$XRAY_PIDFILE" ]; then
+            update_loading_progress "Restarting Xray service..."
+            restart
+        fi
     fi
 
     return 0

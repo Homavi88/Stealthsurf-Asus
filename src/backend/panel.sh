@@ -553,8 +553,14 @@ panel_api_handle() {
         ;;
     esac
 
-    # Apply stealthsurf_* settings (payload chunks etc.) like Merlin amng_custom
+    # Apply stealthsurf_* settings (payload chunks etc.) like Merlin amng_custom.
+    # Drop leftover payload/stage keys first when a new payload arrives — otherwise a
+    # shorter chunk set concatenates with stale payload1+ and corrupts reconstruct_payload.
     if [ -n "$settings" ] && [ "$settings" != "{}" ] && [ "$settings" != "null" ]; then
+        if printf '%s' "$settings" | jq -e 'keys[] | select(startswith("stealthsurf_payload") or startswith("stealthsurf_stage") or . == "stealthsurf_staged_session")' >/dev/null 2>&1; then
+            cleanup_payload 2>/dev/null || true
+            custom_settings_drop '/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' 2>/dev/null || true
+        fi
         printf '%s' "$settings" | jq -r 'to_entries[] | select(.key|startswith("stealthsurf_")) | "\(.key)\t\(.value|tostring)"' 2>/dev/null |
             while IFS=$(printf '\t') read -r key val; do
                 [ -n "$key" ] || continue
