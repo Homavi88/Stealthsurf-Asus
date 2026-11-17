@@ -1,5 +1,5 @@
 #!/bin/sh
-# StealthSurf-Asus 1.2.1+ installer for Asuswrt-Merlin (Entware required).
+# StealthSurf-Asus 1.3.0+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
@@ -19,7 +19,7 @@ OUR_DIR="$JFFS_ADDONS/ssurf"
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> StealthSurf-Asus installer (1.2.1+ — panel :1131, path /jffs/addons/ssurf)"
+echo "==> StealthSurf-Asus installer (1.3.0+ — panel :1131, path /jffs/addons/ssurf)"
 
 if [ ! -d /jffs ]; then
   echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2

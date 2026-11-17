@@ -137,7 +137,20 @@ else
 fi
 CGI
 
-    chmod 0755 "$PANEL_CGI_DIR/bootstrap" "$PANEL_CGI_DIR/api" || true
+    cat >"$PANEL_CGI_DIR/status" <<'CGI'
+#!/bin/sh
+echo "Content-Type: application/json"
+echo "Cache-Control: no-store"
+echo ""
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+if [ -x "$ADDON_SCRIPT" ]; then
+  "$ADDON_SCRIPT" panel live
+else
+  echo '{"ok":false,"error":"stealthsurf missing"}'
+fi
+CGI
+
+    chmod 0755 "$PANEL_CGI_DIR/bootstrap" "$PANEL_CGI_DIR/api" "$PANEL_CGI_DIR/status" || true
 }
 
 panel_prepare_webroot() {
@@ -383,6 +396,122 @@ panel_bootstrap_json() {
             server: { isRunning: $isRunning, b4sni_isRunning: $b4sni_isRunning },
             custom_settings: $custom_settings
           }
+        }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
+}
+
+# Live dashboard metrics for the light panel (CPU / RAM / traffic counters).
+panel_live_json() {
+    panel_load_settings
+    load_xrayui_config 2>/dev/null || true
+
+    local running=false pid=0
+    pid=$(get_xray_daemon_pid 2>/dev/null) || pid=0
+    case "$pid" in
+    '' | *[!0-9]*) pid=0 ;;
+    esac
+    [ "$pid" -gt 0 ] && running=true
+
+    local cpu_pct=0
+    # BusyBox-friendly one-shot CPU estimate from /proc/stat idle ratio.
+    cpu_pct=$(
+        awk '
+      NR==1 {
+        idle=$5; total=0
+        for (i=2;i<=NF;i++) total+=$i
+        getline < "/dev/null"
+      }
+      END {
+        # Fallback: read again after short sleep via shell; here use loadavg heuristic
+        print 0
+      }' /proc/stat 2>/dev/null
+    )
+    # Prefer loadavg-based estimate (works without sleep on BusyBox)
+    cpu_pct=$(
+        awk -v n="$(grep -c '^processor' /proc/cpuinfo 2>/dev/null || echo 1)" '
+      {
+        load=$1+0
+        if (n < 1) n=1
+        pct=int((load / n) * 100 + 0.5)
+        if (pct < 0) pct=0
+        if (pct > 100) pct=100
+        print pct
+        exit
+      }' /proc/loadavg 2>/dev/null
+    )
+    case "$cpu_pct" in '' | *[!0-9]*) cpu_pct=0 ;; esac
+
+    local mem_total_kb=0 mem_avail_kb=0 mem_used_mb=0 mem_total_mb=0
+    mem_total_kb=$(awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null)
+    mem_avail_kb=$(awk '/^MemAvailable:/ {print $2; exit}' /proc/meminfo 2>/dev/null)
+    [ -n "$mem_avail_kb" ] || mem_avail_kb=$(awk '/^MemFree:/ {print $2; exit}' /proc/meminfo 2>/dev/null)
+    case "$mem_total_kb" in '' | *[!0-9]*) mem_total_kb=0 ;; esac
+    case "$mem_avail_kb" in '' | *[!0-9]*) mem_avail_kb=0 ;; esac
+    if [ "$mem_total_kb" -gt 0 ]; then
+        mem_total_mb=$((mem_total_kb / 1024))
+        mem_used_mb=$(((mem_total_kb - mem_avail_kb) / 1024))
+        [ "$mem_used_mb" -ge 0 ] || mem_used_mb=0
+    fi
+
+    local app_rss_mb=0
+    if [ "$pid" -gt 0 ] && [ -r "/proc/$pid/status" ]; then
+        app_rss_mb=$(awk '/^VmRSS:/ {print int($2/1024); exit}' "/proc/$pid/status" 2>/dev/null)
+        case "$app_rss_mb" in '' | *[!0-9]*) app_rss_mb=0 ;; esac
+    fi
+
+    local wan_ip
+    wan_ip=$(nvram get wan_ipaddr 2>/dev/null)
+
+    local vpn_up=0 vpn_down=0 direct_up=0 direct_down=0
+    # Best-effort cumulative counters from last xray stats snapshot (bytes).
+    if [ -f "$ADDON_SHARE_DIR/xray_stats.json" ]; then
+        vpn_up=$(jq -r '[.stat[]? | select(.name|test("outbound>>>ss-.*>>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        vpn_down=$(jq -r '[.stat[]? | select(.name|test("outbound>>>ss-.*>>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        direct_up=$(jq -r '[.stat[]? | select(.name|test("outbound>>>direct>>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        direct_down=$(jq -r '[.stat[]? | select(.name|test("outbound>>>direct>>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+    fi
+    case "$vpn_up" in '' | *[!0-9]*) vpn_up=0 ;; esac
+    case "$vpn_down" in '' | *[!0-9]*) vpn_down=0 ;; esac
+    case "$direct_up" in '' | *[!0-9]*) direct_up=0 ;; esac
+    case "$direct_down" in '' | *[!0-9]*) direct_down=0 ;; esac
+
+    # Refresh stats asynchronously so next poll is fresher (ignore errors).
+    if [ "$running" = true ] && type api_get_connection_status >/dev/null 2>&1; then
+        (api_get_connection_status >/dev/null 2>&1 &) || true
+    fi
+
+    local ts
+    ts=$(date +%s 2>/dev/null) || ts=0
+
+    jq -nc \
+        --argjson ok true \
+        --argjson running "$running" \
+        --argjson pid "$pid" \
+        --argjson cpu_pct "$cpu_pct" \
+        --argjson mem_used_mb "$mem_used_mb" \
+        --argjson mem_total_mb "$mem_total_mb" \
+        --argjson app_rss_mb "$app_rss_mb" \
+        --arg wan_ip "$wan_ip" \
+        --argjson vpn_up "$vpn_up" \
+        --argjson vpn_down "$vpn_down" \
+        --argjson direct_up "$direct_up" \
+        --argjson direct_down "$direct_down" \
+        --argjson ts "$ts" \
+        '{
+          ok: $ok,
+          running: $running,
+          pid: $pid,
+          cpu_pct: $cpu_pct,
+          mem_used_mb: $mem_used_mb,
+          mem_total_mb: $mem_total_mb,
+          app_rss_mb: $app_rss_mb,
+          wan_ip: $wan_ip,
+          traffic: {
+            vpn_up: $vpn_up,
+            vpn_down: $vpn_down,
+            direct_up: $direct_up,
+            direct_down: $direct_down
+          },
+          ts: $ts
         }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
 }
 

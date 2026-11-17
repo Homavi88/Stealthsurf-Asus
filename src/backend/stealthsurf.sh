@@ -534,6 +534,9 @@ panel)
     bootstrap)
         panel_bootstrap_json
         ;;
+    live | live-status)
+        panel_live_json
+        ;;
     api)
         panel_api_handle
         ;;
@@ -547,7 +550,7 @@ panel)
         panel_prepare_webroot
         ;;
     *)
-        echo "usage: stealthsurf panel {start|stop|restart|status|url|set-password}" >&2
+        echo "usage: stealthsurf panel {start|stop|restart|status|url|set-password|live}" >&2
         exit 1
         ;;
     esac
