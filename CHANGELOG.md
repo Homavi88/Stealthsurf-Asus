@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.1] - 2026-11-17
+
+### Light settings with iOS toggles
+
+- Standalone panel settings right column restyled to match SurfGate home (white cards, section labels)
+- **Подключение**: iOS toggles gate nested fields (startup delay, watchdog, probe, catalog autosync, …)
+- Other settings sections use a light FormTable skin instead of the dark Merlin block
+- README screenshots refreshed for the new UI
+
+---
+
 ## [1.4.0] - 2026-11-17
 
 ### Rebrand to SurfGate

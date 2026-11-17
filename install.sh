@@ -1,5 +1,5 @@
 #!/bin/sh
-# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.0+ installer for Asuswrt-Merlin (Entware required).
+# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.1+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
