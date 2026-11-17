@@ -36,7 +36,7 @@
 Нужны Merlin, JFFS custom scripts и Entware (`amtm`). Одна команда на роутере:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
+/opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
 Затем откройте панель:
@@ -83,7 +83,7 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 Если CLI «битый» — восстановление **нашего** аддона (не трогает official):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
+/opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
 ## Что нового в 1.1.8+

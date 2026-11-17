@@ -9,6 +9,9 @@
 #   ssurf/{stealthsurf,index.asp,app.js,panel/…}
 set -e
 
+# Entware first — firmware BusyBox wget cannot fetch HTTPS (GitHub releases).
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 ADDON_REPO="${ADDON_REPO:-Homavi88/Stealthsurf-Asus}"
 ASSET="asuswrt-merlin-surfgate.tar.gz"
 # Fallback for older release assets during transition
@@ -40,8 +43,66 @@ elif [ -d "$OFFICIAL_DIR" ]; then
   echo "==> WARNING: $OFFICIAL_DIR exists without stealthsurf-routerd."
   echo "    If you previously installed our addon into that path, it may have"
   echo "    overwritten the official package. Reinstall official with:"
-  echo "      curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"
+  echo "      /opt/bin/curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"
 fi
+
+# Resolve an HTTPS-capable downloader. Merlin BusyBox wget only speaks http/ftp.
+find_https_fetch() {
+  if [ -x /opt/bin/curl ]; then
+    echo "/opt/bin/curl"
+    return 0
+  fi
+  if [ -x /usr/sbin/curl ]; then
+    echo "/usr/sbin/curl"
+    return 0
+  fi
+  if command -v curl >/dev/null 2>&1; then
+    command -v curl
+    return 0
+  fi
+  # Entware wget (wget-ssl), not BusyBox
+  if [ -x /opt/bin/wget ]; then
+    echo "/opt/bin/wget"
+    return 0
+  fi
+  return 1
+}
+
+ensure_https_fetch() {
+  if find_https_fetch >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "==> No HTTPS client found (BusyBox wget cannot download from GitHub)."
+  echo "==> Installing Entware curl..."
+  opkg update || true
+  if ! opkg install curl; then
+    echo "ERROR: could not install curl. Run manually:" >&2
+    echo "  opkg update && opkg install curl" >&2
+    echo "  then re-run this installer." >&2
+    exit 1
+  fi
+  find_https_fetch >/dev/null 2>&1 || {
+    echo "ERROR: curl installed but not found on PATH. Check /opt/bin/curl" >&2
+    exit 1
+  }
+}
+
+download_https() {
+  # $1 = url, $2 = output path
+  local url="$1" out="$2" bin
+  bin=$(find_https_fetch) || return 1
+  case "$bin" in
+  *curl)
+    "$bin" -fsSL --connect-timeout 30 --retry 3 -o "$out" "$url"
+    ;;
+  *wget)
+    "$bin" -q --timeout=30 -O "$out" "$url"
+    ;;
+  *)
+    return 1
+    ;;
+  esac
+}
 
 URL="https://github.com/${ADDON_REPO}/releases/latest/download/${ASSET}"
 URL_LEGACY="https://github.com/${ADDON_REPO}/releases/latest/download/${ASSET_LEGACY}"
@@ -57,16 +118,17 @@ if [ -n "$LOCAL_TGZ" ]; then
   echo "==> Using local package: $LOCAL_TGZ"
   cp -f "$LOCAL_TGZ" "$TMP"
 else
+  ensure_https_fetch
   echo "==> Downloading $URL"
-  if command -v curl >/dev/null 2>&1; then
-    if ! curl -fsSL -o "$TMP" "$URL"; then
-      echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
-      curl -fsSL -o "$TMP" "$URL_LEGACY"
-    fi
-  else
-    if ! wget -q -O "$TMP" "$URL"; then
-      echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
-      wget -q -O "$TMP" "$URL_LEGACY"
+  if ! download_https "$URL" "$TMP"; then
+    echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
+    if ! download_https "$URL_LEGACY" "$TMP"; then
+      echo "ERROR: download failed." >&2
+      echo "  Tried: $URL" >&2
+      echo "  And:   $URL_LEGACY" >&2
+      echo "  Fetcher: $(find_https_fetch 2>/dev/null || echo none)" >&2
+      echo "  Manual: /opt/bin/curl -fsSL -o /tmp/$ASSET $URL && sh $0" >&2
+      exit 1
     fi
   fi
 fi
@@ -128,4 +190,4 @@ echo "    Merlin WebUI:     VPN → SurfGate"
 echo "    Official panel:   http://${LAN}:8800/   (untouched: $OFFICIAL_DIR)"
 echo "    CLI: surfgate | ssurf | ss   (help: surfgate h)"
 echo "    Restore official if broken:"
-echo "      curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"
+echo "      /opt/bin/curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"
