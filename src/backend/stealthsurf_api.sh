@@ -465,10 +465,13 @@ ss_api_imported_config_ids() {
         echo ""
         return 0
     }
+    # No jq regex (Entware jq often lacks ONIGURUMA — test/sub unavailable).
     jq -r '
+      def is_digits: length > 0 and (explode | all(48 <= . and . <= 57));
+      def is_ss_numeric_tag: startswith("ss-") and (.[3:] | is_digits);
       [.outbounds[]?
-        | select(._stealthsurf == true or ((.tag // "") | test("^ss-[0-9]+$")))
-        | (._ss_id // (if ((.tag // "") | test("^ss-[0-9]+$")) then (.tag | sub("^ss-"; "")) else empty end))
+        | select(._stealthsurf == true or ((.tag // "") | is_ss_numeric_tag))
+        | (._ss_id // (if ((.tag // "") | is_ss_numeric_tag) then .tag[3:] else empty end))
         | select(. != null and . != "")
         | tostring
       ] | unique | .[]
@@ -633,12 +636,24 @@ ss_api_stamp_outbounds_from_catalog() {
     load_xrayui_config
     [ -f "$SS_CACHE_CONFIGS" ] || return 0
     [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    # No jq regex (ONIGURUMA-free): startswith / slice instead of test/sub.
     jq --slurpfile cat "$SS_CACHE_CONFIGS" '
+      def strip_ss_tag_prefix:
+        if startswith("ss-po-") then .[6:]
+        elif startswith("ss-cs-") then .[6:]
+        elif startswith("ss-") then .[3:]
+        else . end;
       ($cat[0] // []) as $c |
       .outbounds = ((.outbounds // []) | map(
-        if ((.tag // "") | test("^ss-")) then
+        if ((.tag // "") | startswith("ss-")) then
           ((.tag) as $tag |
-          ($c | map(select((._ss_tag // ("ss-" + (.id|tostring))) == $tag or ((.id|tostring) == ($tag | sub("^ss-(po-|cs-)?"; ""))))) | first) as $m |
+          ($c | map(select(
+            (._ss_tag // ("ss-" + (.id|tostring))) == $tag
+            or (("ss-" + (.id|tostring)) == $tag)
+            or (("ss-po-" + (.id|tostring)) == $tag)
+            or (("ss-cs-" + (.id|tostring)) == $tag)
+            or ((.id|tostring) == ($tag | strip_ss_tag_prefix))
+          )) | first) as $m |
           if $m != null then
             . + {
               _stealthsurf: true,

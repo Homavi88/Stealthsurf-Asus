@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.5] - 2026-11-17
+
+### jq without ONIGURUMA + panel lighttpd fallback
+
+- Replace jq `test`/`sub` in catalog stamp / imported-id helpers with `startswith` / digit checks (Entware jq often lacks ONIGURUMA)
+- Panel live traffic stats also avoid jq regex
+- If BusyBox has no httpd applet, install/start Entware **lighttpd** + `mod-cgi` / `mod-alias`
+
+---
+
 ## [1.4.4] - 2026-11-17
 
 ### Standalone panel httpd on Merlin

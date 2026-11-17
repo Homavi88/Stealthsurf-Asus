@@ -87,33 +87,81 @@ panel_find_httpd() {
     return 1
 }
 
-# Install Entware busybox when firmware BusyBox has no httpd applet.
+panel_find_lighttpd() {
+    local cand
+    for cand in /opt/sbin/lighttpd /opt/bin/lighttpd; do
+        [ -x "$cand" ] || continue
+        echo "$cand"
+        return 0
+    done
+    return 1
+}
+
+panel_opkg_install() {
+    # $@ = packages; best-effort when feeds are reachable
+    [ -x /opt/bin/opkg ] || return 1
+    opkg update >>"$PANEL_LOG" 2>&1 || log_warn "panel: opkg update failed; trying install anyway"
+    opkg install "$@" >>"$PANEL_LOG" 2>&1
+}
+
+# Ensure a usable panel web server: BusyBox httpd applet, else Entware lighttpd+cgi.
 panel_ensure_httpd() {
     mkdir -p /tmp/stealthsurf 2>/dev/null || true
-    if panel_find_httpd >/dev/null 2>&1; then
+    if panel_find_httpd >/dev/null 2>&1 || panel_find_lighttpd >/dev/null 2>&1; then
         return 0
     fi
 
     if [ ! -x /opt/bin/opkg ]; then
-        log_error "panel: BusyBox httpd not found and Entware (/opt/bin/opkg) is missing."
-        printf '%s\n' "BusyBox httpd applet not found; Entware opkg unavailable." >>"$PANEL_LOG"
+        log_error "panel: no web server and Entware (/opt/bin/opkg) is missing."
+        printf '%s\n' "No BusyBox httpd / lighttpd; Entware opkg unavailable." >>"$PANEL_LOG"
         return 1
     fi
 
-    log_warn "panel: BusyBox httpd missing — installing Entware package 'busybox'..."
-    printf '%s\n' "==> opkg update / install busybox (for httpd applet)" >>"$PANEL_LOG"
-    opkg update >>"$PANEL_LOG" 2>&1 || log_warn "panel: opkg update failed; trying install anyway"
-    if ! opkg install busybox >>"$PANEL_LOG" 2>&1; then
-        opkg install --force-reinstall busybox >>"$PANEL_LOG" 2>&1 || true
-    fi
-
+    # Entware busybox is often essential but built WITHOUT the httpd applet.
+    log_warn "panel: BusyBox httpd missing — trying Entware busybox, then lighttpd..."
+    printf '%s\n' "==> opkg install busybox (httpd applet — often absent)" >>"$PANEL_LOG"
+    panel_opkg_install busybox || true
     if panel_find_httpd >/dev/null 2>&1; then
         log_ok "panel: Entware busybox httpd is available"
         return 0
     fi
 
-    log_error "panel: still no httpd after opkg install busybox (see $PANEL_LOG)"
+    printf '%s\n' "==> opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias" >>"$PANEL_LOG"
+    if panel_opkg_install lighttpd lighttpd-mod-cgi lighttpd-mod-alias; then
+        :
+    else
+        opkg install --force-reinstall lighttpd lighttpd-mod-cgi lighttpd-mod-alias >>"$PANEL_LOG" 2>&1 || true
+    fi
+
+    if panel_find_lighttpd >/dev/null 2>&1; then
+        log_ok "panel: Entware lighttpd is available"
+        return 0
+    fi
+
+    log_error "panel: no BusyBox httpd and lighttpd install failed (see $PANEL_LOG)"
     return 1
+}
+
+panel_write_lighttpd_conf() {
+    # $1 = bind IP (empty = all interfaces)
+    local bind_ip="$1"
+    local conf="$PANEL_WEB_ROOT/lighttpd.conf"
+    {
+        echo 'server.modules = ( "mod_alias", "mod_cgi" )'
+        echo "server.document-root = \"$PANEL_WEB_ROOT\""
+        echo "server.port = $PANEL_PORT"
+        if [ -n "$bind_ip" ]; then
+            echo "server.bind = \"$bind_ip\""
+        fi
+        echo 'server.pid-file = "'"$PANEL_PIDFILE"'"'
+        echo 'server.errorlog = "'"$PANEL_LOG"'"'
+        echo 'index-file.names = ( "index.html" )'
+        echo 'mimetype.assign = ( ".html" => "text/html", ".js" => "application/javascript", ".json" => "application/json", ".css" => "text/css", ".svg" => "image/svg+xml", ".png" => "image/png", ".ico" => "image/x-icon" )'
+        # Extensionless CGI scripts under /cgi-bin/ (no PCRE url =~ needed)
+        echo "alias.url = ( \"/cgi-bin/\" => \"$PANEL_CGI_DIR/\" )"
+        echo 'cgi.assign = ( "" => "" )'
+    } >"$conf"
+    echo "$conf"
 }
 
 panel_ensure_secondary_ip() {
@@ -260,11 +308,10 @@ panel_is_running() {
     '' | *[!0-9]*) return 1 ;;
     esac
     kill -0 "$pid" 2>/dev/null || return 1
-    # Confirm it is our panel httpd (listen arg contains our port)
+    # Confirm it is our panel server (BusyBox httpd or lighttpd)
     if [ -r "/proc/$pid/cmdline" ]; then
-        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|:${PANEL_PORT}\| $PANEL_PORT " || {
-            # Still accept if pidfile matches a live httpd we started
-            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qi httpd || return 1
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|:${PANEL_PORT}\| $PANEL_PORT \|lighttpd.conf" || {
+            tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qiE 'httpd|lighttpd' || return 1
         }
     fi
     return 0
@@ -299,14 +346,27 @@ panel_stop() {
     log_info "Standalone panel stopped"
 }
 
-panel_start_httpd_once() {
-    # $1 = bind arg for -p (IP:PORT or PORT)
+panel_start_busybox_once() {
+    # $1 = bind arg for -p (IP:PORT or PORT); $2 = "busybox httpd" command
     local bind_arg="$1"
     local httpd_cmd="$2"
 
     # -c is relative to -h on some BusyBox builds; conf lives in PANEL_WEB_ROOT.
     # shellcheck disable=SC2086
     $httpd_cmd -p "$bind_arg" -h "$PANEL_WEB_ROOT" -c httpd.conf >>"$PANEL_LOG" 2>&1 &
+    echo $! >"$PANEL_PIDFILE"
+    sleep 1
+    panel_is_running
+}
+
+panel_start_lighttpd_once() {
+    # $1 = bind IP (empty = all interfaces); $2 = lighttpd binary
+    local bind_ip="$1"
+    local bin="$2"
+    local conf
+    conf=$(panel_write_lighttpd_conf "$bind_ip")
+    # -D: stay in foreground so $! is the real server PID
+    "$bin" -f "$conf" -D >>"$PANEL_LOG" 2>&1 &
     echo $! >"$PANEL_PIDFILE"
     sleep 1
     panel_is_running
@@ -329,38 +389,52 @@ panel_start() {
     fi
 
     panel_ensure_httpd || {
-        log_error "panel: BusyBox httpd not found. On the router run: opkg update && opkg install busybox"
+        log_error "panel: no web server. On the router run: opkg update && opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias && surfgate panel start"
         return 1
     }
 
-    local httpd_cmd
-    httpd_cmd=$(panel_find_httpd) || {
-        log_error "panel: BusyBox httpd not found after ensure."
-        return 1
-    }
+    local httpd_cmd lighttpd_bin
+    httpd_cmd=$(panel_find_httpd 2>/dev/null) || httpd_cmd=""
+    lighttpd_bin=$(panel_find_lighttpd 2>/dev/null) || lighttpd_bin=""
 
-    printf '%s\n' "==> starting: $httpd_cmd -p ${PANEL_BIND}:${PANEL_PORT} -h $PANEL_WEB_ROOT -c httpd.conf" >>"$PANEL_LOG"
-
-    # Prefer bind to panel IP; fall back to all-interfaces if address is not ready.
-    if panel_start_httpd_once "${PANEL_BIND}:${PANEL_PORT}" "$httpd_cmd"; then
-        log_ok "Standalone panel listening on $(panel_url)"
-        am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
-        return 0
+    if [ -n "$httpd_cmd" ]; then
+        printf '%s\n' "==> starting busybox: $httpd_cmd -p ${PANEL_BIND}:${PANEL_PORT}" >>"$PANEL_LOG"
+        if panel_start_busybox_once "${PANEL_BIND}:${PANEL_PORT}" "$httpd_cmd"; then
+            log_ok "Standalone panel listening on $(panel_url)"
+            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            return 0
+        fi
+        printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry -p ${PANEL_PORT}" >>"$PANEL_LOG"
+        rm -f "$PANEL_PIDFILE"
+        if panel_start_busybox_once "$PANEL_PORT" "$httpd_cmd"; then
+            log_ok "Standalone panel listening on port $PANEL_PORT (all interfaces)"
+            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            return 0
+        fi
+        rm -f "$PANEL_PIDFILE"
     fi
 
-    printf '%s\n' "==> bind ${PANEL_BIND}:${PANEL_PORT} failed; retry -p ${PANEL_PORT}" >>"$PANEL_LOG"
-    rm -f "$PANEL_PIDFILE"
-    if panel_start_httpd_once "$PANEL_PORT" "$httpd_cmd"; then
-        log_ok "Standalone panel listening on port $PANEL_PORT (all interfaces)"
-        am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
-        return 0
+    if [ -n "$lighttpd_bin" ]; then
+        printf '%s\n' "==> starting lighttpd: $lighttpd_bin (bind $PANEL_BIND)" >>"$PANEL_LOG"
+        if panel_start_lighttpd_once "$PANEL_BIND" "$lighttpd_bin"; then
+            log_ok "Standalone panel (lighttpd) listening on $(panel_url)"
+            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            return 0
+        fi
+        printf '%s\n' "==> lighttpd bind $PANEL_BIND failed; retry all interfaces" >>"$PANEL_LOG"
+        rm -f "$PANEL_PIDFILE"
+        if panel_start_lighttpd_once "" "$lighttpd_bin"; then
+            log_ok "Standalone panel (lighttpd) listening on port $PANEL_PORT (all interfaces)"
+            am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
+            return 0
+        fi
+        rm -f "$PANEL_PIDFILE"
     fi
 
-    log_error "panel: failed to start httpd (see $PANEL_LOG)"
+    log_error "panel: failed to start web server (see $PANEL_LOG)"
     if [ -s "$PANEL_LOG" ]; then
         log_error "panel.log: $(tr '\n' ' ' <"$PANEL_LOG" | cut -c1-240)"
     fi
-    rm -f "$PANEL_PIDFILE"
     return 1
 }
 
@@ -551,10 +625,11 @@ panel_live_json() {
     local vpn_up=0 vpn_down=0 direct_up=0 direct_down=0
     # Best-effort cumulative counters from last xray stats snapshot (bytes).
     if [ -f "$ADDON_SHARE_DIR/xray_stats.json" ]; then
-        vpn_up=$(jq -r '[.stat[]? | select(.name|test("outbound>>>ss-.*>>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        vpn_down=$(jq -r '[.stat[]? | select(.name|test("outbound>>>ss-.*>>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        direct_up=$(jq -r '[.stat[]? | select(.name|test("outbound>>>direct>>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        direct_down=$(jq -r '[.stat[]? | select(.name|test("outbound>>>direct>>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        # startswith/endswith — no ONIGURUMA regex needed
+        vpn_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        vpn_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        direct_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        direct_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
     fi
     case "$vpn_up" in '' | *[!0-9]*) vpn_up=0 ;; esac
     case "$vpn_down" in '' | *[!0-9]*) vpn_down=0 ;; esac

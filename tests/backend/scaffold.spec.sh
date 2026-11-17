@@ -113,10 +113,12 @@ test "$(jq -r '.routing.rules[] | select(.name=="sys:dns.hijack") | .port' "$TMP
 # Catalog stamp of API titles onto ss-<id>
 echo '[{"id":101,"title":"Netherlands VLESS XHTTP","is_online":true}]' >"$TMP/cat.json"
 jq --slurpfile cat "$TMP/cat.json" '
+  def is_digits: length > 0 and (explode | all(48 <= . and . <= 57));
+  def is_ss_numeric_tag: startswith("ss-") and (.[3:] | is_digits);
   ($cat[0] // []) as $c |
   .outbounds = ((.outbounds // []) | map(
-    if ((.tag // "") | test("^ss-[0-9]+$")) then
-      ((.tag | sub("^ss-"; "")) as $id |
+    if ((.tag // "") | is_ss_numeric_tag) then
+      ((.tag[3:]) as $id |
       ($c | map(select((.id | tostring) == $id)) | first) as $m |
       if $m != null then
         . + { _stealthsurf: true, _ss_id: $m.id, _ss_title: ($m.title // $m.name // .tag), _ss_online: ($m.is_online // false) }
