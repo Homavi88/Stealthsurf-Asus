@@ -35,22 +35,23 @@ jobs:
         run: |
           pnpm run pack
           ls -la packaged/
-          test -s packaged/asuswrt-merlin-stealthsurf.tar.gz
-          tar -tzf packaged/asuswrt-merlin-stealthsurf.tar.gz | head -20
+          test -s packaged/asuswrt-merlin-surfgate.tar.gz
+          tar -tzf packaged/asuswrt-merlin-surfgate.tar.gz | head -20
           rm -rf /tmp/ss-rel-pkg && mkdir -p /tmp/ss-rel-pkg
-          tar -xzf packaged/asuswrt-merlin-stealthsurf.tar.gz -C /tmp/ss-rel-pkg
+          tar -xzf packaged/asuswrt-merlin-surfgate.tar.gz -C /tmp/ss-rel-pkg
           # Package root is ssurf/ (not stealthsurf/ — that path is official VPN)
           test -x /tmp/ss-rel-pkg/ssurf/stealthsurf
           test -f /tmp/ss-rel-pkg/ssurf/index.asp
           test -f /tmp/ss-rel-pkg/ssurf/app.js
           test -f /tmp/ss-rel-pkg/ssurf/panel/index.html
+          grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-rel-pkg/ssurf/stealthsurf
           test ! -e /tmp/ss-rel-pkg/stealthsurf
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: asuswrt-merlin-stealthsurf
-          path: packaged/asuswrt-merlin-stealthsurf.tar.gz
+          name: asuswrt-merlin-surfgate
+          path: packaged/asuswrt-merlin-surfgate.tar.gz
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -61,13 +62,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: asuswrt-merlin-stealthsurf
+          name: asuswrt-merlin-surfgate
           path: packaged
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: packaged/asuswrt-merlin-stealthsurf.tar.gz
+          files: packaged/asuswrt-merlin-surfgate.tar.gz
           generate_release_notes: true
           fail_on_unmatched_files: true
           prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}

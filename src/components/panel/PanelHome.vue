@@ -3,7 +3,7 @@
     <header class="ss-topbar">
       <div class="ss-brand">
         <span class="ss-brand-mark" aria-hidden="true"></span>
-        <span>StealthSurf VPN</span>
+        <span>SurfGate</span>
       </div>
       <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -27,7 +27,7 @@
     <div class="ss-resources">
       <span>ЦП <strong>{{ live.cpu_pct }}%</strong></span>
       <span>ОЗУ <strong>{{ memLabel }}</strong></span>
-      <span>StealthSurf <strong>{{ live.app_rss_mb }} МБ</strong></span>
+      <span>SurfGate <strong>{{ live.app_rss_mb }} МБ</strong></span>
     </div>
 
     <div class="ss-card">
@@ -93,7 +93,7 @@
         {{ busy ? '…' : running ? 'Стоп' : 'Старт' }}
       </button>
       <p v-if="conflict" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
-        Конфликт с XrayUI — остановите stock XrayUI, чтобы запустить StealthSurf.
+        Конфликт с XrayUI — остановите stock XrayUI, чтобы запустить SurfGate.
       </p>
     </div>
   </div>

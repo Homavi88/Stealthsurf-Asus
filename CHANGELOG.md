@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.0] - 2026-11-17
+
+### Rebrand to SurfGate
+
+- Product name **SurfGate** in UI, Merlin tab, panel boot, CLI help, README
+- Package asset `asuswrt-merlin-surfgate.tar.gz` (installer still accepts legacy `asuswrt-merlin-stealthsurf.tar.gz`)
+- Primary CLI `surfgate` (aliases `ssurf` / `ss` / `stealthsurf` kept)
+- StealthSurf **provider API**, `stlth_…` keys, internal paths (`ADDON_TAG=stealthsurf`, `/jffs/addons/ssurf`, `/opt/etc/stealthsurf.conf`) and coexistence with official `:8800` unchanged
+
+---
+
 ## [1.1.16] - 2026-11-09
 
 ### Safe coexistence with stock XrayUI

@@ -3,7 +3,7 @@
     <table class="FormTable SettingsTable tableApi_table">
       <thead>
         <tr>
-          <td colspan="2">StealthSurf Account · {{ channelLabel }}</td>
+          <td colspan="2">SurfGate · {{ channelLabel }}</td>
         </tr>
       </thead>
       <tbody>
@@ -103,7 +103,7 @@
               <div v-else class="ss-hint">No catalog yet — add an API key and Sync.</div>
             </div>
             <div class="ss-hint" style="margin-top: 6px">
-              Auto-poll + rebuild: General Options → StealthSurf. Manage opens settings/stats in a modal.
+              Auto-poll + rebuild: General Options → SurfGate. Manage opens settings/stats in a modal.
             </div>
             <input
               class="button_gen button_gen_small"

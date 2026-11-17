@@ -666,7 +666,7 @@ fixme() {
         log_warn "Consider removing old backups or logs before proceeding."
     fi
 
-    log_info "Removing StealthSurf broken payload settings..."
+    log_info "Removing SurfGate broken payload settings..."
     if grep -qE '^stealthsurf_(payload|staged_session|stage_)' /jffs/addons/custom_settings.txt 2>/dev/null; then
         custom_settings_drop '/^stealthsurf_payload/d;/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' || log_warn "Failed to remove broken payload settings"
     else

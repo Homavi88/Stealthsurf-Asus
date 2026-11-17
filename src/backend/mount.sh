@@ -36,7 +36,7 @@ mount_ui() {
 
     sed '/index: "menu_VPN"/,/index:/ {
   /url:\s*"NULL",\s*tabName:\s*"__INHERIT__"/ i \
-    { url: "'"$ADDON_USER_PAGE"'", tabName: "StealthSurf" },
+    { url: "'"$ADDON_USER_PAGE"'", tabName: "'"$ADDON_TITLE"'" },
 }' /tmp/menuTree.js > /tmp/menuTree.$$ && mv /tmp/menuTree.$$ /tmp/menuTree.js
 
     umount /www/require/modules/menuTree.js && mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
@@ -50,6 +50,7 @@ mount_ui() {
     fi
 
     ln -s -f "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" || log_error "Failed to create symlink for $ADDON_TAG."
+    ln -s -f "$ADDON_SCRIPT" /opt/bin/surfgate || log_error "Failed to create symlink for surfgate."
     ln -s -f "$ADDON_SCRIPT" /opt/bin/ssurf || log_error "Failed to create symlink for ssurf."
     ln -s -f "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
 
@@ -121,15 +122,15 @@ unmount_ui() {
         log_warn "menuTree.js not found, skipping unmount."
     else
         log_info "Removing any X-RAY menu entry from menuTree.js."
-        # Safely remove entries with tabName: "StealthSurf"
-        grep -v "tabName: \"StealthSurf\"" /tmp/menuTree.js >/tmp/menuTree_temp.js
+        # Remove SurfGate tab (and legacy StealthSurf tab name from older installs)
+        grep -vE 'tabName: "(SurfGate|StealthSurf)"' /tmp/menuTree.js >/tmp/menuTree_temp.js
         mv /tmp/menuTree_temp.js /tmp/menuTree.js
 
         umount /www/require/modules/menuTree.js
         mount -o bind /tmp/menuTree.js /www/require/modules/menuTree.js
     fi
 
-    rm -f "/opt/bin/$ADDON_TAG" /opt/bin/ssurf /opt/bin/ss || log_error "Failed to remove CLI symlinks."
+    rm -f "/opt/bin/$ADDON_TAG" /opt/bin/surfgate /opt/bin/ssurf /opt/bin/ss || log_error "Failed to remove CLI symlinks."
 
     clear_lock
 

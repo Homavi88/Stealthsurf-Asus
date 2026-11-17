@@ -9,9 +9,9 @@ source /usr/sbin/helper.sh
 
 ADDON_TAG="stealthsurf"
 ADDON_TAG_UPPER="STEALTHSURF"
-ADDON_TITLE="StealthSurf"
+ADDON_TITLE="SurfGate"
 
-XRAYUI_VERSION="1.3.0"
+XRAYUI_VERSION="1.4.0"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -29,7 +29,7 @@ ADDON_USER_SCRIPTS_DIR="/jffs/${ADDON_TAG}_custom"
 ADDON_LOGS_DIR="$ADDON_SHARE_DIR/logs"
 ADDON_TMP_DIR="$ADDON_SHARE_DIR/tmp"
 
-# Standalone panel (official StealthSurf analogy on :8800 → ours on :1131)
+# Standalone SurfGate panel (official StealthSurf analogy on :8800 → ours on :1131)
 PANEL_DEFAULT_PORT=1131
 PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
 PANEL_PIDFILE=/var/run/stealthsurf-panel.pid

@@ -38,7 +38,7 @@ CRU
 }
 log_info() { :; }
 log_warn() { :; }
-ADDON_TITLE=StealthSurf
+ADDON_TITLE=SurfGate
 EOF
 # shellcheck disable=SC1091
 . "$TMP/cron_test.sh"

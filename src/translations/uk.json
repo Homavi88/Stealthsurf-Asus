@@ -27,7 +27,7 @@
     "disabled": "вимкнено",
     "items": "елем: {0}",
     "help": "допомога",
-    "xrayui_desc": "Ця сторінка управління інтерфейсом забезпечує простий спосіб керувати та контролювати конфігурацію X-ray Core та його стан."
+    "xrayui_desc": "SurfGate — панель на базі XrayUI з API-ключами StealthSurf: баланс, каталог підключень і імпорт у outbounds."
   },
   "com": {
     "ClientStatus": {
@@ -43,7 +43,7 @@
       "xrayui_conflict_title": "Конфлікт з XrayUI",
       "xrayui_conflict_pill": "XrayUI конфлікт",
       "xrayui_installed_pill": "XrayUI встановлено (зупинено)",
-      "xrayui_conflict_message": "XrayUI зараз працює. Зупиніть XrayUI (VPN → XrayUI → Stop), потім запускайте StealthSurf. Одночасно обидва аддони не можна: два transparent-proxy ламають інтернет у LAN."
+      "xrayui_conflict_message": "XrayUI зараз працює. Зупиніть XrayUI (VPN → XrayUI → Stop), потім запускайте SurfGate. Одночасно обидва аддони не можна: два transparent-proxy ламають інтернет у LAN."
     },
     "ServerStatus": {
       "configuration": "Конфігурація",
@@ -136,7 +136,7 @@
       "label_subscription_filters": "Фільтри ротації",
       "hint_subscription_filters": "Фільтрувати посилання підписок для авто-ротації за назвою.<hr/>Введіть ключові слова через кому (напр. <code>Canada, Denmark</code>).<hr/>Будуть використовуватись тільки посилання, що містять хоча б одне ключове слово.<hr/>Якщо порожньо, використовується весь пул підписок.",
       "placeholder_subscription_filters": "напр. Canada, Denmark, Japan",
-      "tab_stealthsurf": "StealthSurf",
+      "tab_stealthsurf": "SurfGate",
       "label_ss_catalog_auto_sync": "Автосинхронізація каталогу",
       "hint_ss_catalog_auto_sync": "Періодично запитувати каталог StealthSurf API і порівнювати налаштування вже імпортованих проксі <code>ss-*</code> (URL, протокол, сервер, xray/awg).<hr/>Якщо у провайдера щось змінилося — outbound-и перезбираються автоматично, а Xray перезапускається, якщо він запущений.<hr/>Назва та online оновлюються при кожному sync без перезапуску. Ручний <b>Sync catalog</b> робить те саме порівняння.",
       "ss_sync_15m": "Кожні 15 хвилин"

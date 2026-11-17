@@ -29,7 +29,7 @@
                           <td valign="top">
                             <div class="formfontdesc">
                               <div>&nbsp;</div>
-                              <div class="formfonttitle" style="text-align: left">StealthSurf UI v{{ version }} <span style="opacity: 0.7; font-size: 14px">beta</span></div>
+                              <div class="formfonttitle" style="text-align: left">SurfGate v{{ version }} <span style="opacity: 0.7; font-size: 14px">beta</span></div>
                               <div id="formfontdesc" class="formfontdesc" v-html="$t('labels.xrayui_desc')"></div>
                               <div style="margin: 10px 0 10px 5px" class="splitLine"></div>
                               <stealth-surf-account></stealth-surf-account>

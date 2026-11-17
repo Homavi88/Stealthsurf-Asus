@@ -98,7 +98,7 @@ try {
     banner.style.cssText =
       'margin:12px 16px;padding:14px 18px;border:1px solid #c9a227;background:#3a3218;color:#ffe082;border-radius:6px;font:14px/1.45 Segoe UI,Helvetica Neue,sans-serif;position:relative;z-index:50;';
     banner.innerHTML =
-      '<strong>Конфликт с XrayUI</strong><div style="margin-top:6px">Stock XrayUI сейчас запущен. StealthSurf не стартует transparent proxy, пока XrayUI не остановлен. Используйте <code>xrayui stop</code> или панель XrayUI.</div>';
+      '<strong>Конфликт с XrayUI</strong><div style="margin-top:6px">Stock XrayUI сейчас запущен. SurfGate не стартует transparent proxy, пока XrayUI не остановлен. Используйте <code>xrayui stop</code> или панель XrayUI.</div>';
     host.prepend(banner);
   });
   await page.waitForTimeout(300);
@@ -167,9 +167,9 @@ save('03-routing.png', full.height - H)
   });
   await page.waitForTimeout(400);
 
-  // Settings → StealthSurf tab
+  // Settings → SurfGate tab
   await clickThContaining(page, 'Общие настройки');
-  await page.locator('.xray-modal-overlay, [class*=modal]').getByText('StealthSurf', { exact: true }).click({ force: true });
+  await page.locator('.xray-modal-overlay, [class*=modal]').getByText('SurfGate', { exact: true }).click({ force: true });
   await page.waitForTimeout(700);
   await shot(page, '08-settings-modal.png');
 } finally {

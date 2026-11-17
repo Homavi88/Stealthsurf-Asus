@@ -1,6 +1,6 @@
 #!/bin/bash
 
-XRAYUI_VERSION=${1:-"1.3.0"}
+XRAYUI_VERSION=${1:-"1.4.0"}
 
 NODE_ENV=production npx vite build
 
@@ -9,4 +9,4 @@ sed -i "s/^XRAYUI_VERSION=.*/XRAYUI_VERSION=\"$XRAYUI_VERSION\"/" dist/stealthsu
 
 # Root dir in the archive is ssurf/ so we never collide with official
 # /jffs/addons/stealthsurf (stealthsurf-routerd on :8800).
-tar --transform 's|^|ssurf/|' -czf asuswrt-merlin-stealthsurf.tar.gz -C dist .
+tar --transform 's|^|ssurf/|' -czf asuswrt-merlin-surfgate.tar.gz -C dist .

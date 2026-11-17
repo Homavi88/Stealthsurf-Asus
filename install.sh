@@ -1,5 +1,5 @@
 #!/bin/sh
-# StealthSurf-Asus 1.3.0+ installer for Asuswrt-Merlin (Entware required).
+# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.0+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
@@ -10,7 +10,9 @@
 set -e
 
 ADDON_REPO="${ADDON_REPO:-Homavi88/Stealthsurf-Asus}"
-ASSET="asuswrt-merlin-stealthsurf.tar.gz"
+ASSET="asuswrt-merlin-surfgate.tar.gz"
+# Fallback for older release assets during transition
+ASSET_LEGACY="asuswrt-merlin-stealthsurf.tar.gz"
 TMP="/tmp/$ASSET"
 JFFS_ADDONS="/jffs/addons"
 # Own tree — must not collide with official StealthSurf VPN
@@ -19,7 +21,7 @@ OUR_DIR="$JFFS_ADDONS/ssurf"
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> StealthSurf-Asus installer (1.3.0+ — panel :1131, path /jffs/addons/ssurf)"
+echo "==> SurfGate installer (1.4.0+ — panel :1131, path /jffs/addons/ssurf)"
 
 if [ ! -d /jffs ]; then
   echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2
@@ -42,10 +44,13 @@ elif [ -d "$OFFICIAL_DIR" ]; then
 fi
 
 URL="https://github.com/${ADDON_REPO}/releases/latest/download/${ASSET}"
+URL_LEGACY="https://github.com/${ADDON_REPO}/releases/latest/download/${ASSET_LEGACY}"
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" 2>/dev/null && pwd)
 LOCAL_TGZ=""
 if [ -n "$SCRIPT_DIR" ] && [ -s "$SCRIPT_DIR/packaged/$ASSET" ]; then
   LOCAL_TGZ="$SCRIPT_DIR/packaged/$ASSET"
+elif [ -n "$SCRIPT_DIR" ] && [ -s "$SCRIPT_DIR/packaged/$ASSET_LEGACY" ]; then
+  LOCAL_TGZ="$SCRIPT_DIR/packaged/$ASSET_LEGACY"
 fi
 
 if [ -n "$LOCAL_TGZ" ]; then
@@ -54,9 +59,15 @@ if [ -n "$LOCAL_TGZ" ]; then
 else
   echo "==> Downloading $URL"
   if command -v curl >/dev/null 2>&1; then
-    curl -fsSL -o "$TMP" "$URL"
+    if ! curl -fsSL -o "$TMP" "$URL"; then
+      echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
+      curl -fsSL -o "$TMP" "$URL_LEGACY"
+    fi
   else
-    wget -q -O "$TMP" "$URL"
+    if ! wget -q -O "$TMP" "$URL"; then
+      echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
+      wget -q -O "$TMP" "$URL_LEGACY"
+    fi
   fi
 fi
 
@@ -103,17 +114,18 @@ fi
 mv -f "$OUR_DIR/stealthsurf" /jffs/scripts/stealthsurf
 chmod 0755 /jffs/scripts/stealthsurf
 ln -sf /jffs/scripts/stealthsurf /opt/bin/stealthsurf 2>/dev/null || true
+ln -sf /jffs/scripts/stealthsurf /opt/bin/surfgate 2>/dev/null || true
 ln -sf /jffs/scripts/stealthsurf /opt/bin/ssurf 2>/dev/null || true
 ln -sf /jffs/scripts/stealthsurf /opt/bin/ss 2>/dev/null || true
 
-echo "==> Running stealthsurf install"
+echo "==> Running SurfGate install"
 sh /jffs/scripts/stealthsurf install
 
 LAN=$(nvram get lan_ipaddr 2>/dev/null || echo "192.168.50.1")
 echo "==> Done."
-echo "    Our panel:        http://${LAN}:1131/   (files in $OUR_DIR)"
-echo "    Merlin WebUI:     VPN → StealthSurf"
+echo "    SurfGate panel:   http://${LAN}:1131/   (files in $OUR_DIR)"
+echo "    Merlin WebUI:     VPN → SurfGate"
 echo "    Official panel:   http://${LAN}:8800/   (untouched: $OFFICIAL_DIR)"
-echo "    CLI: ssurf | ss | stealthsurf   (help: ssurf h)"
+echo "    CLI: surfgate | ssurf | ss   (help: surfgate h)"
 echo "    Restore official if broken:"
 echo "      curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"

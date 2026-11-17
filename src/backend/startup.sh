@@ -39,7 +39,7 @@ startup() {
         log_warn "$(ss_xrayui_conflict_message)"
         watchdog_clear_desired 2>/dev/null || true
         if [ -n "$xray_pid" ]; then
-            log_warn "Stopping StealthSurf while stock XrayUI is active."
+            log_warn "Stopping SurfGate while stock XrayUI is active."
             stop
         fi
     elif [ "$(am_settings_get stealthsurf_startup)" = "y" ]; then
