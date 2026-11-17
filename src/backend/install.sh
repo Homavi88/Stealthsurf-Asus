@@ -268,11 +268,11 @@ EOF
         cp -f "$ADDON_JFFS_ADN_DIR/index.panel.html" "$ADDON_JFFS_ADN_DIR/panel/index.html"
     fi
     panel_prepare_webroot 2>/dev/null || true
-    # Ensure Entware busybox httpd exists (firmware BusyBox often lacks the applet).
+    # Ensure a panel web server (BusyBox httpd applet, else Entware lighttpd).
     panel_ensure_httpd 2>/dev/null || true
     if ! panel_start; then
         log_warn "Standalone panel did not start. See /tmp/stealthsurf/panel.log"
-        log_warn "Fix: opkg update && opkg install busybox && surfgate panel start"
+        log_warn "Fix: opkg update && opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias && surfgate panel start"
     fi
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")

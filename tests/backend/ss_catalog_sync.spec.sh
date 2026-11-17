@@ -28,9 +28,11 @@ EOF
 
 # Imported ids
 ids=$(jq -r '
+  def is_digits: length > 0 and (explode | all(48 <= . and . <= 57));
+  def is_ss_numeric_tag: startswith("ss-") and (.[3:] | is_digits);
   [.outbounds[]?
-    | select(._stealthsurf == true or ((.tag // "") | test("^ss-[0-9]+$")))
-    | (._ss_id // (if ((.tag // "") | test("^ss-[0-9]+$")) then (.tag | sub("^ss-"; "")) else empty end))
+    | select(._stealthsurf == true or ((.tag // "") | is_ss_numeric_tag))
+    | (._ss_id // (if ((.tag // "") | is_ss_numeric_tag) then .tag[3:] else empty end))
     | select(. != null and . != "")
     | tostring
   ] | unique | .[]
