@@ -124,19 +124,31 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 ## Веб-интерфейс
 
-Основной UI — **светлая панель** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → SurfGate** сохраняет классический FormTable.
+Основной UI — **светлая панель SurfGate** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → SurfGate** сохраняет классический FormTable.
 
 <p align="center">
-  <img src="./docs/screenshots/08-settings-modal.png" alt="SurfGate settings — account and catalog" width="920">
+  <img src="./docs/screenshots/01-status-running.png" alt="SurfGate home — connected" width="420">
 </p>
 
-| Главная | Настройки · маршрутизация |
+| Аккаунт / каталог | Подключение |
 | --- | --- |
-| ![Главная](./docs/screenshots/01-status-running.png) | ![Маршрутизация](./docs/screenshots/03-routing.png) |
+| ![Аккаунт](./docs/screenshots/08-settings-account.png) | ![Подключение](./docs/screenshots/09-settings-connection.png) |
 
-| Сеть / DNS | Конфликт с XrayUI |
+| Маршрутизация | Сеть и службы |
 | --- | --- |
-| ![Сеть](./docs/screenshots/04-mode-dns.png) | ![Конфликт](./docs/screenshots/05-xrayui-conflict.png) |
+| ![Маршрутизация](./docs/screenshots/03-routing.png) | ![Сеть](./docs/screenshots/04-mode-dns.png) |
+
+| Исходящие | Движок / профили |
+| --- | --- |
+| ![Исходящие](./docs/screenshots/10-settings-outbounds.png) | ![Движок](./docs/screenshots/11-settings-engine.png) |
+
+| Логи | Клиенты online | Обновления |
+| --- | --- | --- |
+| ![Логи](./docs/screenshots/12-settings-logs.png) | ![Клиенты](./docs/screenshots/13-settings-clients.png) | ![Обновления](./docs/screenshots/14-settings-updates.png) |
+
+<p align="center">
+  <img src="./docs/screenshots/05-xrayui-conflict.png" alt="SurfGate — конфликт с XrayUI" width="420">
+</p>
 
 ## Старт за 5 шагов
 
