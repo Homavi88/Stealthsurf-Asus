@@ -1,11 +1,15 @@
 # Changelog
 
-## [1.4.5] - 2026-11-17
+## [1.4.6] - 2026-11-17
 
 ### Installer HTTPS on Merlin
 
 - `install.sh` prefers `/opt/bin/curl` (Entware) and auto-installs `curl` when missing
 - Never uses firmware BusyBox `wget` for GitHub HTTPS (it only supports http/ftp)
+
+---
+
+## [1.4.5] - 2026-11-17
 
 ### jq without ONIGURUMA + panel lighttpd fallback
 
