@@ -388,6 +388,10 @@ service_event)
         togglestartup)
             toggle_startup
             ;;
+        setstartup)
+            # Panel already applied stealthsurf_startup via settings; confirm absolute value.
+            set_startup "$(am_settings_get stealthsurf_startup)"
+            ;;
         generatedefaultconfig)
             generate_xray_config
             ;;

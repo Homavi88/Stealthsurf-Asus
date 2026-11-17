@@ -50,4 +50,14 @@ describe('Engine standalone panel submit', () => {
     expect(body.settings.stealthsurf_version).toBe('1.2.0');
     expect(body.settings.other_addon).toBeUndefined();
   });
+
+  it('posts absolute setstartup with current stealthsurf_startup setting', async () => {
+    window.xray.custom_settings.stealthsurf_startup = 'y';
+    await engine.submit(SubmitActions.setStartupOption, null, 0);
+
+    expect(post.mock.calls[0][1]).toEqual({
+      action: SubmitActions.setStartupOption,
+      settings: { stealthsurf_version: '1.2.0', stealthsurf_startup: 'y' }
+    });
+  });
 });

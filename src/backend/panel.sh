@@ -356,6 +356,16 @@ panel_bootstrap_json() {
         )
         [ -n "$custom_settings" ] || custom_settings="{}"
     fi
+    # Prefer live NVRAM for boot-autostart so the UI matches what startup() will do.
+    # Empty/invalid → enabled (same default as install).
+    local ss_startup
+    ss_startup=$(am_settings_get stealthsurf_startup 2>/dev/null || true)
+    case "$ss_startup" in
+    y | n) ;;
+    *) ss_startup="y" ;;
+    esac
+    custom_settings=$(printf '%s' "$custom_settings" | jq -c --arg v "$ss_startup" '.stealthsurf_startup = $v' 2>/dev/null) ||
+        custom_settings=$(printf '{"stealthsurf_startup":"%s"}' "$ss_startup")
 
     # Devices: best-effort empty objects (full client DB stays on Merlin ASP path)
     jq -nc \

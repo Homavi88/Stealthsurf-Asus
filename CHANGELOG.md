@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.2] - 2026-11-17
+
+### Reliable VPN autostart after router reboot
+
+- Panel «Запуск при загрузке» now writes an **absolute** `stealthsurf_startup` value (`setstartup`) instead of Merlin flip-after-write, which could leave NVRAM off while the UI showed on
+- Saving Connection/General options also syncs `stealthsurf_startup` from the startup toggle
+- Boot path: empty `stealthsurf_startup` defaults to enabled (same as install)
+- Panel bootstrap always exposes the live autostart flag to the UI
+
+---
+
 ## [1.4.1] - 2026-11-17
 
 ### Light settings with iOS toggles

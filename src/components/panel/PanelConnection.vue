@@ -262,12 +262,18 @@
       });
 
       const onStartupToggle = async (on: boolean) => {
+        const previous = options.startup;
         options.startup = on;
+        // Write absolute value before API call so panel settings land as y/n (no flip race).
+        window.xray.custom_settings.stealthsurf_startup = on ? 'y' : 'n';
+        busy.value = true;
         try {
-          await engine.submit(SubmitActions.toggleStartupOption);
-          window.xray.custom_settings.stealthsurf_startup = on ? 'y' : 'n';
+          await engine.submit(SubmitActions.setStartupOption);
         } catch {
-          options.startup = !on;
+          options.startup = previous;
+          window.xray.custom_settings.stealthsurf_startup = previous ? 'y' : 'n';
+        } finally {
+          busy.value = false;
         }
       };
 
@@ -287,9 +293,14 @@
       };
 
       const save = async () => {
+        if (!uiResponse?.value?.xray) {
+          window.alert('Настройки ещё загружаются. Подождите и сохраните снова.');
+          return;
+        }
         busy.value = true;
         try {
           await persist();
+          window.xray.custom_settings.stealthsurf_startup = options.startup ? 'y' : 'n';
         } finally {
           busy.value = false;
         }
@@ -298,7 +309,6 @@
       const ensureBoolDefaults = () => {
         const o = options as Record<string, unknown>;
         for (const key of [
-          'startup',
           'watchdog',
           'check_connection',
           'block_quic',
@@ -309,6 +319,10 @@
           'debug'
         ]) {
           if (typeof o[key] !== 'boolean') o[key] = false;
+        }
+        // Autostart: missing NVRAM key defaults to on (same as install).
+        if (typeof o.startup !== 'boolean') {
+          o.startup = window.xray?.custom_settings?.stealthsurf_startup !== 'n';
         }
         if (!options.ipsec) options.ipsec = 'off';
         if (!options.probe_url) options.probe_url = 'https://www.google.com/generate_204';
@@ -326,6 +340,8 @@
       watch(
         () => uiResponse?.value,
         () => {
+          // Do not clobber in-progress edits while a save/toggle is running.
+          if (busy.value) return;
           hydrate();
           ensureBoolDefaults();
         },

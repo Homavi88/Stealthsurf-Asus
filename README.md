@@ -14,7 +14,7 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf API" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.1-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.2-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**. Основной UI — **панель SurfGate** на порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Файлы лежат в `/jffs/addons/ssurf` и **не трогают** официальный `/jffs/addons/stealthsurf`.
 
-Актуальная версия **1.4.1** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
+Актуальная версия **1.4.2** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
 
 ## Установка
 
@@ -90,6 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 | | |
 | --- | --- |
+| **1.4.2 Boot VPN** | Автозапуск после ребута: абсолютная запись `stealthsurf_startup`, без flip-гонки в панели; пустой флаг = enabled |
 | **1.4.1 Settings UI** | Светлые настройки с iOS-тумблерами (Подключение); вложенные поля только при включённом тумблере |
 | **1.4.0 SurfGate** | Бренд **SurfGate** в UI/CLI/доках; пакет `asuswrt-merlin-surfgate.tar.gz`; CLI `surfgate` (+ `ssurf`/`ss`); API/пути провайдера без изменений |
 | **1.3.0 Light panel** | Светлая главная `:1131` (статус, скорость, объём, ЦП/ОЗУ, Старт/Стоп) + настройки по разделам; Merlin-вкладка без изменений |

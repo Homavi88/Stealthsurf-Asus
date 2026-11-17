@@ -6,7 +6,8 @@ import { EngineResponseConfig } from '@/modules/Engine';
 export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineResponseConfig | undefined>) {
   const makeBase = () => ({
     ...(ui.value?.xray ?? {}),
-    startup: window.xray.custom_settings.stealthsurf_startup === 'y',
+    // Missing key → treat as enabled (install default), only explicit 'n' is off.
+    startup: window.xray.custom_settings?.stealthsurf_startup !== 'n',
     logs_dnsmasq: ui.value?.xray?.dnsmasq ?? false,
     logs_access: cfg.log?.access !== 'none',
     logs_error: cfg.log?.error !== 'none',
