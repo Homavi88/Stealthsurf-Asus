@@ -90,6 +90,7 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/inst
 
 | | |
 | --- | --- |
+| **1.4.1 Settings UI** | Светлые настройки с iOS-тумблерами (Подключение); вложенные поля только при включённом тумблере |
 | **1.4.0 SurfGate** | Бренд **SurfGate** в UI/CLI/доках; пакет `asuswrt-merlin-surfgate.tar.gz`; CLI `surfgate` (+ `ssurf`/`ss`); API/пути провайдера без изменений |
 | **1.3.0 Light panel** | Светлая главная `:1131` (статус, скорость, объём, ЦП/ОЗУ, Старт/Стоп) + настройки по разделам; Merlin-вкладка без изменений |
 | **1.2.1 Path fix** | Пакет в `/jffs/addons/ssurf` — больше не затирает официальный `/jffs/addons/stealthsurf` (`:8800`) |

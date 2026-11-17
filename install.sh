@@ -21,7 +21,7 @@ OUR_DIR="$JFFS_ADDONS/ssurf"
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> SurfGate installer (1.4.0+ — panel :1131, path /jffs/addons/ssurf)"
+echo "==> SurfGate installer (1.4.1+ — panel :1131, path /jffs/addons/ssurf)"
 
 if [ ! -d /jffs ]; then
   echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2
