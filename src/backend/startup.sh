@@ -42,26 +42,37 @@ startup() {
             log_warn "Stopping SurfGate while stock XrayUI is active."
             stop
         fi
-    elif [ "$(am_settings_get stealthsurf_startup)" = "y" ]; then
-        log_ok "Xray service is enabled by XRAYUI. Starting Xray service..."
-
-        if [ "$skipwait" = "false" ]; then
-            log_ok "Waiting for network and iptable rules to be ready..."
-            if [ "$startup_delay" -gt 0 ]; then
-                log_ok "Waiting for $startup_delay seconds before starting Xray service..."
-                sleep "$startup_delay"
-            fi
+    else
+        local stealthsurf_startup
+        stealthsurf_startup=$(am_settings_get stealthsurf_startup)
+        # Empty means never set — match install default (autostart on).
+        if [ -z "$stealthsurf_startup" ]; then
+            am_settings_set stealthsurf_startup "y"
+            stealthsurf_startup="y"
+            log_warn "stealthsurf_startup was empty at boot. Defaulting to 'enabled'."
         fi
 
-        rm -f "$STARTUP_LOCK"
-        trap - EXIT
+        if [ "$stealthsurf_startup" = "y" ]; then
+            log_ok "Xray service is enabled by SurfGate. Starting Xray service..."
 
-        restart
-    elif [ -n "$xray_pid" ]; then
-        log_ok "Xray service is disabled by XRAYUI. Force stopping Xray service..."
-        stop
-    else
-        log_ok "Xray service is disabled by XRAYUI. Xray service is not running."
+            if [ "$skipwait" = "false" ]; then
+                log_ok "Waiting for network and iptable rules to be ready..."
+                if [ "$startup_delay" -gt 0 ]; then
+                    log_ok "Waiting for $startup_delay seconds before starting Xray service..."
+                    sleep "$startup_delay"
+                fi
+            fi
+
+            rm -f "$STARTUP_LOCK"
+            trap - EXIT
+
+            restart
+        elif [ -n "$xray_pid" ]; then
+            log_ok "Xray service is disabled by SurfGate. Force stopping Xray service..."
+            stop
+        else
+            log_ok "Xray service is disabled by SurfGate. Xray service is not running."
+        fi
     fi
 
     initial_response

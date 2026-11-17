@@ -454,3 +454,26 @@ toggle_startup() {
         fi
     fi
 }
+
+# Absolute autostart flag (panel API writes stealthsurf_startup first, then calls this).
+# Avoids the Merlin flip race: write-old-then-toggle can leave NVRAM desynced from the UI.
+set_startup() {
+    local desired="$1"
+    if [ -z "$desired" ]; then
+        desired=$(am_settings_get stealthsurf_startup)
+    fi
+    case "$desired" in
+    y | n)
+        am_settings_set stealthsurf_startup "$desired"
+        if [ "$desired" = "y" ]; then
+            log_ok "stealthsurf_startup set to 'enabled'."
+        else
+            log_ok "stealthsurf_startup set to 'disabled'."
+        fi
+        ;;
+    *)
+        am_settings_set stealthsurf_startup "y"
+        log_warn "stealthsurf_startup was empty/invalid. Set to 'enabled'."
+        ;;
+    esac
+}

@@ -319,6 +319,8 @@ export enum SubmitActions {
   enableLogs = 'stealthsurf_configuration_logs',
   performUpdate = 'stealthsurf_update',
   toggleStartupOption = 'stealthsurf_configuration_togglestartup',
+  /** Absolute NVRAM set (panel); Merlin checkbox still uses toggleStartupOption. */
+  setStartupOption = 'stealthsurf_configuration_setstartup',
   configurationGenerateDefaultConfig = 'stealthsurf_configuration_generatedefaultconfig',
   geodataCommunityUpdate = 'stealthsurf_geodata_communityupdate',
   geoDataCustomGetTags = 'stealthsurf_geodata_customtagfiles',

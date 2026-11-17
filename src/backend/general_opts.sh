@@ -28,7 +28,7 @@ apply_general_options() {
     local subscription_auto_refresh subscription_auto_fallback
     local subscription_fallback_interval probe_url probe_interval subscription_filters
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
-    local ss_catalog_auto_sync
+    local ss_catalog_auto_sync startup_flag
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -64,6 +64,7 @@ apply_general_options() {
         "watchdog_interval=" + ((.watchdog_interval // 2) | tostring | @sh) + "\n" +
         "watchdog_max_attempts=" + ((.watchdog_max_attempts // 5) | tostring | @sh) + "\n" +
         "ss_catalog_auto_sync=" + ((.ss_catalog_auto_sync // "disabled") | tostring | @sh) + "\n" +
+        "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh) + "\n" +
         "subscription_filters=" + (((.subscriptions.filters // []) | join("|")) | @sh)
     '); then
         log_error "Failed to parse general options payload."
@@ -113,6 +114,14 @@ apply_general_options() {
     update_xrayui_config "ADDON_DEBUG" "$debug"
     update_xrayui_config "check_connection" "$check_connection"
     update_xrayui_config "startup_delay" "$startup_delay"
+    # Keep boot autostart NVRAM in sync with the Connection/General Options toggle.
+    if [ "$startup_flag" = "true" ]; then
+        am_settings_set stealthsurf_startup "y"
+        log_ok "stealthsurf_startup set to 'enabled' from general options."
+    elif [ "$startup_flag" = "false" ]; then
+        am_settings_set stealthsurf_startup "n"
+        log_ok "stealthsurf_startup set to 'disabled' from general options."
+    fi
     update_xrayui_config "xray_sleep_time" "$xray_sleep_time"
     update_xrayui_config "subscriptionLinks" "$subscriptionLinks"
     update_xrayui_config "xray_dns_only" "$xray_dns_only"
