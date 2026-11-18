@@ -6,7 +6,9 @@
 
 DEVICES_VPN_JSON="${DEVICES_VPN_JSON:-$ADDON_SHARE_DIR/devices_vpn.json}"
 DEVICES_VPN_LOG="${DEVICES_VPN_LOG:-$ADDON_LOGS_DIR/devices_vpn.log}"
+DEVICES_VPN_HISTORY_LOG="${DEVICES_VPN_HISTORY_LOG:-$ADDON_LOGS_DIR/devices_vpn_history.log}"
 DEVICES_VPN_MAP="${DEVICES_VPN_MAP:-$ADDON_TMP_DIR/devices_ipmap.tsv}"
+DEVICES_VPN_SEEN="${DEVICES_VPN_SEEN:-$ADDON_TMP_DIR/devices_vpn_seen.tsv}"
 
 devices_vpn_access_log() {
     load_xrayui_config
@@ -159,12 +161,78 @@ devices_vpn_active_ips() {
         '
 }
 
+# Append history lines when a device appears or changes outbound.
+devices_vpn_append_history() {
+    local joined="$1"
+    local now="$2"
+    local prev new_seen line ip mac name outbound prev_via
+
+    mkdir -p "$(dirname "$DEVICES_VPN_HISTORY_LOG")" "$(dirname "$DEVICES_VPN_SEEN")" 2>/dev/null || true
+    prev="$DEVICES_VPN_SEEN"
+    new_seen="${DEVICES_VPN_SEEN}.$$"
+    : >"$new_seen"
+
+    [ -f "$prev" ] || : >"$prev"
+    [ -f "$DEVICES_VPN_HISTORY_LOG" ] || printf '# SurfGate VPN device history (IP / MAC / name / via)\n' >"$DEVICES_VPN_HISTORY_LOG"
+
+    while IFS=$(printf '\t') read -r ip mac name outbound; do
+        [ -n "$ip" ] || continue
+        [ -n "$outbound" ] || outbound="vpn"
+        [ -n "$mac" ] || mac="—"
+        [ -n "$name" ] || name="$ip"
+        printf '%s\t%s\n' "$ip" "$outbound" >>"$new_seen"
+        prev_via=$(awk -F'\t' -v ip="$ip" '$1==ip { print $2; exit }' "$prev" 2>/dev/null)
+        if [ -z "$prev_via" ]; then
+            printf '%s  + %-18s %-18s %-20s via %s\n' "$now" "$ip" "$mac" "$name" "$outbound" >>"$DEVICES_VPN_HISTORY_LOG"
+        elif [ "$prev_via" != "$outbound" ]; then
+            printf '%s  ~ %-18s %-18s %-20s via %s (was %s)\n' "$now" "$ip" "$mac" "$name" "$outbound" "$prev_via" >>"$DEVICES_VPN_HISTORY_LOG"
+        fi
+    done <"$joined"
+
+    # Devices that dropped off since last snapshot
+    while IFS=$(printf '\t') read -r ip prev_via; do
+        [ -n "$ip" ] || continue
+        if ! awk -F'\t' -v ip="$ip" '$1==ip { found=1; exit } END { exit !found }' "$new_seen" 2>/dev/null; then
+            printf '%s  - %-18s left VPN (was %s)\n' "$now" "$ip" "${prev_via:-vpn}" >>"$DEVICES_VPN_HISTORY_LOG"
+        fi
+    done <"$prev"
+
+    mv -f "$new_seen" "$prev" 2>/dev/null || rm -f "$new_seen"
+
+    # Cap history size
+    if [ -f "$DEVICES_VPN_HISTORY_LOG" ]; then
+        _hsz=$(wc -c <"$DEVICES_VPN_HISTORY_LOG" 2>/dev/null | tr -d ' ')
+        if [ -n "$_hsz" ] && [ "$_hsz" -gt 1048576 ] 2>/dev/null; then
+            tail -n 2000 "$DEVICES_VPN_HISTORY_LOG" >"${DEVICES_VPN_HISTORY_LOG}.trim" 2>/dev/null &&
+                mv -f "${DEVICES_VPN_HISTORY_LOG}.trim" "$DEVICES_VPN_HISTORY_LOG" 2>/dev/null ||
+                rm -f "${DEVICES_VPN_HISTORY_LOG}.trim" 2>/dev/null
+        fi
+    fi
+}
+
 # Refresh JSON + human log. Used by UI poll + CLI.
 devices_vpn_refresh() {
     local active_file joined now count
 
     load_xrayui_config
     mkdir -p "$ADDON_SHARE_DIR" "$ADDON_LOGS_DIR" "$ADDON_TMP_DIR" 2>/dev/null || true
+
+    # Device discovery needs Xray access log — enable if missing.
+    if [ -f "$XRAY_CONFIG_FILE" ]; then
+        _acc=$(jq -r '.log.access // "none"' "$XRAY_CONFIG_FILE" 2>/dev/null)
+        if [ -z "$_acc" ] || [ "$_acc" = "none" ] || [ "$_acc" = "null" ]; then
+            log_info "Enabling Xray access log for VPN device tracking…"
+            mkdir -p "$ADDON_LOGS_DIR"
+            jq_update_file "$XRAY_CONFIG_FILE" \
+                --arg access "$ADDON_LOGS_DIR/xray_access.log" \
+                --arg error "$ADDON_LOGS_DIR/xray_error.log" '
+                .log = (.log // {})
+                | .log.access = $access
+                | .log.error = (if (.log.error // "none") == "none" then $error else .log.error end)
+                | .log.loglevel = (.log.loglevel // "warning")
+            ' 2>/dev/null || true
+        fi
+    fi
 
     devices_vpn_build_ipmap
 
@@ -193,6 +261,10 @@ devices_vpn_refresh() {
             echo "# SurfGate VPN devices — $now"
             echo "# 0 device(s) using VPN"
         } >"$DEVICES_VPN_LOG"
+        # Still record departures
+        : >"${joined}.empty"
+        devices_vpn_append_history "${joined}.empty" "$now"
+        rm -f "${joined}.empty"
     else
         jq -R -s -c --arg now "$now" '
           split("\n")
@@ -216,6 +288,8 @@ devices_vpn_refresh() {
             count=$(wc -l <"$joined" | tr -d ' ')
             echo "# $count device(s) using VPN"
         } >"$DEVICES_VPN_LOG"
+
+        devices_vpn_append_history "$joined" "$now"
     fi
 
     rm -f "$active_file" "$joined"

@@ -8,6 +8,7 @@ CRU_SUB_FALLBACK_ID="ssurf_subscription_fallback"
 CRU_SS_CATALOG_SYNC_ID="ssurf_catalog_sync"
 CRU_IPSET_SAVE_ID="ssurf_ipset_save"
 CRU_WATCHDOG_ID="ssurf_watchdog"
+CRU_ADDON_UPDATE_ID="ssurf_addon_update"
 XRAY_DESIRED_STATE_FILE="/tmp/ssurf_xray.desired"
 WATCHDOG_STATE_FILE="/tmp/ssurf_watchdog.state"
 WATCHDOG_STABLE_SECONDS=600
@@ -253,6 +254,48 @@ cron_job_lock() {
     trap 'exit 143' TERM
 }
 
+cron_addon_update_check_add() {
+    log_info "Configuring $CRU_ADDON_UPDATE_ID cron job for $ADDON_TITLE"
+
+    load_xrayui_config
+    local addon_update_check="${addon_update_check:-disabled}"
+    cron_job_delete "$CRU_ADDON_UPDATE_ID"
+
+    local cron_expr=""
+    case "$addon_update_check" in
+    1h) cron_expr="15 * * * *" ;;
+    6h) cron_expr="20 */6 * * *" ;;
+    12h) cron_expr="25 */12 * * *" ;;
+    24h | 1d) cron_expr="30 4 * * *" ;;
+    3d) cron_expr="35 4 */3 * *" ;;
+    7d) cron_expr="40 4 * * 0" ;;
+    *)
+        log_info "CRON job $CRU_ADDON_UPDATE_ID skipped (addon_update_check=$addon_update_check)"
+        return
+        ;;
+    esac
+
+    cru a "$CRU_ADDON_UPDATE_ID" "$cron_expr $ADDON_SCRIPT cron addon_update" || {
+        log_error "Failed to add CRU job $CRU_ADDON_UPDATE_ID"
+        return
+    }
+    log_ok "CRON job $CRU_ADDON_UPDATE_ID for $ADDON_TITLE added successfully ($addon_update_check)"
+}
+
+cron_addon_update_check_run() {
+    update_loading_progress() { :; }
+    load_xrayui_config
+    local addon_update_check="${addon_update_check:-disabled}"
+    case "$addon_update_check" in
+    1h | 6h | 12h | 24h | 1d | 3d | 7d) ;;
+    *)
+        log_info "Addon update check disabled — skip"
+        return 0
+        ;;
+    esac
+    addon_update_check_run
+}
+
 cron_jobs_add() {
 
     log_info "Adding cron jobs for $ADDON_TITLE"
@@ -261,6 +304,7 @@ cron_jobs_add() {
     cron_subscription_refresh_add
     cron_subscription_fallback_add
     cron_ss_catalog_sync_add
+    cron_addon_update_check_add
     cron_ipset_save_add
     cron_watchdog_add
 }

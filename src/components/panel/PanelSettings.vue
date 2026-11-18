@@ -76,10 +76,7 @@
         </div>
 
         <div v-else-if="section === 'logs'" class="ss-panel-light">
-          <logs-manager
-            v-if="config.log?.access != 'none' || config.log?.error != 'none'"
-            v-model:logs="config.log!"
-          />
+          <logs-manager v-model:logs="config.log!" />
           <sni-logs />
         </div>
 
@@ -88,7 +85,7 @@
         </div>
 
         <div v-else-if="section === 'updates'" class="ss-panel-light">
-          <version />
+          <panel-updates :config="config" />
         </div>
 
         <div class="ss-apply-wrap" v-if="needsApply">
@@ -112,7 +109,7 @@
   import ClientsOnline from '../ClientsOnline.vue';
   import LogsManager from '../Logs.vue';
   import SniLogs from '../SniLogs.vue';
-  import Version from '../Version.vue';
+  import PanelUpdates from './PanelUpdates.vue';
   import PanelConnection from './PanelConnection.vue';
 
   type SectionId =
@@ -139,7 +136,7 @@
       ClientsOnline,
       LogsManager,
       SniLogs,
-      Version,
+      PanelUpdates,
       PanelConnection
     },
     props: {

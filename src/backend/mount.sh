@@ -63,6 +63,14 @@ mount_ui() {
     ln -s -f "$ADDON_SHARE_DIR/devices_vpn.json" "$ADDON_WEB_DIR/devices-vpn.json" 2>/dev/null || true
     rm -f "$ADDON_WEB_DIR/devices-vpn.log"
     ln -s -f "$ADDON_LOGS_DIR/devices_vpn.log" "$ADDON_WEB_DIR/devices-vpn.log" 2>/dev/null || true
+    rm -f "$ADDON_WEB_DIR/devices-vpn-history.log"
+    ln -s -f "$ADDON_LOGS_DIR/devices_vpn_history.log" "$ADDON_WEB_DIR/devices-vpn-history.log" 2>/dev/null || true
+    rm -f "$ADDON_WEB_DIR/ssurf-app.log"
+    ln -s -f "$ADDON_LOGS_DIR/ssurf_app.log" "$ADDON_WEB_DIR/ssurf-app.log" 2>/dev/null || true
+    touch "$ADDON_UPDATE_STATUS_FILE" 2>/dev/null || true
+    [ -s "$ADDON_UPDATE_STATUS_FILE" ] || echo '{"repo":"Homavi88/Stealthsurf-Asus","current":"","latest":"","update_available":false,"checked_at":"","message":"not checked yet"}' >"$ADDON_UPDATE_STATUS_FILE"
+    rm -f "$ADDON_WEB_DIR/addon-update-status.json"
+    ln -s -f "$ADDON_UPDATE_STATUS_FILE" "$ADDON_WEB_DIR/addon-update-status.json" 2>/dev/null || true
     ln -s -f "$XRAYUI_CONNECTION_STATUS_FILE" "$ADDON_WEB_DIR/connection-status.json" || log_error "Failed to create symlink for xray_connection_status.json."
     ln -s -f "$XRAYUI_SUBSCRIPTIONS_FILE" "$ADDON_WEB_DIR/subscriptions.json" || log_error "Failed to create symlink for xray_subscriptions.json."
     ln -s -f "$XRAYUI_GEOTAGS_FILE" "$ADDON_WEB_DIR/geotags.json" || log_error "Failed to create symlink for xray_geotags.json."

@@ -277,6 +277,10 @@ export class EngineResponseConfig {
     subscription_auto_fallback?: boolean;
     subscription_fallback_interval?: number;
     ss_catalog_auto_sync?: string;
+    /** disabled | 1h | 6h | 12h | 24h | 3d | 7d — GitHub release check cron */
+    addon_update_check?: string;
+    /** When true, cron installs a newer GitHub release automatically */
+    addon_auto_update?: boolean;
     xrayui?: {
       installed?: boolean;
       running?: boolean;
@@ -318,6 +322,7 @@ export enum SubmitActions {
   generateEchKeys = 'stealthsurf_regenerate_echkeys',
   enableLogs = 'stealthsurf_configuration_logs',
   performUpdate = 'stealthsurf_update',
+  addonUpdateCheck = 'stealthsurf_addonupdatecheck',
   toggleStartupOption = 'stealthsurf_configuration_togglestartup',
   /** Absolute NVRAM set (panel); Merlin checkbox still uses toggleStartupOption. */
   setStartupOption = 'stealthsurf_configuration_setstartup',

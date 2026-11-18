@@ -70,7 +70,7 @@ subscriptions)
     ;;
 cron)
     case "$2" in
-    logrotate | geodata | subscription_refresh | subscription_fallback | ss_catalog_sync | ipset_save | watchdog)
+    logrotate | geodata | subscription_refresh | subscription_fallback | ss_catalog_sync | addon_update | ipset_save | watchdog)
         cron_job_lock "$2" || exit 0
         update_loading_progress() { :; }
         ;;
@@ -96,6 +96,9 @@ cron)
         ;;
     ss_catalog_sync)
         cron_ss_catalog_sync_run
+        ;;
+    addon_update)
+        cron_addon_update_check_run
         ;;
     watchdog)
         cron_watchdog_run
@@ -160,6 +163,16 @@ service_event)
         else
             initial_response
             update_loading_progress "Error: the update finished with errors. The details are in the system log." 100
+        fi
+        exit 0
+        ;;
+    addonupdatecheck | checkupdate)
+        if addon_update_check_run; then
+            initial_response
+            update_loading_progress "GitHub update check finished." 100
+        else
+            initial_response
+            update_loading_progress "GitHub update check failed — see app log." 100
         fi
         exit 0
         ;;
