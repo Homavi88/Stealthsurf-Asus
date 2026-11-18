@@ -28,7 +28,7 @@ apply_general_options() {
     local subscription_auto_refresh subscription_auto_fallback
     local subscription_fallback_interval probe_url probe_interval subscription_filters
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
-    local ss_catalog_auto_sync startup_flag
+    local ss_catalog_auto_sync addon_update_check addon_auto_update startup_flag
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -65,6 +65,8 @@ apply_general_options() {
         "watchdog_interval=" + ((.watchdog_interval // 2) | tostring | @sh) + "\n" +
         "watchdog_max_attempts=" + ((.watchdog_max_attempts // 5) | tostring | @sh) + "\n" +
         "ss_catalog_auto_sync=" + ((.ss_catalog_auto_sync // "disabled") | tostring | @sh) + "\n" +
+        "addon_update_check=" + ((.addon_update_check // "disabled") | tostring | @sh) + "\n" +
+        "addon_auto_update=" + ((.addon_auto_update // "false") | tostring | @sh) + "\n" +
         "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
     '); then
         log_error "Failed to parse general options payload."
@@ -142,6 +144,13 @@ apply_general_options() {
     *) ss_catalog_auto_sync="disabled" ;;
     esac
     update_xrayui_config "ss_catalog_auto_sync" "$ss_catalog_auto_sync"
+    case "$addon_update_check" in
+    1h | 6h | 12h | 24h | 1d | 3d | 7d) ;;
+    *) addon_update_check="disabled" ;;
+    esac
+    update_xrayui_config "addon_update_check" "$addon_update_check"
+    [ "$addon_auto_update" = "true" ] || addon_auto_update="false"
+    update_xrayui_config "addon_auto_update" "$addon_auto_update"
 
     # Omit keeps existing conf when the panel payload did not include these keys.
     if [ "$subscriptionLinks" != "__omit__" ]; then
@@ -165,6 +174,7 @@ apply_general_options() {
     cron_subscription_refresh_add
     cron_subscription_fallback_add
     cron_ss_catalog_sync_add
+    cron_addon_update_check_add
     cron_ipset_save_add
     cron_watchdog_add
 

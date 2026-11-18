@@ -1,12 +1,14 @@
 <template>
-  <div class="formfontdesc" v-if="logs">
+  <div class="formfontdesc">
     <div class="log-card">
       <header class="log-card-bar">
         <h3>{{ $t('com.Logs.title') }}</h3>
         <div class="actions">
           <select class="input_option" v-model="file">
-            <option :value="FILE_ACCESS" v-if="logs.access !== 'none'">Access Logs</option>
-            <option :value="FILE_ERROR" v-if="logs.error !== 'none'">Error Logs</option>
+            <option :value="FILE_APP">App (SurfGate)</option>
+            <option :value="FILE_ACCESS">Access (VPN connections)</option>
+            <option :value="FILE_ERROR">Error (engine)</option>
+            <option :value="FILE_DEVICES">Devices (VPN clients)</option>
           </select>
           <input class="button_gen button_gen_small" type="button" :value="$t('com.Logs.display')" @click.prevent="display()" />
         </div>
@@ -14,7 +16,7 @@
 
       <modal ref="logsModal" :width="modal_width" :title="$t('com.Logs.title')">
         <div class="logs-shell">
-          <pre v-if="file === FILE_ERROR" class="plain-log">{{ logsContent }}</pre>
+          <pre v-if="file === FILE_ERROR || file === FILE_APP || file === FILE_DEVICES" class="plain-log">{{ logsContent }}</pre>
 
           <div v-else class="table-wrapper">
             <table class="modern-table">
@@ -104,15 +106,17 @@
   import { XrayLogObject } from '@/modules/CommonObjects';
   import Modal from '@main/Modal.vue';
 
-  const props = defineProps<{ logs: XrayLogObject }>();
+  const props = defineProps<{ logs?: XrayLogObject }>();
 
   const follow = ref(false);
   const logsModal = ref();
   let refreshInterval: number;
 
+  const FILE_APP = '/ext/ssurf/ssurf_app_partial.cab';
   const FILE_ACCESS = '/ext/ssurf/xray_access_partial.cab';
   const FILE_ERROR = '/ext/ssurf/xray_error_partial.cab';
-  const file = ref(FILE_ACCESS);
+  const FILE_DEVICES = '/ext/ssurf/devices_vpn_history_partial.cab';
+  const file = ref(FILE_APP);
   const logsContent = ref('');
   watch(file, () => (logsContent.value = ''));
   const modal_width = ref('85%');

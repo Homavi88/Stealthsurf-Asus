@@ -103,14 +103,53 @@ logs_fetch() {
   log_error=$(jq -r --arg error "$ADDON_LOGS_DIR/xray_error.log" \
     '.log.error // $error' "$XRAY_CONFIG_FILE")
 
+  local app_log="${ADDON_APP_LOG:-$ADDON_LOGS_DIR/ssurf_app.log}"
+  local hist_log="${DEVICES_VPN_HISTORY_LOG:-$ADDON_LOGS_DIR/devices_vpn_history.log}"
+  local snap_log="${DEVICES_VPN_LOG:-$ADDON_LOGS_DIR/devices_vpn.log}"
+
   local pub_error="$ADDON_WEB_DIR/xray_error_partial.cab"
   local pub_access="$ADDON_WEB_DIR/xray_access_partial.cab"
+  local pub_app="$ADDON_WEB_DIR/ssurf_app_partial.cab"
+  local pub_devices="$ADDON_WEB_DIR/devices_vpn_history_partial.cab"
 
   local tmp_error="${pub_error}.$$"
   local tmp_access="${pub_access}.$$"
+  local tmp_app="${pub_app}.$$"
+  local tmp_devices="${pub_devices}.$$"
 
-  tail -n 200 "$log_error" >"$tmp_error"
-  tail -n 500 "$log_access" | grep -v '\[sys:metrics_in -> sys:metrics_out\]' | tail -n 200 >"$tmp_access"
+  mkdir -p "$ADDON_WEB_DIR" "$ADDON_LOGS_DIR" 2>/dev/null || true
+
+  if [ -f "$log_error" ]; then
+    tail -n 200 "$log_error" >"$tmp_error"
+  else
+    printf '# no error log yet\n' >"$tmp_error"
+  fi
+
+  if [ -f "$log_access" ]; then
+    tail -n 500 "$log_access" | grep -v '\[sys:metrics_in -> sys:metrics_out\]' | tail -n 200 >"$tmp_access"
+  else
+    printf '# no access log yet (enable in Connection / General Options)\n' >"$tmp_access"
+  fi
+
+  if [ -f "$app_log" ]; then
+    tail -n 300 "$app_log" >"$tmp_app"
+  else
+    printf '# SurfGate app log empty — start/stop/sync events appear here\n' >"$tmp_app"
+  fi
+
+  {
+    if [ -f "$snap_log" ]; then
+      echo "===== current VPN devices ====="
+      cat "$snap_log"
+      echo ""
+    fi
+    echo "===== device history ====="
+    if [ -f "$hist_log" ]; then
+      tail -n 250 "$hist_log"
+    else
+      echo "# no device history yet"
+    fi
+  } >"$tmp_devices"
 
   if [ "$logs_dnsmasq" = "true" ]; then
     replace_ips_with_domains "$tmp_access"
@@ -118,6 +157,8 @@ logs_fetch() {
 
   mv "$tmp_error" "$pub_error"
   mv "$tmp_access" "$pub_access"
+  mv "$tmp_app" "$pub_app"
+  mv "$tmp_devices" "$pub_devices"
 }
 
 change_log_level() {
@@ -209,10 +250,12 @@ logrotate_setup() {
 
   local log_access="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_access.log" '.log.access // $default' "$XRAY_CONFIG_FILE")"
   local log_error="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_error.log" '.log.error // $default' "$XRAY_CONFIG_FILE")"
+  local app_log="${ADDON_APP_LOG:-$ADDON_LOGS_DIR/ssurf_app.log}"
+  local hist_log="${DEVICES_VPN_HISTORY_LOG:-$ADDON_LOGS_DIR/devices_vpn_history.log}"
 
   local log_files=""
   local candidate=""
-  for candidate in "$log_access" "$log_error"; do
+  for candidate in "$log_access" "$log_error" "$app_log" "$hist_log"; do
     case "$candidate" in
       /*) ;;
       *) continue ;;
@@ -224,11 +267,14 @@ logrotate_setup() {
   done
 
   if [ -z "$log_files" ]; then
-    log_warn "No xray log files are enabled - removing logrotate configuration."
+    log_warn "No log files configured - removing logrotate configuration."
     rm -f "$LR_STANZA"
     cron_job_delete "$CRU_LR_ID"
     return 0
   fi
+
+  # Ensure durable files exist so logrotate does not skip forever
+  touch "$app_log" "$hist_log" 2>/dev/null || true
 
   cat >"$LR_STANZA" <<EOF
 $log_files {

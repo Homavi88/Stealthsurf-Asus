@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### App / VPN logs + GitHub auto-update
+
+- App activity log (`ssurf_app.log`) mirrored from SSURF syslog; panel Logs → App / Access / Error / Devices
+- VPN device history append log (join/leave/outbound change) alongside live Clients Online snapshot
+- Access log auto-enabled when tracking VPN devices if it was off
+- Updates: GitHub `Homavi88/Stealthsurf-Asus` check with cron interval + optional auto-install (`addon_update_check` / `addon_auto_update`)
+
 ## [1.4.12] - 2026-11-18
 
 ### Geek panel, install UX, geodata, VPN devices

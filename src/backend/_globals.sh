@@ -87,6 +87,14 @@ SS_IMPORTED_FP_FILE="$ADDON_SHARE_DIR/imported-configs.fp"
 SS_LAST_SYNC=""
 # disabled | 15m | 30m | 1h | 3h | 6h | 12h
 ss_catalog_auto_sync="disabled"
+# Addon package update check against GitHub releases (Homavi88/Stealthsurf-Asus)
+# disabled | 1h | 6h | 12h | 24h | 3d | 7d
+addon_update_check="disabled"
+# When true and a newer release is found by cron — install automatically
+addon_auto_update="false"
+ADDON_UPDATE_STATUS_FILE="$ADDON_SHARE_DIR/addon_update_status.json"
+ADDON_APP_LOG="$ADDON_LOGS_DIR/ssurf_app.log"
+DEVICES_VPN_HISTORY_LOG="$ADDON_LOGS_DIR/devices_vpn_history.log"
 ADDON_CHANNEL="beta"
 ADDON_REPO="Homavi88/Stealthsurf-Asus"
 

@@ -65,6 +65,25 @@ printlog() {
 
     logger -t "SSURF" -p "${LOG_FACILITY}.${priority}" -- "$msg"
 
+    # Durable app activity log (panel Settings → logs → App)
+    if [ -n "${ADDON_LOGS_DIR:-}" ]; then
+        if [ "$level" != "DEBUG" ] || [ "${ADDON_DEBUG:-false}" = "true" ]; then
+            mkdir -p "$ADDON_LOGS_DIR" 2>/dev/null || true
+            _ss_app_log="${ADDON_LOGS_DIR}/ssurf_app.log"
+            _ss_ts=$(date '+%Y-%m-%d %H:%M:%S' 2>/dev/null || date)
+            printf '%s [%s] %s\n' "$_ss_ts" "$level" "$msg" >>"$_ss_app_log" 2>/dev/null || true
+            # Soft-rotate when over ~2 MiB
+            if [ -f "$_ss_app_log" ]; then
+                _ss_sz=$(wc -c <"$_ss_app_log" 2>/dev/null | tr -d ' ')
+                if [ -n "$_ss_sz" ] && [ "$_ss_sz" -gt 2097152 ] 2>/dev/null; then
+                    tail -n 1500 "$_ss_app_log" >"${_ss_app_log}.trim" 2>/dev/null &&
+                        mv -f "${_ss_app_log}.trim" "$_ss_app_log" 2>/dev/null ||
+                        rm -f "${_ss_app_log}.trim" 2>/dev/null
+                fi
+            fi
+        fi
+    fi
+
     if [ "$ADDON_DEBUG" = "false" ] && [ "$level" = "DEBUG" ]; then
         return
     fi
