@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-XRAYUI_VERSION=${1:-"1.4.12"}
+XRAYUI_VERSION=${1:-"1.4.13"}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT"
 
