@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## [1.4.13] - 2026-11-18
 
-### VPN hardening (boot / WAN / kill-switch / devices / IPv6 / guest / preflight)
+### VPN hardening, app logs, GitHub auto-update
 
 - NTP wait before Xray start (boot + manual start)
 - WAN reconnect hooks (`wan-event` / `wan-start`) rebuild firewall or restart when VPN is desired
@@ -11,13 +11,8 @@
 - IPv6 mode: proxy / block / ignore; guest Wi‑Fi: follow / vpn / direct
 - Preflight checks (NTP, WAN, TPROXY, Xray, XrayUI conflict) — panel + `surfgate pf`
 - DNS-only toggle on Connection pane
-
-### App / VPN logs + GitHub auto-update
-
-- App activity log (`ssurf_app.log`) mirrored from SSURF syslog; panel Logs → App / Access / Error / Devices
-- VPN device history append log (join/leave/outbound change) alongside live Clients Online snapshot
-- Access log auto-enabled when tracking VPN devices if it was off
-- Updates: GitHub `Homavi88/Stealthsurf-Asus` check with cron interval + optional auto-install (`addon_update_check` / `addon_auto_update`)
+- App activity log (`ssurf_app.log`); VPN device history; panel Logs → App / Access / Error / Devices
+- GitHub auto-update check cron + optional auto-install (`addon_update_check` / `addon_auto_update`)
 
 ## [1.4.12] - 2026-11-18
 

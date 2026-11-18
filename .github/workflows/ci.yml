@@ -43,7 +43,7 @@ jobs:
           test -f /tmp/ss-ci-pkg/ssurf/index.panel.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
-          grep -q 'XRAYUI_VERSION="1.4.12"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.4.13"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_PKG_NAME"\|ADDON_PKG_NAME="ssurf"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'OFFICIAL_SS_DAEMON' /tmp/ss-ci-pkg/ssurf/stealthsurf
