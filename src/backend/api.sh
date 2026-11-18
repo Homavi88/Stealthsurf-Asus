@@ -156,11 +156,19 @@ api_get_connected_clients() {
   api_addr=$(api_get_listen_address)
   stats_json="$ADDON_SHARE_DIR/xray_stats.json"
   out_json="$XRAYUI_CLIENTS_FILE"
+  local email_json="${ADDON_TMP_DIR}/ssurf_emails.$$"
 
-  : >"$out_json"
+  mkdir -p "$ADDON_SHARE_DIR" "$ADDON_TMP_DIR" 2>/dev/null || true
 
-  if [ -z "$api_addr" ] || [ -z "$(get_xray_daemon_pid)" ]; then
+  # Primary: LAN devices from access log (IP + MAC + name)
+  if type devices_vpn_refresh >/dev/null 2>&1; then
+    devices_vpn_refresh
+  else
     echo "[]" >"$out_json"
+  fi
+
+  # Optional: inbound proxy users (email) from StatsService — merge when API is up
+  if [ -z "$api_addr" ] || [ -z "$(get_xray_daemon_pid)" ]; then
     return
   fi
 
@@ -168,19 +176,24 @@ api_get_connected_clients() {
     -s "$api_addr" \
     -pattern 'user>>>' \
     -reset >"$stats_json" 2>/dev/null; then
-    log_error "StatsService unreachable on $api_addr"
-    echo "[]" >"$out_json"
+    log_debug "StatsService unreachable on $api_addr (LAN device log still available)"
     return
   fi
 
-  jq -r '
+  jq -c '
         (.stat // [])
         | map(select((.value // 0) | tonumber > 0))
         | map(.name | split(">>>")[1])
         | unique
-        | map({ ip:"", email:[.] })
-    ' "$stats_json" >"$out_json"
+        | map({ ip:"", mac:"", name:., outbound:"inbound", last_seen:"", email:[.] })
+    ' "$stats_json" >"$email_json" 2>/dev/null || echo '[]' >"$email_json"
 
+  if [ -s "$email_json" ] && [ "$(jq 'length' "$email_json" 2>/dev/null || echo 0)" != "0" ]; then
+    jq -c -s '.[0] + .[1] | unique_by(.ip + "|" + (.email|join(",")) )' \
+      "$out_json" "$email_json" >"${out_json}.$$" 2>/dev/null &&
+      mv -f "${out_json}.$$" "$out_json"
+  fi
+  rm -f "$email_json"
 }
 
 api_fetch_metrics() {

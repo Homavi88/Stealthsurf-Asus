@@ -13,6 +13,7 @@ import ./control.sh
 import ./startup.sh
 import ./github.sh
 import ./geodata.sh
+import ./devices.sh
 import ./install.sh
 import ./update.sh
 import ./firewall.sh
@@ -197,6 +198,9 @@ service_event)
         ;;
     connectedclients)
         api_get_connected_clients
+        ;;
+    devices | vpn-devices)
+        devices_vpn_show
         ;;
     connectionstatus)
         api_get_connection_status

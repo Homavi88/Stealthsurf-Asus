@@ -59,6 +59,10 @@ mount_ui() {
 
     rm -f "$ADDON_WEB_DIR/clients-online.json"
     ln -s -f "$XRAYUI_CLIENTS_FILE" "$ADDON_WEB_DIR/clients-online.json" || log_error "Failed to create symlink for xray_clients_online.json."
+    rm -f "$ADDON_WEB_DIR/devices-vpn.json"
+    ln -s -f "$ADDON_SHARE_DIR/devices_vpn.json" "$ADDON_WEB_DIR/devices-vpn.json" 2>/dev/null || true
+    rm -f "$ADDON_WEB_DIR/devices-vpn.log"
+    ln -s -f "$ADDON_LOGS_DIR/devices_vpn.log" "$ADDON_WEB_DIR/devices-vpn.log" 2>/dev/null || true
     ln -s -f "$XRAYUI_CONNECTION_STATUS_FILE" "$ADDON_WEB_DIR/connection-status.json" || log_error "Failed to create symlink for xray_connection_status.json."
     ln -s -f "$XRAYUI_SUBSCRIPTIONS_FILE" "$ADDON_WEB_DIR/subscriptions.json" || log_error "Failed to create symlink for xray_subscriptions.json."
     ln -s -f "$XRAYUI_GEOTAGS_FILE" "$ADDON_WEB_DIR/geotags.json" || log_error "Failed to create symlink for xray_geotags.json."
@@ -91,7 +95,7 @@ mount_ui() {
 
 mount_web_aliases() {
     local name
-    for name in xray-config xray-ui-response clients-online connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions ss_paid_options ss_cloud_servers ss_tariffs ss_traffic ss_server_stats ss_available_servers ss_autofit; do
+    for name in xray-config xray-ui-response clients-online devices-vpn connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions ss_paid_options ss_cloud_servers ss_tariffs ss_traffic ss_server_stats ss_available_servers ss_autofit; do
         [ -L "$ADDON_WEB_DIR/$name.cab" ] || ln -s -f "$name.json" "$ADDON_WEB_DIR/$name.cab" || log_error "Failed to create symlink for $name.cab."
     done
 }

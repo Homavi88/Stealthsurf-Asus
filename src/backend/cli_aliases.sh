@@ -68,6 +68,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   upd [ver]      update         uf             update latest
   v|ver          version        fix|doctor     fixme
   un --yes       uninstall
+  dv|devices     VPN device log (IP / MAC / name)
   panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 
@@ -181,6 +182,10 @@ ss_cli_dispatch() {
     st | status)
         ss_cli_status
         return 0
+        ;;
+    dv | devices | vpn-devices)
+        devices_vpn_show
+        return $?
         ;;
     panel | pan)
         shift

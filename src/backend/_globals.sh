@@ -45,6 +45,8 @@ XRAYUI_LOCKFILE=/tmp/$ADDON_TAG.lock
 UI_RESPONSE_FILE="$ADDON_WEB_DIR/xray-ui-response.json"
 
 XRAYUI_CLIENTS_FILE="$ADDON_SHARE_DIR/xray_clients_online.json"
+DEVICES_VPN_JSON="$ADDON_SHARE_DIR/devices_vpn.json"
+DEVICES_VPN_LOG="$ADDON_LOGS_DIR/devices_vpn.log"
 XRAYUI_CONNECTION_STATUS_FILE="$ADDON_SHARE_DIR/xray_connection_status.json"
 XRAYUI_SUBSCRIPTIONS_FILE="$ADDON_SHARE_DIR/xray_subscriptions.json"
 XRAYUI_GEOTAGS_FILE="$ADDON_SHARE_DIR/geodata_tags.json"
