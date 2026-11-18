@@ -1,11 +1,10 @@
 <template>
   <div>
     <header class="ss-topbar">
-      <div class="ss-brand">
-        <span class="ss-brand-mark" aria-hidden="true"></span>
-        <span>SurfGate</span>
+      <div class="ss-brand" aria-hidden="true">
+        <span class="ss-brand-mark"></span>
       </div>
-      <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
+      <button type="button" class="ss-icon-btn" title="settings" aria-label="settings" @click="$emit('open-settings')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
@@ -16,72 +15,111 @@
     </header>
 
     <section class="ss-hero">
-      <div class="ss-hero-orb" :class="{ 'is-off': !running }" aria-hidden="true"></div>
-      <h1 class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'Подключено' : 'Отключено' }}</h1>
+      <div class="ss-hero-hud" :class="{ 'is-off': !running }" aria-hidden="true">
+        <span class="ss-hero-hud-ring"></span>
+        <span class="ss-hero-hud-core"></span>
+      </div>
+      <h1 class="ss-brand-hero">SurfGate</h1>
+      <p class="ss-brand-hero-sub">merlin · panel :1131 · xray</p>
+      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'status: online' : 'status: offline' }}</p>
       <div class="ss-ip-pill" v-if="displayIp">
-        <span aria-hidden="true">🌐</span>
-        <span>{{ displayIp }}</span>
+        <span class="ss-mono">wan {{ displayIp }}</span>
       </div>
     </section>
 
-    <div class="ss-resources">
-      <span>ЦП <strong>{{ live.cpu_pct }}%</strong></span>
-      <span>ОЗУ <strong>{{ memLabel }}</strong></span>
-      <span>SurfGate <strong>{{ live.app_rss_mb }} МБ</strong></span>
+    <table class="ss-data-table ss-metrics-table ss-mono" aria-label="system metrics">
+      <thead>
+        <tr>
+          <th>cpu</th>
+          <th>mem</th>
+          <th>rss</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{ live.cpu_pct }}%</strong></td>
+          <td><strong>{{ memLabel }}</strong></td>
+          <td><strong>{{ live.app_rss_mb }} MB</strong></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="ss-card ss-card-flush">
+      <p class="ss-card-title">throughput</p>
+      <table class="ss-data-table ss-mono" aria-label="throughput">
+        <thead>
+          <tr>
+            <th></th>
+            <th>rx</th>
+            <th>tx</th>
+            <th>Σ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">vpn</th>
+            <td>{{ fmtRate(rates.vpnDown) }}</td>
+            <td>{{ fmtRate(rates.vpnUp) }}</td>
+            <td>{{ fmtBytes(vol.vpn) }}</td>
+          </tr>
+          <tr>
+            <th scope="row">direct</th>
+            <td>{{ fmtRate(rates.directDown) }}</td>
+            <td>{{ fmtRate(rates.directUp) }}</td>
+            <td>{{ fmtBytes(vol.direct) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="ss-card">
-      <p class="ss-card-title">Скорость</p>
-      <div class="ss-speed-grid">
-        <div class="ss-speed-col">
-          <h4>VPN</h4>
-          <div class="ss-speed-row">↓ <b>{{ fmtRate(rates.vpnDown) }}</b></div>
-          <div class="ss-speed-row">↑ <b>{{ fmtRate(rates.vpnUp) }}</b></div>
-          <div class="ss-speed-row">Σ <b>{{ fmtBytes(vol.vpn) }}</b></div>
-        </div>
-        <div class="ss-speed-col">
-          <h4>Напрямую</h4>
-          <div class="ss-speed-row">↓ <b>{{ fmtRate(rates.directDown) }}</b></div>
-          <div class="ss-speed-row">↑ <b>{{ fmtRate(rates.directUp) }}</b></div>
-          <div class="ss-speed-row">Σ <b>{{ fmtBytes(vol.direct) }}</b></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="ss-card">
-      <div style="display: flex; justify-content: space-between; align-items: center">
-        <p class="ss-card-title" style="margin: 0">Локации</p>
-        <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px; box-shadow: none" title="Обновить" @click="refreshCatalog">
+    <div class="ss-card ss-card-flush">
+      <div class="ss-card-head">
+        <p class="ss-card-title" style="margin: 0">endpoints</p>
+        <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px; box-shadow: none" title="refresh" @click="refreshCatalog">
           ↻
         </button>
       </div>
-      <div
-        v-for="c in locations"
-        :key="String(c.id)"
-        class="ss-loc-item"
-        :class="{ 'is-active': selectedId === c.id }"
-        @click="selectedId = c.id"
-      >
-        <div class="ss-loc-flag">{{ flagFor(c) }}</div>
-        <div class="ss-loc-meta">
-          <div class="name">{{ c.title || `ss-${c.id}` }}</div>
-          <div class="sub">{{ c.protocol || 'vless' }} · {{ c._ss_location_title || c.location || '—' }}</div>
-          <div class="online">{{ c.is_online === false ? 'офлайн' : 'сервер онлайн' }}</div>
-        </div>
-        <div class="ss-loc-vol">
-          <div>{{ fmtBytes(volumeFor(c)) }}</div>
-          <div v-if="isImported(c)" style="color: var(--ss-green); font-weight: 700">в outbounds</div>
-        </div>
-      </div>
-      <p v-if="!locations.length" style="color: var(--ss-muted); font-size: 13px; margin: 8px 0 0">
-        Нет конфигураций. Откройте настройки → Аккаунт и выполните Sync catalog.
-      </p>
+      <table class="ss-data-table ss-endpoints-table" aria-label="endpoints">
+        <thead>
+          <tr>
+            <th></th>
+            <th>endpoint</th>
+            <th>proto</th>
+            <th>status</th>
+            <th class="ss-num">volume</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="c in locations"
+            :key="String(c.id)"
+            class="ss-row-click"
+            :class="{ 'is-active': selectedId === c.id }"
+            @click="selectedId = c.id"
+          >
+            <td class="ss-flag-cell">{{ flagFor(c) }}</td>
+            <td>
+              <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
+              <div class="ss-cell-sub ss-mono">{{ c._ss_location_title || c.location || '—' }}</div>
+              <div v-if="isImported(c)" class="ss-cell-tag">in outbounds</div>
+            </td>
+            <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
+            <td class="ss-mono" :class="c.is_online === false ? 'is-off' : 'is-on'">
+              {{ c.is_online === false ? 'offline' : 'online' }}
+            </td>
+            <td class="ss-num ss-mono">{{ fmtBytes(volumeFor(c)) }}</td>
+          </tr>
+          <tr v-if="!locations.length">
+            <td colspan="5" class="ss-empty">no configs — settings → account → sync catalog</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="ss-card">
       <div class="ss-loc-meta" style="margin-bottom: 12px">
         <div class="name">{{ activeTitle }}</div>
-        <div class="sub">Выбранное подключение · Start/Stop ядра Xray</div>
+        <div class="sub ss-mono">selected · xray start/stop</div>
       </div>
       <button
         type="button"
@@ -90,10 +128,10 @@
         :disabled="busy || (!running && conflict)"
         @click="toggle"
       >
-        {{ busy ? '…' : running ? 'Стоп' : 'Старт' }}
+        {{ busy ? '…' : running ? 'stop' : 'start' }}
       </button>
-      <p v-if="conflict" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
-        Конфликт с XrayUI — остановите stock XrayUI, чтобы запустить SurfGate.
+      <p v-if="conflict" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
+        conflict: stock xrayui is running — stop it first
       </p>
     </div>
   </div>
@@ -172,7 +210,7 @@
 
       const activeTitle = computed(() => {
         const cur = locations.value.find((c) => c.id === selectedId.value);
-        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'Подключение не выбрано');
+        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'no endpoint selected');
       });
 
       const fmtBytes = (n: number) => {

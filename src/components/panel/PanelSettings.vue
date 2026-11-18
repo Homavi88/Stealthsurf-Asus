@@ -1,7 +1,7 @@
 <template>
   <div>
-    <button type="button" class="ss-back-link" @click="$emit('back')">← На главную</button>
-    <h2 class="ss-settings-title">Настройки</h2>
+    <button type="button" class="ss-back-link" @click="$emit('back')">← home</button>
+    <h2 class="ss-settings-title">settings</h2>
 
     <div class="ss-settings-layout">
       <aside>
@@ -92,7 +92,7 @@
         </div>
 
         <div class="ss-apply-wrap" v-if="needsApply">
-          <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">Применить</button>
+          <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">apply</button>
         </div>
       </section>
     </div>
@@ -149,23 +149,23 @@
     setup(_props, { emit }) {
       const section = ref<SectionId>('connection');
       const navPrimary = [
-        { id: 'account' as const, label: 'Подписка / Аккаунт', icon: '🎁' },
-        { id: 'connection' as const, label: 'Подключение', icon: '⏻' },
-        { id: 'routing' as const, label: 'Маршрутизация', icon: '🔀' },
-        { id: 'network' as const, label: 'Сеть и службы', icon: '🌐' }
+        { id: 'account' as const, label: 'account', icon: 'A' },
+        { id: 'connection' as const, label: 'connection', icon: 'C' },
+        { id: 'routing' as const, label: 'routing', icon: 'R' },
+        { id: 'network' as const, label: 'network', icon: 'N' }
       ];
       const navEngine = [
-        { id: 'outbounds' as const, label: 'Исходящие', icon: '📤' },
-        { id: 'engine' as const, label: 'Движок / профили', icon: '⚙️' }
+        { id: 'outbounds' as const, label: 'outbounds', icon: 'O' },
+        { id: 'engine' as const, label: 'engine', icon: 'E' }
       ];
       const navMore = [
-        { id: 'logs' as const, label: 'Логи', icon: '📄' },
-        { id: 'clients' as const, label: 'Клиенты online', icon: '💻' },
-        { id: 'updates' as const, label: 'Обновления', icon: '⬇️' }
+        { id: 'logs' as const, label: 'logs', icon: 'L' },
+        { id: 'clients' as const, label: 'clients', icon: 'U' },
+        { id: 'updates' as const, label: 'updates', icon: 'V' }
       ];
 
       const all = [...navPrimary, ...navEngine, ...navMore];
-      const currentLabel = computed(() => all.find((i) => i.id === section.value)?.label || 'Настройки');
+      const currentLabel = computed(() => all.find((i) => i.id === section.value)?.label || 'settings');
       // Connection has its own Save; avoid double Apply
       const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 

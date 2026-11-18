@@ -6,36 +6,54 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Cache-Control" content="no-cache" />
-    <meta name="theme-color" content="#1a2428" />
+    <meta name="theme-color" content="#0b0f14" />
     <title>SurfGate</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
     <style>
       html,
       body {
         margin: 0;
         min-height: 100%;
-        background: #eef3f9;
-        color: #1a2b3c;
-        font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', sans-serif;
+        background: #0b0f14;
+        color: #e6e8eb;
+        font-family: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', sans-serif;
       }
       #ss-panel-boot {
         max-width: 28rem;
         margin: 20vh auto 0;
         padding: 1.5rem;
-        text-align: center;
-        opacity: 0.85;
+        text-align: left;
+        opacity: 0.95;
+      }
+      #ss-panel-boot .brand {
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 1.15rem;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #3db8ff;
+      }
+      #ss-panel-boot .hint {
+        margin-top: 0.55rem;
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 0.8rem;
+        color: #8b939e;
       }
       #ss-panel-boot[hidden] {
         display: none;
       }
       #ss-panel-boot .err {
-        color: #ff8a80;
+        color: #ff5c5c;
         margin-top: 1rem;
         white-space: pre-wrap;
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 0.8rem;
       }
-      /* Loading overlay must never eat clicks when hidden */
       #Loading.popup_bg {
         pointer-events: none;
       }
@@ -46,8 +64,8 @@
   </head>
   <body class="ss-standalone-panel">
     <div id="ss-panel-boot">
-      <div>SurfGate</div>
-      <div style="margin-top: 0.5rem; font-size: 0.95rem">Загрузка панели…</div>
+      <div class="brand">SurfGate</div>
+      <div class="hint">loading panel…</div>
       <div id="ss-panel-boot-err" class="err" hidden></div>
     </div>
 
@@ -73,7 +91,6 @@
         server: { isRunning: false, b4sni_isRunning: false },
         custom_settings: {}
       };
-      // Merlin overlib globals used by Hint.vue
       window.OFFSETX = 8;
       window.OFFSETY = 8;
       window.RIGHT = 2;
@@ -137,12 +154,12 @@
             s.type = 'module';
             s.src = './app.js';
             s.onerror = function () {
-              fail('Не удалось загрузить app.js');
+              fail('failed to load app.js');
             };
             document.body.appendChild(s);
           })
           .catch(function (e) {
-            fail('Панель не ответила: ' + (e && e.message ? e.message : e));
+            fail('panel bootstrap failed: ' + (e && e.message ? e.message : e));
           });
       })();
     </script>

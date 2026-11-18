@@ -44,7 +44,7 @@ async function shotShell(page, name) {
 
 async function openSettings(page) {
   await hideLoading(page);
-  await page.locator('button[aria-label="Настройки"], button[title="Настройки"]').first().click({ force: true });
+  await page.locator('button[aria-label="settings"], button[title="settings"], button[aria-label="Настройки"]').first().click({ force: true });
   await page.waitForSelector('.ss-settings-layout', { timeout: 10000 });
   await page.waitForTimeout(600);
   await hideLoading(page);
@@ -74,11 +74,11 @@ const hideTimer = setInterval(() => {
 
 try {
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForSelector('.ss-brand', { timeout: 30000 });
+  await page.waitForSelector('.ss-brand-hero', { timeout: 30000 });
   await page.waitForTimeout(2200);
   await hideLoading(page);
 
-  const brand = (await page.locator('.ss-brand').innerText()).replace(/\s+/g, ' ').trim();
+  const brand = (await page.locator('.ss-brand-hero').innerText()).replace(/\s+/g, ' ').trim();
   console.log('brand=', brand);
   if (!/SurfGate/i.test(brand)) {
     throw new Error(`Expected SurfGate brand on home, got: ${brand}`);
@@ -94,9 +94,9 @@ try {
     const banner = document.createElement('div');
     banner.id = 'ss-xrayui-conflict-shot';
     banner.style.cssText =
-      'margin:0 0 14px;padding:14px 16px;border:1px solid #f0c36a;background:#fff8e8;color:#7a5a10;border-radius:14px;font:14px/1.45 Manrope,Segoe UI,Helvetica Neue,sans-serif;position:relative;z-index:50;box-shadow:0 8px 28px rgba(40,70,110,0.08)';
+      'margin:0 0 14px;padding:12px 14px;border:1px solid rgba(255,196,72,0.28);background:rgba(255,196,72,0.1);color:#f0c36a;border-radius:8px;font:12px/1.45 "IBM Plex Mono",ui-monospace,Menlo,monospace;position:relative;z-index:50';
     banner.innerHTML =
-      '<strong>Конфликт с XrayUI</strong><div style="margin-top:6px">Stock XrayUI сейчас запущен. SurfGate не стартует transparent proxy, пока XrayUI не остановлен. Используйте <code>xrayui stop</code> или панель XrayUI.</div>';
+      '<strong>conflict: xrayui</strong><div style="margin-top:6px">stock xrayui is running — SurfGate will not start transparent proxy until it is stopped. use <code>xrayui stop</code> or the xrayui panel.</div>';
     host.prepend(banner);
   });
   await shotShell(page, '05-xrayui-conflict.png');
@@ -106,15 +106,15 @@ try {
   await openSettings(page);
 
   const sections = [
-    { label: 'Подписка / Аккаунт', file: '08-settings-account.png' },
-    { label: 'Подключение', file: '09-settings-connection.png' },
-    { label: 'Маршрутизация', file: '03-routing.png' },
-    { label: 'Сеть и службы', file: '04-mode-dns.png' },
-    { label: 'Исходящие', file: '10-settings-outbounds.png' },
-    { label: 'Движок / профили', file: '11-settings-engine.png' },
-    { label: 'Логи', file: '12-settings-logs.png' },
-    { label: 'Клиенты online', file: '13-settings-clients.png' },
-    { label: 'Обновления', file: '14-settings-updates.png' },
+    { label: 'account', file: '08-settings-account.png' },
+    { label: 'connection', file: '09-settings-connection.png' },
+    { label: 'routing', file: '03-routing.png' },
+    { label: 'network', file: '04-mode-dns.png' },
+    { label: 'outbounds', file: '10-settings-outbounds.png' },
+    { label: 'engine', file: '11-settings-engine.png' },
+    { label: 'logs', file: '12-settings-logs.png' },
+    { label: 'clients', file: '13-settings-clients.png' },
+    { label: 'updates', file: '14-settings-updates.png' },
   ];
 
   for (const s of sections) {
@@ -123,7 +123,7 @@ try {
   }
 
   // Connection with an expanded gated block (watchdog ON)
-  await openSection(page, 'Подключение');
+  await openSection(page, 'connection');
   const watchdog = page.locator('.ss-set-row', { hasText: 'Автоперезапуск' }).locator('.ss-toggle');
   if (await watchdog.count()) {
     const on = await watchdog.getAttribute('aria-checked');
