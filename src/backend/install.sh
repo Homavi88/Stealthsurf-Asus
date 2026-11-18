@@ -270,9 +270,11 @@ EOF
     panel_prepare_webroot 2>/dev/null || true
     # Prefer bundled panel-httpd from the package (works even when opkg feeds are down).
     panel_ensure_httpd 2>/dev/null || true
+    # Always restart so an upgraded panel-httpd replaces the stale process (avoids bootstrap HTTP 500).
+    panel_stop 2>/dev/null || true
     if ! panel_start; then
         log_warn "Standalone panel did not start. See /tmp/stealthsurf/panel.log"
-        log_warn "Fix: surfgate panel start   (1.4.8+ ships bin/panel-httpd; or install lighttpd via opkg)"
+        log_warn "Fix: surfgate panel restart   (1.4.9+ ships bin/panel-httpd; or install lighttpd via opkg)"
     fi
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
