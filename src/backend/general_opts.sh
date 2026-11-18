@@ -29,6 +29,7 @@ apply_general_options() {
     local subscription_fallback_interval probe_url probe_interval subscription_filters
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
     local ss_catalog_auto_sync addon_update_check addon_auto_update startup_flag
+    local kill_switch lan_vpn_mode lan_vpn_macs ipv6_mode guest_vpn_mode
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -67,6 +68,11 @@ apply_general_options() {
         "ss_catalog_auto_sync=" + ((.ss_catalog_auto_sync // "disabled") | tostring | @sh) + "\n" +
         "addon_update_check=" + ((.addon_update_check // "disabled") | tostring | @sh) + "\n" +
         "addon_auto_update=" + ((.addon_auto_update // "false") | tostring | @sh) + "\n" +
+        "kill_switch=" + ((.kill_switch // "false") | tostring | @sh) + "\n" +
+        "lan_vpn_mode=" + ((.lan_vpn_mode // "all") | tostring | @sh) + "\n" +
+        "lan_vpn_macs=" + ((.lan_vpn_macs // "") | tostring | @sh) + "\n" +
+        "ipv6_mode=" + ((.ipv6_mode // "proxy") | tostring | @sh) + "\n" +
+        "guest_vpn_mode=" + ((.guest_vpn_mode // "follow") | tostring | @sh) + "\n" +
         "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
     '); then
         log_error "Failed to parse general options payload."
@@ -151,6 +157,27 @@ apply_general_options() {
     update_xrayui_config "addon_update_check" "$addon_update_check"
     [ "$addon_auto_update" = "true" ] || addon_auto_update="false"
     update_xrayui_config "addon_auto_update" "$addon_auto_update"
+    [ "$kill_switch" = "true" ] || kill_switch="false"
+    update_xrayui_config "kill_switch" "$kill_switch"
+    case "$lan_vpn_mode" in
+    all | selected | exclude) ;;
+    *) lan_vpn_mode="all" ;;
+    esac
+    update_xrayui_config "lan_vpn_mode" "$lan_vpn_mode"
+    update_xrayui_config "lan_vpn_macs" "$lan_vpn_macs"
+    case "$ipv6_mode" in
+    proxy | block | ignore) ;;
+    *) ipv6_mode="proxy" ;;
+    esac
+    update_xrayui_config "ipv6_mode" "$ipv6_mode"
+    case "$guest_vpn_mode" in
+    follow | vpn | direct) ;;
+    *) guest_vpn_mode="follow" ;;
+    esac
+    update_xrayui_config "guest_vpn_mode" "$guest_vpn_mode"
+
+    # Sync simple LAN device mode into xray routing.policies
+    vpn_lan_policies_sync 2>/dev/null || true
 
     # Omit keeps existing conf when the panel payload did not include these keys.
     if [ "$subscriptionLinks" != "__omit__" ]; then

@@ -57,6 +57,8 @@ startup() {
 
             if [ "$skipwait" = "false" ]; then
                 log_ok "Waiting for network and iptable rules to be ready..."
+                # NTP before TLS/REALITY handshakes
+                vpn_ntp_wait || log_warn "Boot NTP wait incomplete"
                 if [ "$startup_delay" -gt 0 ]; then
                     log_ok "Waiting for $startup_delay seconds before starting Xray service..."
                     sleep "$startup_delay"

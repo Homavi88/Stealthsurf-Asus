@@ -14,6 +14,7 @@ import ./startup.sh
 import ./github.sh
 import ./geodata.sh
 import ./devices.sh
+import ./vpn_hardening.sh
 import ./install.sh
 import ./update.sh
 import ./firewall.sh
@@ -174,6 +175,23 @@ service_event)
             initial_response
             update_loading_progress "GitHub update check failed — see app log." 100
         fi
+        exit 0
+        ;;
+    wan)
+        case "$3" in
+        reconnect | connected | start)
+            vpn_wan_reconnect
+            ;;
+        *)
+            vpn_wan_reconnect
+            ;;
+        esac
+        exit $?
+        ;;
+    preflight)
+        vpn_preflight_run
+        initial_response
+        update_loading_progress "Preflight finished." 100
         exit 0
         ;;
     geodata)

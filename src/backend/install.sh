@@ -118,6 +118,8 @@ EOF
     setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && $ADDON_SCRIPT service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #ssurf"
 
     setup_script_file "/jffs/scripts/dnsmasq.postconf" "$ADDON_SCRIPT dnsmasq \"\$1\" #ssurf"
+    # WAN reconnect: rebuild firewall / restart if desired after PPPoE flap
+    vpn_wan_hook_install 2>/dev/null || true
     install_ui_status ok "merlin hooks"
 
     install_ui_step "WebUI mount"
@@ -547,4 +549,5 @@ clear_script_entries() {
     sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/service-event >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
     sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
     sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/wan-event >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/wan-event && chmod +x /jffs/scripts/wan-event || log_debug "Failed to remove entry from /jffs/scripts/wan-event."
 }

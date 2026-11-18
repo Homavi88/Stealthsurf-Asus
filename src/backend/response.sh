@@ -64,6 +64,24 @@ initial_response() {
     esac
     local addon_auto_update="${addon_auto_update:-false}"
     [ "$addon_auto_update" = "true" ] || addon_auto_update="false"
+    local kill_switch="${kill_switch:-false}"
+    [ "$kill_switch" = "true" ] || kill_switch="false"
+    local lan_vpn_mode="${lan_vpn_mode:-all}"
+    case "$lan_vpn_mode" in
+    all | selected | exclude) ;;
+    *) lan_vpn_mode="all" ;;
+    esac
+    local lan_vpn_macs="${lan_vpn_macs:-}"
+    local ipv6_mode="${ipv6_mode:-proxy}"
+    case "$ipv6_mode" in
+    proxy | block | ignore) ;;
+    *) ipv6_mode="proxy" ;;
+    esac
+    local guest_vpn_mode="${guest_vpn_mode:-follow}"
+    case "$guest_vpn_mode" in
+    follow | vpn | direct) ;;
+    *) guest_vpn_mode="follow" ;;
+    esac
     local probe_url="${probe_url:-https://www.google.com/generate_204}"
     local probe_interval=$(sanitize_probe_interval "$probe_interval")
 
@@ -160,6 +178,11 @@ initial_response() {
         --arg ss_cas "$ss_catalog_auto_sync" \
         --arg auc "$addon_update_check" \
         --argjson aau "$addon_auto_update" \
+        --argjson kill_switch "$kill_switch" \
+        --arg lan_vpn_mode "$lan_vpn_mode" \
+        --arg lan_vpn_macs "$lan_vpn_macs" \
+        --arg ipv6_mode "$ipv6_mode" \
+        --arg guest_vpn_mode "$guest_vpn_mode" \
         --arg hook_before_firewall_start "$hook_before_firewall_start" \
         --arg after_firewall_start "$after_firewall_start" \
         --arg after_firewall_cleanup "$after_firewall_cleanup" \
@@ -207,6 +230,11 @@ initial_response() {
         | .xray.ss_catalog_auto_sync = $ss_cas
         | .xray.addon_update_check = $auc
         | .xray.addon_auto_update = $aau
+        | .xray.kill_switch = $kill_switch
+        | .xray.lan_vpn_mode = $lan_vpn_mode
+        | .xray.lan_vpn_macs = $lan_vpn_macs
+        | .xray.ipv6_mode = $ipv6_mode
+        | .xray.guest_vpn_mode = $guest_vpn_mode
         | .xray.subscriptions.filters = (if $sf == "" then [] else ($sf | split("|")) end)
         | .xray.hooks = {
             before_firewall_start: $hook_before_firewall_start,
@@ -261,6 +289,11 @@ initial_response() {
             --arg ss_cas "$ss_catalog_auto_sync" \
             --arg auc "$addon_update_check" \
             --argjson aau "$addon_auto_update" \
+            --argjson kill_switch "$kill_switch" \
+            --arg lan_vpn_mode "$lan_vpn_mode" \
+            --arg lan_vpn_macs "$lan_vpn_macs" \
+            --arg ipv6_mode "$ipv6_mode" \
+            --arg guest_vpn_mode "$guest_vpn_mode" \
             --arg xrayui_ver "$XRAYUI_VERSION" \
             --arg xray_ver "$XRAY_VERSION" \
             --arg xray_err "$XRAYUI_CORE_ERR" \
@@ -271,7 +304,7 @@ initial_response() {
             --argjson xrayui "$xrayui_json" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, kill_switch: $kill_switch, lan_vpn_mode: $lan_vpn_mode, lan_vpn_macs: $lan_vpn_macs, ipv6_mode: $ipv6_mode, guest_vpn_mode: $guest_vpn_mode, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
                 xrayui: $xrayui,
                 conflict: $xrayui.conflict,
                 conflict_message: $xrayui.message

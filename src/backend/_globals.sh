@@ -92,6 +92,16 @@ ss_catalog_auto_sync="disabled"
 addon_update_check="disabled"
 # When true and a newer release is found by cron — install automatically
 addon_auto_update="false"
+# Kill-switch: block LAN→WAN while VPN is desired but traffic is unmarked
+kill_switch="false"
+# all | selected | exclude — simple device VPN mode (syncs routing.policies)
+lan_vpn_mode="all"
+lan_vpn_macs=""
+# proxy | block | ignore
+ipv6_mode="proxy"
+# follow | vpn | direct — guest Wi-Fi bridges
+guest_vpn_mode="follow"
+PREFLIGHT_STATUS_FILE="$ADDON_SHARE_DIR/preflight_status.json"
 ADDON_UPDATE_STATUS_FILE="$ADDON_SHARE_DIR/addon_update_status.json"
 ADDON_APP_LOG="$ADDON_LOGS_DIR/ssurf_app.log"
 DEVICES_VPN_HISTORY_LOG="$ADDON_LOGS_DIR/devices_vpn_history.log"

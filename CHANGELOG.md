@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### VPN hardening (boot / WAN / kill-switch / devices / IPv6 / guest / preflight)
+
+- NTP wait before Xray start (boot + manual start)
+- WAN reconnect hooks (`wan-event` / `wan-start`) rebuild firewall or restart when VPN is desired
+- Kill-switch: block unmarked LAN→WAN while VPN is desired
+- Simple LAN VPN mode on Connection: all / selected MACs / exclude MACs (syncs `routing.policies`)
+- IPv6 mode: proxy / block / ignore; guest Wi‑Fi: follow / vpn / direct
+- Preflight checks (NTP, WAN, TPROXY, Xray, XrayUI conflict) — panel + `surfgate pf`
+- DNS-only toggle on Connection pane
+
 ### App / VPN logs + GitHub auto-update
 
 - App activity log (`ssurf_app.log`) mirrored from SSURF syslog; panel Logs → App / Access / Error / Devices

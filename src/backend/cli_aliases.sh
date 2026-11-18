@@ -69,6 +69,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   v|ver          version        fix|doctor     fixme
   un --yes       uninstall
   dv|devices     VPN device log (IP / MAC / name)
+  pf|preflight   NTP/WAN/TPROXY/Xray checks
   panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 
@@ -185,6 +186,14 @@ ss_cli_dispatch() {
         ;;
     dv | devices | vpn-devices)
         devices_vpn_show
+        return $?
+        ;;
+    pf | preflight)
+        vpn_preflight_run
+        if [ -f "$PREFLIGHT_STATUS_FILE" ]; then
+            cat "$PREFLIGHT_STATUS_FILE"
+            echo
+        fi
         return $?
         ;;
     panel | pan)

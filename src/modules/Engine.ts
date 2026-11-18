@@ -281,6 +281,14 @@ export class EngineResponseConfig {
     addon_update_check?: string;
     /** When true, cron installs a newer GitHub release automatically */
     addon_auto_update?: boolean;
+    kill_switch?: boolean;
+    /** all | selected | exclude */
+    lan_vpn_mode?: string;
+    lan_vpn_macs?: string;
+    /** proxy | block | ignore */
+    ipv6_mode?: string;
+    /** follow | vpn | direct */
+    guest_vpn_mode?: string;
     xrayui?: {
       installed?: boolean;
       running?: boolean;
@@ -323,6 +331,7 @@ export enum SubmitActions {
   enableLogs = 'stealthsurf_configuration_logs',
   performUpdate = 'stealthsurf_update',
   addonUpdateCheck = 'stealthsurf_addonupdatecheck',
+  preflight = 'stealthsurf_preflight',
   toggleStartupOption = 'stealthsurf_configuration_togglestartup',
   /** Absolute NVRAM set (panel); Merlin checkbox still uses toggleStartupOption. */
   setStartupOption = 'stealthsurf_configuration_setstartup',

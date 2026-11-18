@@ -17,10 +17,18 @@ start() {
         return 1
     fi
 
+    # Wait for clock before REALITY/TLS (skipped when skipwait=true)
+    if [ "${WATCHDOG_RUN:-false}" != "true" ]; then
+        vpn_ntp_wait || log_warn "NTP wait finished with errors — continuing start"
+    fi
+
     watchdog_mark_desired
 
     # Repair empty profiles so Start always has all-in/direct/block like XrayUI import
     ensure_xray_scaffold
+
+    # Sync simple LAN device mode into routing.policies before firewall
+    vpn_lan_policies_sync 2>/dev/null || true
 
     migrate_tun_inbounds_config
 
@@ -153,6 +161,9 @@ start() {
     fi
 
     configure_firewall
+    vpn_kill_switch_apply 2>/dev/null || true
+    vpn_ipv6_block_apply 2>/dev/null || true
+    vpn_preflight_run 2>/dev/null || true
 }
 
 stop() {
@@ -161,6 +172,8 @@ stop() {
     log_info "Stopping $ADDON_TITLE"
 
     watchdog_clear_desired
+    vpn_kill_switch_clear 2>/dev/null || true
+    vpn_ipv6_block_clear 2>/dev/null || true
 
     update_loading_progress "Stopping $ADDON_TITLE"
 
