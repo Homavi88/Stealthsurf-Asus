@@ -133,6 +133,10 @@ contains_ipv6() {
 }
 
 is_ipv6_enabled() {
+    # Product mode: ignore = do not include IPv6 in SurfGate transparent proxy
+    case "${ipv6_mode:-proxy}" in
+    ignore | block) return 1 ;;
+    esac
 
     # 1) kernel has it
     [ -f /proc/net/if_inet6 ] || return 1
@@ -248,6 +252,8 @@ configure_firewall() {
 }
 
 cleanup_firewall() {
+    vpn_kill_switch_clear 2>/dev/null || true
+    vpn_ipv6_block_clear 2>/dev/null || true
     with_firewall_lock cleanup_firewall_rules
 }
 
@@ -636,6 +642,11 @@ configure_firewall_client() {
 
     source_nets_v4="$source_nets_v4 $wgs_addr $ipsec_addr"
     source_nets_v4=$(printf '%s\n' $source_nets_v4 | sort -u)
+    # Guest Wi-Fi: direct = exclude guest bridges from transparent proxy
+    if type vpn_filter_source_nets >/dev/null 2>&1; then
+        source_nets_v4=$(vpn_filter_source_nets "$source_nets_v4")
+        source_nets_v4=$(printf '%s\n' $source_nets_v4 | sed '/^$/d' | sort -u)
+    fi
 
     source_nets="$source_nets_v4 $source_nets_v6"
 
