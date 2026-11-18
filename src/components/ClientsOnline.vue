@@ -1,18 +1,18 @@
 <template>
-  <div class="formfontdesc" v-if="enable_check()">
-    <table class="FormTable SettingsTable tableApi_table">
+  <div class="formfontdesc ss-clients-wrap" v-if="enable_check()">
+    <table class="FormTable SettingsTable tableApi_table ss-data-table ss-clients-table">
       <thead>
         <tr>
-          <td colspan="4">{{ $t('com.ClientsOnline.title') }}</td>
+          <th colspan="4">{{ $t('com.ClientsOnline.title') }}</th>
         </tr>
-      </thead>
-      <tbody>
         <tr class="row_title">
           <th>{{ $t('com.ClientsOnline.label_ip') }}</th>
           <th>Name</th>
           <th>MAC</th>
           <th>{{ $t('com.ClientsOnline.label_client') }}</th>
         </tr>
+      </thead>
+      <tbody>
         <tr v-for="client in clients" :key="clientKey(client)" class="data_tr">
           <td>
             <span class="label label-success">{{ $t('com.ClientsOnline.online') }}</span>
@@ -26,7 +26,7 @@
           </td>
         </tr>
         <tr v-if="!clients.length" class="data_tr">
-          <td colspan="4" style="color: #ffcc00">{{ $t('com.ClientsOnline.noone_is_online') }}</td>
+          <td colspan="4" class="ss-empty">{{ $t('com.ClientsOnline.noone_is_online') }}</td>
         </tr>
       </tbody>
     </table>

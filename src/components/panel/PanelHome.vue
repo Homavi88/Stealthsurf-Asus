@@ -27,58 +27,93 @@
       </div>
     </section>
 
-    <div class="ss-resources ss-mono">
-      <span>cpu <strong>{{ live.cpu_pct }}%</strong></span>
-      <span>mem <strong>{{ memLabel }}</strong></span>
-      <span>rss <strong>{{ live.app_rss_mb }} MB</strong></span>
-    </div>
+    <table class="ss-data-table ss-metrics-table ss-mono" aria-label="system metrics">
+      <thead>
+        <tr>
+          <th>cpu</th>
+          <th>mem</th>
+          <th>rss</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>{{ live.cpu_pct }}%</strong></td>
+          <td><strong>{{ memLabel }}</strong></td>
+          <td><strong>{{ live.app_rss_mb }} MB</strong></td>
+        </tr>
+      </tbody>
+    </table>
 
-    <div class="ss-card">
+    <div class="ss-card ss-card-flush">
       <p class="ss-card-title">throughput</p>
-      <div class="ss-speed-grid ss-mono">
-        <div class="ss-speed-col">
-          <h4>vpn</h4>
-          <div class="ss-speed-row">rx <b>{{ fmtRate(rates.vpnDown) }}</b></div>
-          <div class="ss-speed-row">tx <b>{{ fmtRate(rates.vpnUp) }}</b></div>
-          <div class="ss-speed-row">Σ <b>{{ fmtBytes(vol.vpn) }}</b></div>
-        </div>
-        <div class="ss-speed-col">
-          <h4>direct</h4>
-          <div class="ss-speed-row">rx <b>{{ fmtRate(rates.directDown) }}</b></div>
-          <div class="ss-speed-row">tx <b>{{ fmtRate(rates.directUp) }}</b></div>
-          <div class="ss-speed-row">Σ <b>{{ fmtBytes(vol.direct) }}</b></div>
-        </div>
-      </div>
+      <table class="ss-data-table ss-mono" aria-label="throughput">
+        <thead>
+          <tr>
+            <th></th>
+            <th>rx</th>
+            <th>tx</th>
+            <th>Σ</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">vpn</th>
+            <td>{{ fmtRate(rates.vpnDown) }}</td>
+            <td>{{ fmtRate(rates.vpnUp) }}</td>
+            <td>{{ fmtBytes(vol.vpn) }}</td>
+          </tr>
+          <tr>
+            <th scope="row">direct</th>
+            <td>{{ fmtRate(rates.directDown) }}</td>
+            <td>{{ fmtRate(rates.directUp) }}</td>
+            <td>{{ fmtBytes(vol.direct) }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
-    <div class="ss-card">
-      <div style="display: flex; justify-content: space-between; align-items: center">
+    <div class="ss-card ss-card-flush">
+      <div class="ss-card-head">
         <p class="ss-card-title" style="margin: 0">endpoints</p>
         <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px; box-shadow: none" title="refresh" @click="refreshCatalog">
           ↻
         </button>
       </div>
-      <div
-        v-for="c in locations"
-        :key="String(c.id)"
-        class="ss-loc-item"
-        :class="{ 'is-active': selectedId === c.id }"
-        @click="selectedId = c.id"
-      >
-        <div class="ss-loc-flag">{{ flagFor(c) }}</div>
-        <div class="ss-loc-meta">
-          <div class="name">{{ c.title || `ss-${c.id}` }}</div>
-          <div class="sub">{{ c.protocol || 'vless' }} · {{ c._ss_location_title || c.location || '—' }}</div>
-          <div class="online">{{ c.is_online === false ? 'offline' : 'online' }}</div>
-        </div>
-        <div class="ss-loc-vol ss-mono">
-          <div>{{ fmtBytes(volumeFor(c)) }}</div>
-          <div v-if="isImported(c)" style="color: var(--ss-green); font-weight: 600">in outbounds</div>
-        </div>
-      </div>
-      <p v-if="!locations.length" style="color: var(--ss-muted); font-size: 13px; margin: 8px 0 0">
-        no configs — settings → account → sync catalog
-      </p>
+      <table class="ss-data-table ss-endpoints-table" aria-label="endpoints">
+        <thead>
+          <tr>
+            <th></th>
+            <th>endpoint</th>
+            <th>proto</th>
+            <th>status</th>
+            <th class="ss-num">volume</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="c in locations"
+            :key="String(c.id)"
+            class="ss-row-click"
+            :class="{ 'is-active': selectedId === c.id }"
+            @click="selectedId = c.id"
+          >
+            <td class="ss-flag-cell">{{ flagFor(c) }}</td>
+            <td>
+              <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
+              <div class="ss-cell-sub ss-mono">{{ c._ss_location_title || c.location || '—' }}</div>
+              <div v-if="isImported(c)" class="ss-cell-tag">in outbounds</div>
+            </td>
+            <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
+            <td class="ss-mono" :class="c.is_online === false ? 'is-off' : 'is-on'">
+              {{ c.is_online === false ? 'offline' : 'online' }}
+            </td>
+            <td class="ss-num ss-mono">{{ fmtBytes(volumeFor(c)) }}</td>
+          </tr>
+          <tr v-if="!locations.length">
+            <td colspan="5" class="ss-empty">no configs — settings → account → sync catalog</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <div class="ss-card">
