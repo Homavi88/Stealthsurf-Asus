@@ -55,6 +55,11 @@ XRAY_CONFIG_DIR="/opt/etc/xray/$ADDON_TAG"
 DEFAULT_XRAY_PROFILE_NAME="config.json"
 DEFAULT_GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
 DEFAULT_GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+# Fallback when Loyalsoldier GitHub releases are unreachable (RU/blocked regions)
+FALLBACK_GEOIP_URL="https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geoip.dat"
+FALLBACK_GEOSITE_URL="https://raw.githubusercontent.com/runetfreedom/russia-v2ray-rules-dat/release/geosite.dat"
+# Reject truncated / HTML error pages
+GEODATA_MIN_BYTES=102400
 CUSTOM_GEODATA_NAME="$ADDON_TAG"
 
 XRAYUI_CONFIG_FILE="/opt/etc/$ADDON_TAG.conf"

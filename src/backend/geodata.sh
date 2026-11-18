@@ -1,28 +1,65 @@
 #!/bin/sh
 # shellcheck disable=SC2034  # codacy:Unused variables
 
+# Download one community geodat with primary + regional fallback URLs.
+geodata_fetch_one() {
+    local kind="$1" # geosite | geoip
+    local primary="$2"
+    local fallback="$3"
+    local out="$4"
+    local min_bytes="${GEODATA_MIN_BYTES:-102400}"
+
+    if github_download "$primary" "$out" "$min_bytes" "${kind}.dat"; then
+        return 0
+    fi
+
+    if [ -n "$fallback" ] && [ "$fallback" != "$primary" ]; then
+        log_warn "Primary ${kind}.dat failed — trying regional fallback…"
+        type install_ui_status >/dev/null 2>&1 && install_ui_status warn "fallback ${kind}.dat"
+        if github_download "$fallback" "$out" "$min_bytes" "${kind}.dat (fallback)"; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
 update_community_geodata() {
     update_loading_progress "Updating community geodata files..."
     load_xrayui_config
 
-    local geositeurl=$(github_proxy_url "${geosite_url:-$DEFAULT_GEOSITE_URL}")
-    local geoipurl=$(github_proxy_url "${geoip_url:-$DEFAULT_GEOIP_URL}")
+    local geosite_primary="${geosite_url:-$DEFAULT_GEOSITE_URL}"
+    local geoip_primary="${geoip_url:-$DEFAULT_GEOIP_URL}"
+    # Only use runetfreedom fallback when user did not override URLs
+    local geosite_fallback="" geoip_fallback=""
+    if [ -z "${geosite_url:-}" ] || [ "$geosite_url" = "null" ]; then
+        geosite_fallback="$FALLBACK_GEOSITE_URL"
+    fi
+    if [ -z "${geoip_url:-}" ] || [ "$geoip_url" = "null" ]; then
+        geoip_fallback="$FALLBACK_GEOIP_URL"
+    fi
 
-    local xray_dir=$(dirname "$(which xray)")
+    local xray_bin xray_dir
+    xray_bin=$(which xray 2>/dev/null || true)
+    if [ -z "$xray_bin" ]; then
+        log_error "xray binary not found — cannot place geosite/geoip"
+        type install_ui_status >/dev/null 2>&1 && install_ui_status fail "geodata (no xray)"
+        return 1
+    fi
+    xray_dir=$(dirname "$xray_bin")
+    mkdir -p "$ADDON_TMP_DIR" "$xray_dir" 2>/dev/null || true
 
-    log_info "Downloading geosite.dat from $geositeurl..."
-    update_loading_progress "Downloading geosite.dat..."
-    if ! curl -fL "$geositeurl" -o "$ADDON_TMP_DIR/geosite.dat" || [ ! -s "$ADDON_TMP_DIR/geosite.dat" ]; then
-        rm -f "$ADDON_TMP_DIR/geosite.dat"
-        log_error "Failed to download geosite.dat."
+    type install_ui_status >/dev/null 2>&1 && install_ui_status run "geosite.dat + geoip.dat → $xray_dir"
+
+    if ! geodata_fetch_one geosite "$geosite_primary" "$geosite_fallback" "$ADDON_TMP_DIR/geosite.dat"; then
+        rm -f "$ADDON_TMP_DIR/geosite.dat" "$ADDON_TMP_DIR/geoip.dat"
+        log_error "Failed to download geosite.dat (mirrors + fallback exhausted)."
         return 1
     fi
 
-    log_info "Downloading geoip.dat from $geoipurl..."
-    update_loading_progress "Downloading geoip.dat..."
-    if ! curl -fL "$geoipurl" -o "$ADDON_TMP_DIR/geoip.dat" || [ ! -s "$ADDON_TMP_DIR/geoip.dat" ]; then
+    if ! geodata_fetch_one geoip "$geoip_primary" "$geoip_fallback" "$ADDON_TMP_DIR/geoip.dat"; then
         rm -f "$ADDON_TMP_DIR/geosite.dat" "$ADDON_TMP_DIR/geoip.dat"
-        log_error "Failed to download geoip.dat."
+        log_error "Failed to download geoip.dat (mirrors + fallback exhausted)."
         return 1
     fi
 
@@ -31,6 +68,7 @@ update_community_geodata() {
         cmp -s "$ADDON_TMP_DIR/geoip.dat" "$xray_dir/geoip.dat"; then
         rm -f "$ADDON_TMP_DIR/geosite.dat" "$ADDON_TMP_DIR/geoip.dat"
         log_ok "Community geodata files are already up to date."
+        type install_ui_status >/dev/null 2>&1 && install_ui_status ok "geodata already current"
         return 0
     fi
 
@@ -40,9 +78,11 @@ update_community_geodata() {
     mv -f "$ADDON_TMP_DIR/geoip.dat" "$xray_dir/geoip.dat"
 
     if [ -f "$xray_dir/geosite.dat" ] && [ -f "$xray_dir/geoip.dat" ]; then
-        log_ok "Files successfully placed in $xray_dir."
+        log_ok "Geodata placed in $xray_dir ($(install_ui_humansize "$(wc -c <"$xray_dir/geosite.dat" | tr -d ' ')") + $(install_ui_humansize "$(wc -c <"$xray_dir/geoip.dat" | tr -d ' ')"))"
+        type install_ui_status >/dev/null 2>&1 && install_ui_status ok "geosite.dat + geoip.dat installed"
     else
         log_error "Failed to place geosite.dat/geoip.dat in $xray_dir."
+        type install_ui_status >/dev/null 2>&1 && install_ui_status fail "place geodata"
         return 1
     fi
 

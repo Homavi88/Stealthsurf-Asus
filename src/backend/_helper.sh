@@ -119,6 +119,147 @@ log_box() {
     printf '%b╚%s╝%b\n' "$color" "$border" "$CRESET"
 }
 
+# ── SurfGate colorful install progress (TTY) ──────────────────────────────
+INSTALL_UI_TOTAL=1
+INSTALL_UI_STEP=0
+INSTALL_UI_WIDTH=28
+CBAR='\033[0;36m'
+CDIM='\033[0;90m'
+CBLD='\033[1m'
+
+install_ui_humansize() {
+    local n="$1"
+    if [ -z "$n" ]; then
+        echo "?"
+        return
+    fi
+    if [ "$n" -ge 1048576 ] 2>/dev/null; then
+        awk -v n="$n" 'BEGIN { printf "%.1f MB", n/1048576 }'
+    elif [ "$n" -ge 1024 ] 2>/dev/null; then
+        awk -v n="$n" 'BEGIN { printf "%.0f KB", n/1024 }'
+    else
+        printf '%s B' "$n"
+    fi
+}
+
+install_ui_bar_draw() {
+    local pct="$1"
+    local filled empty i bar
+    [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+    [ "$pct" -lt 0 ] 2>/dev/null && pct=0
+    filled=$((pct * INSTALL_UI_WIDTH / 100))
+    empty=$((INSTALL_UI_WIDTH - filled))
+    bar=''
+    i=0
+    while [ "$i" -lt "$filled" ]; do
+        bar="${bar}█"
+        i=$((i + 1))
+    done
+    i=0
+    while [ "$i" -lt "$empty" ]; do
+        bar="${bar}░"
+        i=$((i + 1))
+    done
+    printf '%s' "$bar"
+}
+
+install_ui_begin() {
+    local title="${1:-SurfGate install}"
+    local total="${2:-10}"
+    INSTALL_UI_TOTAL=$total
+    INSTALL_UI_STEP=0
+
+    if [ "${USE_COLOR:-0}" -eq 1 ]; then
+        printf '\n'
+        printf '%b┌─ %b%s%b ─────────────────────────────┐%b\n' "$CBAR" "$CBLD" "$title" "$CBAR" "$CRESET"
+        printf '%b│%b colorful progress · modules · geodata %b│%b\n' "$CBAR" "$CDIM" "$CBAR" "$CRESET"
+        printf '%b└──────────────────────────────────────────────┘%b\n' "$CBAR" "$CRESET"
+    else
+        log_info "=== $title ($total steps) ==="
+    fi
+}
+
+install_ui_step() {
+    local label="$1"
+    local pct
+    INSTALL_UI_STEP=$((INSTALL_UI_STEP + 1))
+    [ "$INSTALL_UI_TOTAL" -lt 1 ] && INSTALL_UI_TOTAL=1
+    pct=$((INSTALL_UI_STEP * 100 / INSTALL_UI_TOTAL))
+    [ "$pct" -gt 100 ] && pct=100
+
+    update_loading_progress "$label" "$pct" 2>/dev/null || true
+
+    if [ "${USE_COLOR:-0}" -eq 1 ]; then
+        printf '%b[%b%s%b]%b %3d%%  %b%2d/%d%b  %s\n' \
+            "$CDIM" "$CBAR" "$(install_ui_bar_draw "$pct")" "$CDIM" "$CRESET" \
+            "$pct" "$CDIM" "$INSTALL_UI_STEP" "$INSTALL_UI_TOTAL" "$CRESET" "$label"
+    else
+        log_info "[$pct%] ($INSTALL_UI_STEP/$INSTALL_UI_TOTAL) $label"
+    fi
+}
+
+install_ui_status() {
+    local kind="$1"
+    local msg="$2"
+    local mark color
+
+    case "$kind" in
+    ok | success)
+        mark='✓'
+        color=$CSUC
+        ;;
+    fail | error)
+        mark='✗'
+        color=$CERR
+        ;;
+    skip | warn)
+        mark='!'
+        color=$CWARN
+        ;;
+    run | info)
+        mark='›'
+        color=$CINFO
+        ;;
+    *)
+        mark='·'
+        color=$CLOG
+        ;;
+    esac
+
+    if [ "${USE_COLOR:-0}" -eq 1 ]; then
+        printf '  %b%s%b %s\n' "$color" "$mark" "$CRESET" "$msg"
+    else
+        log_info "[$kind] $msg"
+    fi
+}
+
+install_ui_fetch() {
+    local label="$1"
+    local url="$2"
+    local attempt="$3"
+    local short
+    short=$(printf '%s' "$url" | sed 's#https://##; s#http://##')
+    short=$(printf '%.64s' "$short")
+    if [ "${USE_COLOR:-0}" -eq 1 ]; then
+        printf '  %b↓%b %s  %btry %s%b  %b%s%b\n' \
+            "$CBAR" "$CRESET" "$label" "$CDIM" "$attempt" "$CRESET" "$CDIM" "$short" "$CRESET"
+    else
+        log_info "↓ $label (try $attempt)"
+    fi
+}
+
+install_ui_end() {
+    local ok_msg="${1:-Installation finished}"
+    if [ "${USE_COLOR:-0}" -eq 1 ]; then
+        printf '%b[%b%s%b]%b 100%%  done\n' \
+            "$CDIM" "$CSUC" "$(install_ui_bar_draw 100)" "$CDIM" "$CRESET"
+        install_ui_status ok "$ok_msg"
+        printf '\n'
+    else
+        log_ok "$ok_msg"
+    fi
+}
+
 # PATH puts /opt/sbin first, so a bare `modprobe` resolves to Entware's kmod,
 # which can fail to load firmware modules. Prefer the firmware's own modprobe.
 kmod_load() {
