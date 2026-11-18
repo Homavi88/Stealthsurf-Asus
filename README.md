@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./docs/screenshots/01-status-running.png" alt="SurfGate light panel on :1131" width="420">
+  <img src="./docs/screenshots/01-status-running.png" alt="SurfGate panel on :1131" width="420">
 </p>
 
 <h1 align="center">SurfGate</h1>
@@ -140,7 +140,7 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 
 ## Веб-интерфейс
 
-Основной UI — **светлая панель SurfGate** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → SurfGate** сохраняет классический FormTable.
+Основной UI — **панель SurfGate** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → SurfGate** сохраняет классический FormTable.
 
 <p align="center">
   <img src="./docs/screenshots/01-status-running.png" alt="SurfGate home — connected" width="420">
