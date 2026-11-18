@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.12] - 2026-11-18
+
+### Geek panel, install UX, geodata, VPN devices
+
+- Standalone `:1131` panel: dark geek graphite + IBM Plex Sans/Mono, HUD status, bordered console tables (metrics / throughput / endpoints / clients)
+- Colorful TTY install progress (bar + per-module status) in root `install.sh` and addon `install`
+- Hardened geosite/geoip download: curl-first `github_download`, mirrors, size check, runetfreedom fallback
+- VPN device log: LAN clients from access log enriched with IP / name / MAC (`surfgate devices`, Clients Online)
+
 ## [1.4.11] - 2026-11-18
 
 ### Isolate SurfGate runtime from official StealthSurf
