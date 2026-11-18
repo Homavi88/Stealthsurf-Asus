@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.9] - 2026-11-18
+
+### Force panel-httpd restart after upgrade (bootstrap HTTP 500)
+
+- Install always `panel_stop` then start so a stale 1.4.7 CGI process cannot keep serving
+- `panel_start` replaces the process when the bundled binary is newer / not current
+- Run `panel-httpd` from `/tmp/stealthsurf/panel-httpd` (copy) to avoid `/jffs` noexec
+- Bootstrap never returns HTTP 500: in-process handler + minimal JSON fallback
+- Better SPA error text when bootstrap fails
+
+---
+
 ## [1.4.8] - 2026-11-18
 
 ### Panel bootstrap HTTP 500

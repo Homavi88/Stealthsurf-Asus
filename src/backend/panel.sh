@@ -370,7 +370,14 @@ panel_start_bundled_once() {
     # $1 = listen addr (IP:PORT or :PORT); $2 = panel-httpd binary
     local listen_arg="$1"
     local bin="$2"
-    # -addon: call stealthsurf via /bin/sh (no CGI shebang on /jffs → no HTTP 500 on noexec/+x)
+    # Run from /tmp so (a) noexec /jffs cannot block exec, (b) package replace
+    # always starts a freshly copied 1.4.9+ binary after panel_stop.
+    local runbin="/tmp/stealthsurf/panel-httpd"
+    mkdir -p /tmp/stealthsurf
+    if cp -f "$bin" "$runbin" 2>/dev/null && chmod 0755 "$runbin" 2>/dev/null; then
+        bin="$runbin"
+    fi
+    # -addon: call stealthsurf via /bin/sh (no CGI shebang on /jffs → no HTTP 500)
     "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" -addon "${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}" >>"$PANEL_LOG" 2>&1 &
     echo $! >"$PANEL_PIDFILE"
     sleep 1
@@ -408,6 +415,32 @@ panel_mark_started() {
     am_settings_set stealthsurf_panel_url "$(panel_url)" 2>/dev/null || true
 }
 
+# True when the running panel process is already the current bundled panel-httpd.
+panel_running_is_current_bundled() {
+    local pid bundled runbin exe cmd
+    pid=$(cat "$PANEL_PIDFILE" 2>/dev/null) || return 1
+    case "$pid" in
+    '' | *[!0-9]*) return 1 ;;
+    esac
+    kill -0 "$pid" 2>/dev/null || return 1
+    bundled=$(panel_bundled_httpd 2>/dev/null) || return 1
+    runbin="/tmp/stealthsurf/panel-httpd"
+    # Package newer than pidfile → stale process from previous version.
+    if [ -f "$bundled" ] && [ -f "$PANEL_PIDFILE" ] && [ "$bundled" -nt "$PANEL_PIDFILE" ]; then
+        return 1
+    fi
+    exe=$(readlink "/proc/$pid/exe" 2>/dev/null || true)
+    case "$exe" in
+    *" (deleted)") return 1 ;;
+    "$bundled" | "$runbin") return 0 ;;
+    esac
+    cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
+    case "$cmd" in
+    *"$bundled"* | *"/tmp/stealthsurf/panel-httpd"*) return 0 ;;
+    esac
+    return 1
+}
+
 panel_start() {
     panel_load_settings
     mkdir -p /tmp/stealthsurf
@@ -419,13 +452,19 @@ panel_start() {
     }
     panel_ensure_secondary_ip
 
+    # After package upgrades the old panel-httpd keeps serving until killed.
+    # Only skip start when the *current* bundled binary is already running.
     if panel_is_running; then
-        log_info "Standalone panel already running on $(panel_url)"
-        return 0
+        if panel_running_is_current_bundled; then
+            log_info "Standalone panel already running on $(panel_url)"
+            return 0
+        fi
+        log_warn "panel: replacing stale panel process with current bundled binary"
+        panel_stop
     fi
 
     panel_ensure_httpd || {
-        log_error "panel: no web server. Reinstall 1.4.7+ package (includes bin/panel-httpd) or: opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias"
+        log_error "panel: no web server. Reinstall 1.4.9+ package (includes bin/panel-httpd) or: opkg install lighttpd lighttpd-mod-cgi lighttpd-mod-alias"
         return 1
     }
 

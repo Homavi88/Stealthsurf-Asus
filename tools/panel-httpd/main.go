@@ -1,19 +1,20 @@
-// Minimal static+CGI HTTP server for SurfGate standalone panel on Asuswrt-Merlin.
+// Minimal static HTTP server for SurfGate standalone panel on Asuswrt-Merlin.
 // Bundled into the package so the panel works when opkg/BusyBox httpd/lighttpd are unavailable.
 //
-// Critical endpoints (/cgi-bin/bootstrap|status|api) call the addon script via /bin/sh
-// (not via CGI shebang exec on /jffs) so missing +x / noexec cannot yield HTTP 500.
+// /cgi-bin/bootstrap|status|api are handled in-process (addon via /bin/sh).
+// Never returns opaque HTTP 500 for those endpoints — JSON errors or a minimal
+// bootstrap fallback so the SPA can always load after an upgrade.
 package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
-	"net/http/cgi"
 	"os"
 	"os/exec"
 	"path"
@@ -22,7 +23,10 @@ import (
 	"time"
 )
 
-const defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+const (
+	version     = "1.4.9"
+	defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+)
 
 func main() {
 	root := flag.String("root", ".", "document root (panel web root)")
@@ -41,52 +45,45 @@ func main() {
 
 	mux := http.NewServeMux()
 
-	mux.HandleFunc("/cgi-bin/bootstrap", func(w http.ResponseWriter, r *http.Request) {
-		runAddonJSON(w, addonPath, nil, nil, "panel", "bootstrap")
-	})
-	mux.HandleFunc("/cgi-bin/status", func(w http.ResponseWriter, r *http.Request) {
-		runAddonJSON(w, addonPath, nil, nil, "panel", "live")
-	})
-	mux.HandleFunc("/cgi-bin/api", func(w http.ResponseWriter, r *http.Request) {
-		var stdin io.Reader
-		extra := []string{"REQUEST_METHOD=" + r.Method}
-		if r.Method == http.MethodPost || r.Method == http.MethodPut {
-			stdin = r.Body
-			if r.ContentLength > 0 {
-				extra = append(extra, fmt.Sprintf("CONTENT_LENGTH=%d", r.ContentLength))
+	// Exact paths (+ trailing-slash variants) — never CGI shebang exec.
+	for _, patt := range []string{"/cgi-bin/bootstrap", "/cgi-bin/bootstrap/"} {
+		mux.HandleFunc(patt, withRecover(func(w http.ResponseWriter, r *http.Request) {
+			handleBootstrap(w, addonPath)
+		}))
+	}
+	for _, patt := range []string{"/cgi-bin/status", "/cgi-bin/status/"} {
+		mux.HandleFunc(patt, withRecover(func(w http.ResponseWriter, r *http.Request) {
+			runAddonJSON(w, addonPath, nil, nil, false, "panel", "live")
+		}))
+	}
+	for _, patt := range []string{"/cgi-bin/api", "/cgi-bin/api/"} {
+		mux.HandleFunc(patt, withRecover(func(w http.ResponseWriter, r *http.Request) {
+			var stdin io.Reader
+			extra := []string{"REQUEST_METHOD=" + r.Method}
+			if r.Method == http.MethodPost || r.Method == http.MethodPut {
+				stdin = r.Body
+				if r.ContentLength > 0 {
+					extra = append(extra, fmt.Sprintf("CONTENT_LENGTH=%d", r.ContentLength))
+				}
 			}
-		}
-		runAddonJSON(w, addonPath, stdin, extra, "panel", "api")
-	})
+			runAddonJSON(w, addonPath, stdin, extra, false, "panel", "api")
+		}))
+	}
+	mux.HandleFunc("/cgi-bin/ping", withRecover(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, fmt.Sprintf(`{"ok":true,"panel_httpd":%q,"addon":%q}`, version, addonPath))
+	}))
 
-	// Generic CGI fallback via /bin/sh (works even when script lacks +x / noexec).
-	mux.HandleFunc("/cgi-bin/", func(w http.ResponseWriter, r *http.Request) {
+	// Unknown CGI names → 404 JSON (never fork CGI shebang on /jffs).
+	mux.HandleFunc("/cgi-bin/", withRecover(func(w http.ResponseWriter, r *http.Request) {
 		name := strings.TrimPrefix(r.URL.Path, "/cgi-bin/")
-		name = path.Clean("/" + name)
-		name = strings.TrimPrefix(name, "/")
-		if name == "" || name == "." || strings.HasPrefix(name, "../") || strings.Contains(name, "/") {
-			http.NotFound(w, r)
-			return
-		}
-		script := filepath.Join(cgiDir, name)
-		if st, err := os.Stat(script); err != nil || st.IsDir() {
-			http.NotFound(w, r)
-			return
-		}
-		h := &cgi.Handler{
-			Path:       "/bin/sh",
-			Args:       []string{script},
-			Dir:        cgiDir,
-			InheritEnv: []string{"HOME", "USER", "TZ", "LANG"},
-			Env:        []string{"PATH=" + defaultPATH, "ADDON_SCRIPT=" + addonPath},
-		}
-		h.ServeHTTP(w, r)
-	})
+		name = strings.Trim(path.Clean("/"+name), "/")
+		writeJSON(w, fmt.Sprintf(`{"ok":false,"error":"unknown cgi %q"}`, name))
+	}))
 
 	fileServer := http.FileServer(http.Dir(absRoot))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/cgi-bin/") {
-			http.NotFound(w, r)
+			writeJSON(w, `{"ok":false,"error":"not found"}`)
 			return
 		}
 		fileServer.ServeHTTP(w, r)
@@ -101,9 +98,21 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen %s: %v", addr, err)
 	}
-	fmt.Fprintf(os.Stderr, "panel-httpd listening on %s root=%s addon=%s\n", ln.Addr().String(), absRoot, addonPath)
+	fmt.Fprintf(os.Stderr, "panel-httpd %s listening on %s root=%s addon=%s\n", version, ln.Addr().String(), absRoot, addonPath)
 	if err := http.Serve(ln, mux); err != nil {
 		log.Fatal(err)
+	}
+}
+
+func withRecover(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic on %s: %v", r.URL.Path, rec)
+				writeJSON(w, fmt.Sprintf(`{"ok":false,"error":%q}`, fmt.Sprintf("panic: %v", rec)))
+			}
+		}()
+		next(w, r)
 	}
 }
 
@@ -126,10 +135,26 @@ func resolveAddon(preferred string) string {
 	return preferred
 }
 
-func runAddonJSON(w http.ResponseWriter, addon string, stdin io.Reader, extraEnv []string, argv ...string) {
-	if addon == "" {
-		writeJSON(w, `{"ok":false,"error":"addon script missing"}`)
+func handleBootstrap(w http.ResponseWriter, addon string) {
+	// Prefer live addon JSON; on any failure serve a minimal valid bootstrap
+	// so the SPA can load (router fields empty / defaults).
+	ok := runAddonJSON(w, addon, nil, nil, true, "panel", "bootstrap")
+	if ok {
 		return
+	}
+	log.Printf("bootstrap: addon failed — serving minimal fallback")
+	writeJSON(w, minimalBootstrapJSON())
+}
+
+// runAddonJSON returns true when a usable JSON object was written.
+// When allowEmptyFail is true and the addon fails, it writes nothing (caller falls back).
+func runAddonJSON(w http.ResponseWriter, addon string, stdin io.Reader, extraEnv []string, allowEmptyFail bool, argv ...string) bool {
+	if addon == "" {
+		if allowEmptyFail {
+			return false
+		}
+		writeJSON(w, `{"ok":false,"error":"addon script missing"}`)
+		return true
 	}
 
 	cmd := exec.Command("/bin/sh", append([]string{addon}, argv...)...)
@@ -142,10 +167,12 @@ func runAddonJSON(w http.ResponseWriter, addon string, stdin io.Reader, extraEnv
 		cmd.Stdin = stdin
 	}
 
-	var stderr bytes.Buffer
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	out, err := runCmdOutput(cmd, 45*time.Second)
+	err := runCmd(cmd, 45*time.Second)
+	out := stdout.Bytes()
 	if err != nil {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
@@ -155,60 +182,94 @@ func runAddonJSON(w http.ResponseWriter, addon string, stdin io.Reader, extraEnv
 			msg = msg[:200]
 		}
 		log.Printf("addon %v: %v (%s)", argv, err, msg)
+		if allowEmptyFail {
+			return false
+		}
 		writeJSON(w, fmt.Sprintf(`{"ok":false,"error":%q}`, "addon: "+msg))
-		return
+		return true
 	}
 
 	trimmed := strings.TrimSpace(string(out))
 	if trimmed == "" {
+		if allowEmptyFail {
+			return false
+		}
 		writeJSON(w, `{"ok":false,"error":"empty addon response"}`)
-		return
+		return true
 	}
-	// Addon may leak log lines on stdout before JSON — keep the last object.
 	if !strings.HasPrefix(trimmed, "{") {
 		if i := strings.LastIndex(trimmed, "{"); i >= 0 {
 			trimmed = trimmed[i:]
 		}
 	}
+	if !json.Valid([]byte(trimmed)) {
+		log.Printf("addon %v: invalid JSON: %q", argv, truncate(trimmed, 120))
+		if allowEmptyFail {
+			return false
+		}
+		writeJSON(w, `{"ok":false,"error":"invalid addon JSON"}`)
+		return true
+	}
+	// For bootstrap, require ok+xray shape when possible.
+	if allowEmptyFail {
+		var probe struct {
+			OK   bool            `json:"ok"`
+			Xray json.RawMessage `json:"xray"`
+		}
+		if err := json.Unmarshal([]byte(trimmed), &probe); err != nil || !probe.OK || len(probe.Xray) == 0 {
+			return false
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Panel-Httpd", version)
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, trimmed)
 	if !strings.HasSuffix(trimmed, "\n") {
 		_, _ = io.WriteString(w, "\n")
 	}
+	return true
 }
 
-func runCmdOutput(cmd *exec.Cmd, d time.Duration) ([]byte, error) {
-	type result struct {
-		out []byte
-		err error
+func minimalBootstrapJSON() string {
+	return `{"ok":true,"standalone":true,"panel":{"url":"http://0.0.0.0:1131/","ip":"0.0.0.0","port":1131},"xray":{"router":{"name":"","firmware":"","language":"en","ip":"","territory":"","wan_ip":"","wan_connected":false,"features":"","is_gnuton":false,"cpu":1,"devices_online":{},"devices":{}},"server":{"isRunning":false,"b4sni_isRunning":false},"custom_settings":{"stealthsurf_startup":"y"}},"panel_httpd":"` + version + `","fallback":true}`
+}
+
+func runCmd(cmd *exec.Cmd, d time.Duration) error {
+	if err := cmd.Start(); err != nil {
+		return err
 	}
-	ch := make(chan result, 1)
-	go func() {
-		out, err := cmd.Output()
-		ch <- result{out, err}
-	}()
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
 	select {
-	case r := <-ch:
-		return r.out, r.err
+	case err := <-done:
+		return err
 	case <-time.After(d):
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 		}
-		return nil, fmt.Errorf("timeout after %s", d)
+		<-done
+		return fmt.Errorf("timeout after %s", d)
 	}
 }
 
 func writeJSON(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Panel-Httpd", version)
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, body)
 	if !strings.HasSuffix(body, "\n") {
 		_, _ = io.WriteString(w, "\n")
 	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n]
 }
 
 func mergeEnv(base []string, overrides ...string) []string {

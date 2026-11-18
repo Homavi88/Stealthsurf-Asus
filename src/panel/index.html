@@ -113,8 +113,20 @@
         }
         fetch('/cgi-bin/bootstrap', { cache: 'no-store' })
           .then(function (r) {
-            if (!r.ok) throw new Error('bootstrap HTTP ' + r.status);
-            return r.json();
+            return r.text().then(function (t) {
+              var data = null;
+              try {
+                data = t ? JSON.parse(t) : null;
+              } catch (e) {
+                data = null;
+              }
+              if (!r.ok) {
+                var detail = (data && data.error) || t || '';
+                detail = String(detail).replace(/\s+/g, ' ').slice(0, 160);
+                throw new Error('bootstrap HTTP ' + r.status + (detail ? ' — ' + detail : ''));
+              }
+              return data;
+            });
           })
           .then(function (data) {
             if (!data || !data.ok || !data.xray) throw new Error((data && data.error) || 'bad bootstrap');
