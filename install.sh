@@ -26,23 +26,92 @@ OUR_SCRIPT="/jffs/scripts/ssurf"
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> SurfGate installer (1.4.11+ — panel :1131, path /jffs/addons/ssurf, script /jffs/scripts/ssurf)"
+# ── bootstrap TTY UI ──────────────────────────────────────────────────────
+C0='\033[0m'
+CCYAN='\033[0;36m'
+CGREEN='\033[0;32m'
+CRED='\033[0;31m'
+CYELLOW='\033[0;33m'
+CDIM='\033[0;90m'
+CBLD='\033[1m'
+if [ -t 1 ]; then UI_COLOR=1; else UI_COLOR=0; fi
+
+ui_say() {
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '%b›%b %s\n' "$CCYAN" "$C0" "$*"
+  else
+    echo "==> $*"
+  fi
+}
+ui_ok() {
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '  %b✓%b %s\n' "$CGREEN" "$C0" "$*"
+  else
+    echo "  [ok] $*"
+  fi
+}
+ui_fail() {
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '  %b✗%b %s\n' "$CRED" "$C0" "$*" >&2
+  else
+    echo "  [fail] $*" >&2
+  fi
+}
+ui_warn() {
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '  %b!%b %s\n' "$CYELLOW" "$C0" "$*"
+  else
+    echo "  [warn] $*"
+  fi
+}
+ui_bar() {
+  # $1 pct 0-100, $2 label
+  pct=$1
+  label=$2
+  w=28
+  [ "$pct" -gt 100 ] && pct=100
+  filled=$((pct * w / 100))
+  empty=$((w - filled))
+  bar=''
+  i=0
+  while [ "$i" -lt "$filled" ]; do bar="${bar}█"; i=$((i + 1)); done
+  i=0
+  while [ "$i" -lt "$empty" ]; do bar="${bar}░"; i=$((i + 1)); done
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '%b[%b%s%b]%b %3d%%  %s\n' "$CDIM" "$CCYAN" "$bar" "$CDIM" "$C0" "$pct" "$label"
+  else
+    echo "[$pct%] $label"
+  fi
+}
+ui_banner() {
+  if [ "$UI_COLOR" -eq 1 ]; then
+    printf '\n%b┌─ %sSurfGate bootstrap%s ─────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
+    printf '%b│%b 1.4.11+ · panel :1131 · path /jffs/addons/ssurf%b│%b\n' "$CCYAN" "$CDIM" "$CCYAN" "$C0"
+    printf '%b└──────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
+  else
+    echo "==> SurfGate installer (1.4.11+ — panel :1131, path /jffs/addons/ssurf, script /jffs/scripts/ssurf)"
+  fi
+}
+
+ui_banner
+ui_bar 5 "preflight"
 
 if [ ! -d /jffs ]; then
-  echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2
+  ui_fail "/jffs not found. Enable JFFS custom scripts in Administration → System."
   exit 1
 fi
 
 if [ ! -x /opt/bin/opkg ]; then
-  echo "ERROR: Entware (/opt/bin/opkg) is required." >&2
+  ui_fail "Entware (/opt/bin/opkg) is required."
   echo "See: https://github.com/Entware/Entware/wiki/Install-on-ASUSWRT" >&2
   exit 1
 fi
+ui_ok "JFFS + Entware"
 
 if [ -x "$OFFICIAL_DAEMON" ]; then
-  echo "==> Official StealthSurf VPN detected at $OFFICIAL_DIR (will not touch it)."
+  ui_ok "Official StealthSurf VPN detected at $OFFICIAL_DIR (untouched)"
 elif [ -d "$OFFICIAL_DIR" ]; then
-  echo "==> WARNING: $OFFICIAL_DIR exists without stealthsurf-routerd."
+  ui_warn "$OFFICIAL_DIR exists without stealthsurf-routerd"
   echo "    If you previously installed our addon into that path, it may have"
   echo "    overwritten the official package. Reinstall official with:"
   echo "      /opt/bin/curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"
@@ -74,28 +143,30 @@ ensure_https_fetch() {
   if find_https_fetch >/dev/null 2>&1; then
     return 0
   fi
-  echo "==> No HTTPS client found (BusyBox wget cannot download from GitHub)."
-  echo "==> Installing Entware curl..."
+  ui_say "No HTTPS client (BusyBox wget cannot download from GitHub) — installing curl"
   opkg update || true
   if ! opkg install curl; then
-    echo "ERROR: could not install curl. Run manually:" >&2
-    echo "  opkg update && opkg install curl" >&2
-    echo "  then re-run this installer." >&2
+    ui_fail "could not install curl. Run: opkg update && opkg install curl"
     exit 1
   fi
   find_https_fetch >/dev/null 2>&1 || {
-    echo "ERROR: curl installed but not found on PATH. Check /opt/bin/curl" >&2
+    ui_fail "curl installed but not found on PATH (/opt/bin/curl)"
     exit 1
   }
 }
 
 download_https() {
   # $1 = url, $2 = output path
-  local url="$1" out="$2" bin
+  url="$1"
+  out="$2"
   bin=$(find_https_fetch) || return 1
   case "$bin" in
   *curl)
-    "$bin" -fsSL --connect-timeout 30 --retry 3 -o "$out" "$url"
+    if [ "$UI_COLOR" -eq 1 ] && [ -t 2 ]; then
+      "$bin" -fL --connect-timeout 30 --retry 3 --progress-bar -o "$out" "$url" 2>&1
+    else
+      "$bin" -fsSL --connect-timeout 30 --retry 3 -o "$out" "$url"
+    fi
     ;;
   *wget)
     "$bin" -q --timeout=30 -O "$out" "$url"
@@ -104,6 +175,26 @@ download_https() {
     return 1
     ;;
   esac
+}
+
+# GitHub mirrors for blocked regions (same set as addon github.sh)
+download_https_mirrored() {
+  url="$1"
+  out="$2"
+  if download_https "$url" "$out" && [ -s "$out" ]; then
+    return 0
+  fi
+  for mirror in \
+    'https://ghfast.top/' \
+    'https://gh-proxy.com/' \
+    'https://cdn.gh-proxy.org/' \
+    'https://gitproxy.click/'; do
+    ui_warn "retry via $mirror"
+    if download_https "${mirror}${url}" "$out" && [ -s "$out" ]; then
+      return 0
+    fi
+  done
+  return 1
 }
 
 URL="https://github.com/${ADDON_REPO}/releases/latest/download/${ASSET}"
@@ -116,16 +207,19 @@ elif [ -n "$SCRIPT_DIR" ] && [ -s "$SCRIPT_DIR/packaged/$ASSET_LEGACY" ]; then
   LOCAL_TGZ="$SCRIPT_DIR/packaged/$ASSET_LEGACY"
 fi
 
+ui_bar 20 "fetch package"
 if [ -n "$LOCAL_TGZ" ]; then
-  echo "==> Using local package: $LOCAL_TGZ"
+  ui_say "Using local package: $LOCAL_TGZ"
   cp -f "$LOCAL_TGZ" "$TMP"
+  ui_ok "local $ASSET"
 else
   ensure_https_fetch
-  echo "==> Downloading $URL"
-  if ! download_https "$URL" "$TMP"; then
-    echo "==> $ASSET not on latest release yet — trying $ASSET_LEGACY"
-    if ! download_https "$URL_LEGACY" "$TMP"; then
-      echo "ERROR: download failed." >&2
+  ui_ok "HTTPS client: $(find_https_fetch)"
+  ui_say "Downloading $URL"
+  if ! download_https_mirrored "$URL" "$TMP"; then
+    ui_warn "$ASSET missing on latest — trying $ASSET_LEGACY"
+    if ! download_https_mirrored "$URL_LEGACY" "$TMP"; then
+      ui_fail "download failed"
       echo "  Tried: $URL" >&2
       echo "  And:   $URL_LEGACY" >&2
       echo "  Fetcher: $(find_https_fetch 2>/dev/null || echo none)" >&2
@@ -133,11 +227,13 @@ else
       exit 1
     fi
   fi
+  ui_ok "downloaded $(wc -c <"$TMP" | tr -d ' ') bytes"
 fi
 
 # Migrate our files accidentally left under the official path (no routerd).
+ui_bar 40 "prepare paths"
 if [ ! -x "$OFFICIAL_DAEMON" ] && [ -f "$OFFICIAL_DIR/index.asp" -o -f "$OFFICIAL_DIR/app.js" -o -f "$OFFICIAL_DIR/index.panel.html" ]; then
-  echo "==> Moving leftover Homavi88 files from $OFFICIAL_DIR → $OUR_DIR"
+  ui_say "Moving leftover Homavi88 files from $OFFICIAL_DIR → $OUR_DIR"
   mkdir -p "$OUR_DIR"
   for f in index.asp app.js index.panel.html panel stealthsurf; do
     if [ -e "$OFFICIAL_DIR/$f" ]; then
@@ -151,30 +247,32 @@ if [ ! -x "$OFFICIAL_DAEMON" ] && [ -f "$OFFICIAL_DIR/index.asp" -o -f "$OFFICIA
   fi
 fi
 
-echo "==> Extracting to $OUR_DIR"
+ui_bar 55 "extract → $OUR_DIR"
 rm -rf "$OUR_DIR"
 mkdir -p "$JFFS_ADDONS"
 # Archive root is ssurf/…
 tar -xzf "$TMP" -C "$JFFS_ADDONS"
 rm -f "$TMP"
+ui_ok "extracted"
 
 # Backward-compatible: old archives still packed as stealthsurf/
 if [ ! -f "$OUR_DIR/stealthsurf" ] && [ -f "$JFFS_ADDONS/stealthsurf/stealthsurf" ]; then
   if [ -x "$OFFICIAL_DAEMON" ]; then
-    echo "ERROR: got a legacy package root 'stealthsurf/' but official VPN is installed there." >&2
+    ui_fail "got a legacy package root 'stealthsurf/' but official VPN is installed there."
     echo "       Refusing to overwrite. Use a 1.2.1+ package (ssurf/)." >&2
     exit 1
   fi
-  echo "==> Legacy package layout (stealthsurf/) — relocating to $OUR_DIR"
+  ui_warn "Legacy package layout (stealthsurf/) — relocating to $OUR_DIR"
   rm -rf "$OUR_DIR"
   mv -f "$JFFS_ADDONS/stealthsurf" "$OUR_DIR"
 fi
 
 if [ ! -f "$OUR_DIR/stealthsurf" ]; then
-  echo "ERROR: package missing ssurf/stealthsurf script" >&2
+  ui_fail "package missing ssurf/stealthsurf script"
   exit 1
 fi
 
+ui_bar 70 "link CLI"
 mv -f "$OUR_DIR/stealthsurf" "$OUR_SCRIPT"
 chmod 0755 "$OUR_SCRIPT"
 # CLI aliases only — never /opt/bin/stealthsurf (official branding)
@@ -188,15 +286,28 @@ if [ -f /jffs/scripts/stealthsurf ]; then
     rm -f /jffs/scripts/stealthsurf 2>/dev/null || true
   fi
 fi
+ui_ok "script $OUR_SCRIPT + surfgate/ssurf/ss"
 
-echo "==> Running SurfGate install"
+ui_bar 80 "addon install (modules + geodata)"
+ui_say "Running SurfGate install — colorful module/geodata progress follows"
 sh "$OUR_SCRIPT" install
 
 LAN=$(nvram get lan_ipaddr 2>/dev/null || echo "192.168.50.1")
-echo "==> Done."
-echo "    SurfGate panel:   http://${LAN}:1131/   (files in $OUR_DIR)"
-echo "    Merlin WebUI:     VPN → SurfGate"
-echo "    Official panel:   http://${LAN}:8800/   (untouched: $OFFICIAL_DIR)"
-echo "    CLI: surfgate | ssurf | ss   (help: surfgate h)"
+ui_bar 100 "done"
+if [ "$UI_COLOR" -eq 1 ]; then
+  printf '\n%b╔════════════════════════════════════════════════╗%b\n' "$CGREEN" "$C0"
+  printf '%b║%b  SurfGate ready                                %b║%b\n' "$CGREEN" "$C0" "$CGREEN" "$C0"
+  printf '%b║%b  panel   http://%s:1131/               %b║%b\n' "$CGREEN" "$C0" "$LAN" "$CGREEN" "$C0"
+  printf '%b║%b  WebUI   VPN → SurfGate                         %b║%b\n' "$CGREEN" "$C0" "$CGREEN" "$C0"
+  printf '%b║%b  CLI     surfgate | ssurf | ss                  %b║%b\n' "$CGREEN" "$C0" "$CGREEN" "$C0"
+  printf '%b╚════════════════════════════════════════════════╝%b\n' "$CGREEN" "$C0"
+  printf '%b  official panel :8800 untouched (%s)%b\n\n' "$CDIM" "$OFFICIAL_DIR" "$C0"
+else
+  echo "==> Done."
+  echo "    SurfGate panel:   http://${LAN}:1131/   (files in $OUR_DIR)"
+  echo "    Merlin WebUI:     VPN → SurfGate"
+  echo "    Official panel:   http://${LAN}:8800/   (untouched: $OFFICIAL_DIR)"
+  echo "    CLI: surfgate | ssurf | ss   (help: surfgate h)"
+fi
 echo "    Restore official if broken:"
 echo "      /opt/bin/curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh"

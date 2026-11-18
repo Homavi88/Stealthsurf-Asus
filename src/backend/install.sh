@@ -24,25 +24,29 @@ check_jffs_ready() {
 
 install() {
 
-    update_loading_progress "Installing $ADDON_TITLE..."
+    install_ui_begin "$ADDON_TITLE install" 12
+    update_loading_progress "Installing $ADDON_TITLE..." 0
     log_info "Starting $ADDON_TITLE installation process."
 
+    install_ui_step "check JFFS + Entware"
     check_jffs_ready
 
     load_xrayui_config
 
     # Check for Entware
     if [ ! -x /opt/bin/opkg ]; then
+        install_ui_status fail "Entware missing"
         log_error "Entware is not installed or opkg binary is not accessible."
         log_error "Please install Entware first: https://github.com/Entware/Entware/wiki/Install-on-ASUSWRT"
         exit 1
     fi
-    log_info "Entware is installed."
+    install_ui_status ok "Entware ready"
 
+    install_ui_step "opkg dependencies"
     update_loading_progress "Installing dependencies..."
 
-    opkg update
-    opkg upgrade
+    opkg update || log_warn "opkg update failed — continuing with cached feeds"
+    opkg upgrade || true
 
     install_opkg_package sed true
     install_opkg_package curl false
@@ -56,23 +60,31 @@ install() {
     install_opkg_package findutils false
 
     if which base64 >/dev/null 2>&1; then
-        log_debug "base64 is already installed."
+        install_ui_status ok "base64 present"
     else
-        log_warn "base64 is not installed. Installing base64..."
+        install_ui_status run "installing base64"
         install_opkg_package coreutils-base64 false
     fi
+    install_ui_status ok "opkg packages"
 
+    install_ui_step "xray-core"
     if which xray >/dev/null 2>&1; then
-        log_info "Xray is already installed. Skipping xray-core installation."
+        install_ui_status ok "xray already installed ($(xray version 2>/dev/null | head -1 | tr -d '\r' || echo ok))"
     else
         # The tested core, not the newest: a newer core may silently ignore settings XRAYUI writes
-        log_warn "Xray is not installed. Installing xray-core $XRAYUI_TESTED_CORE, the version this $ADDON_TITLE release was tested with..."
+        install_ui_status run "installing xray-core $XRAYUI_TESTED_CORE"
         if ! switch_stealthsurf_version "$XRAYUI_TESTED_CORE"; then
             log_warn "Could not install xray-core $XRAYUI_TESTED_CORE. Trying the latest release instead..."
             switch_stealthsurf_version "latest"
         fi
+        if which xray >/dev/null 2>&1; then
+            install_ui_status ok "xray-core installed"
+        else
+            install_ui_status fail "xray-core missing"
+        fi
     fi
 
+    install_ui_step "config + hooks"
     # xrayui config
     if [ ! -f "$XRAYUI_CONFIG_FILE" ]; then
 
@@ -85,17 +97,14 @@ logs_dir=$ADDON_LOGS_DIR
 EOF
         chmod 600 "$XRAYUI_CONFIG_FILE"
 
-        log_info "Default XRAYUI config created successfully."
+        install_ui_status ok "default config created"
     else
-        log_info "XRAYUI config file $XRAYUI_CONFIG_FILE found."
+        install_ui_status ok "config $XRAYUI_CONFIG_FILE"
     fi
 
     generate_xray_config
     ensure_xray_scaffold
     migrate_homavi88_runtime_to_ssurf 2>/dev/null || true
-
-
-    update_loading_progress "Configuring XRAY UI..."
 
     clear_script_entries
 
@@ -109,8 +118,9 @@ EOF
     setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && $ADDON_SCRIPT service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #ssurf"
 
     setup_script_file "/jffs/scripts/dnsmasq.postconf" "$ADDON_SCRIPT dnsmasq \"\$1\" #ssurf"
+    install_ui_status ok "merlin hooks"
 
-    log_info "Mounting web page..."
+    install_ui_step "WebUI mount"
     remount_ui "skipwait"
 
     am_settings_set stealthsurf_version $XRAYUI_VERSION
@@ -118,106 +128,97 @@ EOF
     stealthsurf_startup=$(am_settings_get stealthsurf_startup)
     if [ -z "$stealthsurf_startup" ]; then
         am_settings_set stealthsurf_startup "y"
-        log_warn "stealthsurf_startup was empty. Set to 'enabled'."
+        install_ui_status ok "startup enabled"
     else
-        log_info "stealthsurf_startup already set. Skipping."
+        install_ui_status ok "startup already set"
     fi
 
     mkdir -p $ADDON_USER_SCRIPTS_DIR
-
-    # Install and setup geodata builder
-    log_info "Installing XRAY UI geodata files builder..."
-
     mkdir -p "$ADDON_SHARE_DIR" || log_error "Failed to create $ADDON_SHARE_DIR."
     mkdir -p "$ADDON_TMP_DIR" || log_error "Failed to create $ADDON_TMP_DIR."
 
-    update_loading_progress "Downloading XRAYUI geodata files builder..."
-
     # Companion tools stay upstream (XrayUI releases); only the addon tarball is ours.
-    # GitHub / proxy can flake once — retry before treating as hard failure.
-    local release_url=$(github_proxy_url "https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz")
-    local builder_ok=0 attempt=1
-    while [ "$attempt" -le 2 ]; do
-        if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" "$release_url"; then
-            if tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR"; then
-                chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || true
-                builder_ok=1
-            else
-                log_error "Failed to extract xraydatbuilder.tar.gz."
-            fi
-            rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || true
-            [ "$builder_ok" -eq 1 ] && break
+    install_ui_step "module: geodata builder"
+    local builder_url="https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz"
+    if github_download "$builder_url" "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" 1024 "xraydatbuilder"; then
+        if tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR"; then
+            chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || true
+            install_ui_status ok "xraydatbuilder"
         else
-            log_warn "Attempt $attempt: failed to download geodata files builder from GitHub."
+            install_ui_status fail "extract xraydatbuilder"
         fi
-        attempt=$((attempt + 1))
-        [ "$attempt" -le 2 ] && sleep 2
-    done
-    if [ "$builder_ok" -ne 1 ]; then
-        log_error "Failed to download XRAYUI geodata files builder (custom geodata recompile may be skipped)."
-    fi
-
-    # Install and setup v2dat (reverse geofile data extractor)
-    log_info "Installing v2dat (reverse geofile data extractor)..."
-    update_loading_progress "Downloading v2dat..."
-    local v2dat_arch_name=$(version_get_arch_name "v2dat")
-    local v2dat_url=$(github_proxy_url "https://github.com/DanielLavrushin/v2dat/releases/latest/download/$v2dat_arch_name")
-    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/v2dat.tar.gz" "$v2dat_url"; then
-        tar -xzf "$ADDON_TMP_DIR/v2dat.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract v2dat.tar.gz."
-        rm -f "$ADDON_TMP_DIR/v2dat.tar.gz" || log_error "Failed to remove v2dat.tar.gz."
-        chmod +x "$ADDON_SHARE_DIR/v2dat" || log_error "Failed to make v2dat executable."
+        rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || true
     else
-        log_error "Failed to download v2dat."
+        install_ui_status skip "geodata builder (custom recompile may be skipped)"
     fi
 
-    # Install and setup RTLS-SCANNER
-    log_info "Installing RTLS-SCANNER..."
-    local rtls_arch_name=$(version_get_arch_name "rtls-scanner")
-    update_loading_progress "Downloading RTLS-SCANNER..."
-    local rtls_scan_url=$(github_proxy_url "https://github.com/DanielLavrushin/rtls-scanner/releases/latest/download/$rtls_arch_name")
-    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/rtls-scanner.tar.gz" "$rtls_scan_url"; then
-        tar -xzf "$ADDON_TMP_DIR/rtls-scanner.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract rtls-scanner.tar.gz."
-        rm -f "$ADDON_TMP_DIR/rtls-scanner.tar.gz" || log_error "Failed to remove rtls-scanner.tar.gz."
-        chmod +x "$ADDON_SHARE_DIR/rtls-scanner" || log_error "Failed to make rtls-scanner executable."
-
-        local mmdb_url=$(github_proxy_url "https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb")
-        wget -q --show-progress --no-hsts -O "$ADDON_SHARE_DIR/Country.mmdb" "$mmdb_url"
-
+    install_ui_step "module: v2dat"
+    local v2dat_arch_name
+    v2dat_arch_name=$(version_get_arch_name "v2dat")
+    local v2dat_url="https://github.com/DanielLavrushin/v2dat/releases/latest/download/$v2dat_arch_name"
+    if github_download "$v2dat_url" "$ADDON_TMP_DIR/v2dat.tar.gz" 1024 "v2dat"; then
+        tar -xzf "$ADDON_TMP_DIR/v2dat.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract v2dat"
+        rm -f "$ADDON_TMP_DIR/v2dat.tar.gz" || true
+        chmod +x "$ADDON_SHARE_DIR/v2dat" || true
+        install_ui_status ok "v2dat"
     else
-        log_error "Failed to download RTLS-SCANNER."
+        install_ui_status fail "v2dat"
     fi
 
-    # Install and setup B4SNI (reverse geofile data extractor)
-    log_info "Installing B4SNI..."
-    update_loading_progress "Downloading B4SNI..."
-    local b4sni_arch_name=$(version_get_arch_name "b4sni" "linux")
-    local b4sni_url=$(github_proxy_url "https://github.com/DanielLavrushin/b4sni/releases/latest/download/$b4sni_arch_name")
-    if wget -q --show-progress --no-hsts -O "$ADDON_TMP_DIR/b4sni.tar.gz" "$b4sni_url"; then
-        tar -xzf "$ADDON_TMP_DIR/b4sni.tar.gz" -C "$ADDON_SHARE_DIR" || log_error "Failed to extract b4sni.tar.gz."
-        rm -f "$ADDON_TMP_DIR/b4sni.tar.gz" || log_error "Failed to remove b4sni.tar.gz."
-        chmod +x "$ADDON_SHARE_DIR/b4sni" || log_error "Failed to make b4sni executable."
+    install_ui_step "module: rtls-scanner + Country.mmdb"
+    local rtls_arch_name
+    rtls_arch_name=$(version_get_arch_name "rtls-scanner")
+    local rtls_scan_url="https://github.com/DanielLavrushin/rtls-scanner/releases/latest/download/$rtls_arch_name"
+    if github_download "$rtls_scan_url" "$ADDON_TMP_DIR/rtls-scanner.tar.gz" 1024 "rtls-scanner"; then
+        tar -xzf "$ADDON_TMP_DIR/rtls-scanner.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract rtls-scanner"
+        rm -f "$ADDON_TMP_DIR/rtls-scanner.tar.gz" || true
+        chmod +x "$ADDON_SHARE_DIR/rtls-scanner" || true
+        install_ui_status ok "rtls-scanner"
+        local mmdb_url="https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb"
+        if github_download "$mmdb_url" "$ADDON_SHARE_DIR/Country.mmdb" 102400 "Country.mmdb"; then
+            :
+        else
+            install_ui_status skip "Country.mmdb"
+        fi
     else
-        log_error "Failed to download b4sni ($b4sni_arch_name)."
+        install_ui_status fail "rtls-scanner"
     fi
 
-    # setup logrotate
+    install_ui_step "module: b4sni"
+    local b4sni_arch_name
+    b4sni_arch_name=$(version_get_arch_name "b4sni" "linux")
+    local b4sni_url="https://github.com/DanielLavrushin/b4sni/releases/latest/download/$b4sni_arch_name"
+    if github_download "$b4sni_url" "$ADDON_TMP_DIR/b4sni.tar.gz" 1024 "b4sni"; then
+        tar -xzf "$ADDON_TMP_DIR/b4sni.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract b4sni"
+        rm -f "$ADDON_TMP_DIR/b4sni.tar.gz" || true
+        chmod +x "$ADDON_SHARE_DIR/b4sni" || true
+        install_ui_status ok "b4sni"
+    else
+        install_ui_status fail "b4sni ($b4sni_arch_name)"
+    fi
+
+    install_ui_step "logrotate + cron"
     logrotate_setup
-
-    # setup cron jobs
-    log_info "Configuring cron jobs for $ADDON_TITLE"
     cron_jobs_add
+    install_ui_status ok "cron jobs"
 
     mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_SHARE_DIR/data" 2>/dev/null
     # Isolate from stock XrayUI: never use /opt/etc/xray/config.json as our profile
     load_xrayui_config
     if [ ! -f "$XRAY_CONFIG_FILE" ]; then
         generate_xray_config
-        log_ok "Created isolated config $XRAY_CONFIG_FILE"
+        install_ui_status ok "isolated config $XRAY_CONFIG_FILE"
     fi
     # Move junk out of geodata data/ (outbound-ss-* caused invalid attribute errors)
     geodata_sanitize_datadir 2>/dev/null || true
 
-    update_community_geodata || log_warn "Community geodata update finished with warnings"
+    install_ui_step "geosite.dat + geoip.dat"
+    if update_community_geodata; then
+        install_ui_status ok "community geodata"
+    else
+        install_ui_status skip "community geodata (will retry later via cron / panel)"
+        log_warn "Community geodata update finished with warnings"
+    fi
 
     cleanup_stale_asdfiles
 
@@ -233,10 +234,12 @@ EOF
     xrayui_core_forget
     xrayui_core_probe
     if [ -z "$(xrayui_core_version)" ]; then
+        install_ui_status fail "xray core unavailable"
         log_error_box "Installation finished, but the Xray core is not available ($XRAYUI_CORE_ERR). Install it with: surfgate update xray $XRAYUI_TESTED_CORE"
         update_loading_progress "Installation finished, but the Xray core is not available."
         return 1
     fi
+    install_ui_status ok "xray core $(xrayui_core_version)"
 
     # StealthSurf API caches + migrate keys from 1.0.x addon conf
     ss_api_ensure_caches 2>/dev/null || true
@@ -259,6 +262,7 @@ EOF
         chmod 0755 /jffs/scripts/service-event 2>/dev/null || true
     fi
 
+    install_ui_step "panel :1131"
     # Standalone panel on :1131 — no interaction with official StealthSurf (:8800).
     if [ ! -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ] && [ -f "$ADDON_JFFS_ADN_DIR/index.panel.html" ]; then
         mkdir -p "$ADDON_JFFS_ADN_DIR/panel"
@@ -270,18 +274,22 @@ EOF
     # Always restart so an upgraded panel-httpd replaces the stale process (avoids bootstrap HTTP 500).
     panel_stop 2>/dev/null || true
     if ! panel_start; then
+        install_ui_status fail "panel httpd"
         log_warn "Standalone panel did not start. See /tmp/ssurf/panel.log"
         log_warn "Fix: surfgate panel restart   (1.4.11+ ships bin/panel-httpd; or install lighttpd via opkg)"
+    else
+        install_ui_status ok "panel httpd"
     fi
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
 
+    install_ui_end "Installed $(show_version) → $_panel_url"
     log_ok "Installed $(show_version) (files in $ADDON_JFFS_ADN_DIR, panel :1131)"
     log_box "Installation completed. Open panel: $_panel_url"
     log_info "Merlin WebUI: VPN → $ADDON_TITLE  ·  CLI: surfgate panel status"
     log_info "Official StealthSurf path /jffs/addons/stealthsurf is never modified by SurfGate."
 
-    update_loading_progress "Installation completed. Panel: $_panel_url"
+    update_loading_progress "Installation completed. Panel: $_panel_url" 100
 }
 
 uninstall() {
@@ -484,19 +492,21 @@ install_opkg_package() {
     local critical=$2
     # Check for jq
     if ! opkg list-installed | grep "$package -"; then
-        log_info "$package is not installed. Installing $package..."
+        install_ui_status run "opkg install $package"
         if opkg install $package; then
-            log_info "$package installed successfully."
+            install_ui_status ok "opkg $package"
         else
             if [ "$critical" = true ]; then
+                install_ui_status fail "opkg $package (critical)"
                 log_error "Critical package $package failed to install. Exiting."
                 exit 1
             else
+                install_ui_status skip "opkg $package"
                 log_warn "Non-critical package $package failed to install. Continuing."
             fi
         fi
     else
-        log_info "$package is already installed."
+        install_ui_status ok "opkg $package (cached)"
     fi
 }
 

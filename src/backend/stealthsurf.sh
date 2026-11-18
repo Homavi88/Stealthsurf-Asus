@@ -11,6 +11,9 @@ import ./api.sh
 import ./version.sh
 import ./control.sh
 import ./startup.sh
+import ./github.sh
+import ./geodata.sh
+import ./devices.sh
 import ./install.sh
 import ./update.sh
 import ./firewall.sh
@@ -22,8 +25,6 @@ import ./tlsping.sh
 import ./general_opts.sh
 import ./response.sh
 import ./subscriptions.sh
-import ./github.sh
-import ./geodata.sh
 import ./profile.sh
 import ./logs.sh
 import ./backup.sh
@@ -197,6 +198,9 @@ service_event)
         ;;
     connectedclients)
         api_get_connected_clients
+        ;;
+    devices | vpn-devices)
+        devices_vpn_show
         ;;
     connectionstatus)
         api_get_connection_status
