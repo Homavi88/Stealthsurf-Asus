@@ -191,10 +191,11 @@ ss_cli_dispatch() {
         url) panel_url ;;
         set-password | password) panel_set_password ;;
         bootstrap) panel_bootstrap_json ;;
+        live | live-status) panel_live_json ;;
         api) panel_api_handle ;;
         prepare) panel_prepare_webroot ;;
         *)
-            ss_cli_echo "usage: surfgate panel {start|stop|restart|status|url|set-password}"
+            ss_cli_echo "usage: surfgate panel {start|stop|restart|status|url|set-password|bootstrap|live}"
             return 1
             ;;
         esac
