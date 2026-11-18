@@ -24,15 +24,15 @@ import (
 )
 
 const (
-	version     = "1.4.10"
+	version     = "1.4.11"
 	defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
 func main() {
 	root := flag.String("root", ".", "document root (panel web root)")
 	listen := flag.String("listen", ":1131", "listen address ([ip]:port)")
-	addon := flag.String("addon", "/jffs/scripts/stealthsurf", "path to SurfGate addon script")
-	webdir := flag.String("webdir", "/www/user/stealthsurf", "live JSON/CAB dir for /ext/stealthsurf/ (API keys, catalog, …)")
+	addon := flag.String("addon", "/jffs/scripts/ssurf", "path to SurfGate addon script")
+	webdir := flag.String("webdir", "/www/user/ssurf", "live JSON/CAB dir for /ext/ssurf/ (API keys, catalog, …)")
 	flag.Parse()
 
 	absRoot, err := filepath.Abs(*root)
@@ -50,8 +50,8 @@ func main() {
 	// Live addon web files — must NOT be a frozen symlink snapshot from panel start,
 	// otherwise newly saved api_keys.json / ss_configs.json are invisible to the SPA.
 	if absWeb != "" {
-		extFS := http.StripPrefix("/ext/stealthsurf/", http.FileServer(http.Dir(absWeb)))
-		mux.Handle("/ext/stealthsurf/", withRecover(func(w http.ResponseWriter, r *http.Request) {
+		extFS := http.StripPrefix("/ext/ssurf/", http.FileServer(http.Dir(absWeb)))
+		mux.Handle("/ext/ssurf/", withRecover(func(w http.ResponseWriter, r *http.Request) {
 			// Ensure directory listings are disabled; FileServer 404s missing files.
 			extFS.ServeHTTP(w, r)
 		}))
@@ -117,7 +117,7 @@ func main() {
 }
 
 func resolveWebDir(preferred string) string {
-	cands := []string{preferred, "/www/user/stealthsurf"}
+	cands := []string{preferred, "/www/user/ssurf"}
 	for _, cand := range cands {
 		if cand == "" {
 			continue
@@ -158,9 +158,9 @@ func withRecover(next http.HandlerFunc) http.HandlerFunc {
 func resolveAddon(preferred string) string {
 	cands := []string{
 		preferred,
-		"/jffs/scripts/stealthsurf",
+		"/jffs/scripts/ssurf",
 		"/opt/bin/surfgate",
-		"/opt/bin/stealthsurf",
+		"/opt/bin/surfgate",
 		"/opt/bin/ssurf",
 	}
 	for _, cand := range cands {

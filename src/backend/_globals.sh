@@ -7,11 +7,15 @@ unset LD_LIBRARY_PATH
 
 source /usr/sbin/helper.sh
 
-ADDON_TAG="stealthsurf"
-ADDON_TAG_UPPER="STEALTHSURF"
+# Runtime tag is ssurf — NEVER share paths with official StealthSurf
+# (/jffs/addons/stealthsurf + stealthsurf-routerd :8800).
+ADDON_TAG="ssurf"
+ADDON_TAG_UPPER="SSURF"
 ADDON_TITLE="SurfGate"
+# Merlin/UI action_script prefix (Homavi88 panel protocol). Not the official addon.
+ADDON_ACTION_PREFIX="stealthsurf"
 
-XRAYUI_VERSION="1.4.10"
+XRAYUI_VERSION="1.4.11"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -20,19 +24,19 @@ ADDON_WEB_DIR="/www/user/$ADDON_TAG"
 ADDON_SCRIPT="/jffs/scripts/$ADDON_TAG"
 ADDON_SHARE_DIR="/opt/share/$ADDON_TAG"
 # Package files live under /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf
-# (that path is reserved for official StealthSurf VPN / stealthsurf-routerd :8800).
 ADDON_PKG_NAME="ssurf"
 ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_PKG_NAME"
+# Official router app path — we never install into, delete, or call it.
 OFFICIAL_SS_JFFS_DIR="/jffs/addons/stealthsurf"
 OFFICIAL_SS_DAEMON="$OFFICIAL_SS_JFFS_DIR/sbin/stealthsurf-routerd"
 ADDON_USER_SCRIPTS_DIR="/jffs/${ADDON_TAG}_custom"
 ADDON_LOGS_DIR="$ADDON_SHARE_DIR/logs"
 ADDON_TMP_DIR="$ADDON_SHARE_DIR/tmp"
 
-# Standalone SurfGate panel (official StealthSurf analogy on :8800 → ours on :1131)
+# Standalone SurfGate panel on :1131 (official app uses :8800 separately)
 PANEL_DEFAULT_PORT=1131
 PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
-PANEL_PIDFILE=/var/run/stealthsurf-panel.pid
+PANEL_PIDFILE=/var/run/ssurf-panel.pid
 
 ADDON_DEBUG="false"
 
@@ -46,7 +50,7 @@ XRAYUI_SUBSCRIPTIONS_FILE="$ADDON_SHARE_DIR/xray_subscriptions.json"
 XRAYUI_GEOTAGS_FILE="$ADDON_SHARE_DIR/geodata_tags.json"
 XRAYUI_FAILOVER_STATE_FILE="$ADDON_SHARE_DIR/xray_failover_state.json"
 
-# Isolated from stock XrayUI (/opt/etc/xray/config.json)
+# Isolated from stock XrayUI (/opt/etc/xray/config.json) and from official StealthSurf
 XRAY_CONFIG_DIR="/opt/etc/xray/$ADDON_TAG"
 DEFAULT_XRAY_PROFILE_NAME="config.json"
 DEFAULT_GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
@@ -55,7 +59,7 @@ CUSTOM_GEODATA_NAME="$ADDON_TAG"
 
 XRAYUI_CONFIG_FILE="/opt/etc/$ADDON_TAG.conf"
 
-# StealthSurf provider API (control plane)
+# StealthSurf *provider* API (control plane) — not the official router addon
 SS_API_BASE="https://api.stealthsurf.net"
 SS_API_KEY=""
 SS_API_KEYS=""
@@ -83,7 +87,7 @@ XRAY_VERSION="0.0"
 XRAYUI_CORE_VER_CACHE=""
 XRAYUI_CORE_ERR=""
 # Own pidfile — never share /var/run/xray.pid with stock XrayUI
-XRAY_PIDFILE=/var/run/stealthsurf-xray.pid
+XRAY_PIDFILE=/var/run/ssurf-xray.pid
 XRAY_RESTART_LOCKFILE=/tmp/$ADDON_TAG.restart.lock
 XRAY_RESTART_LOCK_FD=387
 XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
@@ -91,7 +95,7 @@ XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"
 POST_RESTART_DNSMASQ="false"
 FIREWALL_FROM_HOOK="false"
 
-# Firewall — MUST differ from stock XrayUI (chains XRAYUI, mark 0x10000, table 77)
+# Firewall — MUST differ from stock XrayUI (XRAYUI/0x10000/77) and official StealthSurf
 FW_CHAIN="$ADDON_TAG_UPPER"
 FW_DNS_LOCK_CHAIN="${ADDON_TAG_UPPER}_DNS_LOCK"
 FW_DNS_OWNERPROBE_CHAIN="${ADDON_TAG_UPPER}_DNS_OWNERPROBE"
@@ -118,7 +122,7 @@ nice -n 19 true >/dev/null 2>&1 && NICE="nice -n 19"
 
 if [ -f "$XRAYUI_CONFIG_FILE" ]; then
     . "$XRAYUI_CONFIG_FILE"
+elif [ -f /opt/etc/stealthsurf.conf ]; then
+    # One-time read of pre-1.4.11 Homavi88 conf (not official addon files)
+    . /opt/etc/stealthsurf.conf
 fi
-
-# Recompute after sourcing conf (profile may override)
-XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/${profile:-$DEFAULT_XRAY_PROFILE_NAME}"

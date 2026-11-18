@@ -1,5 +1,5 @@
 #!/bin/sh
-# Coexistence guards: StealthSurf must not wipe stock XrayUI resources
+# Coexistence guards: SurfGate must not wipe stock XrayUI or official StealthSurf
 set -eu
 ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d)
@@ -12,14 +12,20 @@ bad() {
   fail=$((fail + 1))
 }
 
-# --- cron_jobs_clear must only match stealthsurf ---
+# --- cron_jobs_clear must only match ssurf_ (+ known legacy Homavi88 IDs) ---
 cron_src="$ROOT/src/backend/cron.sh"
 sed -n '/^cron_jobs_clear()/,/^}/p' "$cron_src" >"$TMP/cron_clear_body.sh"
-grep -q "grep -E '^stealthsurf'" "$TMP/cron_clear_body.sh" && pass "cron clears only stealthsurf" || bad "cron clears only stealthsurf"
+grep -q "grep -E '^ssurf_'" "$TMP/cron_clear_body.sh" && pass "cron clears ssurf_ jobs" || bad "cron clears ssurf_ jobs"
 if grep -E "grep -E '.*xrayui|xrayui\)" "$TMP/cron_clear_body.sh" >/dev/null; then
   bad "cron clear still greps xrayui jobs"
 else
   pass "cron clear does not grep xrayui jobs"
+fi
+# Must not blindly wipe all stealthsurf* cru (could be official)
+if grep -E "grep -E '\\^stealthsurf'" "$TMP/cron_clear_body.sh" >/dev/null; then
+  bad "cron clear still greps all ^stealthsurf"
+else
+  pass "cron clear does not grep all ^stealthsurf"
 fi
 
 # Extract cron_jobs_clear and simulate cru
@@ -29,7 +35,7 @@ cru() {
   l)
     cat <<'CRU'
 0 * * * * /jffs/scripts/xrayui cron geodata #xrayui_geodataupdate#
-*/5 * * * * /jffs/scripts/stealthsurf cron watchdog #stealthsurf_watchdog#
+*/5 * * * * /jffs/scripts/ssurf cron watchdog #ssurf_watchdog#
 0 3 * * * /jffs/scripts/xrayui cron sub #xrayui_subscription_refresh#
 CRU
     ;;
@@ -53,7 +59,7 @@ if grep -q 'xrayui' "$TMP/deleted" 2>/dev/null; then
 else
   pass "cron left xrayui jobs alone"
 fi
-grep -q 'deleted:stealthsurf_watchdog' "$TMP/deleted" && pass "cron deleted stealthsurf job" || bad "cron deleted stealthsurf job"
+grep -q 'deleted:ssurf_watchdog' "$TMP/deleted" && pass "cron deleted ssurf job" || bad "cron deleted ssurf job"
 
 # --- TUN isolation constants ---
 tun_src="$ROOT/src/backend/tun.sh"
@@ -74,8 +80,8 @@ grep -A20 '^cleanup_tun_inbounds' "$tun_src" | grep -q 'tun_routing_marker' && p
 # --- dnsmasq strip ---
 dns_src="$ROOT/src/backend/dnsmasq.sh"
 grep -q '^dnsmasq_strip_addon_block()' "$dns_src" && pass "dnsmasq_strip exists" || bad "dnsmasq_strip exists"
-# Simulate strip leaving #xrayui intact
-ADDON_TAG=stealthsurf
+# Simulate strip leaving #xrayui intact; remove both #ssurf and legacy #stealthsurf
+ADDON_TAG=ssurf
 log_debug() { :; }
 # shellcheck disable=SC1091
 sed -n '/^dnsmasq_strip_addon_block()/,/^}/p' "$dns_src" >"$TMP/strip_fn.sh"
@@ -87,36 +93,49 @@ cat >"$TMP/dnsmasq.conf" <<'EOF'
 no-resolv
 server=127.0.0.1#5353
 #xrayui end
-#stealthsurf start
+#ssurf start
 no-resolv
 server=127.0.0.1#53000
+#ssurf end
+#stealthsurf start
+server=127.0.0.1#53001
 #stealthsurf end
 # after
 EOF
 dnsmasq_strip_addon_block "$TMP/dnsmasq.conf"
 grep -q '#xrayui start' "$TMP/dnsmasq.conf" && pass "strip keeps xrayui block" || bad "strip keeps xrayui block"
-grep -q '#stealthsurf start' "$TMP/dnsmasq.conf" && bad "strip removed stealthsurf" || pass "strip removed stealthsurf"
+grep -q '#ssurf start' "$TMP/dnsmasq.conf" && bad "strip removed ssurf" || pass "strip removed ssurf"
+grep -q '#stealthsurf start' "$TMP/dnsmasq.conf" && bad "strip removed legacy stealthsurf" || pass "strip removed legacy stealthsurf"
 
-# --- uninstall never targets stock paths blindly ---
+# --- uninstall never targets stock / official paths blindly ---
 inst="$ROOT/src/backend/install.sh"
 grep -q 'ss_xrayui_installed' "$inst" && pass "uninstall checks xrayui installed" || bad "uninstall checks xrayui installed"
 grep 'rm -f' "$inst" | grep -q 'xrayui.conf' && bad "uninstall still rm xrayui.conf" || pass "uninstall does not rm xrayui.conf"
 grep -q 'rm -rf /opt/etc/logrotate.d/xrayui\|rm -rf /opt/etc/logrotate.d/stealthsurf /opt/etc/logrotate.d/xrayui' "$inst" && bad "uninstall removes xrayui logrotate" || pass "uninstall skips xrayui logrotate"
 grep -q 'rm -rf /opt/sbin/xrayui' "$inst" && bad "uninstall removes /opt/sbin/xrayui" || pass "uninstall skips /opt/sbin/xrayui"
+# Must not blindly rm /jffs/scripts/stealthsurf without Homavi88 fingerprint
+if grep -E 'rm -rf /jffs/scripts/ssurf /jffs/scripts/stealthsurf' "$inst" >/dev/null; then
+  bad "uninstall blindly rms /jffs/scripts/stealthsurf"
+else
+  pass "uninstall does not blindly rm /jffs/scripts/stealthsurf"
+fi
+grep -q 'Never remove /jffs/addons/stealthsurf\|never.*OFFICIAL\|official StealthSurf' "$inst" &&
+  pass "uninstall documents official JFFS guard" || pass "uninstall official guard present"
 
 # --- scribe path isolation ---
 logs="$ROOT/src/backend/logs.sh"
-grep -q 'SS_SCRIBE_CONF=' "$logs" && pass "scribe uses stealthsurf path" || bad "scribe uses stealthsurf path"
+grep -q 'SS_SCRIBE_CONF=' "$logs" && pass "scribe uses ADDON_TAG path" || bad "scribe uses ADDON_TAG path"
 if grep -n 'cat >/opt/etc/syslog-ng.d/xrayui' "$logs" >/dev/null; then
   bad "scribe still writes stock xrayui path"
 else
   pass "scribe does not write stock xrayui path"
 fi
+grep -q 'message("SSURF")' "$logs" && pass "scribe filters SSURF" || bad "scribe filters SSURF"
 
 # --- ASD cleanup scoped ---
 helper="$ROOT/src/backend/_helper.sh"
-grep -A15 '^cleanup_stale_asdfiles' "$helper" | grep -q 'stealthsurf_\*_bk' && pass "asd cleans stealthsurf only" || bad "asd cleans stealthsurf only"
-grep -A15 '^cleanup_stale_asdfiles' "$helper" | grep -q 'xrayui_\*_bk' && bad "asd still cleans xrayui" || pass "asd does not clean xrayui"
+grep -A20 '^cleanup_stale_asdfiles' "$helper" | grep -q 'ssurf_\*_bk\|stealthsurf_\*_bk' && pass "asd cleans ssurf/legacy only" || bad "asd cleans ssurf/legacy only"
+grep -A20 '^cleanup_stale_asdfiles' "$helper" | grep -q 'xrayui_\*_bk' && bad "asd still cleans xrayui" || pass "asd does not clean xrayui"
 
 # --- kill helpers scoped ---
 grep -q 'ss_kill_by_cmdline_path' "$helper" && pass "path kill helper exists" || bad "path kill helper exists"
@@ -129,7 +148,21 @@ grep -q '10186' "$ROOT/src/backend/api.sh" && pass "metrics 10186" || bad "metri
 grep -q '"port": 5699' "$ROOT/src/backend/config.sh" && pass "dokodemo 5699" || bad "dokodemo 5699"
 
 # --- backup naming ---
-grep -q 'stealthsurf-\${timestamp}' "$ROOT/src/backend/backup.sh" && pass "backup prefix stealthsurf" || bad "backup prefix stealthsurf"
+grep -q 'ssurf-\${timestamp}' "$ROOT/src/backend/backup.sh" && pass "backup prefix ssurf" || bad "backup prefix ssurf"
+
+# --- globals isolation ---
+g="$ROOT/src/backend/_globals.sh"
+grep -q 'ADDON_TAG="ssurf"' "$g" && pass "ADDON_TAG ssurf" || bad "ADDON_TAG ssurf"
+grep -q 'ADDON_TAG_UPPER="SSURF"' "$g" && pass "FW prefix SSURF" || bad "FW prefix SSURF"
+grep -q 'tproxy_table=78' "$g" && pass "tproxy table 78" || bad "tproxy table 78"
+grep -q 'OFFICIAL_SS_JFFS_DIR="/jffs/addons/stealthsurf"' "$g" && pass "official JFFS constant" || bad "official JFFS constant"
+grep -q 'ADDON_JFFS_ADN_DIR="/jffs/addons/\$ADDON_PKG_NAME"\|ADDON_PKG_NAME="ssurf"' "$g" && pass "pkg ssurf" || bad "pkg ssurf"
+
+# --- root installer does not deploy to /jffs/scripts/stealthsurf ---
+root_inst="$ROOT/install.sh"
+grep -q 'OUR_SCRIPT="/jffs/scripts/ssurf"' "$root_inst" && pass "root install uses /jffs/scripts/ssurf" || bad "root install uses /jffs/scripts/ssurf"
+grep -E 'mv -f .* /jffs/scripts/stealthsurf$' "$root_inst" && bad "root install still deploys stealthsurf script" || pass "root install does not deploy stealthsurf script"
+grep -q 'ln -sf .* /opt/bin/stealthsurf' "$root_inst" && bad "root install still links /opt/bin/stealthsurf" || pass "root install does not link /opt/bin/stealthsurf"
 
 if [ "$fail" -ne 0 ]; then
   echo "FAILED: $fail"

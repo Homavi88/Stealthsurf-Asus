@@ -63,7 +63,7 @@ printlog() {
         ;;
     esac
 
-    logger -t "STEALTHSURF" -p "${LOG_FACILITY}.${priority}" -- "$msg"
+    logger -t "SSURF" -p "${LOG_FACILITY}.${priority}" -- "$msg"
 
     if [ "$ADDON_DEBUG" = "false" ] && [ "$level" = "DEBUG" ]; then
         return
@@ -620,7 +620,7 @@ update_loading_progress() {
     echo "$json_content" >"/tmp/xray-response.$$.tmp" && mv -f "/tmp/xray-response.$$.tmp" "$UI_RESPONSE_FILE"
 
     if [ "$progress" = "100" ]; then
-        /jffs/scripts/stealthsurf service_event cleanloadingprogress >/dev/null 2>&1 &
+        "$ADDON_SCRIPT" service_event cleanloadingprogress >/dev/null 2>&1 &
     fi
 
 }
@@ -673,8 +673,8 @@ fixme() {
         log_info "No broken payload settings found."
     fi
 
-    # Re-assert service hooks so Start/Stop from WebUI always reach this addon
-    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && /jffs/scripts/stealthsurf service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #stealthsurf" 2>/dev/null || true
+    # Re-assert service hooks so Start/Stop from WebUI always reach SurfGate (/jffs/scripts/ssurf)
+    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && $ADDON_SCRIPT service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #ssurf" 2>/dev/null || true
     ensure_xray_scaffold 2>/dev/null || true
 
     log_info "Removing file $UI_RESPONSE_FILE..."
@@ -793,6 +793,7 @@ cleanup_stale_asdfiles() {
     rm -f /tmp/stealthsurf_script.* /tmp/stealthsurf_payload* 2>/dev/null
 
     if [ -d "$asdbk" ]; then
+        rm -f "$asdbk"/ssurf_*_bk "$asdbk"/*ssurf*.tmp.*_bk 2>/dev/null
         rm -f "$asdbk"/stealthsurf_*_bk "$asdbk"/*stealthsurf*.tmp.*_bk 2>/dev/null
     fi
 
@@ -825,5 +826,85 @@ urldecode_pct() {
 
 safe_preview() {
     dd bs=200 count=1 2>/dev/null | tr '\r\n' ' '
+}
+
+# Move Homavi88 SurfGate runtime from legacy tag "stealthsurf" → "ssurf".
+# NEVER touches /jffs/addons/stealthsurf (official StealthSurf VPN).
+migrate_homavi88_runtime_to_ssurf() {
+    local src dst
+    # Share / data
+    if [ ! -d "$ADDON_SHARE_DIR" ] && [ -d /opt/share/stealthsurf ]; then
+        mkdir -p "$(dirname "$ADDON_SHARE_DIR")" 2>/dev/null || true
+        mv /opt/share/stealthsurf "$ADDON_SHARE_DIR" 2>/dev/null ||
+            cp -a /opt/share/stealthsurf "$ADDON_SHARE_DIR" 2>/dev/null || true
+        log_info "Migrated share data → $ADDON_SHARE_DIR"
+    fi
+    # Xray profile tree
+    if [ ! -d "$XRAY_CONFIG_DIR" ] && [ -d /opt/etc/xray/stealthsurf ]; then
+        mkdir -p "$(dirname "$XRAY_CONFIG_DIR")" 2>/dev/null || true
+        mv /opt/etc/xray/stealthsurf "$XRAY_CONFIG_DIR" 2>/dev/null ||
+            cp -a /opt/etc/xray/stealthsurf "$XRAY_CONFIG_DIR" 2>/dev/null || true
+        log_info "Migrated Xray profiles → $XRAY_CONFIG_DIR"
+    fi
+    # Conf
+    if [ ! -f "$XRAYUI_CONFIG_FILE" ] && [ -f /opt/etc/stealthsurf.conf ]; then
+        cp -f /opt/etc/stealthsurf.conf "$XRAYUI_CONFIG_FILE" 2>/dev/null || true
+        log_info "Migrated conf → $XRAYUI_CONFIG_FILE"
+    fi
+    # Merlin www user dir (Homavi88 panel JSON) — not official :8800 tree
+    if [ ! -d "$ADDON_WEB_DIR" ] && [ -d /www/user/stealthsurf ]; then
+        mkdir -p "$(dirname "$ADDON_WEB_DIR")" 2>/dev/null || true
+        mv /www/user/stealthsurf "$ADDON_WEB_DIR" 2>/dev/null ||
+            cp -a /www/user/stealthsurf "$ADDON_WEB_DIR" 2>/dev/null || true
+        log_info "Migrated web dir → $ADDON_WEB_DIR"
+    fi
+    # Our old script path → ssurf (only if it looks like Homavi88 SurfGate)
+    if [ -f /jffs/scripts/stealthsurf ] && [ ! -f "$ADDON_SCRIPT" ]; then
+        if grep -q 'ADDON_TITLE="SurfGate"\|ADDON_PKG_NAME="ssurf"\|Homavi88' /jffs/scripts/stealthsurf 2>/dev/null; then
+            mv /jffs/scripts/stealthsurf "$ADDON_SCRIPT" 2>/dev/null || true
+            chmod 0755 "$ADDON_SCRIPT" 2>/dev/null || true
+            log_info "Migrated script → $ADDON_SCRIPT"
+        fi
+    fi
+    # Drop confusing /opt/bin/stealthsurf symlink (official branding); keep surfgate/ssurf
+    if [ -L /opt/bin/stealthsurf ]; then
+        case "$(readlink /opt/bin/stealthsurf 2>/dev/null)" in
+        *ssurf* | *stealthsurf*)
+            if [ -f /jffs/addons/ssurf/stealthsurf ] || [ -f "$ADDON_SCRIPT" ]; then
+                rm -f /opt/bin/stealthsurf 2>/dev/null || true
+            fi
+            ;;
+        esac
+    fi
+    # Custom geodata helper /opt/sbin/<tag>
+    if [ -f /opt/sbin/stealthsurf ] && [ ! -e /opt/sbin/ssurf ]; then
+        mv /opt/sbin/stealthsurf /opt/sbin/ssurf 2>/dev/null ||
+            cp -f /opt/sbin/stealthsurf /opt/sbin/ssurf 2>/dev/null || true
+    fi
+    # Logrotate stanza rename
+    if [ -f /opt/etc/logrotate.d/stealthsurf ] && [ ! -f /opt/etc/logrotate.d/ssurf ]; then
+        mv /opt/etc/logrotate.d/stealthsurf /opt/etc/logrotate.d/ssurf 2>/dev/null ||
+            cp -f /opt/etc/logrotate.d/stealthsurf /opt/etc/logrotate.d/ssurf 2>/dev/null || true
+    fi
+    # Temp / pid files
+    mkdir -p /tmp/ssurf 2>/dev/null || true
+    if [ -d /tmp/stealthsurf ] && [ ! -e /tmp/ssurf/panel.log ]; then
+        cp -a /tmp/stealthsurf/. /tmp/ssurf/ 2>/dev/null || true
+    fi
+    # Flush legacy Homavi88 firewall chain names once (STEALTHSURF_* → SSURF_*)
+    if type iptables >/dev/null 2>&1; then
+        for ch in STEALTHSURF STEALTHSURF_DNS_LOCK STEALTHSURF_DNS_OWNERPROBE STEALTHSURF_DIVERT; do
+            for tbl in filter mangle nat; do
+                iptables -w -t "$tbl" -F "$ch" 2>/dev/null || true
+                iptables -w -t "$tbl" -X "$ch" 2>/dev/null || true
+                ip6tables -w -t "$tbl" -F "$ch" 2>/dev/null || true
+                ip6tables -w -t "$tbl" -X "$ch" 2>/dev/null || true
+            done
+        done
+        for s in STEALTHSURF_BYPASS4 STEALTHSURF_BYPASS6 STEALTHSURF_PROXY4 STEALTHSURF_PROXY6 \
+            STEALTHSURF_BYPASS4_NET STEALTHSURF_BYPASS6_NET STEALTHSURF_PROXY4_NET STEALTHSURF_PROXY6_NET; do
+            ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null || true
+        done
+    fi
 }
 

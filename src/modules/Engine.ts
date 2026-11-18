@@ -420,10 +420,10 @@ export class Engine {
   public async getWebData<T>(name: string, config: AxiosRequestConfig = {}): Promise<AxiosResponse<T>> {
     const request = { ...config, headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache', Expires: '0', ...config.headers } };
     try {
-      return await axios.get<T>(`/ext/stealthsurf/${name}.cab`, request);
+      return await axios.get<T>(`/ext/ssurf/${name}.cab`, request);
     } catch (e) {
       if ((e as AxiosError).response?.status !== 404) throw e;
-      return axios.get<T>(`/ext/stealthsurf/${name}.json?_=${Date.now()}`, request);
+      return axios.get<T>(`/ext/ssurf/${name}.json?_=${Date.now()}`, request);
     }
   }
 
@@ -887,7 +887,7 @@ export class Engine {
       if (axiosError.status === 404) {
         if (
           confirm(
-            'SurfGate configuration not found in /opt/etc/xray/stealthsurf. Generate a default config (all-in + direct + block)?'
+            'SurfGate configuration not found in /opt/etc/xray/ssurf. Generate a default config (all-in + direct + block)?'
           )
         ) {
           await this.submit(SubmitActions.configurationGenerateDefaultConfig);

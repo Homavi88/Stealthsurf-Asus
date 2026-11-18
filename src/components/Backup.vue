@@ -225,7 +225,7 @@
         await Promise.all(
           targets.map(async (filename) => {
             try {
-              const res = await fetch(`/ext/stealthsurf/backup/${filename}.cab`, { method: 'HEAD' });
+              const res = await fetch(`/ext/ssurf/backup/${filename}.cab`, { method: 'HEAD' });
               const len = res.headers.get('Content-Length');
               sizes.value[filename] = len ? Number(len) : null;
             } catch {
@@ -261,7 +261,7 @@
 
       const download = async (filename: string) => {
         if (!filename) return;
-        const url = `/ext/stealthsurf/backup/${filename}.cab`;
+        const url = `/ext/ssurf/backup/${filename}.cab`;
         const res = await fetch(url, { method: 'HEAD', cache: 'no-store' }).catch(() => undefined);
         if (res?.ok && res.headers.get('Content-Type')?.startsWith('text/html')) {
           window.location.reload();

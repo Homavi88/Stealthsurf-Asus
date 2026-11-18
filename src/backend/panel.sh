@@ -1,13 +1,13 @@
 #!/bin/sh
 # shellcheck disable=SC2034  # codacy:Unused variables
 #
-# Standalone control panel (official StealthSurf analogy: lan_ip:8800).
+# Standalone control panel (SurfGate standalone panel).
 # Ours listens on a dedicated router IP:port — default lan_ip:1131 — so it can
-# sit next to the stock StealthSurf panel on :8800 without sharing Merlin's ASP UI.
+# Separate from official StealthSurf (:8800 /jffs/addons/stealthsurf).
 
 PANEL_DEFAULT_PORT=1131
-PANEL_PIDFILE=/var/run/stealthsurf-panel.pid
-PANEL_LOG=/tmp/stealthsurf/panel.log
+PANEL_PIDFILE=/var/run/ssurf-panel.pid
+PANEL_LOG=/tmp/ssurf/panel.log
 PANEL_HTTPD_CONF="$ADDON_JFFS_ADN_DIR/panel/httpd.conf"
 PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
 PANEL_CGI_DIR="$PANEL_WEB_ROOT/cgi-bin"
@@ -132,7 +132,7 @@ panel_opkg_install() {
 
 # Ensure a usable panel web server. Prefer bundled binary (no network/opkg).
 panel_ensure_httpd() {
-    mkdir -p /tmp/stealthsurf 2>/dev/null || true
+    mkdir -p /tmp/ssurf 2>/dev/null || true
     if panel_bundled_httpd >/dev/null 2>&1; then
         return 0
     fi
@@ -173,7 +173,7 @@ panel_write_lighttpd_conf() {
         echo 'mimetype.assign = ( ".html" => "text/html", ".js" => "application/javascript", ".json" => "application/json", ".css" => "text/css", ".svg" => "image/svg+xml", ".png" => "image/png", ".ico" => "image/x-icon" )'
         # Extensionless CGI scripts under /cgi-bin/ (no PCRE url =~ needed)
         # Live Merlin web dir for API JSON (keys/catalog) — not a frozen panel snapshot.
-        echo "alias.url = ( \"/cgi-bin/\" => \"$PANEL_CGI_DIR/\", \"/ext/stealthsurf/\" => \"${ADDON_WEB_DIR}/\" )"
+        echo "alias.url = ( \"/cgi-bin/\" => \"$PANEL_CGI_DIR/\", \"/ext/ssurf/\" => \"${ADDON_WEB_DIR}/\" )"
         echo 'cgi.assign = ( "" => "" )'
     } >"$conf"
     echo "$conf"
@@ -222,16 +222,16 @@ panel_netmask_to_prefix() {
     esac
 }
 
-# Mirror /www/user/stealthsurf into the panel webroot for BusyBox/lighttpd.
+# Mirror /www/user/ssurf into the panel webroot for BusyBox/lighttpd.
 # Bundled panel-httpd serves ADDON_WEB_DIR live via -webdir (preferred).
 panel_refresh_ext_links() {
-    mkdir -p "$PANEL_WEB_ROOT/ext/stealthsurf" "$ADDON_WEB_DIR" 2>/dev/null || true
-    ln -sfn "$ADDON_WEB_DIR" "$PANEL_WEB_ROOT/ext/stealthsurf-files" 2>/dev/null || true
+    mkdir -p "$PANEL_WEB_ROOT/ext/ssurf" "$ADDON_WEB_DIR" 2>/dev/null || true
+    ln -sfn "$ADDON_WEB_DIR" "$PANEL_WEB_ROOT/ext/ssurf-files" 2>/dev/null || true
     # BusyBox httpd: individual file symlinks (dir symlink is unreliable on some builds).
     local f
     for f in "$ADDON_WEB_DIR"/*; do
         [ -e "$f" ] || continue
-        ln -s -f "$f" "$PANEL_WEB_ROOT/ext/stealthsurf/${f##*/}" 2>/dev/null || true
+        ln -s -f "$f" "$PANEL_WEB_ROOT/ext/ssurf/${f##*/}" 2>/dev/null || true
     done
 }
 
@@ -247,9 +247,9 @@ echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/ssurf}"
 if [ -f "$ADDON_SCRIPT" ]; then
-  /bin/sh "$ADDON_SCRIPT" panel bootstrap 2>/tmp/stealthsurf/cgi-bootstrap.err
+  /bin/sh "$ADDON_SCRIPT" panel bootstrap 2>/tmp/ssurf/cgi-bootstrap.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -261,10 +261,10 @@ echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/ssurf}"
 export CONTENT_LENGTH REQUEST_METHOD
 if [ -f "$ADDON_SCRIPT" ]; then
-  /bin/sh "$ADDON_SCRIPT" panel api 2>/tmp/stealthsurf/cgi-api.err
+  /bin/sh "$ADDON_SCRIPT" panel api 2>/tmp/ssurf/cgi-api.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -276,9 +276,9 @@ echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
-ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
+ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/ssurf}"
 if [ -f "$ADDON_SCRIPT" ]; then
-  /bin/sh "$ADDON_SCRIPT" panel live 2>/tmp/stealthsurf/cgi-status.err
+  /bin/sh "$ADDON_SCRIPT" panel live 2>/tmp/ssurf/cgi-status.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -289,7 +289,7 @@ CGI
 
 panel_prepare_webroot() {
     panel_load_settings
-    mkdir -p "$PANEL_WEB_ROOT/ext/stealthsurf" "$PANEL_CGI_DIR" /tmp/stealthsurf || return 1
+    mkdir -p "$PANEL_WEB_ROOT/ext/ssurf" "$PANEL_CGI_DIR" /tmp/ssurf || return 1
 
     # Static SPA
     if [ -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ]; then
@@ -341,7 +341,7 @@ panel_is_running() {
     kill -0 "$pid" 2>/dev/null || return 1
     # Confirm it is our panel server (bundled panel-httpd, BusyBox httpd, or lighttpd)
     if [ -r "/proc/$pid/cmdline" ]; then
-        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "stealthsurf/panel\|panel-httpd\|:${PANEL_PORT}\| $PANEL_PORT \|lighttpd.conf" || {
+        tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -q "ssurf/panel\|stealthsurf/panel\|panel-httpd\|:${PANEL_PORT}\| $PANEL_PORT \|lighttpd.conf" || {
             tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null | grep -qiE 'httpd|lighttpd|panel-httpd' || return 1
         }
     fi
@@ -383,16 +383,16 @@ panel_start_bundled_once() {
     local bin="$2"
     # Run from /tmp so (a) noexec /jffs cannot block exec, (b) package replace
     # always starts a freshly copied 1.4.9+ binary after panel_stop.
-    local runbin="/tmp/stealthsurf/panel-httpd"
-    mkdir -p /tmp/stealthsurf
+    local runbin="/tmp/ssurf/panel-httpd"
+    mkdir -p /tmp/ssurf
     if cp -f "$bin" "$runbin" 2>/dev/null && chmod 0755 "$runbin" 2>/dev/null; then
         bin="$runbin"
     fi
     # -addon: call stealthsurf via /bin/sh (no CGI shebang on /jffs → no HTTP 500)
-    # -webdir: live /www/user/stealthsurf so api_keys.json etc. appear without re-symlink
+    # -webdir: live /www/user/ssurf so api_keys.json etc. appear without re-symlink
     "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" \
-        -addon "${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}" \
-        -webdir "${ADDON_WEB_DIR:-/www/user/stealthsurf}" >>"$PANEL_LOG" 2>&1 &
+        -addon "${ADDON_SCRIPT:-/jffs/scripts/ssurf}" \
+        -webdir "${ADDON_WEB_DIR:-/www/user/ssurf}" >>"$PANEL_LOG" 2>&1 &
     echo $! >"$PANEL_PIDFILE"
     sleep 1
     panel_is_running
@@ -438,7 +438,7 @@ panel_running_is_current_bundled() {
     esac
     kill -0 "$pid" 2>/dev/null || return 1
     bundled=$(panel_bundled_httpd 2>/dev/null) || return 1
-    runbin="/tmp/stealthsurf/panel-httpd"
+    runbin="/tmp/ssurf/panel-httpd"
     # Package newer than pidfile → stale process from previous version.
     if [ -f "$bundled" ] && [ -f "$PANEL_PIDFILE" ] && [ "$bundled" -nt "$PANEL_PIDFILE" ]; then
         return 1
@@ -450,14 +450,14 @@ panel_running_is_current_bundled() {
     esac
     cmd=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)
     case "$cmd" in
-    *"$bundled"* | *"/tmp/stealthsurf/panel-httpd"*) return 0 ;;
+    *"$bundled"* | *"/tmp/ssurf/panel-httpd"*) return 0 ;;
     esac
     return 1
 }
 
 panel_start() {
     panel_load_settings
-    mkdir -p /tmp/stealthsurf
+    mkdir -p /tmp/ssurf
     : >"$PANEL_LOG"
 
     panel_prepare_webroot || {
@@ -825,8 +825,8 @@ panel_api_handle() {
             custom_settings_drop '/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' 2>/dev/null || true
         fi
         local kvfile key val
-        kvfile="/tmp/stealthsurf/panel-api-kv.$$"
-        mkdir -p /tmp/stealthsurf 2>/dev/null || true
+        kvfile="/tmp/ssurf/panel-api-kv.$$"
+        mkdir -p /tmp/ssurf 2>/dev/null || true
         printf '%s' "$settings" | jq -r 'to_entries[] | select(.key|startswith("stealthsurf_")) | "\(.key)\t\(.value|tostring)"' >"$kvfile" 2>/dev/null || : >"$kvfile"
         while IFS=$(printf '\t') read -r key val; do
             [ -n "$key" ] || continue
@@ -835,7 +835,7 @@ panel_api_handle() {
         rm -f "$kvfile"
     fi
 
-    # Keep /ext/stealthsurf/* in sync for BusyBox/lighttpd after key/catalog writes.
+    # Keep /ext/ssurf/* in sync for BusyBox/lighttpd after key/catalog writes.
     if type ss_api_ensure_caches >/dev/null 2>&1; then
         ss_api_ensure_caches 2>/dev/null || true
     fi
@@ -846,9 +846,9 @@ panel_api_handle() {
     rest=$(printf '%s' "$action" | cut -d'_' -f2- | tr '_' ' ')
     # Run in background but after settings are fully flushed to custom_settings.txt
     (
-        /jffs/scripts/stealthsurf service_event $rest
+        /jffs/scripts/ssurf service_event $rest
         panel_refresh_ext_links 2>/dev/null || true
-    ) >/tmp/stealthsurf/panel-api.log 2>&1 &
+    ) >/tmp/ssurf/panel-api.log 2>&1 &
 
     echo '{"ok":true,"queued":true,"action":"'"$action"'"}'
 }

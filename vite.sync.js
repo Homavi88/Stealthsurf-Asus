@@ -24,11 +24,11 @@ async function uploadFiles() {
     // Upload files
     await sftp.fastPut('dist/index.asp', '/jffs/addons/ssurf/index.asp');
     await sftp.fastPut('dist/app.js', '/jffs/addons/ssurf/app.js');
-    await sftp.fastPut('dist/stealthsurf', '/jffs/scripts/stealthsurf');
+    await sftp.fastPut('dist/stealthsurf', '/jffs/scripts/ssurf');
     await sftp.fastPut('tools/adsblock/adsblock.sh', '/jffs/addons/ssurf/adsblock');
 
     // Set executable permissions
-    await sftp.chmod('/jffs/scripts/stealthsurf', '755');
+    await sftp.chmod('/jffs/scripts/ssurf', '755');
     await sftp.chmod('/jffs/addons/ssurf/adsblock', '755');
 
     console.log('Files uploaded and permissions set successfully.');

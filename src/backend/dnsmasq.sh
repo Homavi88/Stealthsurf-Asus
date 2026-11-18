@@ -4,18 +4,22 @@
 DNSMASQ_PRIME_LIMIT=200
 DNSMASQ_PRIME_SHARE_MIN=20
 
-# Remove only our #stealthsurf block — never touch #xrayui blocks
+# Remove only our #ssurf (and legacy Homavi88 #stealthsurf) block — never #xrayui
 dnsmasq_strip_addon_block() {
     local CONFIG="${1:-/etc/dnsmasq.conf}"
     [ -f "$CONFIG" ] || return 0
-    grep -q "^#${ADDON_TAG} start$" "$CONFIG" 2>/dev/null || return 0
-    local CONFIG_TMP="${CONFIG}.stealthsurf.strip.$$"
-    if sed "/^#${ADDON_TAG} start$/,/^#${ADDON_TAG} end$/d" "$CONFIG" >"$CONFIG_TMP" && mv -f "$CONFIG_TMP" "$CONFIG"; then
-        log_debug "dnsmasq: stripped #${ADDON_TAG} block from $CONFIG"
-        return 0
-    fi
-    rm -f "$CONFIG_TMP"
-    return 1
+    local tag CONFIG_TMP rc=0
+    for tag in "${ADDON_TAG:-ssurf}" stealthsurf; do
+        grep -q "^#${tag} start$" "$CONFIG" 2>/dev/null || continue
+        CONFIG_TMP="${CONFIG}.ssurf.strip.$$"
+        if sed "/^#${tag} start$/,/^#${tag} end$/d" "$CONFIG" >"$CONFIG_TMP" && mv -f "$CONFIG_TMP" "$CONFIG"; then
+            log_debug "dnsmasq: stripped #${tag} block from $CONFIG"
+        else
+            rm -f "$CONFIG_TMP"
+            rc=1
+        fi
+    done
+    return $rc
 }
 
 dnsmasq_configure() {

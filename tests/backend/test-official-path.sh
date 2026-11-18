@@ -26,7 +26,9 @@ grep -q '/jffs/addons/ssurf' "$BIN" || grep -q 'ADDON_JFFS_ADN_DIR="/jffs/addons
 grep -E 'rm -rf "/jffs/addons/stealthsurf"|rm -rf \$OFFICIAL_SS_JFFS_DIR|rm -rf "\$OFFICIAL_SS_JFFS_DIR"' "$BIN" &&
   fail "script removes official JFFS tree wholesale" || pass "does not wipe official tree"
 
-grep -q 'XRAYUI_VERSION="1.4.10"' "$BIN" || fail "version not 1.4.10"
+grep -q 'XRAYUI_VERSION="1.4.11"' "$BIN" || fail "version not 1.4.11"
+grep -q 'ADDON_TAG="ssurf"' "$BIN" || fail "ADDON_TAG not ssurf"
+grep -q 'ADDON_SCRIPT="/jffs/scripts/\$ADDON_TAG"\|ADDON_SCRIPT="/jffs/scripts/ssurf"' "$BIN" || fail "ADDON_SCRIPT not ssurf"
 grep -q 'ADDON_TITLE="SurfGate"' "$BIN" || fail "ADDON_TITLE not SurfGate"
 pass "official path coexistence guards"
 echo "ALL PASS"

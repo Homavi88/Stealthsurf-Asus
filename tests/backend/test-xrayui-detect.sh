@@ -5,10 +5,10 @@ ROOT="$(CDPATH= cd -- "$(dirname "$0")/../.." && pwd)"
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-export ADDON_TAG=stealthsurf
+export ADDON_TAG=ssurf
 export ADDON_LOGS_DIR="$TMP/logs"
-export XRAY_PIDFILE="$TMP/stealthsurf-xray.pid"
-export XRAY_DESIRED_STATE_FILE="$TMP/stealthsurf.desired"
+export XRAY_PIDFILE="$TMP/ssurf-xray.pid"
+export XRAY_DESIRED_STATE_FILE="$TMP/ssurf.desired"
 export SS_XRAYUI_PIDFILE="$TMP/xray.pid"
 export SS_XRAYUI_DESIRED="$TMP/xrayui.desired"
 export SS_XRAYUI_CONFIG="$TMP/config.json"

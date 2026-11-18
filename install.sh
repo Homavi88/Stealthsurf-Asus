@@ -1,5 +1,5 @@
 #!/bin/sh
-# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.10+ installer for Asuswrt-Merlin (Entware required).
+# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.11+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
@@ -7,6 +7,7 @@
 #
 # Layout after extract:
 #   ssurf/{stealthsurf,index.asp,app.js,panel/…}
+# Runtime script: /jffs/scripts/ssurf (never /jffs/scripts/stealthsurf).
 set -e
 
 # Entware first — firmware BusyBox wget cannot fetch HTTPS (GitHub releases).
@@ -20,11 +21,12 @@ TMP="/tmp/$ASSET"
 JFFS_ADDONS="/jffs/addons"
 # Own tree — must not collide with official StealthSurf VPN
 OUR_DIR="$JFFS_ADDONS/ssurf"
+OUR_SCRIPT="/jffs/scripts/ssurf"
 # Official closed-source router package (cdn.stealthsurf.net merlin.sh)
 OFFICIAL_DIR="$JFFS_ADDONS/stealthsurf"
 OFFICIAL_DAEMON="$OFFICIAL_DIR/sbin/stealthsurf-routerd"
 
-echo "==> SurfGate installer (1.4.10+ — panel :1131, path /jffs/addons/ssurf)"
+echo "==> SurfGate installer (1.4.11+ — panel :1131, path /jffs/addons/ssurf, script /jffs/scripts/ssurf)"
 
 if [ ! -d /jffs ]; then
   echo "ERROR: /jffs not found. Enable JFFS custom scripts in Administration → System." >&2
@@ -173,15 +175,22 @@ if [ ! -f "$OUR_DIR/stealthsurf" ]; then
   exit 1
 fi
 
-mv -f "$OUR_DIR/stealthsurf" /jffs/scripts/stealthsurf
-chmod 0755 /jffs/scripts/stealthsurf
-ln -sf /jffs/scripts/stealthsurf /opt/bin/stealthsurf 2>/dev/null || true
-ln -sf /jffs/scripts/stealthsurf /opt/bin/surfgate 2>/dev/null || true
-ln -sf /jffs/scripts/stealthsurf /opt/bin/ssurf 2>/dev/null || true
-ln -sf /jffs/scripts/stealthsurf /opt/bin/ss 2>/dev/null || true
+mv -f "$OUR_DIR/stealthsurf" "$OUR_SCRIPT"
+chmod 0755 "$OUR_SCRIPT"
+# CLI aliases only — never /opt/bin/stealthsurf (official branding)
+ln -sf "$OUR_SCRIPT" /opt/bin/surfgate 2>/dev/null || true
+ln -sf "$OUR_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
+ln -sf "$OUR_SCRIPT" /opt/bin/ss 2>/dev/null || true
+rm -f /opt/bin/stealthsurf 2>/dev/null || true
+# Drop leftover Homavi88 script at legacy path if it is ours (never touch official)
+if [ -f /jffs/scripts/stealthsurf ]; then
+  if grep -q 'ADDON_TITLE="SurfGate"\|ADDON_PKG_NAME="ssurf"\|Homavi88' /jffs/scripts/stealthsurf 2>/dev/null; then
+    rm -f /jffs/scripts/stealthsurf 2>/dev/null || true
+  fi
+fi
 
 echo "==> Running SurfGate install"
-sh /jffs/scripts/stealthsurf install
+sh "$OUR_SCRIPT" install
 
 LAN=$(nvram get lan_ipaddr 2>/dev/null || echo "192.168.50.1")
 echo "==> Done."

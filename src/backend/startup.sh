@@ -3,7 +3,7 @@
 
 startup() {
     # Use a lock file to prevent concurrent startup executions
-    local STARTUP_LOCK="/tmp/stealthsurf_startup.lock"
+    local STARTUP_LOCK="/tmp/ssurf_startup.lock"
 
     # Check if startup is already in progress
     if [ -f "$STARTUP_LOCK" ]; then

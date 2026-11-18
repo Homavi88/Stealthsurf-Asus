@@ -9,7 +9,7 @@ import urllib.parse
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist", "panel"))
-EXT = os.path.join(ROOT, "ext", "stealthsurf")
+EXT = os.path.join(ROOT, "ext", "ssurf")
 os.makedirs(EXT, exist_ok=True)
 os.makedirs(os.path.join(ROOT, "cgi-bin"), exist_ok=True)
 
@@ -34,7 +34,7 @@ BOOTSTRAP = {
         },
         "server": {"isRunning": True, "b4sni_isRunning": False},
         "custom_settings": {
-            "stealthsurf_version": "1.4.10",
+            "stealthsurf_version": "1.4.11",
             "stealthsurf_startup": "y",
             "stealthsurf_page": "user2.asp",
         },
@@ -45,7 +45,7 @@ UI_RESPONSE = {
     "xray": {
         "core_version": "26.9.9",
         "tested_core": "26.9.9",
-        "ui_version": "1.4.10",
+        "ui_version": "1.4.11",
         "running": True,
         "uptime": 3600,
         "profile": "config.json",

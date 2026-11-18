@@ -38,7 +38,7 @@ interface Result {
 const run = (shell: string[], scenario: Scenario): Result => {
   const state = fs.mkdtempSync(path.join(os.tmpdir(), 'xrayui-api-'));
   try {
-    const files = { 'opt/etc/xray/stealthsurf/config-api.json': API_CONFIG, ...scenario.files };
+    const files = { 'opt/etc/xray/ssurf/config-api.json': API_CONFIG, ...scenario.files };
     Object.entries(files).forEach(([rel, content]) => {
       const file = path.join(state, rel);
       fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -48,7 +48,7 @@ const run = (shell: string[], scenario: Scenario): Result => {
     expect(out.error).toBeUndefined();
     const read = (rel: string) => (fs.existsSync(path.join(state, rel)) ? fs.readFileSync(path.join(state, rel), 'utf8') : undefined);
     const status = read('share/xray_connection_status.json');
-    const apiConfig = read('opt/etc/xray/stealthsurf/config-api.json');
+    const apiConfig = read('opt/etc/xray/ssurf/config-api.json');
     return {
       events: (read('events.log') ?? '').split('\n').filter(Boolean),
       status: status ? JSON.parse(status) : undefined,
@@ -120,7 +120,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
     const r = run(shell, {
       steps: ['required'],
       env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' },
-      files: { 'opt/etc/xray/stealthsurf/config.json': balancerConfig(balancer) }
+      files: { 'opt/etc/xray/ssurf/config.json': balancerConfig(balancer) }
     });
     expect(r.events).toEqual([`required rc=${rc}`]);
   });
@@ -130,7 +130,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
     ['burstObservatory', { burstObservatory: { subjectSelector: ['p-'] } }]
   ])('leaves a configuration with its own %s alone when both checks are off', (_label, extra) => {
     const config = { ...JSON.parse(balancerConfig({ strategy: { type: 'leastPing' } })), ...extra };
-    const r = run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.events).toEqual(['required rc=1']);
   });
 
@@ -148,7 +148,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
     const r = run(shell, {
       steps: ['apply'],
       env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false', RS_PROBE_URL: 'https://probe.example/204', RS_PROBE_INTERVAL: '45' },
-      files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) }
+      files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) }
     });
     expect(r.apiConfig).toEqual({
       observatory: { subjectSelector: ['p-', 'q-', 'r-'], probeUrl: 'https://probe.example/204', probeInterval: '45s', enableConcurrency: true }
@@ -158,7 +158,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   });
 
   it('writes the full API configuration and the metrics rule when the connection check is on', () => {
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': balancerConfig({ strategy: { type: 'leastPing' } }) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': balancerConfig({ strategy: { type: 'leastPing' } }) } });
     expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, observatory: { subjectSelector: ['p-a'] }, metrics: { tag: 'sys:metrics_out' } });
     expect(r.events).toContain('jq_update_file');
   });
@@ -166,7 +166,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   it('probes every outbound through the burstObservatory instead of adding an observatory', () => {
     const burstObservatory = { subjectSelector: ['p-'], pingConfig: { destination: 'https://probe.example/204', interval: '30s', sampling: 3 } };
     const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct' }], burstObservatory };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).not.toHaveProperty('observatory');
     expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, burstObservatory: { subjectSelector: ['direct', 'p-', 'p-a'], pingConfig: burstObservatory.pingConfig } });
   });
@@ -174,7 +174,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   it('keeps the burstObservatory selectors as written when only the clients check is on', () => {
     const burstObservatory = { subjectSelector: ['p-'], pingConfig: { interval: '30s' } };
     const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct' }], burstObservatory };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).not.toHaveProperty('observatory');
     expect(r.apiConfig?.burstObservatory).toEqual(burstObservatory);
   });
@@ -185,7 +185,7 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
     ['a balancer that needs no probes', { routing: { balancers: [{ tag: 'bal', selector: ['p-'] }] } }]
   ])('probes no outbound when only the clients check is on and there is %s', (_label, extra) => {
     const config = { outbounds: [{ tag: 'p-a' }, { tag: 'reserve' }], ...extra };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, metrics: { tag: 'sys:metrics_out' } });
     expect(r.apiConfig).not.toHaveProperty('observatory');
     expect(r.events).toContain('apply rc=0');
@@ -193,14 +193,14 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
 
   it('probes only the balancer selectors when only the clients check is on', () => {
     const config = { outbounds: [{ tag: 'p-a' }, { tag: 'reserve' }], routing: { balancers: [{ tag: 'fast', selector: ['p-'], strategy: { type: 'leastPing' } }] } };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' } });
     expect(r.apiConfig?.observatory).toEqual(expect.objectContaining({ subjectSelector: ['p-'] }));
   });
 
   it('leaves a hand-written observatory alone when only the clients check is on', () => {
     const config = { ...JSON.parse(balancerConfig({ strategy: { type: 'leastPing' } })), observatory: { subjectSelector: ['p-'] } };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' } });
     expect(r.apiConfig).not.toHaveProperty('observatory');
   });
@@ -208,24 +208,24 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   // a leastPing balancer stops Xray from starting without an observatory, even one with nothing to probe
   it('keeps the observatory with an empty selector list when the connection check has nothing to probe', () => {
     const config = { outbounds: [{ tag: 'block', protocol: 'blackhole' }], routing: { balancers: [{ tag: 'bal', selector: ['block'], strategy: { type: 'leastPing' } }] } };
-    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/stealthsurf/config.json': JSON.stringify(config) } });
+    const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig?.observatory).toEqual(expect.objectContaining({ subjectSelector: [] }));
   });
 
   it('lists the clients that moved traffic since the last query', () => {
-    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/stealthsurf/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
+    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/ssurf/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
     expect(JSON.parse(r.clients ?? '')).toEqual([{ ip: '', email: ['alice@example'] }]);
     expect(r.events).toEqual(['xray api statsquery -s 127.0.0.1:10185 -pattern user>>> -reset', 'clients rc=0']);
   });
 
   it('does not start an xray process while Xray is stopped', () => {
-    const r = run(shell, { steps: ['clients'], files: { 'opt/etc/xray/stealthsurf/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
+    const r = run(shell, { steps: ['clients'], files: { 'opt/etc/xray/ssurf/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
     expect(JSON.parse(r.clients ?? '')).toEqual([]);
     expect(r.events).toEqual(['clients rc=0']);
   });
 
   it('writes an empty client list when the stats service does not answer', () => {
-    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/stealthsurf/config-api.json': CLIENTS_API_CONFIG } });
+    const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/ssurf/config-api.json': CLIENTS_API_CONFIG } });
     expect(JSON.parse(r.clients ?? '')).toEqual([]);
     expect(r.events).toContain('ERROR: StatsService unreachable on 127.0.0.1:10185');
   });

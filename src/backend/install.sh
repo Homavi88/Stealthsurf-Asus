@@ -92,23 +92,23 @@ EOF
 
     generate_xray_config
     ensure_xray_scaffold
+    migrate_homavi88_runtime_to_ssurf 2>/dev/null || true
+
 
     update_loading_progress "Configuring XRAY UI..."
 
     clear_script_entries
 
-    # Add or update nat-start
-    setup_script_file "/jffs/scripts/nat-start" "/jffs/scripts/stealthsurf service_event firewall configure #stealthsurf"
-    setup_script_file "/jffs/scripts/firewall-start" "/jffs/scripts/stealthsurf service_event firewall configure #stealthsurf"
+    # SurfGate hooks only — script is /jffs/scripts/ssurf (never official StealthSurf).
+    setup_script_file "/jffs/scripts/nat-start" "$ADDON_SCRIPT service_event firewall configure #ssurf"
+    setup_script_file "/jffs/scripts/firewall-start" "$ADDON_SCRIPT service_event firewall configure #ssurf"
 
-    # Add or update post-mount
-    setup_script_file "/jffs/scripts/post-mount" "/jffs/scripts/stealthsurf service_event startup & #stealthsurf"
+    setup_script_file "/jffs/scripts/post-mount" "$ADDON_SCRIPT service_event startup & #ssurf"
 
-    # Add or update service-event (Merlin passes custom action_script as $2)
-    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && /jffs/scripts/stealthsurf service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #stealthsurf"
+    # Merlin action_script names stay stealthsurf_* (Homavi88 panel protocol).
+    setup_script_file "/jffs/scripts/service-event" "echo \"\$2\" | grep -q \"^stealthsurf\" && $ADDON_SCRIPT service_event \$(echo \"\$2\" | cut -d'_' -f2- | tr '_' ' ') & #ssurf"
 
-    # Add or update dnsmasq.postconf
-    setup_script_file "/jffs/scripts/dnsmasq.postconf" "/jffs/scripts/stealthsurf dnsmasq \"\$1\" #stealthsurf"
+    setup_script_file "/jffs/scripts/dnsmasq.postconf" "$ADDON_SCRIPT dnsmasq \"\$1\" #ssurf"
 
     log_info "Mounting web page..."
     remount_ui "skipwait"
@@ -233,7 +233,7 @@ EOF
     xrayui_core_forget
     xrayui_core_probe
     if [ -z "$(xrayui_core_version)" ]; then
-        log_error_box "Installation finished, but the Xray core is not available ($XRAYUI_CORE_ERR). Install it with: stealthsurf update xray $XRAYUI_TESTED_CORE"
+        log_error_box "Installation finished, but the Xray core is not available ($XRAYUI_CORE_ERR). Install it with: surfgate update xray $XRAYUI_TESTED_CORE"
         update_loading_progress "Installation finished, but the Xray core is not available."
         return 1
     fi
@@ -243,10 +243,10 @@ EOF
     ss_api_migrate_legacy_keys 2>/dev/null || true
     ss_api_public_keys_view 2>/dev/null || true
     ss_cli_ensure_bin_links 2>/dev/null || {
-        ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
         ln -sf "$ADDON_SCRIPT" /opt/bin/surfgate 2>/dev/null || true
         ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
         ln -sf "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
+        rm -f /opt/bin/stealthsurf 2>/dev/null || true
     }
     # Clear legacy 1.0.x service-event block if present (replaced by #stealthsurf hook)
     if [ -f /jffs/scripts/service-event ] && grep -qE 'StealthSurf UI hook|SurfGate UI hook' /jffs/scripts/service-event 2>/dev/null; then
@@ -259,10 +259,7 @@ EOF
         chmod 0755 /jffs/scripts/service-event 2>/dev/null || true
     fi
 
-    # Standalone panel on dedicated IP:1131 (coexists with official StealthSurf :8800)
-    if [ -x "$OFFICIAL_SS_DAEMON" ]; then
-        log_ok "Official StealthSurf VPN detected at $OFFICIAL_SS_JFFS_DIR — files kept untouched."
-    fi
+    # Standalone panel on :1131 — no interaction with official StealthSurf (:8800).
     if [ ! -f "$ADDON_JFFS_ADN_DIR/panel/index.html" ] && [ -f "$ADDON_JFFS_ADN_DIR/index.panel.html" ]; then
         mkdir -p "$ADDON_JFFS_ADN_DIR/panel"
         cp -f "$ADDON_JFFS_ADN_DIR/index.panel.html" "$ADDON_JFFS_ADN_DIR/panel/index.html"
@@ -273,8 +270,8 @@ EOF
     # Always restart so an upgraded panel-httpd replaces the stale process (avoids bootstrap HTTP 500).
     panel_stop 2>/dev/null || true
     if ! panel_start; then
-        log_warn "Standalone panel did not start. See /tmp/stealthsurf/panel.log"
-        log_warn "Fix: surfgate panel restart   (1.4.10+ ships bin/panel-httpd; or install lighttpd via opkg)"
+        log_warn "Standalone panel did not start. See /tmp/ssurf/panel.log"
+        log_warn "Fix: surfgate panel restart   (1.4.11+ ships bin/panel-httpd; or install lighttpd via opkg)"
     fi
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
@@ -282,7 +279,7 @@ EOF
     log_ok "Installed $(show_version) (files in $ADDON_JFFS_ADN_DIR, panel :1131)"
     log_box "Installation completed. Open panel: $_panel_url"
     log_info "Merlin WebUI: VPN → $ADDON_TITLE  ·  CLI: surfgate panel status"
-    log_info "Official :8800 path is $OFFICIAL_SS_JFFS_DIR (never removed by this addon)."
+    log_info "Official StealthSurf path /jffs/addons/stealthsurf is never modified by SurfGate."
 
     update_loading_progress "Installation completed. Panel: $_panel_url"
 }
@@ -307,13 +304,7 @@ uninstall() {
     log_info "Removing XRAY UI files from $ADDON_JFFS_ADN_DIR..."
     rm -rf "$ADDON_WEB_DIR" || log_warn "Failed to remove $ADDON_WEB_DIR."
     rm -rf "$ADDON_JFFS_ADN_DIR" || log_warn "Failed to remove $ADDON_JFFS_ADN_DIR."
-    if [ -x "$OFFICIAL_SS_DAEMON" ]; then
-        log_ok "Official StealthSurf VPN at $OFFICIAL_SS_JFFS_DIR left in place."
-    elif [ -d "$OFFICIAL_SS_JFFS_DIR" ] && { [ -f "$OFFICIAL_SS_JFFS_DIR/index.asp" ] || [ -f "$OFFICIAL_SS_JFFS_DIR/app.js" ]; }; then
-        log_warn "Cleaning mistaken Homavi88 leftovers from $OFFICIAL_SS_JFFS_DIR (no official daemon)."
-        rm -rf "$OFFICIAL_SS_JFFS_DIR/index.asp" "$OFFICIAL_SS_JFFS_DIR/app.js" \
-            "$OFFICIAL_SS_JFFS_DIR/index.panel.html" "$OFFICIAL_SS_JFFS_DIR/panel" 2>/dev/null || true
-    fi
+    # Never read/write/delete under /jffs/addons/stealthsurf (official StealthSurf).
     rm -rf "$ADDON_SHARE_DIR"/*.json || log_warn "Failed to remove $ADDON_SHARE_DIR/*.json."
     rm -rf "$ADDON_SHARE_DIR/logs" || log_warn "Failed to remove $ADDON_SHARE_DIR/logs."
 
@@ -374,7 +365,8 @@ uninstall() {
         log_info "Removing SurfGate custom GEODATA..."
         rm -rf "$ADDON_SHARE_DIR" || log_debug "Failed to remove $ADDON_SHARE_DIR."
         # Only our custom dat helper — never /opt/sbin/xrayui (stock XrayUI)
-        rm -f /opt/sbin/stealthsurf || log_debug "Failed to remove /opt/sbin/stealthsurf."
+        # Our custom dat name is ssurf; also drop legacy Homavi88 /opt/sbin/stealthsurf
+        rm -f /opt/sbin/ssurf /opt/sbin/stealthsurf || log_debug "Failed to remove SurfGate custom geodata helper."
         if [ "$stock_xrayui" = "true" ]; then
             log_info "Keeping shared community geodata (geoip.dat/geosite.dat) for stock XrayUI."
         else
@@ -443,8 +435,12 @@ uninstall() {
     read -r user_input
     if [ "$user_input" = "yes" ] || [ "$user_input" = "y" ]; then
         log_info "Removing SurfGate settings..."
-        # Never delete stock /opt/etc/xrayui.conf
-        rm -f "$XRAYUI_CONFIG_FILE" /opt/etc/stealthsurf.conf || log_debug "Failed to remove settings conf."
+        # Never delete stock /opt/etc/xrayui.conf or official addon state
+        rm -f "$XRAYUI_CONFIG_FILE" || log_debug "Failed to remove settings conf."
+        # Drop legacy Homavi88 conf only when it looks like ours
+        if [ -f /opt/etc/stealthsurf.conf ] && grep -qE 'panel_|ss_api|ADDON_|stlth_|geoip_url' /opt/etc/stealthsurf.conf 2>/dev/null; then
+            rm -f /opt/etc/stealthsurf.conf || true
+        fi
     else
         log_info "Keeping SurfGate settings ($XRAYUI_CONFIG_FILE)."
     fi
@@ -462,9 +458,23 @@ uninstall() {
     cron_jobs_clear
 
     # Only our logrotate stanza — never stock xrayui
-    rm -f /opt/etc/logrotate.d/stealthsurf || log_debug "Failed to remove logrotate config."
-    rm -f /opt/bin/stealthsurf /opt/bin/surfgate /opt/bin/ssurf /opt/bin/ss 2>/dev/null
-    rm -rf /jffs/scripts/stealthsurf || log_debug "Failed to remove /jffs/scripts/stealthsurf."
+    rm -f /opt/etc/logrotate.d/ssurf /opt/etc/logrotate.d/stealthsurf || log_debug "Failed to remove logrotate config."
+    rm -f /opt/bin/surfgate /opt/bin/ssurf /opt/bin/ss 2>/dev/null
+    # Never create/claim /opt/bin/stealthsurf; remove only if it pointed at our script
+    if [ -L /opt/bin/stealthsurf ]; then
+        case "$(readlink /opt/bin/stealthsurf 2>/dev/null)" in
+        /jffs/scripts/ssurf | /jffs/scripts/stealthsurf | */addons/ssurf/*)
+            rm -f /opt/bin/stealthsurf 2>/dev/null || true
+            ;;
+        esac
+    fi
+    rm -f /jffs/scripts/ssurf 2>/dev/null || true
+    # Remove legacy Homavi88 script path only when fingerprint matches (never official)
+    if [ -f /jffs/scripts/stealthsurf ] &&
+        grep -q 'ADDON_TITLE="SurfGate"\|ADDON_PKG_NAME="ssurf"\|Homavi88' /jffs/scripts/stealthsurf 2>/dev/null; then
+        rm -f /jffs/scripts/stealthsurf 2>/dev/null || true
+    fi
+    # Never remove /jffs/addons/stealthsurf (official StealthSurf).
 
     log_box "Uninstallation process completed successfully."
 }
@@ -520,11 +530,11 @@ setup_script_file() {
 clear_script_entries() {
 
     log_info "Removing existing $ADDON_TITLE entries from scripts."
-    sed '/#stealthsurf/d' /jffs/scripts/services-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/services-start && chmod +x /jffs/scripts/services-start || log_debug "Failed to remove entry from /jffs/scripts/services-start."
-    sed '/#stealthsurf/d' /jffs/scripts/nat-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/nat-start && chmod +x /jffs/scripts/nat-start || log_debug "Failed to remove entry from /jffs/scripts/nat-start."
-    sed '/#stealthsurf/d' /jffs/scripts/firewall-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/firewall-start && chmod +x /jffs/scripts/firewall-start || log_debug "Failed to remove entry from /jffs/scripts/firewall-start."
-    sed '/#stealthsurf/d' /jffs/scripts/post-mount >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/post-mount && chmod +x /jffs/scripts/post-mount || log_debug "Failed to remove entry from /jffs/scripts/post-mount."
-    sed '/#stealthsurf/d' /jffs/scripts/service-event >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
-    sed '/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
-    sed '/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/services-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/services-start && chmod +x /jffs/scripts/services-start || log_debug "Failed to remove entry from /jffs/scripts/services-start."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/nat-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/nat-start && chmod +x /jffs/scripts/nat-start || log_debug "Failed to remove entry from /jffs/scripts/nat-start."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/firewall-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/firewall-start && chmod +x /jffs/scripts/firewall-start || log_debug "Failed to remove entry from /jffs/scripts/firewall-start."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/post-mount >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/post-mount && chmod +x /jffs/scripts/post-mount || log_debug "Failed to remove entry from /jffs/scripts/post-mount."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/service-event >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/service-event && chmod +x /jffs/scripts/service-event || log_debug "Failed to remove entry from /jffs/scripts/service-event."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/dnsmasq.postconf >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/dnsmasq.postconf && chmod +x /jffs/scripts/dnsmasq.postconf || log_debug "Failed to remove entry from /jffs/scripts/dnsmasq.postconf."
+    sed '/#ssurf/d;/#stealthsurf/d' /jffs/scripts/wan-start >/tmp/stealthsurf_hook.$$ 2>/dev/null && mv /tmp/stealthsurf_hook.$$ /jffs/scripts/wan-start && chmod +x /jffs/scripts/wan-start || log_debug "Failed to remove entry from /jffs/scripts/wan-start."
 }
