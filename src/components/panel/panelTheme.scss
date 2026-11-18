@@ -1,16 +1,18 @@
-/* Light SurfGate panel (standalone :1131) — Soft Utility + Signal Paper. */
+/* Light SurfGate panel — Soft Utility + Signal Paper typography, iOS 27 colors. */
 .ss-panel-root {
-  --ss-bg0: #f4f6f3;
-  --ss-bg1: #fafbf9;
-  --ss-card: #ffffff;
-  --ss-text: #15241c;
-  --ss-muted: #5f6f66;
-  --ss-line: #dde5df;
-  --ss-blue: #0f7a5f; /* accent (emerald) — keep name for compatibility */
-  --ss-blue-soft: #d8efe6;
-  --ss-green: #1a9a5c;
-  --ss-danger: #d64545;
-  --ss-shadow: 0 10px 30px rgba(25, 50, 40, 0.07);
+  /* iOS 27 / Liquid Glass system tokens (light) */
+  --ss-bg0: #f2f2f7; /* systemGroupedBackground */
+  --ss-bg1: #ffffff;
+  --ss-card: #ffffff; /* secondarySystemGroupedBackground */
+  --ss-text: #000000; /* label */
+  --ss-muted: rgba(60, 60, 67, 0.6); /* secondaryLabel */
+  --ss-line: rgba(60, 60, 67, 0.18); /* separator-ish */
+  --ss-blue: #0088ff; /* systemBlue — control accent */
+  --ss-blue-soft: rgba(0, 136, 255, 0.12);
+  --ss-green: #34c759; /* systemGreen */
+  --ss-danger: #ff383c; /* systemRed */
+  --ss-fill: #e5e5ea; /* systemGray5 */
+  --ss-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
   --ss-radius: 14px;
   --ss-font: 'Outfit', 'Segoe UI', 'Helvetica Neue', sans-serif;
   --ss-font-brand: 'Fraunces', Georgia, 'Times New Roman', serif;
@@ -20,8 +22,8 @@
   color: var(--ss-text);
   font-family: var(--ss-font);
   background:
-    radial-gradient(1200px 520px at 50% -8%, rgba(15, 122, 95, 0.14), transparent 60%),
-    linear-gradient(180deg, #eef3ee 0%, var(--ss-bg0) 42%, #f7f8f6 100%);
+    radial-gradient(1000px 480px at 50% -12%, rgba(0, 136, 255, 0.1), transparent 58%),
+    var(--ss-bg0);
   background-attachment: fixed;
 }
 
@@ -30,10 +32,10 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.28;
+  opacity: 0.22;
   background-image:
-    linear-gradient(rgba(40, 90, 70, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(40, 90, 70, 0.06) 1px, transparent 1px);
+    linear-gradient(rgba(60, 60, 67, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(60, 60, 67, 0.05) 1px, transparent 1px);
   background-size: 44px 44px;
   z-index: 0;
 }
@@ -70,8 +72,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #5ec4a0, var(--ss-blue));
-  box-shadow: 0 0 0 4px rgba(15, 122, 95, 0.14);
+  background: radial-gradient(circle at 35% 30%, #64b5ff, var(--ss-blue));
+  box-shadow: 0 0 0 4px rgba(0, 136, 255, 0.16);
 }
 
 .ss-brand-name {
@@ -110,8 +112,8 @@
   margin: 8px auto 14px;
   border-radius: 50%;
   background:
-    radial-gradient(circle at 50% 42%, rgba(120, 210, 170, 0.95), rgba(15, 122, 95, 0.38) 55%, transparent 70%),
-    radial-gradient(circle at 50% 50%, rgba(15, 122, 95, 0.16), transparent 70%);
+    radial-gradient(circle at 50% 42%, rgba(120, 200, 255, 0.95), rgba(0, 136, 255, 0.38) 55%, transparent 70%),
+    radial-gradient(circle at 50% 50%, rgba(52, 199, 89, 0.18), transparent 70%);
   position: relative;
   animation: ss-orb-pulse 3.2s ease-in-out infinite;
 }
@@ -121,8 +123,8 @@
   position: absolute;
   inset: 34px;
   border-radius: 50%;
-  background: linear-gradient(160deg, #8fd9b8, #0f7a5f 72%);
-  box-shadow: inset 0 -8px 16px rgba(0, 60, 40, 0.22);
+  background: linear-gradient(160deg, #7ec8ff, #0088ff 72%);
+  box-shadow: inset 0 -8px 16px rgba(0, 60, 140, 0.22);
 }
 
 .ss-hero-orb.is-off {
@@ -162,7 +164,7 @@
   font-size: 22px;
   font-weight: 700;
   letter-spacing: -0.02em;
-  color: var(--ss-blue);
+  color: var(--ss-green);
   margin: 0;
 }
 
@@ -256,7 +258,7 @@
 }
 
 .ss-loc-item.is-active {
-  background: linear-gradient(90deg, rgba(15, 122, 95, 0.07), transparent);
+  background: linear-gradient(90deg, rgba(0, 136, 255, 0.08), transparent);
   border-radius: 12px;
   padding-left: 8px;
   padding-right: 8px;
@@ -318,15 +320,15 @@
 }
 
 .ss-primary-btn.start {
-  background: linear-gradient(180deg, #1a9a72, var(--ss-blue));
+  background: var(--ss-blue);
   color: #fff;
-  box-shadow: 0 10px 24px rgba(15, 122, 95, 0.32);
+  box-shadow: 0 8px 20px rgba(0, 136, 255, 0.28);
 }
 
 .ss-primary-btn.stop {
   background: #fff;
   color: var(--ss-danger);
-  border: 1px solid #f0c2c2;
+  border: 1px solid rgba(255, 56, 60, 0.28);
   box-shadow: var(--ss-shadow);
 }
 
@@ -540,7 +542,7 @@
   box-sizing: border-box;
   border: 0;
   border-radius: 12px;
-  background: #eef2ee;
+  background: var(--ss-fill);
   color: var(--ss-text);
   font: inherit;
   font-size: 14px;
@@ -551,7 +553,7 @@
 
 .ss-field input:focus,
 .ss-field select:focus {
-  box-shadow: 0 0 0 3px rgba(15, 122, 95, 0.2);
+  box-shadow: 0 0 0 3.5px rgba(0, 136, 255, 0.35);
 }
 
 .ss-toggle {
@@ -560,7 +562,7 @@
   height: 31px;
   border: 0;
   border-radius: 999px;
-  background: #e1e6ee;
+  background: #e5e5ea;
   padding: 0;
   cursor: pointer;
   transition: background 0.18s ease;
@@ -605,7 +607,7 @@
 }
 
 .ss-chip-btn.danger {
-  background: #fde8e8;
+  background: rgba(255, 56, 60, 0.12);
   color: var(--ss-danger);
 }
 
@@ -692,7 +694,7 @@
 .ss-panel-light .FormTable input[type='password'],
 .ss-panel-light .FormTable select,
 .ss-panel-light .FormTable textarea {
-  background: #eef2ee !important;
+  background: var(--ss-fill) !important;
   border: 0 !important;
   border-radius: 12px !important;
   color: var(--ss-text) !important;
@@ -710,12 +712,12 @@
 }
 
 .ss-panel-light .label-success {
-  background: #e6f7ee !important;
+  background: rgba(52, 199, 89, 0.14) !important;
   color: var(--ss-green) !important;
 }
 
 .ss-panel-light .label-error {
-  background: #fde8e8 !important;
+  background: rgba(255, 56, 60, 0.12) !important;
   color: var(--ss-danger) !important;
 }
 
@@ -772,7 +774,7 @@
 .ss-panel-light pre.log,
 .ss-panel-light .log-view,
 .ss-panel-light .sni-list {
-  background: #eef2ee !important;
+  background: var(--ss-fill) !important;
   color: var(--ss-text) !important;
   border-radius: 12px;
 }
