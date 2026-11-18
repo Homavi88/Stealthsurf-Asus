@@ -1,19 +1,22 @@
-/* Light SurfGate panel — Soft Utility + Signal Paper typography, iOS 27 colors. */
+/* Soft Utility + Signal Paper + mature iOS 27 Liquid Glass */
 .ss-panel-root {
-  /* iOS 27 / Liquid Glass system tokens (light) */
-  --ss-bg0: #f2f2f7; /* systemGroupedBackground */
-  --ss-bg1: #ffffff;
-  --ss-card: #ffffff; /* secondarySystemGroupedBackground */
-  --ss-text: #000000; /* label */
-  --ss-muted: rgba(60, 60, 67, 0.6); /* secondaryLabel */
-  --ss-line: rgba(60, 60, 67, 0.18); /* separator-ish */
-  --ss-blue: #0088ff; /* systemBlue — control accent */
-  --ss-blue-soft: rgba(0, 136, 255, 0.12);
-  --ss-green: #34c759; /* systemGreen */
-  --ss-danger: #ff383c; /* systemRed */
-  --ss-fill: #e5e5ea; /* systemGray5 */
-  --ss-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
-  --ss-radius: 14px;
+  --ss-bg0: #e8eaf0;
+  --ss-bg1: #f5f6fa;
+  --ss-card: rgba(255, 255, 255, 0.52);
+  --ss-card-solid: #ffffff;
+  --ss-text: #1c1c1e;
+  --ss-muted: rgba(60, 60, 67, 0.55);
+  --ss-line: rgba(255, 255, 255, 0.55);
+  --ss-hair: rgba(60, 60, 67, 0.12);
+  --ss-blue: #0077ed; /* slightly deeper than candy #0088FF */
+  --ss-blue-soft: rgba(0, 119, 237, 0.12);
+  --ss-green: #248a3d; /* mature green (not toy #34C759) */
+  --ss-green-bright: #34c759;
+  --ss-danger: #e11d2e;
+  --ss-fill: rgba(120, 120, 128, 0.12);
+  --ss-shadow: 0 10px 40px rgba(20, 28, 45, 0.08);
+  --ss-glass-blur: 28px;
+  --ss-radius: 12px;
   --ss-font: 'Outfit', 'Segoe UI', 'Helvetica Neue', sans-serif;
   --ss-font-brand: 'Fraunces', Georgia, 'Times New Roman', serif;
 
@@ -22,8 +25,10 @@
   color: var(--ss-text);
   font-family: var(--ss-font);
   background:
-    radial-gradient(1000px 480px at 50% -12%, rgba(0, 136, 255, 0.1), transparent 58%),
-    var(--ss-bg0);
+    radial-gradient(900px 520px at 12% -10%, rgba(90, 130, 200, 0.28), transparent 55%),
+    radial-gradient(800px 480px at 88% 8%, rgba(120, 160, 190, 0.22), transparent 50%),
+    radial-gradient(700px 420px at 50% 110%, rgba(70, 100, 140, 0.12), transparent 45%),
+    linear-gradient(180deg, #dfe4ee 0%, var(--ss-bg0) 45%, #f3f4f8 100%);
   background-attachment: fixed;
 }
 
@@ -32,12 +37,35 @@
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.22;
-  background-image:
-    linear-gradient(rgba(60, 60, 67, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(60, 60, 67, 0.05) 1px, transparent 1px);
-  background-size: 44px 44px;
+  opacity: 0.35;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.45), transparent 40%),
+    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.2), transparent 35%);
   z-index: 0;
+}
+
+/* Shared liquid-glass surface */
+.ss-glass {
+  background: var(--ss-card);
+  border: 1px solid var(--ss-line);
+  box-shadow:
+    var(--ss-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  -webkit-backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.6);
+  backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.6);
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .ss-glass,
+  .ss-card,
+  .ss-set-card,
+  .ss-nav-group,
+  .ss-icon-btn,
+  .ss-ip-pill,
+  .ss-panel-light .FormTable,
+  .ss-panel-light table.FormTable {
+    background: rgba(255, 255, 255, 0.92) !important;
+  }
 }
 
 .ss-panel-shell {
@@ -72,8 +100,13 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #64b5ff, var(--ss-blue));
-  box-shadow: 0 0 0 4px rgba(0, 136, 255, 0.16);
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    0 4px 14px rgba(20, 40, 80, 0.1);
+  -webkit-backdrop-filter: blur(12px) saturate(1.4);
+  backdrop-filter: blur(12px) saturate(1.4);
 }
 
 .ss-brand-name {
@@ -87,14 +120,18 @@
 .ss-icon-btn {
   width: 40px;
   height: 40px;
-  border: 0;
-  border-radius: 12px;
-  background: var(--ss-card);
-  box-shadow: var(--ss-shadow);
-  color: var(--ss-blue);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow:
+    0 6px 18px rgba(20, 28, 45, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  color: var(--ss-text);
   cursor: pointer;
   display: grid;
   place-items: center;
+  -webkit-backdrop-filter: blur(20px) saturate(1.5);
+  backdrop-filter: blur(20px) saturate(1.5);
 }
 
 .ss-icon-btn:active {
@@ -107,24 +144,33 @@
 }
 
 .ss-hero-orb {
-  width: 132px;
-  height: 132px;
-  margin: 8px auto 14px;
+  width: 120px;
+  height: 120px;
+  margin: 4px auto 16px;
   border-radius: 50%;
-  background:
-    radial-gradient(circle at 50% 42%, rgba(120, 200, 255, 0.95), rgba(0, 136, 255, 0.38) 55%, transparent 70%),
-    radial-gradient(circle at 50% 50%, rgba(52, 199, 89, 0.18), transparent 70%);
   position: relative;
-  animation: ss-orb-pulse 3.2s ease-in-out infinite;
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.75), rgba(255, 255, 255, 0.08) 42%, transparent 60%),
+    linear-gradient(160deg, rgba(180, 200, 230, 0.35), rgba(90, 120, 170, 0.22));
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    0 18px 40px rgba(40, 60, 100, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8),
+    inset 0 -10px 24px rgba(40, 70, 120, 0.12);
+  -webkit-backdrop-filter: blur(18px) saturate(1.5);
+  backdrop-filter: blur(18px) saturate(1.5);
+  animation: ss-orb-pulse 4s ease-in-out infinite;
 }
 
 .ss-hero-orb::after {
   content: '';
   position: absolute;
-  inset: 34px;
+  inset: 38px;
   border-radius: 50%;
-  background: linear-gradient(160deg, #7ec8ff, #0088ff 72%);
-  box-shadow: inset 0 -8px 16px rgba(0, 60, 140, 0.22);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.55), rgba(0, 119, 237, 0.45));
+  box-shadow:
+    inset 0 -6px 14px rgba(0, 60, 120, 0.18),
+    0 4px 12px rgba(0, 80, 160, 0.12);
 }
 
 .ss-hero-orb.is-off {
@@ -146,8 +192,8 @@
 .ss-brand-hero {
   margin: 0 0 6px;
   font-family: var(--ss-font-brand);
-  font-size: 42px;
-  font-weight: 700;
+  font-size: 36px;
+  font-weight: 600;
   letter-spacing: -0.03em;
   line-height: 1.05;
   color: var(--ss-text);
@@ -161,9 +207,9 @@
 }
 
 .ss-status-title {
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ss-green);
   margin: 0;
 }
@@ -177,12 +223,15 @@
   align-items: center;
   gap: 8px;
   margin-top: 10px;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid var(--ss-line);
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   color: var(--ss-muted);
   font-size: 13px;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  backdrop-filter: blur(16px) saturate(1.4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
 }
 
 .ss-resources {
@@ -203,10 +252,14 @@
 .ss-card {
   background: var(--ss-card);
   border-radius: var(--ss-radius);
-  box-shadow: var(--ss-shadow);
-  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow:
+    var(--ss-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   padding: 14px 16px;
   margin-bottom: 12px;
+  -webkit-backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
+  backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
 }
 
 .ss-card-title {
@@ -258,8 +311,8 @@
 }
 
 .ss-loc-item.is-active {
-  background: linear-gradient(90deg, rgba(0, 136, 255, 0.08), transparent);
-  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(0, 119, 237, 0.1), transparent);
+  border-radius: 14px;
   padding-left: 8px;
   padding-right: 8px;
 }
@@ -267,11 +320,14 @@
 .ss-loc-flag {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
-  background: var(--ss-blue-soft);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.5);
   display: grid;
   place-items: center;
   font-size: 18px;
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
 }
 
 .ss-loc-meta {
@@ -306,10 +362,10 @@
 .ss-primary-btn {
   width: 100%;
   border: 0;
-  border-radius: var(--ss-radius);
-  padding: 16px 18px;
+  border-radius: 12px;
+  padding: 15px 18px;
   font-size: 16px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
   font-family: inherit;
   transition: transform 0.12s ease, box-shadow 0.12s ease;
@@ -322,14 +378,18 @@
 .ss-primary-btn.start {
   background: var(--ss-blue);
   color: #fff;
-  box-shadow: 0 8px 20px rgba(0, 136, 255, 0.28);
+  box-shadow: 0 10px 28px rgba(0, 90, 200, 0.28);
 }
 
 .ss-primary-btn.stop {
-  background: #fff;
+  background: rgba(255, 255, 255, 0.5);
   color: var(--ss-danger);
-  border: 1px solid rgba(255, 56, 60, 0.28);
-  box-shadow: var(--ss-shadow);
+  border: 1px solid rgba(225, 29, 46, 0.22);
+  box-shadow:
+    0 8px 22px rgba(20, 28, 45, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
 }
 
 .ss-primary-btn:disabled {
@@ -353,9 +413,14 @@
 .ss-nav-group {
   background: var(--ss-card);
   border-radius: var(--ss-radius);
-  box-shadow: var(--ss-shadow);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow:
+    var(--ss-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
   padding: 6px;
   margin-bottom: 10px;
+  -webkit-backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
+  backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
 }
 
 .ss-nav-item {
@@ -375,37 +440,42 @@
   cursor: pointer;
 }
 
-.ss-nav-item:hover,
+.ss-nav-item:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
 .ss-nav-item.is-active {
-  background: var(--ss-blue-soft);
+  background: rgba(0, 119, 237, 0.1);
   color: var(--ss-blue);
 }
 
 .ss-nav-ico {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
+  width: 26px;
+  height: 26px;
+  border-radius: 9px;
   display: grid;
   place-items: center;
   flex-shrink: 0;
-  background: var(--ss-blue-soft);
-  color: var(--ss-blue);
-  font-size: 12px;
-  font-weight: 800;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  color: var(--ss-muted);
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0;
   opacity: 1;
 }
 
 .ss-nav-item.is-active .ss-nav-ico {
   background: var(--ss-blue);
+  border-color: transparent;
   color: #fff;
 }
 
 .ss-settings-title {
   margin: 0 0 14px;
   font-family: var(--ss-font-brand);
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.02em;
   color: var(--ss-text);
 }
@@ -437,7 +507,7 @@
   background: transparent;
   color: var(--ss-blue);
   font: inherit;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   padding: 0;
   margin-bottom: 10px;
@@ -459,10 +529,14 @@
 .ss-set-card {
   background: var(--ss-card);
   border-radius: var(--ss-radius);
-  box-shadow: var(--ss-shadow);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    var(--ss-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   overflow: hidden;
-  margin-bottom: 4px;
+  margin-bottom: 8px;
+  -webkit-backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
+  backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
 }
 
 .ss-set-row {
@@ -470,7 +544,7 @@
 }
 
 .ss-set-row.has-divider {
-  border-bottom: 1px solid var(--ss-line);
+  border-bottom: 1px solid var(--ss-hair);
 }
 
 .ss-set-row.has-divider:last-child {
@@ -540,7 +614,7 @@
 .ss-field select {
   width: 100%;
   box-sizing: border-box;
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.4);
   border-radius: 12px;
   background: var(--ss-fill);
   color: var(--ss-text);
@@ -553,7 +627,8 @@
 
 .ss-field input:focus,
 .ss-field select:focus {
-  box-shadow: 0 0 0 3.5px rgba(0, 136, 255, 0.35);
+  box-shadow: 0 0 0 3.5px rgba(0, 119, 237, 0.28);
+  border-color: rgba(0, 119, 237, 0.35);
 }
 
 .ss-toggle {
@@ -562,7 +637,7 @@
   height: 31px;
   border: 0;
   border-radius: 999px;
-  background: #e5e5ea;
+  background: rgba(120, 120, 128, 0.22);
   padding: 0;
   cursor: pointer;
   transition: background 0.18s ease;
@@ -595,20 +670,23 @@
 }
 
 .ss-chip-btn {
-  border: 0;
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 999px;
-  background: var(--ss-blue-soft);
+  background: rgba(255, 255, 255, 0.4);
   color: var(--ss-blue);
   font: inherit;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 600;
   padding: 8px 12px;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .ss-chip-btn.danger {
-  background: rgba(255, 56, 60, 0.12);
+  background: rgba(225, 29, 46, 0.1);
   color: var(--ss-danger);
+  border-color: rgba(225, 29, 46, 0.15);
 }
 
 .ss-chip-btn:disabled {
@@ -655,9 +733,13 @@
   background: var(--ss-card);
   border-radius: var(--ss-radius);
   overflow: hidden;
-  box-shadow: var(--ss-shadow);
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    var(--ss-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   margin-bottom: 12px;
+  -webkit-backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
+  backdrop-filter: blur(var(--ss-glass-blur)) saturate(1.55);
 }
 
 .ss-panel-light .FormTable th,
@@ -665,7 +747,7 @@
 .ss-panel-light .FormTable thead td {
   background: transparent !important;
   color: var(--ss-text) !important;
-  border-color: var(--ss-line) !important;
+  border-color: var(--ss-hair) !important;
   font-family: inherit;
 }
 
@@ -695,7 +777,7 @@
 .ss-panel-light .FormTable select,
 .ss-panel-light .FormTable textarea {
   background: var(--ss-fill) !important;
-  border: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
   border-radius: 12px !important;
   color: var(--ss-text) !important;
   padding: 10px 12px !important;
@@ -703,21 +785,21 @@
 
 .ss-panel-light .FormTable .button_gen,
 .ss-panel-light .FormTable input.button_gen {
-  background: var(--ss-blue-soft) !important;
+  background: rgba(255, 255, 255, 0.45) !important;
   color: var(--ss-blue) !important;
-  border: 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
   border-radius: 999px !important;
-  font-weight: 700 !important;
-  box-shadow: none !important;
+  font-weight: 600 !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6) !important;
 }
 
 .ss-panel-light .label-success {
-  background: rgba(52, 199, 89, 0.14) !important;
+  background: rgba(36, 138, 61, 0.12) !important;
   color: var(--ss-green) !important;
 }
 
 .ss-panel-light .label-error {
-  background: rgba(255, 56, 60, 0.12) !important;
+  background: rgba(225, 29, 46, 0.1) !important;
   color: var(--ss-danger) !important;
 }
 
@@ -766,7 +848,7 @@
 .ss-panel-light .toolbar {
   background: var(--ss-card) !important;
   color: var(--ss-text) !important;
-  border-color: var(--ss-line) !important;
+  border-color: var(--ss-hair) !important;
 }
 
 .ss-panel-light .log-console,
@@ -774,9 +856,10 @@
 .ss-panel-light pre.log,
 .ss-panel-light .log-view,
 .ss-panel-light .sni-list {
-  background: var(--ss-fill) !important;
+  background: rgba(255, 255, 255, 0.4) !important;
   color: var(--ss-text) !important;
   border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
 }
 
 .ss-panel-light .button_gen,
