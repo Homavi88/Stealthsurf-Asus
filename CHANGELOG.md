@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.8] - 2026-11-18
+
+### Panel bootstrap HTTP 500
+
+- `panel-httpd` calls `/cgi-bin/bootstrap|status|api` via `/bin/sh` + addon (no CGI shebang on `/jffs`)
+- Never returns opaque HTTP 500 for addon failures — JSON `{"ok":false,"error":...}` instead
+- CGI fallback scripts also invoke addon with `/bin/sh`; fix missing `panel live` in CLI dispatch
+- Harden bootstrap JSON (validate custom_settings, keep stdout clean)
+
+---
+
 ## [1.4.7] - 2026-11-17
 
 ### Bundled panel-httpd (no opkg)

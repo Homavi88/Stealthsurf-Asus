@@ -224,14 +224,18 @@ panel_netmask_to_prefix() {
 panel_write_cgi() {
     mkdir -p "$PANEL_CGI_DIR" || return 1
 
+    # BusyBox/lighttpd CGI fallback. Bundled panel-httpd (1.4.8+) calls the addon
+    # directly via /bin/sh and does not depend on these scripts being +x/exec.
+    # Always invoke addon with /bin/sh (works when script lacks +x).
     cat >"$PANEL_CGI_DIR/bootstrap" <<'CGI'
 #!/bin/sh
 echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
-if [ -x "$ADDON_SCRIPT" ]; then
-  "$ADDON_SCRIPT" panel bootstrap
+if [ -f "$ADDON_SCRIPT" ]; then
+  /bin/sh "$ADDON_SCRIPT" panel bootstrap 2>/tmp/stealthsurf/cgi-bootstrap.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -242,10 +246,11 @@ CGI
 echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
 export CONTENT_LENGTH REQUEST_METHOD
-if [ -x "$ADDON_SCRIPT" ]; then
-  "$ADDON_SCRIPT" panel api
+if [ -f "$ADDON_SCRIPT" ]; then
+  /bin/sh "$ADDON_SCRIPT" panel api 2>/tmp/stealthsurf/cgi-api.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -256,9 +261,10 @@ CGI
 echo "Content-Type: application/json"
 echo "Cache-Control: no-store"
 echo ""
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 ADDON_SCRIPT="${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}"
-if [ -x "$ADDON_SCRIPT" ]; then
-  "$ADDON_SCRIPT" panel live
+if [ -f "$ADDON_SCRIPT" ]; then
+  /bin/sh "$ADDON_SCRIPT" panel live 2>/tmp/stealthsurf/cgi-status.err
 else
   echo '{"ok":false,"error":"stealthsurf missing"}'
 fi
@@ -364,7 +370,8 @@ panel_start_bundled_once() {
     # $1 = listen addr (IP:PORT or :PORT); $2 = panel-httpd binary
     local listen_arg="$1"
     local bin="$2"
-    "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" >>"$PANEL_LOG" 2>&1 &
+    # -addon: call stealthsurf via /bin/sh (no CGI shebang on /jffs → no HTTP 500 on noexec/+x)
+    "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" -addon "${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}" >>"$PANEL_LOG" 2>&1 &
     echo $! >"$PANEL_PIDFILE"
     sleep 1
     panel_is_running
@@ -499,8 +506,11 @@ panel_status() {
 
 # JSON bootstrap for the SPA (replaces Merlin ASP <% nvram_get %> blocks).
 panel_bootstrap_json() {
-    panel_load_settings
-    load_xrayui_config 2>/dev/null || true
+    # Keep stdout clean for CGI/panel-httpd JSON (logs → stderr only).
+    {
+        panel_load_settings
+        load_xrayui_config 2>/dev/null || true
+    } 1>&2
 
     local productid firmver lang territory wan_ip link_internet rc_support extendno
     productid=$(nvram get productid 2>/dev/null)
@@ -533,6 +543,7 @@ panel_bootstrap_json() {
 
     local cpu
     cpu=$(grep -c '^processor' /proc/cpuinfo 2>/dev/null) || cpu=1
+    case "$cpu" in '' | *[!0-9]*) cpu=1 ;; esac
 
     local custom_settings="{}"
     if [ -f /jffs/addons/custom_settings.txt ]; then
@@ -550,6 +561,8 @@ panel_bootstrap_json() {
             ' /jffs/addons/custom_settings.txt 2>/dev/null
         )
         [ -n "$custom_settings" ] || custom_settings="{}"
+        # Validate JSON — corrupt custom_settings.txt must not break --argjson
+        printf '%s' "$custom_settings" | jq -e . >/dev/null 2>&1 || custom_settings="{}"
     fi
     # Prefer live NVRAM for boot-autostart so the UI matches what startup() will do.
     # Empty/invalid → enabled (same default as install).
