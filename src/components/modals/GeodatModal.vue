@@ -29,7 +29,7 @@
                   {{ opt }}
                 </option>
               </select>
-              <span class="hint-color" v-if="file.tag">ext:stealthsurf:{{ file.tag ?? '{tag}' }}</span>
+              <span class="hint-color" v-if="file.tag">ext:ssurf:{{ file.tag ?? '{tag}' }}</span>
             </td>
           </tr>
         </tbody>
@@ -107,7 +107,7 @@
 
       const getGeodataContent = async (tag: string) => {
         isLoadingContent.value = true;
-        const content = await axios.get(`/ext/stealthsurf/geodata/${tag}.asp`);
+        const content = await axios.get(`/ext/ssurf/geodata/${tag}.asp`);
         isLoadingContent.value = false;
         return content;
       };

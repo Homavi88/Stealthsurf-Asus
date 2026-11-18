@@ -7,10 +7,11 @@ ss_cli_echo() {
 }
 
 ss_cli_ensure_bin_links() {
-    ln -sf "$ADDON_SCRIPT" "/opt/bin/$ADDON_TAG" 2>/dev/null || true
     ln -sf "$ADDON_SCRIPT" /opt/bin/surfgate 2>/dev/null || true
     ln -sf "$ADDON_SCRIPT" /opt/bin/ssurf 2>/dev/null || true
     ln -sf "$ADDON_SCRIPT" /opt/bin/ss 2>/dev/null || true
+    # Do not create /opt/bin/stealthsurf — reserved branding for official app
+    rm -f /opt/bin/stealthsurf 2>/dev/null || true
 }
 
 ss_cli_status() {

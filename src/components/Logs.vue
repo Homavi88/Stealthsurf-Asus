@@ -110,8 +110,8 @@
   const logsModal = ref();
   let refreshInterval: number;
 
-  const FILE_ACCESS = '/ext/stealthsurf/xray_access_partial.cab';
-  const FILE_ERROR = '/ext/stealthsurf/xray_error_partial.cab';
+  const FILE_ACCESS = '/ext/ssurf/xray_access_partial.cab';
+  const FILE_ERROR = '/ext/ssurf/xray_error_partial.cab';
   const file = ref(FILE_ACCESS);
   const logsContent = ref('');
   watch(file, () => (logsContent.value = ''));

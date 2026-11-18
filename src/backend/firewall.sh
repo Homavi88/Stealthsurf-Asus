@@ -252,7 +252,7 @@ cleanup_firewall() {
 }
 
 configure_firewall_rules() {
-    local STARTUP_LOCK="/tmp/stealthsurf_startup.lock"
+    local STARTUP_LOCK="/tmp/ssurf_startup.lock"
     if [ -f "$STARTUP_LOCK" ]; then
         local lock_pid=$(cat "$STARTUP_LOCK" 2>/dev/null)
         if [ -n "$lock_pid" ] && [ "$lock_pid" != "$$" ] && kill -0 "$lock_pid" 2>/dev/null; then
@@ -947,7 +947,8 @@ cleanup_firewall_rules() {
         rm -f "$IPSET_LEARNED_FILE"
     fi
 
-    ipset list -n 2>/dev/null | awk '/^STEALTHSURF_/{print $1}' | while read -r s; do
+    # Only our SSURF_* sets (and legacy Homavi88 STEALTHSURF_* once) — never foreign sets
+    ipset list -n 2>/dev/null | awk '/^(SSURF_|STEALTHSURF_)/{print $1}' | while read -r s; do
         ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null
     done
 

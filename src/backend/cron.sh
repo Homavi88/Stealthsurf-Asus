@@ -1,21 +1,21 @@
 #!/bin/sh
 # shellcheck disable=SC2034  # codacy:Unused variables
 
-CRU_GEOUPD_ID="stealthsurf_geodataupdate"
-CRU_LR_ID="stealthsurf_logrotate"
-CRU_SUB_REFRESH_ID="stealthsurf_subscription_refresh"
-CRU_SUB_FALLBACK_ID="stealthsurf_subscription_fallback"
-CRU_SS_CATALOG_SYNC_ID="stealthsurf_catalog_sync"
-CRU_IPSET_SAVE_ID="stealthsurf_ipset_save"
-CRU_WATCHDOG_ID="stealthsurf_watchdog"
-XRAY_DESIRED_STATE_FILE="/tmp/stealthsurf_xray.desired"
-WATCHDOG_STATE_FILE="/tmp/stealthsurf_watchdog.state"
+CRU_GEOUPD_ID="ssurf_geodataupdate"
+CRU_LR_ID="ssurf_logrotate"
+CRU_SUB_REFRESH_ID="ssurf_subscription_refresh"
+CRU_SUB_FALLBACK_ID="ssurf_subscription_fallback"
+CRU_SS_CATALOG_SYNC_ID="ssurf_catalog_sync"
+CRU_IPSET_SAVE_ID="ssurf_ipset_save"
+CRU_WATCHDOG_ID="ssurf_watchdog"
+XRAY_DESIRED_STATE_FILE="/tmp/ssurf_xray.desired"
+WATCHDOG_STATE_FILE="/tmp/ssurf_watchdog.state"
 WATCHDOG_STABLE_SECONDS=600
 WATCHDOG_MAX_DELAY=3600
 LR_STATUS="/tmp/logrotate.status"
 LR_BIN="/opt/sbin/logrotate"
 LR_CONF="/opt/etc/logrotate.conf"
-LR_STANZA="/opt/etc/logrotate.d/stealthsurf"
+LR_STANZA="/opt/etc/logrotate.d/ssurf"
 CRON_LOCK_FD=8
 
 #
@@ -121,12 +121,17 @@ cron_job_delete() {
 
 cron_jobs_clear() {
     log_info "Clearing cron jobs for $ADDON_TITLE"
-    # Only our jobs — never delete stock XrayUI cru entries (xrayui*)
-    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep -E '^stealthsurf' |
+    # Only our jobs — never delete stock XrayUI (xrayui*) or official StealthSurf cru.
+    # New IDs are ssurf_*; also drop known legacy Homavi88 stealthsurf_* IDs only.
+    cru l | awk -F'#' 'NF>=2 {print $(NF-1)}' | grep -E '^ssurf_' |
         while read -r id; do
             log_warn " - Deleting cron job $id"
             cru d "$id"
         done
+    for id in stealthsurf_geodataupdate stealthsurf_logrotate stealthsurf_subscription_refresh \
+        stealthsurf_subscription_fallback stealthsurf_catalog_sync stealthsurf_ipset_save stealthsurf_watchdog; do
+        cru d "$id" 2>/dev/null || true
+    done
 }
 
 cron_subscription_refresh_add() {
@@ -234,7 +239,7 @@ cron_ss_catalog_sync_run() {
 }
 
 cron_job_lock() {
-    local lockfile="/tmp/stealthsurf_cron_$1.lock"
+    local lockfile="/tmp/ssurf_cron_$1.lock"
     which flock >/dev/null 2>&1 || return 0
     touch "$lockfile" 2>/dev/null || return 0
     eval exec "$CRON_LOCK_FD>$lockfile"
@@ -362,7 +367,7 @@ cron_watchdog_run() {
     fi
 
     # Boot startup is still running: let it finish
-    local startup_pid=$(cat /tmp/stealthsurf_startup.lock 2>/dev/null)
+    local startup_pid=$(cat /tmp/ssurf_startup.lock 2>/dev/null)
     if [ -n "$startup_pid" ] && kill -0 "$startup_pid" 2>/dev/null; then
         log_debug "Watchdog: startup in progress, skipping this check."
         return 0

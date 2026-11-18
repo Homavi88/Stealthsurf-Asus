@@ -41,7 +41,7 @@ backup_configuration() {
 
     local backup_file
     if [ -n "$custom_name" ]; then
-        backup_file="$backup_dir/stealthsurf-${timestamp}-${custom_name}.tar.gz"
+        backup_file="$backup_dir/ssurf-${timestamp}-${custom_name}.tar.gz"
     else
         backup_file="$backup_dir/stealthsurf-$timestamp.tar.gz"
     fi

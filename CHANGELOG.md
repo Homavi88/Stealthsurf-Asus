@@ -1,14 +1,25 @@
 # Changelog
 
+## [1.4.11] - 2026-11-18
+
+### Isolate SurfGate runtime from official StealthSurf
+
+- Runtime tag `ssurf`: `/jffs/scripts/ssurf`, `/www/user/ssurf`, `/ext/ssurf/`, `/opt/share/ssurf`, `/opt/etc/ssurf.conf`, `/opt/etc/xray/ssurf`
+- Firewall/ipset `SSURF_*` (table 78); cron `ssurf_*`; logger/Scribe `SSURF`; no `/opt/bin/stealthsurf`
+- Root `install.sh` deploys to `/jffs/scripts/ssurf` only; never installs into or deletes `/jffs/addons/stealthsurf`
+- Uninstall removes Homavi88 legacy paths by fingerprint only (never official script/tree)
+- Migrate Homavi88 `stealthsurf` → `ssurf` share/conf/www/script/geodata/logrotate; flush legacy `STEALTHSURF_*`
+- Provider API `api.stealthsurf.net` and Merlin `stealthsurf_*` action_script names unchanged
+
 ## [1.4.10] - 2026-11-18
 
 ### Panel API keys / catalog JSON invisible after save
 
-- `panel-httpd` serves live `/www/user/stealthsurf` at `/ext/stealthsurf/` (`-webdir`)
+- `panel-httpd` serves live `/www/user/ssurf` at `/ext/ssurf/` (`-webdir`)
 - Refresh panel ext symlinks + ensure API cache stubs on prepare/API
 - `panel_api_handle` writes settings without pipeline subshell (BusyBox ash)
-- lighttpd alias for `/ext/stealthsurf/` → addon web dir
-- Firewall still only touches STEALTHSURF_* chains / table 78 (coexistence tests pass)
+- lighttpd alias for `/ext/ssurf/` → addon web dir
+- Firewall only touches SurfGate chains / table 78 (coexistence tests pass)
 
 ---
 

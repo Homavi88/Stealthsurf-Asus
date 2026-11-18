@@ -35,7 +35,7 @@ update_community_geodata() {
     fi
 
     # Shared community dats next to /opt/sbin/xray — both addons benefit.
-    # Custom dat stays isolated as /opt/sbin/stealthsurf (never /opt/sbin/xrayui).
+    # Custom dat stays isolated as /opt/sbin/ssurf (never /opt/sbin/xrayui).
     mv -f "$ADDON_TMP_DIR/geosite.dat" "$xray_dir/geosite.dat"
     mv -f "$ADDON_TMP_DIR/geoip.dat" "$xray_dir/geoip.dat"
 
@@ -62,7 +62,7 @@ geodata_unpack_tags() {
     geosite_json="[]"
     geoip_json="[]"
     custom_json="[]"
-    custom_dat="$xray_dir/${CUSTOM_GEODATA_NAME:-stealthsurf}"
+    custom_dat="$xray_dir/${CUSTOM_GEODATA_NAME:-ssurf}"
 
     if [ -f "$xray_dir/geosite.dat" ]; then
         log_info "Unpacking geosite.dat..."
@@ -120,7 +120,7 @@ geodata_is_list_file() {
     # Custom geodata lists are plain text tag files (no extension / .list / .txt).
     # JSON outbounds, fingerprints, backups must not sit next to them.
     case "$1" in
-    outbound-* | *.json | *.asp | *.fp | *.bak | *.tmp | *.tar.gz | stealthsurf | xrayui | xraydatbuilder | v2dat)
+    outbound-* | *.json | *.asp | *.fp | *.bak | *.tmp | *.tar.gz | stealthsurf | ssurf | xrayui | xraydatbuilder | v2dat)
         return 1
         ;;
     esac
@@ -202,7 +202,7 @@ geodata_recompile_all() {
     update_loading_progress "Recompiling geodata files..."
 
     local builder="$ADDON_SHARE_DIR/xraydatbuilder"
-    local outname="${CUSTOM_GEODATA_NAME:-stealthsurf}"
+    local outname="${CUSTOM_GEODATA_NAME:-ssurf}"
 
     if [ ! -f "$builder" ] || [ ! -x "$builder" ]; then
         log_warn "Geodata builder missing at $builder — skip recompile"
@@ -220,7 +220,7 @@ geodata_recompile_all() {
     rm -f "$outdir/$outname" || log_debug "Failed to remove existing $outdir/$outname"
 
     if ! "$builder" --datapath "$datadir" --outputdir "$outdir" --outputname "$outname"; then
-        log_warn "Failed to recompile geodata files (non-fatal). Custom ext:stealthsurf: lists may be empty until fixed."
+        log_warn "Failed to recompile geodata files (non-fatal). Custom ext:ssurf: lists may be empty until fixed."
         cleanup_payload
         geodata_remount_to_web
         return 0

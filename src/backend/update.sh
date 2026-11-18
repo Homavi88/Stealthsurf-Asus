@@ -46,25 +46,13 @@ update() {
         return 1
     fi
 
-    # Never touch official StealthSurf VPN at /jffs/addons/stealthsurf
-    if [ -x "$OFFICIAL_SS_DAEMON" ]; then
-        log_info "Official StealthSurf VPN present at $OFFICIAL_SS_JFFS_DIR — leaving it alone."
-    fi
-
+    # Never touch /jffs/addons/stealthsurf (official StealthSurf).
     log_info "Cleaning up existing installation at $ADDON_JFFS_ADN_DIR..."
     if rm -rf "$ADDON_JFFS_ADN_DIR"; then
         log_info "Old installation removed."
     else
         log_error "Failed to remove the old installation. Exiting."
         return 1
-    fi
-
-    # Also drop a mistaken 1.2.0 copy under the official path (no routerd).
-    if [ ! -x "$OFFICIAL_SS_DAEMON" ] && { [ -f "$OFFICIAL_SS_JFFS_DIR/index.asp" ] || [ -f "$OFFICIAL_SS_JFFS_DIR/app.js" ]; }; then
-        log_warn "Removing leftover Homavi88 files from $OFFICIAL_SS_JFFS_DIR (official daemon absent)."
-        rm -rf "$OFFICIAL_SS_JFFS_DIR/index.asp" "$OFFICIAL_SS_JFFS_DIR/app.js" \
-            "$OFFICIAL_SS_JFFS_DIR/index.panel.html" "$OFFICIAL_SS_JFFS_DIR/panel" \
-            "$OFFICIAL_SS_JFFS_DIR/stealthsurf" 2>/dev/null || true
     fi
 
     log_info "Extracting the package..."

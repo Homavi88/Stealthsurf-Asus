@@ -14,7 +14,7 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf API" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.10-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.11-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**. Основной UI — **панель SurfGate** на порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Файлы лежат в `/jffs/addons/ssurf` и **не трогают** официальный `/jffs/addons/stealthsurf`.
 
-Актуальная версия **1.4.10** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
+Актуальная версия **1.4.11** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
 
 ## Установка
 
@@ -49,7 +49,7 @@ http://192.168.50.1:1131/
 Опционально: logout → login в WebUI → **VPN → SurfGate**.  
 Пакет: [**Releases → latest**](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest) (`asuswrt-merlin-surfgate.tar.gz`).
 
-Обновление с 1.0.x / 1.1.x / 1.2.x / 1.3.x — тем же `install.sh`; ключи `stlth_…` мигрируют из `/opt/etc/stealthsurf.conf`. CLI: `surfgate` (алиасы `ssurf` / `ss` остаются).
+Обновление с 1.0.x / 1.1.x / 1.2.x / 1.3.x — тем же `install.sh`; ключи `stlth_…` мигрируют из `/opt/etc/stealthsurf.conf` → `/opt/etc/ssurf.conf`. CLI: `surfgate` (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf`).
 
 ### Панель :1131
 
@@ -57,9 +57,10 @@ http://192.168.50.1:1131/
 | --- | --- |
 | URL | `http://<lan_ip>:1131/` |
 | Файлы | `/jffs/addons/ssurf` |
+| Скрипт | `/jffs/scripts/ssurf` |
 | Служба | `surfgate panel start\|stop\|restart\|status` |
 | Пароль | `surfgate panel set-password` (Basic Auth, опционально) |
-| Отдельный IP | в `/opt/etc/stealthsurf.conf`: `panel_ip=192.168.50.2` → alias на `br0` |
+| Отдельный IP | в `/opt/etc/ssurf.conf`: `panel_ip=192.168.50.2` → alias на `br0` |
 | Порт | `panel_port=1131` (по умолчанию) |
 
 ### Рядом с официальным StealthSurf
@@ -67,14 +68,18 @@ http://192.168.50.1:1131/
 | | SurfGate (этот аддон) | Официальный VPN |
 | --- | --- | --- |
 | Каталог | `/jffs/addons/ssurf` | `/jffs/addons/stealthsurf` |
+| Скрипт | `/jffs/scripts/ssurf` | (свой daemon) |
 | Панель | `:1131` | `:8800` (`stealthsurf-routerd`) |
+| Web data | `/www/user/ssurf`, `/ext/ssurf/` | — |
+| Conf / Xray | `/opt/etc/ssurf.conf`, `/opt/etc/xray/ssurf` | — |
+| Firewall | `SSURF_*`, table 78 | — |
 | Установка | этот `install.sh` | `curl …/merlin.sh \| sh` |
 
-**1.2.0** ошибочно ставился в `/jffs/addons/stealthsurf` и мог затереть официальный пакет. С **1.2.1** путь свой. Если официальная панель `:8800` пропала:
+**1.2.0** ошибочно ставился в `/jffs/addons/stealthsurf` и мог затереть официальный пакет. С **1.2.1** путь свой; с **1.4.11** runtime полностью на теге `ssurf`. Если официальная панель `:8800` пропала:
 
 ```sh
 # 1) убрать наш аддон
-surfgate un --yes 2>/dev/null || ssurf un --yes 2>/dev/null || sh /jffs/scripts/stealthsurf uninstall
+surfgate un --yes 2>/dev/null || ssurf un --yes 2>/dev/null || sh /jffs/scripts/ssurf uninstall
 
 # 2) поставить официальный заново
 curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
@@ -90,7 +95,8 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 
 | | |
 | --- | --- |
-| **1.4.10 Live /ext/stealthsurf** | API keys/catalog JSON видны сразу после сохранения (live webdir) |
+| **1.4.11 Isolate ssurf** | Runtime `ssurf` (скрипт/cron/`/ext`/FW `SSURF_*`); не трогает official `/jffs/addons/stealthsurf` |
+| **1.4.10 Live /ext** | API keys/catalog JSON видны сразу после сохранения (live webdir) |
 | **1.4.9 Panel restart on upgrade** | После установки всегда новый `panel-httpd` (нет stale CGI → HTTP 500) |
 | **1.4.8 Bootstrap CGI fix** | `panel-httpd` вызывает addon через `/bin/sh` — больше нет bootstrap HTTP 500 |
 | **1.4.7 Bundled panel-httpd** | Статический `bin/panel-httpd` в пакете — панель без opkg/BusyBox httpd |
@@ -198,17 +204,17 @@ SurfGate **1.1.16+** держит своё состояние и **безопа�
 
 | | SurfGate | Stock XrayUI |
 | --- | --- | --- |
-| Profile | `/opt/etc/xray/stealthsurf/config.json` | `/opt/etc/xray/config.json` |
-| Conf | `/opt/etc/stealthsurf.conf` | `/opt/etc/xrayui.conf` |
-| Settings | `stealthsurf_*` | `xray_*` |
-| PID | `/var/run/stealthsurf-xray.pid` | `/var/run/xray.pid` |
-| Firewall | `STEALTHSURF*` · mark `0x20000` · table `78` | `XRAYUI*` · `0x10000` · `77` |
+| Profile | `/opt/etc/xray/ssurf/config.json` | `/opt/etc/xray/config.json` |
+| Conf | `/opt/etc/ssurf.conf` | `/opt/etc/xrayui.conf` |
+| Settings | `stealthsurf_*` (Merlin action protocol) | `xray_*` |
+| PID | `/var/run/ssurf-xray.pid` | `/var/run/xray.pid` |
+| Firewall | `SSURF*` · mark `0x20000` · table `78` | `XRAYUI*` · `0x10000` · `77` |
 | TUN | table `251` · prio `47/53` · iface `ss0` | table `250` · `49/51` · `xray0` |
 | Ports | dokodemo `5699` · API `10185` · metrics `10186` | `5599` · `10085` · `10086` |
-| Cron / Scribe | `stealthsurf*` · `syslog-ng.d/stealthsurf` | `xrayui*` · `syslog-ng.d/xrayui` |
+| Cron / Scribe | `ssurf_*` · `syslog-ng.d/ssurf` | `xrayui*` · `syslog-ng.d/xrayui` |
 
 Общее: `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat` (uninstall SurfGate их не удаляет, если XrayUI установлен).  
-Стоп SurfGate снимает только `#stealthsurf` из dnsmasq и свои firewall/TUN правила.  
+Стоп SurfGate снимает только `#ssurf` из dnsmasq и свои firewall/TUN правила.  
 **Не включайте transparent proxy у обоих аддонов одновременно** — SurfGate покажет баннер «Конфликт с XrayUI» и запретит Start, пока XrayUI работает.
 
 <p align="center">

@@ -247,13 +247,14 @@ EOF
   cron_logrotate_add
 }
 
-# Isolated from stock XrayUI (/opt/etc/syslog-ng.d/xrayui)
-SS_SCRIBE_CONF="/opt/etc/syslog-ng.d/${ADDON_TAG:-stealthsurf}"
+# Isolated from stock XrayUI (/opt/etc/syslog-ng.d/xrayui) and official StealthSurf
+SS_SCRIBE_CONF="/opt/etc/syslog-ng.d/${ADDON_TAG:-ssurf}"
 
 logs_scribe_remove() {
   rm -f "$SS_SCRIBE_CONF" 2>/dev/null
-  # Migrate: old builds wrongly used stock path — remove only if it filters STEALTHSURF
-  if [ -f /opt/etc/syslog-ng.d/xrayui ] && grep -q 'STEALTHSURF\|stealthsurf' /opt/etc/syslog-ng.d/xrayui 2>/dev/null; then
+  # Migrate: old Homavi88 paths — remove only if they filter our tags
+  rm -f /opt/etc/syslog-ng.d/stealthsurf 2>/dev/null
+  if [ -f /opt/etc/syslog-ng.d/xrayui ] && grep -q 'STEALTHSURF\|SSURF\|stealthsurf\|ssurf' /opt/etc/syslog-ng.d/xrayui 2>/dev/null; then
     rm -f /opt/etc/syslog-ng.d/xrayui 2>/dev/null
   fi
 }
@@ -267,7 +268,7 @@ logs_scribe_integration() {
     return 0
   fi
 
-  log_info "Setting up StealthSurf syslog integration for Scribe..."
+  log_info "Setting up SurfGate syslog integration for Scribe..."
 
   if [ ! -f /jffs/scripts/scribe ]; then
     log_warn "Scribe script not found. Please install Scribe first."
@@ -279,23 +280,23 @@ logs_scribe_integration() {
     return 0
   fi
 
-  log_debug "Scribe integration is enabled. Creating syslog-ng configuration for StealthSurf."
+  log_debug "Scribe integration is enabled. Creating syslog-ng configuration for SurfGate."
 
   # Never write stock /opt/etc/syslog-ng.d/xrayui
   cat >"$SS_SCRIBE_CONF" <<EOF
-# syslog-ng configuration for StealthSurf (isolated from XrayUI)
-destination d_stealthsurf {
-    file("/opt/var/log/stealthsurf.log");
+# syslog-ng configuration for SurfGate (isolated from XrayUI / official StealthSurf)
+destination d_ssurf {
+    file("/opt/var/log/ssurf.log");
 };
 
-filter f_stealthsurf {
-    message("STEALTHSURF") or message("StealthSurf");
+filter f_ssurf {
+    message("SSURF") or message("SurfGate");
 };
 
 log {
     source(src);
-    filter(f_stealthsurf);
-    destination(d_stealthsurf);
+    filter(f_ssurf);
+    destination(d_ssurf);
     flags(final);
 };
 
@@ -304,5 +305,5 @@ EOF
 
   /jffs/scripts/scribe restart || { log_error "Failed to reload Scribe configuration." && return 1; }
 
-  log_ok "Scribe integration for StealthSurf logs configured successfully."
+  log_ok "Scribe integration for SurfGate logs configured successfully."
 }
