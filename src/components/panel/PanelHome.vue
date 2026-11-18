@@ -1,9 +1,8 @@
 <template>
   <div>
     <header class="ss-topbar">
-      <div class="ss-brand">
-        <span class="ss-brand-mark" aria-hidden="true"></span>
-        <span>SurfGate</span>
+      <div class="ss-brand" aria-hidden="true">
+        <span class="ss-brand-mark"></span>
       </div>
       <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -17,9 +16,14 @@
 
     <section class="ss-hero">
       <div class="ss-hero-orb" :class="{ 'is-off': !running }" aria-hidden="true"></div>
-      <h1 class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'Подключено' : 'Отключено' }}</h1>
+      <h1 class="ss-brand-hero">SurfGate</h1>
+      <p class="ss-brand-hero-sub">VPN на Asuswrt-Merlin</p>
+      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'Подключено' : 'Отключено' }}</p>
       <div class="ss-ip-pill" v-if="displayIp">
-        <span aria-hidden="true">🌐</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18" />
+        </svg>
         <span>{{ displayIp }}</span>
       </div>
     </section>

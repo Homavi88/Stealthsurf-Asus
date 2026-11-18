@@ -74,11 +74,11 @@ const hideTimer = setInterval(() => {
 
 try {
   await page.goto(BASE, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForSelector('.ss-brand', { timeout: 30000 });
+  await page.waitForSelector('.ss-brand-hero', { timeout: 30000 });
   await page.waitForTimeout(2200);
   await hideLoading(page);
 
-  const brand = (await page.locator('.ss-brand').innerText()).replace(/\s+/g, ' ').trim();
+  const brand = (await page.locator('.ss-brand-hero').innerText()).replace(/\s+/g, ' ').trim();
   console.log('brand=', brand);
   if (!/SurfGate/i.test(brand)) {
     throw new Error(`Expected SurfGate brand on home, got: ${brand}`);
@@ -94,7 +94,7 @@ try {
     const banner = document.createElement('div');
     banner.id = 'ss-xrayui-conflict-shot';
     banner.style.cssText =
-      'margin:0 0 14px;padding:14px 16px;border:1px solid #f0c36a;background:#fff8e8;color:#7a5a10;border-radius:14px;font:14px/1.45 Manrope,Segoe UI,Helvetica Neue,sans-serif;position:relative;z-index:50;box-shadow:0 8px 28px rgba(40,70,110,0.08)';
+      'margin:0 0 14px;padding:14px 16px;border:1px solid #f0c36a;background:#fff8e8;color:#7a5a10;border-radius:14px;font:14px/1.45 Outfit,Segoe UI,Helvetica Neue,sans-serif;position:relative;z-index:50;box-shadow:0 10px 30px rgba(25,50,40,0.07)';
     banner.innerHTML =
       '<strong>Конфликт с XrayUI</strong><div style="margin-top:6px">Stock XrayUI сейчас запущен. SurfGate не стартует transparent proxy, пока XrayUI не остановлен. Используйте <code>xrayui stop</code> или панель XrayUI.</div>';
     host.prepend(banner);

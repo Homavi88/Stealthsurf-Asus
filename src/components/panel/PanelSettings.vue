@@ -149,19 +149,19 @@
     setup(_props, { emit }) {
       const section = ref<SectionId>('connection');
       const navPrimary = [
-        { id: 'account' as const, label: 'Подписка / Аккаунт', icon: '🎁' },
-        { id: 'connection' as const, label: 'Подключение', icon: '⏻' },
-        { id: 'routing' as const, label: 'Маршрутизация', icon: '🔀' },
-        { id: 'network' as const, label: 'Сеть и службы', icon: '🌐' }
+        { id: 'account' as const, label: 'Подписка / Аккаунт', icon: 'A' },
+        { id: 'connection' as const, label: 'Подключение', icon: 'C' },
+        { id: 'routing' as const, label: 'Маршрутизация', icon: 'R' },
+        { id: 'network' as const, label: 'Сеть и службы', icon: 'N' }
       ];
       const navEngine = [
-        { id: 'outbounds' as const, label: 'Исходящие', icon: '📤' },
-        { id: 'engine' as const, label: 'Движок / профили', icon: '⚙️' }
+        { id: 'outbounds' as const, label: 'Исходящие', icon: 'O' },
+        { id: 'engine' as const, label: 'Движок / профили', icon: 'E' }
       ];
       const navMore = [
-        { id: 'logs' as const, label: 'Логи', icon: '📄' },
-        { id: 'clients' as const, label: 'Клиенты online', icon: '💻' },
-        { id: 'updates' as const, label: 'Обновления', icon: '⬇️' }
+        { id: 'logs' as const, label: 'Логи', icon: 'L' },
+        { id: 'clients' as const, label: 'Клиенты online', icon: 'U' },
+        { id: 'updates' as const, label: 'Обновления', icon: 'V' }
       ];
 
       const all = [...navPrimary, ...navEngine, ...navMore];
