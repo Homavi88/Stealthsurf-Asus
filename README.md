@@ -121,7 +121,7 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 | **Автосинк каталога** | General Options → SurfGate: опрос API по интервалу, сравнение настроек `ss-*`, автообновление при изменениях у провайдера |
 | **Платформа XrayUI** | Полноценный WebUI: outbounds, routing, DNS, clients online, geodata, updates |
 | **API-ключи** | Несколько `stlth_…`, баланс/реферал (RUB), sync каталога, импорт → `ss-<id>` |
-| **Короткий CLI** | `surfgate` / `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `bal` `h` `m` |
+| **Короткий CLI** | `surfgate` / `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `bal` `dv` `panel` `h` `m` |
 | **Изоляция от XrayUI** | Свои config / PID / firewall mark / geodata; при работающем XrayUI — баннер и блокировка Start |
 | **Статус outbounds** | После импорта включаются probes — в списке 🟢 / 🟡 / 🔴 |
 | **Дефолтный профиль** | `all-in` + `direct` + `block`; импорт ставит выбранный узел default-маршрутом |
@@ -134,7 +134,7 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 | **Transparent proxy** | Весь LAN через Xray (`ipsec=off`) или smart proxy (`redirect` + geosite) |
 | **Routing** | domain / geosite / geoip → `ss-<id>`, пресеты XrayUI |
 | **Надёжность** | автостарт, watchdog, backup, geodata |
-| **CLI** | короткий `surfgate` + меню `surfgate m` |
+| **CLI** | `surfgate` / `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `dv` `panel` · `h` / `m` |
 
 Протоколы ядра Xray: VLESS / Trojan / Shadowsocks / Hysteria / WireGuard и остальное, что умеет установленный Xray-core.
 
@@ -180,24 +180,45 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 
 ## CLI за минуту
 
+Бинарники: **`surfgate`** · **`ssurf`** · **`ss`** (одно и то же). Справка: `surfgate h` · меню: `surfgate m`.
+
 ```sh
 surfgate key 'stlth_…'
 surfgate sy && surfgate ls
 surfgate ap <id>          # import + default route + status probes
 surfgate up && surfgate st
+surfgate dv               # устройства VPN: IP / MAC / имя
 surfgate h                # справка · surfgate m — меню
 ```
 
-| | |
+| Команда | Действие |
 | --- | --- |
-| `surfgate up` / `dn` / `re` / `st` | старт / стоп / рестарт / статус |
-| `surfgate sy` · `ls` · `ap <id>` | sync · список · import |
-| `surfgate refresh <id>` | пересобрать `ss-*` из API |
-| `surfgate bal` · `key` · `addk` | баланс · ключ |
-| `surfgate bak` · `upd` · `fix` | backup · update · doctor |
-| `surfgate h` · `surfgate m` | справка · меню |
+| `up` / `on` | старт |
+| `dn` / `off` | стоп |
+| `re` / `rs` | рестарт |
+| `st` | статус (xray + панель + каталог + баланс) |
+| `sy` | sync каталога API |
+| `ls` / `l` | список конфигов |
+| `ap` / `ic` / `imp` `<id>` | import → `ss-<id>` |
+| `refresh` `<id>` | пересобрать `ss-*` из API |
+| `bal` | баланс |
+| `key` `'stlth_…'` | задать API-ключ |
+| `addk` `<k>` `[lbl]` · `rmkey` `<k>` | добавить / удалить ключ |
+| `autofit` `<id>` | подобрать сервер/протокол |
+| `patch` `<id>` | PATCH settings (`SS_PATCH_BODY`) |
+| `stats` `<id>` · `traffic` | статистика / трафик |
+| `renew` `<id>` · `topup` `<amount>` | продление / пополнение |
+| `dv` / `devices` | устройства VPN (IP / MAC / имя) |
+| `panel` `start\|stop\|status\|url\|set-password` | панель `:1131` |
+| `bak` | backup |
+| `d` / `dg` | diagnostics |
+| `upd` `[ver]` / `uf` | обновление аддона |
+| `fix` / `doctor` | doctor |
+| `v` / `ver` | версия |
+| `un --yes` | uninstall |
+| `h` / `?` · `m` | справка · интерактивное меню |
 
-Алиасы `ssurf` и `ss` работают так же.
+Примеры: `surfgate up` · `surfgate sy && surfgate ls` · `surfgate ap 101 && surfgate re` · `surfgate panel status`.
 
 ## Рядом с XrayUI
 
