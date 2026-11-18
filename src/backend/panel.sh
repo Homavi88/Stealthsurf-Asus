@@ -172,7 +172,8 @@ panel_write_lighttpd_conf() {
         echo 'index-file.names = ( "index.html" )'
         echo 'mimetype.assign = ( ".html" => "text/html", ".js" => "application/javascript", ".json" => "application/json", ".css" => "text/css", ".svg" => "image/svg+xml", ".png" => "image/png", ".ico" => "image/x-icon" )'
         # Extensionless CGI scripts under /cgi-bin/ (no PCRE url =~ needed)
-        echo "alias.url = ( \"/cgi-bin/\" => \"$PANEL_CGI_DIR/\" )"
+        # Live Merlin web dir for API JSON (keys/catalog) — not a frozen panel snapshot.
+        echo "alias.url = ( \"/cgi-bin/\" => \"$PANEL_CGI_DIR/\", \"/ext/stealthsurf/\" => \"${ADDON_WEB_DIR}/\" )"
         echo 'cgi.assign = ( "" => "" )'
     } >"$conf"
     echo "$conf"
@@ -219,6 +220,19 @@ panel_netmask_to_prefix() {
     255.255.255.240) echo 28 ;;
     *) echo 24 ;;
     esac
+}
+
+# Mirror /www/user/stealthsurf into the panel webroot for BusyBox/lighttpd.
+# Bundled panel-httpd serves ADDON_WEB_DIR live via -webdir (preferred).
+panel_refresh_ext_links() {
+    mkdir -p "$PANEL_WEB_ROOT/ext/stealthsurf" "$ADDON_WEB_DIR" 2>/dev/null || true
+    ln -sfn "$ADDON_WEB_DIR" "$PANEL_WEB_ROOT/ext/stealthsurf-files" 2>/dev/null || true
+    # BusyBox httpd: individual file symlinks (dir symlink is unreliable on some builds).
+    local f
+    for f in "$ADDON_WEB_DIR"/*; do
+        [ -e "$f" ] || continue
+        ln -s -f "$f" "$PANEL_WEB_ROOT/ext/stealthsurf/${f##*/}" 2>/dev/null || true
+    done
 }
 
 panel_write_cgi() {
@@ -289,17 +303,14 @@ panel_prepare_webroot() {
         ln -s -f "$ADDON_JFFS_ADN_DIR/app.js" "$PANEL_WEB_ROOT/app.js"
     fi
 
-    # Same JSON/cab surface the Merlin UI uses under /ext/stealthsurf/
-    if [ -d "$ADDON_WEB_DIR" ]; then
-        ln -sfn "$ADDON_WEB_DIR" "$PANEL_WEB_ROOT/ext/stealthsurf-files" 2>/dev/null || true
-        # BusyBox httpd does not follow a directory symlink as document root child
-        # reliably on all builds — mirror individual files as symlinks.
-        local f
-        for f in "$ADDON_WEB_DIR"/*; do
-            [ -e "$f" ] || continue
-            ln -s -f "$f" "$PANEL_WEB_ROOT/ext/stealthsurf/${f##*/}" 2>/dev/null || true
-        done
+    # Ensure API cache stubs + Merlin web aliases exist before linking into the panel.
+    if type ss_api_ensure_caches >/dev/null 2>&1; then
+        ss_api_ensure_caches 2>/dev/null || true
     fi
+    if type mount_web_aliases >/dev/null 2>&1; then
+        mount_web_aliases 2>/dev/null || true
+    fi
+    panel_refresh_ext_links
 
     panel_write_cgi
 
@@ -378,7 +389,10 @@ panel_start_bundled_once() {
         bin="$runbin"
     fi
     # -addon: call stealthsurf via /bin/sh (no CGI shebang on /jffs → no HTTP 500)
-    "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" -addon "${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}" >>"$PANEL_LOG" 2>&1 &
+    # -webdir: live /www/user/stealthsurf so api_keys.json etc. appear without re-symlink
+    "$bin" -root "$PANEL_WEB_ROOT" -listen "$listen_arg" \
+        -addon "${ADDON_SCRIPT:-/jffs/scripts/stealthsurf}" \
+        -webdir "${ADDON_WEB_DIR:-/www/user/stealthsurf}" >>"$PANEL_LOG" 2>&1 &
     echo $! >"$PANEL_PIDFILE"
     sleep 1
     panel_is_running
@@ -804,22 +818,37 @@ panel_api_handle() {
     # Apply stealthsurf_* settings (payload chunks etc.) like Merlin amng_custom.
     # Drop leftover payload/stage keys first when a new payload arrives — otherwise a
     # shorter chunk set concatenates with stale payload1+ and corrupts reconstruct_payload.
+    # IMPORTANT: do not use `cmd | while` (subshell) — write a temp file and read it.
     if [ -n "$settings" ] && [ "$settings" != "{}" ] && [ "$settings" != "null" ]; then
         if printf '%s' "$settings" | jq -e 'keys[] | select(startswith("stealthsurf_payload") or startswith("stealthsurf_stage") or . == "stealthsurf_staged_session")' >/dev/null 2>&1; then
             cleanup_payload 2>/dev/null || true
             custom_settings_drop '/^stealthsurf_staged_session/d;/^stealthsurf_stage_/d' 2>/dev/null || true
         fi
-        printf '%s' "$settings" | jq -r 'to_entries[] | select(.key|startswith("stealthsurf_")) | "\(.key)\t\(.value|tostring)"' 2>/dev/null |
-            while IFS=$(printf '\t') read -r key val; do
-                [ -n "$key" ] || continue
-                am_settings_set "$key" "$val" 2>/dev/null || true
-            done
+        local kvfile key val
+        kvfile="/tmp/stealthsurf/panel-api-kv.$$"
+        mkdir -p /tmp/stealthsurf 2>/dev/null || true
+        printf '%s' "$settings" | jq -r 'to_entries[] | select(.key|startswith("stealthsurf_")) | "\(.key)\t\(.value|tostring)"' >"$kvfile" 2>/dev/null || : >"$kvfile"
+        while IFS=$(printf '\t') read -r key val; do
+            [ -n "$key" ] || continue
+            am_settings_set "$key" "$val" 2>/dev/null || true
+        done <"$kvfile"
+        rm -f "$kvfile"
     fi
+
+    # Keep /ext/stealthsurf/* in sync for BusyBox/lighttpd after key/catalog writes.
+    if type ss_api_ensure_caches >/dev/null 2>&1; then
+        ss_api_ensure_caches 2>/dev/null || true
+    fi
+    panel_refresh_ext_links 2>/dev/null || true
 
     # Map stealthsurf_configuration_apply → service_event configuration apply
     local rest
     rest=$(printf '%s' "$action" | cut -d'_' -f2- | tr '_' ' ')
-    /jffs/scripts/stealthsurf service_event $rest >/tmp/stealthsurf/panel-api.log 2>&1 &
+    # Run in background but after settings are fully flushed to custom_settings.txt
+    (
+        /jffs/scripts/stealthsurf service_event $rest
+        panel_refresh_ext_links 2>/dev/null || true
+    ) >/tmp/stealthsurf/panel-api.log 2>&1 &
 
     echo '{"ok":true,"queued":true,"action":"'"$action"'"}'
 }
