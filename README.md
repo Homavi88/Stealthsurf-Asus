@@ -14,7 +14,7 @@
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
   <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
   <a href="https://docs.stealthsurf.net"><img alt="StealthSurf API" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.9-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.10-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -29,7 +29,7 @@
 
 Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**. Основной UI — **панель SurfGate** на порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Файлы лежат в `/jffs/addons/ssurf` и **не трогают** официальный `/jffs/addons/stealthsurf`.
 
-Актуальная версия **1.4.9** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
+Актуальная версия **1.4.10** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
 
 ## Установка
 
@@ -90,6 +90,7 @@ curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
 
 | | |
 | --- | --- |
+| **1.4.10 Live /ext/stealthsurf** | API keys/catalog JSON видны сразу после сохранения (live webdir) |
 | **1.4.9 Panel restart on upgrade** | После установки всегда новый `panel-httpd` (нет stale CGI → HTTP 500) |
 | **1.4.8 Bootstrap CGI fix** | `panel-httpd` вызывает addon через `/bin/sh` — больше нет bootstrap HTTP 500 |
 | **1.4.7 Bundled panel-httpd** | Статический `bin/panel-httpd` в пакете — панель без opkg/BusyBox httpd |

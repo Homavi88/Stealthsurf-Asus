@@ -34,7 +34,7 @@ BOOTSTRAP = {
         },
         "server": {"isRunning": True, "b4sni_isRunning": False},
         "custom_settings": {
-            "stealthsurf_version": "1.4.9",
+            "stealthsurf_version": "1.4.10",
             "stealthsurf_startup": "y",
             "stealthsurf_page": "user2.asp",
         },
@@ -45,7 +45,7 @@ UI_RESPONSE = {
     "xray": {
         "core_version": "26.9.9",
         "tested_core": "26.9.9",
-        "ui_version": "1.4.9",
+        "ui_version": "1.4.10",
         "running": True,
         "uptime": 3600,
         "profile": "config.json",

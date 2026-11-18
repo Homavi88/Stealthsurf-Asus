@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	version     = "1.4.9"
+	version     = "1.4.10"
 	defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
@@ -32,6 +32,7 @@ func main() {
 	root := flag.String("root", ".", "document root (panel web root)")
 	listen := flag.String("listen", ":1131", "listen address ([ip]:port)")
 	addon := flag.String("addon", "/jffs/scripts/stealthsurf", "path to SurfGate addon script")
+	webdir := flag.String("webdir", "/www/user/stealthsurf", "live JSON/CAB dir for /ext/stealthsurf/ (API keys, catalog, …)")
 	flag.Parse()
 
 	absRoot, err := filepath.Abs(*root)
@@ -42,8 +43,19 @@ func main() {
 	_ = os.MkdirAll(cgiDir, 0755)
 
 	addonPath := resolveAddon(*addon)
+	absWeb := resolveWebDir(*webdir)
 
 	mux := http.NewServeMux()
+
+	// Live addon web files — must NOT be a frozen symlink snapshot from panel start,
+	// otherwise newly saved api_keys.json / ss_configs.json are invisible to the SPA.
+	if absWeb != "" {
+		extFS := http.StripPrefix("/ext/stealthsurf/", http.FileServer(http.Dir(absWeb)))
+		mux.Handle("/ext/stealthsurf/", withRecover(func(w http.ResponseWriter, r *http.Request) {
+			// Ensure directory listings are disabled; FileServer 404s missing files.
+			extFS.ServeHTTP(w, r)
+		}))
+	}
 
 	// Exact paths (+ trailing-slash variants) — never CGI shebang exec.
 	for _, patt := range []string{"/cgi-bin/bootstrap", "/cgi-bin/bootstrap/"} {
@@ -98,10 +110,37 @@ func main() {
 	if err != nil {
 		log.Fatalf("listen %s: %v", addr, err)
 	}
-	fmt.Fprintf(os.Stderr, "panel-httpd %s listening on %s root=%s addon=%s\n", version, ln.Addr().String(), absRoot, addonPath)
+	fmt.Fprintf(os.Stderr, "panel-httpd %s listening on %s root=%s addon=%s webdir=%s\n", version, ln.Addr().String(), absRoot, addonPath, absWeb)
 	if err := http.Serve(ln, mux); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func resolveWebDir(preferred string) string {
+	cands := []string{preferred, "/www/user/stealthsurf"}
+	for _, cand := range cands {
+		if cand == "" {
+			continue
+		}
+		st, err := os.Stat(cand)
+		if err == nil && st.IsDir() {
+			abs, err := filepath.Abs(cand)
+			if err == nil {
+				return abs
+			}
+			return cand
+		}
+	}
+	// Create preferred so first key save can land under a live path.
+	if preferred != "" {
+		_ = os.MkdirAll(preferred, 0755)
+		abs, err := filepath.Abs(preferred)
+		if err == nil {
+			return abs
+		}
+		return preferred
+	}
+	return ""
 }
 
 func withRecover(next http.HandlerFunc) http.HandlerFunc {

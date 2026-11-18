@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.10] - 2026-11-18
+
+### Panel API keys / catalog JSON invisible after save
+
+- `panel-httpd` serves live `/www/user/stealthsurf` at `/ext/stealthsurf/` (`-webdir`)
+- Refresh panel ext symlinks + ensure API cache stubs on prepare/API
+- `panel_api_handle` writes settings without pipeline subshell (BusyBox ash)
+- lighttpd alias for `/ext/stealthsurf/` → addon web dir
+- Firewall still only touches STEALTHSURF_* chains / table 78 (coexistence tests pass)
+
+---
+
 ## [1.4.9] - 2026-11-18
 
 ### Force panel-httpd restart after upgrade (bootstrap HTTP 500)
