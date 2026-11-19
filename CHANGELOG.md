@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.32] - 2026-11-19
+
+### LAN access while VPN is on
+
+- Private destinations (`192.168/10/172.16`) INSERT at head of TPROXY chain — LAN↔LAN не уходит в proxy когда CTF выключен
+- IP excluded-устройств из ARP/leases тоже в bypass
+- Save в Connection сразу пересобирает firewall, если VPN уже запущен
+
 ## [1.4.31] - 2026-11-19
 
 ### LAN exclude reachability

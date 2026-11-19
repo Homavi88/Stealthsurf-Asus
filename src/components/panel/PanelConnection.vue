@@ -124,7 +124,7 @@
               }}
             </div>
             <div class="ss-lan-devices__hint">
-              Заход с телефона в LAN: в приложении указывайте локальный IP из списка ниже (192.168.x.x), не DDNS и не «имя из интернета» — иначе трафик уйдёт в VPN и устройство будет «недоступно». Один Wi‑Fi с роутером (не guest), без AP isolation; на телефоне отключите случайный MAC или отметьте актуальный. После Save — Restart VPN.
+              Заход с телефона (он в VPN) на excluded-устройство: в приложении только локальный IP из списка (например 192.168.50.112), не DDNS и не облачное имя. Один Wi‑Fi (не guest). После Save правила firewall обновятся сами, если VPN уже запущен; иначе — Start/Restart VPN.
             </div>
             <label v-for="d in lanDevices" :key="d.mac" class="ss-lan-devices__row">
               <input type="checkbox" :checked="isLanMacSelected(d.mac)" @change="onLanMacChange(d.mac, $event)" />

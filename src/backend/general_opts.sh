@@ -208,6 +208,18 @@ apply_general_options() {
         vpn_service_lock_clear 2>/dev/null || true
     fi
 
+    # Apply LAN exclude/selected iptables immediately when VPN is up — otherwise
+    # Save alone leaves old TPROXY rules and home LAN access to direct hosts fails
+    # until a manual Restart VPN.
+    if [ -n "$(get_xray_daemon_pid 2>/dev/null || true)" ]; then
+        if type configure_firewall >/dev/null 2>&1; then
+            configure_firewall 2>/dev/null || log_warn "firewall refresh after LAN mode save failed"
+        fi
+        if [ "${kill_switch:-false}" = "true" ] && type vpn_kill_switch_apply >/dev/null 2>&1; then
+            vpn_kill_switch_apply 2>/dev/null || true
+        fi
+    fi
+
     # Omit keeps existing conf when the panel payload did not include these keys.
     if [ "$subscriptionLinks" != "__omit__" ]; then
         update_xrayui_config "subscriptionLinks" "$subscriptionLinks"
