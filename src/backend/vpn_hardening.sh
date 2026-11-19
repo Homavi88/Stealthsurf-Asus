@@ -3,6 +3,9 @@
 # Boot / WAN / kill-switch / LAN device mode / IPv6 / guest / preflight
 
 FW_KILLSWITCH_CHAIN="${ADDON_TAG_UPPER}_KILLSWITCH"
+FW_SVCLOCK_CHAIN="${FW_SVCLOCK_CHAIN:-${ADDON_TAG_UPPER}_SVCLOCK}"
+IPSET_LOCK_V4="${IPSET_LOCK_V4:-${ADDON_TAG_UPPER}_LOCK4}"
+IPSET_LOCK_V6="${IPSET_LOCK_V6:-${ADDON_TAG_UPPER}_LOCK6}"
 PREFLIGHT_STATUS_FILE="${PREFLIGHT_STATUS_FILE:-$ADDON_SHARE_DIR/preflight_status.json}"
 
 # ── 1. NTP ──────────────────────────────────────────────────────────────────
@@ -46,6 +49,7 @@ vpn_wan_reconnect() {
     if [ "${kill_switch:-false}" = "true" ]; then
         vpn_kill_switch_apply
     fi
+    vpn_service_lock_apply 2>/dev/null || true
     log_ok "WAN reconnect: firewall refreshed"
     return 0
 }
@@ -305,17 +309,9 @@ vpn_guest_force_nets() {
     vpn_guest_nets_v4
 }
 
-# ── Domain split (bypass list → direct) ─────────────────────────────────────
-# split_bypass_domains: comma/space/newline separated hostnames or geosite: tags
-vpn_split_rules_sync() {
-    load_xrayui_config
-    local raw="${split_bypass_domains:-}"
-    local tmp domains_json
-
-    [ -f "$XRAY_CONFIG_FILE" ] || return 0
-
-    # Normalise → JSON string array (keep geosite: / domain: / full: prefixes)
-    domains_json=$(printf '%s' "$raw" | tr ';\n' ',,' | tr -s ',' ',' | sed 's/^,//; s/,$//' |
+# ── Domain helpers (bypass / VPN-lock) ──────────────────────────────────────
+vpn_domains_to_json() {
+    printf '%s' "${1:-}" | tr ';\n' ',,' | tr -s ',' ',' | sed 's/^,//; s/,$//' |
         awk -F',' '
           BEGIN { printf "[" }
           {
@@ -328,7 +324,47 @@ vpn_split_rules_sync() {
             }
           }
           END { printf "]" }
-        ')
+        '
+}
+
+vpn_lock_wanted() {
+    load_xrayui_config 2>/dev/null || true
+    local raw="${split_lock_domains:-}"
+    [ -n "$(printf '%s' "$raw" | tr -d ' \t\n\r,;')" ]
+}
+
+# Prefer tag "proxy", else first non-direct/non-block outbound
+vpn_primary_proxy_tag() {
+    [ -f "$XRAY_CONFIG_FILE" ] || {
+        echo "proxy"
+        return 0
+    }
+    jq -r '
+      (.outbounds // []) as $o
+      | ($o | map(select(
+          (.protocol // "") != "freedom"
+          and (.protocol // "") != "blackhole"
+          and (.protocol // "") != "dns"
+          and ((.tag // "") != "direct")
+          and ((.tag // "") != "block")
+          and ((.tag // "") != "")
+        ))) as $p
+      | (($p | map(select(.tag == "proxy"))) + $p)
+      | if length == 0 then "proxy" else .[0].tag end
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null || echo "proxy"
+}
+
+# ── Domain split (bypass list → direct) ─────────────────────────────────────
+# split_bypass_domains: comma/space/newline separated hostnames or geosite: tags
+vpn_split_rules_sync() {
+    load_xrayui_config
+    local raw="${split_bypass_domains:-}"
+    local tmp domains_json
+
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+
+    # Normalise → JSON string array (keep geosite: / domain: / full: prefixes)
+    domains_json=$(vpn_domains_to_json "$raw")
 
     tmp="${ADDON_TMP_DIR}/ssurf_split.$$"
     mkdir -p "$ADDON_TMP_DIR" 2>/dev/null || true
@@ -365,6 +401,228 @@ vpn_split_rules_sync() {
     ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
     rm -f "$tmp" 2>/dev/null
     log_info "Split bypass domains applied ($domains_json)"
+}
+
+# ── VPN-only / fail-closed lock (domains must use VPN or be blocked) ────────
+# split_lock_domains: hostnames or geosite: tags → proxy outbound in Xray;
+# literal hostnames also feed LOCK ipsets; unmarked clearnet to those IPs is DROP.
+vpn_lock_rules_sync() {
+    load_xrayui_config
+    local raw="${split_lock_domains:-}"
+    local tmp domains_json proxy_tag
+
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+
+    domains_json=$(vpn_domains_to_json "$raw")
+    tmp="${ADDON_TMP_DIR}/ssurf_lock.$$"
+    mkdir -p "$ADDON_TMP_DIR" 2>/dev/null || true
+
+    if [ "$domains_json" = "[]" ] || [ -z "$domains_json" ]; then
+        jq '
+          .routing = (.routing // {})
+          | .routing.rules = (
+              [(.routing.rules // [])[] | select((.name // "") != "surfgate-vpn-lock")]
+            )
+        ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+        log_info "VPN-lock domains cleared"
+        return 0
+    fi
+
+    proxy_tag=$(vpn_primary_proxy_tag)
+    # Ensure target outbound exists (scaffold / import usually provides it)
+    if ! jq -e --arg t "$proxy_tag" '(.outbounds // []) | any(.tag==$t)' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        log_warn "VPN-lock: outbound tag '$proxy_tag' missing — rule still written"
+    fi
+
+    # Place lock before bypass so a domain listed in both stays fail-closed on VPN
+    jq --argjson domains "$domains_json" --arg tag "$proxy_tag" '
+      .routing = (.routing // {})
+      | .routing.rules = (
+          [{
+            name: "surfgate-vpn-lock",
+            type: "field",
+            domain: $domains,
+            outboundTag: $tag
+          }]
+          + [(.routing.rules // [])[] | select((.name // "") != "surfgate-vpn-lock")]
+        )
+    ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+    rm -f "$tmp" 2>/dev/null
+    log_info "VPN-lock domains applied → $proxy_tag ($domains_json)"
+}
+
+vpn_lock_ensure_sets() {
+    ipset list -t "$IPSET_LOCK_V4" >/dev/null 2>&1 ||
+        ipset create "$IPSET_LOCK_V4" hash:ip family inet timeout 86400 2>/dev/null ||
+        ipset create "$IPSET_LOCK_V4" hash:ip family inet 2>/dev/null || true
+    if is_ipv6_enabled 2>/dev/null; then
+        ipset list -t "$IPSET_LOCK_V6" >/dev/null 2>&1 ||
+            ipset create "$IPSET_LOCK_V6" hash:ip family inet6 timeout 86400 2>/dev/null ||
+            ipset create "$IPSET_LOCK_V6" hash:ip family inet6 2>/dev/null || true
+    fi
+}
+
+# Best-effort resolve literal hostnames into LOCK sets (geosite: skipped)
+vpn_lock_prime_ips() {
+    load_xrayui_config
+    vpn_lock_ensure_sets
+    local raw="${split_lock_domains:-}" d ip
+    printf '%s' "$raw" | tr ';\n' ',,' | tr ',' '\n' | while IFS= read -r d; do
+        d=$(printf '%s' "$d" | sed 's/^[ \t]*//;s/[ \t]*$//')
+        [ -z "$d" ] && continue
+        case "$d" in
+        geosite:* | geoip:* | ext:* | domain:* | full:* | regexp:* | keyword:*) continue ;;
+        esac
+        # strip leading wildcard / dots for resolve
+        d=$(printf '%s' "$d" | sed 's/^\*\.//; s/^\.//')
+        [ -z "$d" ] && continue
+        for ip in $(nslookup "$d" 2>/dev/null | awk '/^Address: / { print $2 }' | grep -E '^[0-9.]+$|^[0-9a-fA-F:]+$'); do
+            case "$ip" in
+            *:*) ipset add "$IPSET_LOCK_V6" "$ip" 2>/dev/null || true ;;
+            *) ipset add "$IPSET_LOCK_V4" "$ip" 2>/dev/null || true ;;
+            esac
+        done
+    done
+}
+
+vpn_service_lock_clear() {
+    local IPT
+    for IPT in iptables ip6tables; do
+        command -v "$IPT" >/dev/null 2>&1 || continue
+        $IPT -w -t filter -D FORWARD -j "$FW_SVCLOCK_CHAIN" 2>/dev/null || true
+        $IPT -w -t filter -D OUTPUT -j "$FW_SVCLOCK_CHAIN" 2>/dev/null || true
+        $IPT -w -t filter -F "$FW_SVCLOCK_CHAIN" 2>/dev/null || true
+        $IPT -w -t filter -X "$FW_SVCLOCK_CHAIN" 2>/dev/null || true
+    done
+}
+
+vpn_service_lock_conntrack_flush() {
+    command -v conntrack >/dev/null 2>&1 || return 0
+    local ip
+    if ipset list -t "$IPSET_LOCK_V4" >/dev/null 2>&1; then
+        for ip in $(ipset list "$IPSET_LOCK_V4" 2>/dev/null | awk '/^[0-9]+\./ { print $1 }'); do
+            conntrack -D -d "$ip" 2>/dev/null || true
+            conntrack -D -q "$ip" 2>/dev/null || true
+        done
+    fi
+    if is_ipv6_enabled 2>/dev/null && ipset list -t "$IPSET_LOCK_V6" >/dev/null 2>&1; then
+        for ip in $(ipset list "$IPSET_LOCK_V6" 2>/dev/null | awk '/:/ { print $1 }'); do
+            conntrack -D -f ipv6 -d "$ip" 2>/dev/null || true
+            conntrack -D -f ipv6 -q "$ip" 2>/dev/null || true
+        done
+    fi
+}
+
+vpn_service_lock_apply() {
+    load_xrayui_config
+    vpn_service_lock_clear
+
+    if ! vpn_lock_wanted; then
+        log_debug "VPN-lock: no domains — not arming"
+        return 0
+    fi
+
+    vpn_lock_ensure_sets
+    vpn_lock_prime_ips
+
+    local IPT wan0 wan1
+    wan0=$(nvram get wan0_ifname 2>/dev/null)
+    wan1=$(nvram get wan1_ifname 2>/dev/null)
+
+    log_info "Arming VPN-lock (DROP clearnet to locked service IPs)…"
+
+    for IPT in iptables ip6tables; do
+        command -v "$IPT" >/dev/null 2>&1 || continue
+        if [ "$IPT" = "ip6tables" ]; then
+            case "${ipv6_mode:-proxy}" in
+            ignore) continue ;;
+            esac
+            is_ipv6_enabled 2>/dev/null || continue
+            ipset list -t "$IPSET_LOCK_V6" >/dev/null 2>&1 || continue
+        else
+            ipset list -t "$IPSET_LOCK_V4" >/dev/null 2>&1 || continue
+        fi
+
+        $IPT -w -t filter -N "$FW_SVCLOCK_CHAIN" 2>/dev/null || $IPT -w -t filter -F "$FW_SVCLOCK_CHAIN"
+        # SurfGate-marked / diverted traffic may leave via WAN
+        $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -m mark --mark "$tproxy_mark/$tproxy_mask" -j RETURN
+        # Destination not in lock set → ignore
+        if [ "$IPT" = "iptables" ]; then
+            $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -m set ! --match-set "$IPSET_LOCK_V4" dst -j RETURN
+        else
+            $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -m set ! --match-set "$IPSET_LOCK_V6" dst -j RETURN
+        fi
+        # Locked destination without SurfGate mark → DROP (all states — cut leaks immediately)
+        if [ -n "$wan0" ]; then
+            $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -o "$wan0" -j DROP
+        fi
+        if [ -n "$wan1" ] && [ "$wan1" != "$wan0" ]; then
+            $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -o "$wan1" -j DROP
+        fi
+        # Also block when oif unknown but dst is locked (router OUTPUT / odd paths)
+        $IPT -w -t filter -A "$FW_SVCLOCK_CHAIN" -j DROP
+
+        $IPT -w -t filter -I FORWARD 1 -j "$FW_SVCLOCK_CHAIN"
+        $IPT -w -t filter -I OUTPUT 1 -j "$FW_SVCLOCK_CHAIN"
+    done
+
+    log_ok "VPN-lock armed"
+}
+
+# After Xray stops: cut live sessions and keep fail-closed DROP + dnsmasq LOCK fills
+vpn_service_lock_on_xray_down() {
+    load_xrayui_config 2>/dev/null || true
+    if ! vpn_lock_wanted; then
+        vpn_service_lock_clear
+        return 0
+    fi
+    vpn_service_lock_conntrack_flush
+    vpn_service_lock_apply
+    if type dnsmasq_configure >/dev/null 2>&1; then
+        dnsmasq_configure /etc/dnsmasq.conf 2>/dev/null || true
+        if type dnsmasq_restart >/dev/null 2>&1; then
+            dnsmasq_restart 2>/dev/null || true
+        fi
+    fi
+}
+
+# Append ipset=/domain/LOCK… lines for literal lock hostnames (into open dnsmasq conf)
+vpn_lock_dnsmasq_append() {
+    local CONFIG="${1:-/etc/dnsmasq.conf}"
+    load_xrayui_config 2>/dev/null || true
+    vpn_lock_wanted || return 0
+    vpn_lock_ensure_sets
+
+    local raw="${split_lock_domains:-}" d sets
+    sets="$IPSET_LOCK_V4"
+    if is_ipv6_enabled 2>/dev/null; then
+        sets="$IPSET_LOCK_V4,$IPSET_LOCK_V6"
+    fi
+    # When redirect mode is active, also fill PROXY so traffic is diverted into Xray
+    if [ "${ipsec:-off}" = "redirect" ]; then
+        if is_ipv6_enabled 2>/dev/null; then
+            sets="$IPSET_LOCK_V4,$IPSET_LOCK_V6,$IPSET_PROXY_V4,$IPSET_PROXY_V6"
+        else
+            sets="$IPSET_LOCK_V4,$IPSET_PROXY_V4"
+        fi
+    fi
+
+    printf '%s' "$raw" | tr ';\n' ',,' | tr ',' '\n' | while IFS= read -r d; do
+        d=$(printf '%s' "$d" | sed 's/^[ \t]*//;s/[ \t]*$//')
+        [ -z "$d" ] && continue
+        case "$d" in
+        geosite:* | geoip:* | ext:* | regexp:* | keyword:*) continue ;;
+        domain:*) d="${d#domain:}" ;;
+        full:*) d="${d#full:}" ;;
+        esac
+        d=$(printf '%s' "$d" | sed 's/^\*\.//')
+        [ -z "$d" ] && continue
+        # basic hostname sanity
+        printf '%s' "$d" | grep -qE '^[A-Za-z0-9._-]+$' || continue
+        pc_append "ipset=/$d/$sets" "$CONFIG" 2>/dev/null ||
+            printf 'ipset=/%s/%s\n' "$d" "$sets" >>"$CONFIG"
+    done
+    return 0
 }
 
 # ── 6. Preflight ────────────────────────────────────────────────────────────

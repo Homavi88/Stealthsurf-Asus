@@ -347,7 +347,7 @@
         </div>
         <div class="feature">
           <h3>VPN hardening</h3>
-          <p>NTP wait, WAN reconnect, kill-switch, LAN MAC modes, guest Wi‑Fi, IPv6 proxy/block, DNS-only lock, preflight.</p>
+          <p>NTP wait, WAN reconnect, kill-switch, VPN-only fail-closed, LAN MAC modes, guest Wi‑Fi, IPv6 proxy/block, DNS-only lock, preflight.</p>
         </div>
         <div class="feature">
           <h3>Диагностика</h3>
@@ -429,8 +429,9 @@ http://192.168.50.1:1131/</pre>
       <figure class="shot">
         <img src="../screenshots/09-settings-connection.png" alt="Подключение" loading="lazy" />
         <figcaption>
-          <strong>Подключение</strong> — автозапуск, kill-switch, режим LAN (все / selected / exclude MAC),
-          гостевая Wi‑Fi, IPv6, DNS-only, диагностика (preflight / speed / DNS leak).
+          <strong>Подключение</strong> — автозапуск, kill-switch, VPN-only fail-closed, split bypass,
+          режим LAN (все / selected / exclude MAC), гостевая Wi‑Fi, IPv6, DNS-only,
+          диагностика (preflight / speed / DNS leak).
         </figcaption>
       </figure>
 
@@ -494,6 +495,7 @@ http://192.168.50.1:1131/</pre>
         <tbody>
           <tr><td>Запуск при загрузке</td><td>Автостарт Xray после ребута роутера</td></tr>
           <tr><td>Kill-switch</td><td>Блок LAN→WAN без марки SurfGate, пока VPN «должен» быть up</td></tr>
+          <tr><td>VPN-only (fail-closed)</td><td>Сервисы только через VPN; при падении аддона/VPN — DROP clearnet + сброс conntrack</td></tr>
           <tr><td>Кому VPN</td><td><code>all</code> / только MAC / все кроме MAC</td></tr>
           <tr><td>Гостевая Wi‑Fi</td><td><code>follow</code> · <code>vpn</code> (всегда TPROXY) · <code>direct</code></td></tr>
           <tr><td>Split bypass</td><td>Домены / <code>geosite:</code> → <code>direct</code> (минуя VPN)</td></tr>
@@ -549,6 +551,7 @@ surfgate panel status     # http://LAN:1131/</pre>
         <div class="feature"><h3>NTP wait</h3><p>Перед стартом Xray ждём синхронизацию времени (TLS/REALITY).</p></div>
         <div class="feature"><h3>WAN reconnect</h3><p>Хуки <code>wan-event</code> / <code>wan-start</code> — rebuild firewall или restart.</p></div>
         <div class="feature"><h3>Kill-switch</h3><p>Пока VPN desired — unmarked LAN→WAN режется.</p></div>
+        <div class="feature"><h3>VPN-only</h3><p>Домены → proxy; unmarked clearnet к их IP — DROP. Остаётся armed при Stop Xray.</p></div>
         <div class="feature"><h3>LAN / Guest / IPv6</h3><p>MAC policies, гостевые мосты, IPv6 proxy|block|ignore.</p></div>
         <div class="feature"><h3>Split bypass</h3><p>Домены / <code>geosite:</code> → правило <code>surfgate-split-bypass</code> → <code>direct</code>. App/DPI split нет.</p></div>
         <div class="feature"><h3>Speed cron</h3><p>Опционально каждые 6/12/24 ч (CRU <code>ssurf_speedtest</code>).</p></div>
@@ -567,8 +570,23 @@ surfgate panel status     # http://LAN:1131/</pre>
 
       <h3>Split bypass (домены)</h3>
       <p class="sec-p" style="margin-bottom:0.75rem">Connection → <strong>Split bypass</strong>: <code>example.com, geosite:category-games</code>. После Apply/Restart:</p>
+      <pre>jq '.routing.rules[]|select(.name=="surfgate-split-bypass")' /opt/etc/xray/ssurf/*.json
+# outboundTag: direct</pre>
+
+      <h3>VPN-only / fail-closed</h3>
+      <p class="sec-p" style="margin-bottom:0.75rem">
+        Connection → <strong>VPN-only</strong>: сервисы, которые <em>нельзя</em> пускать в clearnet.
+        Xray-правило <code>surfgate-vpn-lock</code> → proxy; literal-домены в ipset <code>SSURF_LOCK*</code>;
+        unmarked пакеты к этим IP — DROP. При Stop Xray / падении VPN — conntrack flush + DROP остаётся.
+      </p>
       <pre>jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
-# name: surfgate-split-bypass · outboundTag: direct</pre>
+# name: surfgate-vpn-lock · outboundTag: proxy
+iptables -w -t filter -nvL SSURF_SVCLOCK
+ipset list SSURF_LOCK4 | head</pre>
+      <p style="color:var(--muted);margin:0.75rem 0 0">
+        Лучше с <code>ipsec=redirect</code> (DNS заполняет LOCK/PROXY). Для <code>geosite:</code> fail-closed DROP
+        по IP ограничен — routing в Xray всё равно принуждает к VPN, пока core жив.
+      </p>
     </div>
   </section>
 
@@ -674,7 +692,14 @@ surfgate pf && surfgate sp && surfgate dns
 
 # 5. Split bypass (опционально)
 #    Connection → Split bypass → Apply/Restart
-#    jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+#    jq '.routing.rules[]|select(.name=="surfgate-split-bypass")' /opt/etc/xray/ssurf/*.json
+
+# 5b. VPN-only fail-closed (опционально)
+#    Connection → VPN-only → netflix.com → Apply/Restart
+#    jq '.routing.rules[0]' …  # surfgate-vpn-lock → proxy
+#    surfgate dn   # Stop Xray
+#    iptables -nvL SSURF_SVCLOCK   # DROP still armed
+#    # traffic to locked IPs must fail (no clearnet)
 
 # 6. Speed cron (опционально)
 #    Connection → Авто по cron → 6h/12h/24h

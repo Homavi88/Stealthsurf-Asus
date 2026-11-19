@@ -28,13 +28,31 @@ surfgate st          # xray + panel
 ## Split bypass (домены)
 
 Connection → **Split bypass**: `example.com, geosite:category-games`  
-После Apply/Restart в конфиге Xray правило `surfgate-split-bypass` → `outboundTag: direct` в начале `routing.rules`.
+После Apply/Restart в конфиге Xray правило `surfgate-split-bypass` → `outboundTag: direct`.
 
 ```sh
-jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+jq '.routing.rules[]|select(.name=="surfgate-split-bypass")' /opt/etc/xray/ssurf/*.json
 ```
 
 App/DPI split **не** поддерживается (нужен DPI на роутере).
+
+## VPN-only / fail-closed
+
+Connection → **VPN-only**: домены, которые должны ходить **только** через VPN.
+
+1. Apply/Restart → правило `surfgate-vpn-lock` → `outboundTag: proxy` (первым в `routing.rules`).
+2. Literal-домены попадают в ipset `SSURF_LOCK4` (и LOCK6) через dnsmasq `ipset=/…`.
+3. Цепочка `SSURF_SVCLOCK`: unmarked → WAN к LOCK IP = **DROP** (в т.ч. ESTABLISHED).
+4. `surfgate dn` (Stop): conntrack flush по LOCK IP + DROP остаётся armed; dnsmasq lock-строки сохраняются.
+5. Проверка: с LAN к заблокированному сервису без VPN — таймаут/отказ, не ISP IP.
+
+```sh
+jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+iptables -w -t filter -nvL SSURF_SVCLOCK
+ipset list SSURF_LOCK4 | head
+```
+
+Рекомендуется `ipsec=redirect`. Для чистых `geosite:` тегов fail-closed по IP слабее (нет раскрытия geodata в LOCK) — пока Xray жив, routing всё равно гонит в VPN.
 
 ## Speedtest cron
 

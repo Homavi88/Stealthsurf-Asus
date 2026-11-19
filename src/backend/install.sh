@@ -310,6 +310,17 @@ uninstall() {
         log_warn "XRAY service is not running."
     fi
 
+    # Clear fail-closed service lock left armed by stop()
+    vpn_service_lock_clear 2>/dev/null || true
+    split_lock_domains=""
+    if type dnsmasq_strip_addon_block >/dev/null 2>&1; then
+        dnsmasq_strip_addon_block /etc/dnsmasq.conf 2>/dev/null || true
+    fi
+    for set in "${IPSET_LOCK_V4:-}" "${IPSET_LOCK_V6:-}"; do
+        [ -n "$set" ] || continue
+        ipset list -n 2>/dev/null | grep -qx "$set" && ipset destroy "$set" 2>/dev/null || true
+    done
+
     # Remove our files only — never /jffs/addons/stealthsurf when official VPN is there
     log_info "Removing XRAY UI files from $ADDON_JFFS_ADN_DIR..."
     rm -rf "$ADDON_WEB_DIR" || log_warn "Failed to remove $ADDON_WEB_DIR."

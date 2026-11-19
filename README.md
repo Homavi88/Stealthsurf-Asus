@@ -102,7 +102,7 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 | **Панель :1131** | Статус, throughput, ЦП/ОЗУ, настройки по разделам |
 | **Каталог API** | Sync / автосинк, import, autofit, traffic/stats, renew/top-up |
 | **Transparent proxy** | Весь LAN (`ipsec=off`) или smart proxy (`redirect` + geosite) |
-| **VPN hardening** | NTP, WAN reconnect, kill-switch, LAN/guest/IPv6, DNS lock, preflight |
+| **VPN hardening** | NTP, WAN reconnect, kill-switch, VPN-only fail-closed, LAN/guest/IPv6, DNS lock, preflight |
 | **Диагностика** | Speed test, DNS/IPv6 leak, Observatory probes |
 | **Логи** | App / Access / Error / Devices |
 | **Updates** | GitHub check + опциональный auto-install |
@@ -145,6 +145,8 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 | --- | --- |
 | Запуск при загрузке | Автостарт Xray после ребута |
 | Kill-switch | Блок LAN→WAN без марки, пока VPN desired |
+| VPN-only (fail-closed) | Домены только через VPN; при падении аддона/VPN — DROP clearnet + сброс conntrack |
+| Split bypass | Домены в direct, минуя VPN |
 | Кому VPN | `all` / selected MAC / exclude MAC |
 | Гостевая Wi‑Fi | `follow` · `vpn` · `direct` |
 | IPv6 | `proxy` · `block` · `ignore` |

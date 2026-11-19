@@ -83,6 +83,7 @@ initial_response() {
     *) guest_vpn_mode="follow" ;;
     esac
     local split_bypass_domains="${split_bypass_domains:-}"
+    local split_lock_domains="${split_lock_domains:-}"
     local speedtest_interval="${speedtest_interval:-disabled}"
     case "$speedtest_interval" in
     6h | 12h | 24h) ;;
@@ -190,6 +191,7 @@ initial_response() {
         --arg ipv6_mode "$ipv6_mode" \
         --arg guest_vpn_mode "$guest_vpn_mode" \
         --arg split_bypass_domains "$split_bypass_domains" \
+        --arg split_lock_domains "$split_lock_domains" \
         --arg speedtest_interval "$speedtest_interval" \
         --arg hook_before_firewall_start "$hook_before_firewall_start" \
         --arg after_firewall_start "$after_firewall_start" \
@@ -244,6 +246,7 @@ initial_response() {
         | .xray.ipv6_mode = $ipv6_mode
         | .xray.guest_vpn_mode = $guest_vpn_mode
         | .xray.split_bypass_domains = $split_bypass_domains
+        | .xray.split_lock_domains = $split_lock_domains
         | .xray.speedtest_interval = $speedtest_interval
         | .xray.subscriptions.filters = (if $sf == "" then [] else ($sf | split("|")) end)
         | .xray.hooks = {
@@ -305,6 +308,7 @@ initial_response() {
             --arg ipv6_mode "$ipv6_mode" \
             --arg guest_vpn_mode "$guest_vpn_mode" \
             --arg split_bypass_domains "$split_bypass_domains" \
+            --arg split_lock_domains "$split_lock_domains" \
             --arg speedtest_interval "$speedtest_interval" \
             --arg xrayui_ver "$XRAYUI_VERSION" \
             --arg xray_ver "$XRAY_VERSION" \
@@ -316,7 +320,7 @@ initial_response() {
             --argjson xrayui "$xrayui_json" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, kill_switch: $kill_switch, lan_vpn_mode: $lan_vpn_mode, lan_vpn_macs: $lan_vpn_macs, ipv6_mode: $ipv6_mode, guest_vpn_mode: $guest_vpn_mode, split_bypass_domains: $split_bypass_domains, speedtest_interval: $speedtest_interval, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, kill_switch: $kill_switch, lan_vpn_mode: $lan_vpn_mode, lan_vpn_macs: $lan_vpn_macs, ipv6_mode: $ipv6_mode, guest_vpn_mode: $guest_vpn_mode, split_bypass_domains: $split_bypass_domains, split_lock_domains: $split_lock_domains, speedtest_interval: $speedtest_interval, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
                 xrayui: $xrayui,
                 conflict: $xrayui.conflict,
                 conflict_message: $xrayui.message
