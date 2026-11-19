@@ -359,10 +359,12 @@ vpn_split_ru_tld_domains() {
     printf '%s' 'domain:ru,domain:su,domain:xn--p1ai'
 }
 
-# Preset: RU services whitelist → direct (geosite where available + literals)
+# Preset: RU services whitelist → direct (geosite tags that exist in Loyalsoldier
+# geosite.dat + literals). Do NOT use geosite:geolocation-ru — that tag is absent
+# and Xray fails with "failed to build routing configuration".
 vpn_split_ru_services_domains() {
     printf '%s' \
-        'geosite:category-ru,geosite:category-gov-ru,geosite:geolocation-ru,geosite:yandex,' \
+        'geosite:category-ru,geosite:category-gov-ru,geosite:yandex,' \
         'gosuslugi.ru,mos.ru,nalog.ru,cbr.ru,' \
         'sberbank.ru,sber.ru,tinkoff.ru,tbank.ru,vtb.ru,alfabank.ru,gazprombank.ru,raiffeisen.ru,' \
         'vk.com,vk.ru,ok.ru,mail.ru,my.mail.ru,yandex.ru,ya.ru,yandex.net,yandex.com,' \

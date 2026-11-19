@@ -177,7 +177,7 @@
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
-  import { checkSurfGateUpdate } from '@/modules/SurfGateUpdate';
+  import { checkSurfGateUpdate, compareVersions } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     current?: string;
@@ -294,20 +294,23 @@
       const clientUpdate = ref(false);
 
       const updateLatest = computed(() => clientLatest.value || updateStatus.value?.latest || '');
-      const updateAvailable = computed(
-        () =>
-          Boolean(updateLatest.value) &&
-          Boolean(
-            (updateStatus.value?.update_available && updateStatus.value?.latest) || clientUpdate.value
-          )
-      );
       const updateCurrent = computed(
         () =>
-          updateStatus.value?.current ||
           window.xray?.custom_settings?.stealthsurf_version ||
           uiResponse.value?.xray?.ui_version ||
+          updateStatus.value?.current ||
           '—'
       );
+      // Always compare versions — stale addon-update-status can keep update_available=true
+      // after install (e.g. banner shows v1.4.27 → v1.4.27).
+      const updateAvailable = computed(() => {
+        const latest = String(updateLatest.value || '').replace(/^v/i, '');
+        const current = String(updateCurrent.value || '').replace(/^v/i, '');
+        if (!latest || !current || current === '—') return false;
+        if (clientUpdate.value && compareVersions(latest, current) === 1) return true;
+        if (updateStatus.value?.update_available && compareVersions(latest, current) === 1) return true;
+        return compareVersions(latest, current) === 1;
+      });
 
       const loadUpdateStatus = async () => {
         try {

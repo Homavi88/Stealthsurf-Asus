@@ -85,7 +85,7 @@
   import Version from '../Version.vue';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
-  import { checkSurfGateUpdate } from '@/modules/SurfGateUpdate';
+  import { checkSurfGateUpdate, compareVersions } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     repo?: string;
@@ -116,15 +116,18 @@
       const repoUrl = computed(() => `https://github.com/${repo.value}/releases`);
       const current = computed(
         () =>
-          status.value?.current ||
           window.xray?.custom_settings?.stealthsurf_version ||
           uiResponse?.value?.xray?.ui_version ||
+          status.value?.current ||
           '—'
       );
       const displayLatest = computed(() => clientLatest.value || status.value?.latest || '');
-      const updateAvailable = computed(
-        () => Boolean((status.value?.update_available && displayLatest.value) || (clientUpdate.value && displayLatest.value))
-      );
+      const updateAvailable = computed(() => {
+        const latest = String(displayLatest.value || '').replace(/^v/i, '');
+        const cur = String(current.value || '').replace(/^v/i, '');
+        if (!latest || !cur || cur === '—') return false;
+        return compareVersions(latest, cur) === 1;
+      });
       const displayMessage = computed(() => {
         if (updateAvailable.value && displayLatest.value) {
           return `Доступна новая версия: v${displayLatest.value} (установлено v${current.value})`;
