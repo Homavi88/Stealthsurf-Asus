@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.21] - 2026-11-19
+
+### Home + LAN devices
+
+- Главная: рядом с WAN показывается **vpn <server>** активного outbound (stealthsurf-default)
+- Настройки → connection → **Устройства VPN**: чеклист LAN-устройств для режимов «только выбранные» / «все кроме» (direct мимо VPN)
+
 ## [1.4.20] - 2026-11-19
 
 ### Update download

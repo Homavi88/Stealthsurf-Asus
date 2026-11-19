@@ -22,8 +22,10 @@
       <h1 class="ss-brand-hero">SurfGate</h1>
       <p class="ss-brand-hero-sub">merlin · panel :1131 · xray</p>
       <p class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'status: online' : 'status: offline' }}</p>
-      <div class="ss-ip-pill" v-if="displayIp">
-        <span class="ss-mono">wan {{ displayIp }}</span>
+      <div class="ss-ip-pill" v-if="displayIp || displayVpnServer">
+        <span class="ss-mono" v-if="displayIp">wan {{ displayIp }}</span>
+        <span class="ss-mono ss-ip-sep" v-if="displayIp && displayVpnServer">·</span>
+        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer">vpn {{ displayVpnServer }}</span>
       </div>
     </section>
 
@@ -154,6 +156,7 @@
     mem_total_mb: number;
     app_rss_mb: number;
     wan_ip?: string;
+    vpn_server?: string;
     traffic?: { vpn_up: number; vpn_down: number; direct_up: number; direct_down: number };
     ts?: number;
   };
@@ -205,6 +208,10 @@
       });
 
       const displayIp = computed(() => live.value.wan_ip || window.xray?.router?.wan_ip || '');
+      const displayVpnServer = computed(() => {
+        if (!running.value) return '';
+        return (live.value.vpn_server || '').trim();
+      });
 
       const memLabel = computed(() => {
         const u = (live.value.mem_used_mb / 1024).toFixed(1).replace('.', ',');
@@ -368,6 +375,7 @@
             mem_total_mb: data.mem_total_mb || 0,
             app_rss_mb: data.app_rss_mb || 0,
             wan_ip: data.wan_ip,
+            vpn_server: data.vpn_server,
             running: data.running,
             traffic: t,
             ts
@@ -443,6 +451,7 @@
         selectEndpoint,
         isActiveRoute,
         displayIp,
+        displayVpnServer,
         memLabel,
         activeTitle,
         isImported,

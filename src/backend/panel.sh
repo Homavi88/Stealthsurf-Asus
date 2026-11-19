@@ -670,6 +670,63 @@ panel_bootstrap_json() {
         }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
 }
 
+# Address of the active stealthsurf-default outbound (VPN server host/IP).
+panel_vpn_server_from_config() {
+    [ -f "$XRAY_CONFIG_FILE" ] || {
+        echo ""
+        return 0
+    }
+    jq -r '
+      (.routing.rules // []
+        | map(select(.name == "stealthsurf-default"))
+        | .[0].outboundTag // empty) as $tag
+      | if ($tag | length) == 0 then
+          empty
+        else
+          (.outbounds // [] | map(select(.tag == $tag)) | .[0]) as $o
+          | ($o.settings.vnext[0].address
+             // $o.settings.servers[0].address
+             // $o.settings.address
+             // empty)
+        end
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null | head -n1
+}
+
+# Publish LAN clients (ip/mac/name) for Settings → Connection device picker.
+panel_lan_devices_publish() {
+    local map_file out
+    out="${ADDON_SHARE_DIR}/lan_devices.json"
+    mkdir -p "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR" 2>/dev/null || true
+    if ! type devices_vpn_build_ipmap >/dev/null 2>&1; then
+        echo '[]' >"$out"
+        return 0
+    fi
+    devices_vpn_build_ipmap
+    map_file="${DEVICES_VPN_MAP:-$ADDON_TMP_DIR/devices_ipmap.tsv}"
+    if [ ! -s "$map_file" ]; then
+        echo '[]' >"$out"
+    else
+        awk -F'\t' '
+          NF >= 2 && $2 != "" {
+            ip=$1; mac=tolower($2); name=$3;
+            gsub(/\\/,"\\\\",name); gsub(/"/,"\\\"",name);
+            printf "%s\t%s\t%s\n", ip, mac, name
+          }
+        ' "$map_file" |
+            awk -F'\t' '
+              BEGIN { print "[" }
+              {
+                if (seen[$2]++) next
+                if (n++) printf ","
+                printf "{\"ip\":\"%s\",\"mac\":\"%s\",\"name\":\"%s\"}", $1, $2, ($3==""?$2:$3)
+              }
+              END { print "]" }
+            ' >"${out}.$$" && mv -f "${out}.$$" "$out"
+    fi
+    ln -s -f "$out" "$ADDON_WEB_DIR/lan-devices.json" 2>/dev/null ||
+        cp -f "$out" "$ADDON_WEB_DIR/lan-devices.json" 2>/dev/null || true
+}
+
 # Live dashboard metrics for the light panel (CPU / RAM / traffic counters).
 panel_live_json() {
     panel_load_settings
@@ -729,8 +786,11 @@ panel_live_json() {
         case "$app_rss_mb" in '' | *[!0-9]*) app_rss_mb=0 ;; esac
     fi
 
-    local wan_ip
+    local wan_ip vpn_server=""
     wan_ip=$(nvram get wan_ipaddr 2>/dev/null)
+    if [ "$running" = true ]; then
+        vpn_server=$(panel_vpn_server_from_config 2>/dev/null || true)
+    fi
 
     local vpn_up=0 vpn_down=0 direct_up=0 direct_down=0
     # Best-effort cumulative counters from last xray stats snapshot (bytes).
@@ -750,6 +810,8 @@ panel_live_json() {
     if [ "$running" = true ] && type api_get_connection_status >/dev/null 2>&1; then
         (api_get_connection_status >/dev/null 2>&1 &) || true
     fi
+    # Keep LAN device list warm for Settings → Connection (cheap; runs in background).
+    (panel_lan_devices_publish >/dev/null 2>&1 &) || true
 
     local ts
     ts=$(date +%s 2>/dev/null) || ts=0
@@ -763,6 +825,7 @@ panel_live_json() {
         --argjson mem_total_mb "$mem_total_mb" \
         --argjson app_rss_mb "$app_rss_mb" \
         --arg wan_ip "$wan_ip" \
+        --arg vpn_server "$vpn_server" \
         --argjson vpn_up "$vpn_up" \
         --argjson vpn_down "$vpn_down" \
         --argjson direct_up "$direct_up" \
@@ -777,6 +840,7 @@ panel_live_json() {
           mem_total_mb: $mem_total_mb,
           app_rss_mb: $app_rss_mb,
           wan_ip: $wan_ip,
+          vpn_server: $vpn_server,
           traffic: {
             vpn_up: $vpn_up,
             vpn_down: $vpn_down,
