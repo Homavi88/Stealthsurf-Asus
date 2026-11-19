@@ -248,8 +248,15 @@ logrotate_setup() {
   chown "$username":root "$ADDON_LOGS_DIR"
   chmod 755 "$ADDON_LOGS_DIR"
 
-  local log_access="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_access.log" '.log.access // $default' "$XRAY_CONFIG_FILE")"
-  local log_error="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_error.log" '.log.error // $default' "$XRAY_CONFIG_FILE")"
+  # Corrupt/NUL config.json must not abort install — fall back to default log paths.
+  local log_access="$ADDON_LOGS_DIR/xray_access.log"
+  local log_error="$ADDON_LOGS_DIR/xray_error.log"
+  if [ -f "$XRAY_CONFIG_FILE" ] && jq -e 'type == "object"' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+    log_access="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_access.log" '.log.access // $default' "$XRAY_CONFIG_FILE" 2>/dev/null || echo "$log_access")"
+    log_error="$(jq -r --arg default "$ADDON_LOGS_DIR/xray_error.log" '.log.error // $default' "$XRAY_CONFIG_FILE" 2>/dev/null || echo "$log_error")"
+  else
+    log_warn "logrotate: Xray config missing/invalid — using default log paths"
+  fi
   local app_log="${ADDON_APP_LOG:-$ADDON_LOGS_DIR/ssurf_app.log}"
   local hist_log="${DEVICES_VPN_HISTORY_LOG:-$ADDON_LOGS_DIR/devices_vpn_history.log}"
 

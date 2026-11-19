@@ -199,18 +199,24 @@ EOF
         install_ui_status fail "b4sni ($b4sni_arch_name)"
     fi
 
+    mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_SHARE_DIR/data" 2>/dev/null
+    # Isolate from stock XrayUI: never use /opt/etc/xray/config.json as our profile.
+    # Repair NUL/corrupt JSON BEFORE logrotate/jq — otherwise update prints
+    # "jq: parse error" and "Could not update …; it was left unchanged."
+    load_xrayui_config
+    ensure_xray_scaffold
+    if xray_config_is_valid "$XRAY_CONFIG_FILE"; then
+        install_ui_status ok "config $XRAY_CONFIG_FILE"
+    else
+        install_ui_status fail "config $XRAY_CONFIG_FILE still invalid"
+        log_warn "Xray config could not be repaired; continuing install with defaults where possible"
+    fi
+
     install_ui_step "logrotate + cron"
     logrotate_setup
     cron_jobs_add
     install_ui_status ok "cron jobs"
 
-    mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_SHARE_DIR/data" 2>/dev/null
-    # Isolate from stock XrayUI: never use /opt/etc/xray/config.json as our profile
-    load_xrayui_config
-    if [ ! -f "$XRAY_CONFIG_FILE" ]; then
-        generate_xray_config
-        install_ui_status ok "isolated config $XRAY_CONFIG_FILE"
-    fi
     # Move junk out of geodata data/ (outbound-ss-* caused invalid attribute errors)
     geodata_sanitize_datadir 2>/dev/null || true
 
@@ -224,13 +230,15 @@ EOF
 
     cleanup_stale_asdfiles
 
-    if [ -f "$XRAY_CONFIG_FILE" ]; then
+    if xray_config_is_valid "$XRAY_CONFIG_FILE"; then
         log_info "Updating $XRAY_CONFIG_FILE config to version 0.55.1..."
         jq_update_file "$XRAY_CONFIG_FILE" '
           if .inbounds then .inbounds |= map(select(.tag != "sys:socks-in")) else . end
         | .routing.rules //= []
         | .routing.rules |= map(select(.name != "sys:connection-check"))
       ' || log_warn "Could not update $XRAY_CONFIG_FILE; it was left unchanged."
+    else
+        log_warn "Skipping config migration — $XRAY_CONFIG_FILE is not valid JSON"
     fi
 
     xrayui_core_forget

@@ -228,7 +228,9 @@
       const statusLabel = computed(() => {
         if (live.value.official && !running.value) return 'status: offline · official StealthSurf active';
         if (running.value) return 'status: online';
-        if (live.value.desired && !running.value) return 'status: offline · vpn desired (xray not detected)';
+        if (live.value.desired && !running.value) {
+          return 'status: offline · SurfGate Xray не запущен — нажмите START';
+        }
         return 'status: offline';
       });
 

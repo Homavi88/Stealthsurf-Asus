@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.23] - 2026-11-19
+
+### Corrupt config recovery
+
+- Перед Start: если `/opt/etc/xray/ssurf/config.json` битый (NUL/`\x00`, пустой, не JSON) — карантин, восстановление из `.bak` или новый scaffold
+- **Install/update**: repair конфига **до** logrotate/`jq` (убирает `jq: parse error` и `Could not update … left unchanged`)
+- logrotate не падает на битом JSON — берёт пути логов по умолчанию
+- `xray -test` при ошибке **останавливает** Start (больше не игнорируется)
+- При неудачном Start снимается «vpn desired», чтобы UI не залипал в offline / xray not detected
+- Apply config пишет атомарно (`*.new` → `mv`), чтобы не оставлять NUL на flash
+
 ## [1.4.22] - 2026-11-19
 
 ### Panel navigation + update UX

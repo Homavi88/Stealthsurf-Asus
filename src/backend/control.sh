@@ -54,6 +54,7 @@ start() {
             existing_pid=$(get_xray_daemon_pid)
             if [ -n "$existing_pid" ]; then
                 log_error "Failed to force-stop the Xray daemon (PID: $existing_pid). Aborting start."
+                watchdog_clear_desired
                 return 1
             fi
         else
@@ -71,7 +72,20 @@ start() {
     if [ "$skip_test" = "true" ]; then
         log_info "Skipping Xray configuration test as per user settings."
     else
-        test_xray_config
+        if ! test_xray_config; then
+            log_error "Xray configuration test failed — aborting start."
+            # Do not leave "vpn desired" sticky when Xray never came up (UI shows offline ghost).
+            watchdog_clear_desired
+            update_loading_progress "Error: Xray config invalid (corrupt JSON?). Check Test Config / system log." 100
+            return 1
+        fi
+    fi
+
+    if ! xray_config_is_valid "$XRAY_CONFIG_FILE"; then
+        log_error "Xray config still invalid after scaffold — aborting start."
+        watchdog_clear_desired
+        update_loading_progress "Error: Xray config is corrupt. Re-import endpoint or restore backup." 100
+        return 1
     fi
 
     log_info "Starting $ADDON_TITLE"
@@ -159,7 +173,17 @@ start() {
             log_debug "Waiting $i/$xray_sleep_time seconds for Xray to initialize..."
             sleep 1
             i=$((i + 1))
+            # Bail early once the daemon is visible
+            [ -n "$(get_xray_daemon_pid)" ] && [ "$i" -ge 2 ] && break
         done
+    fi
+
+    if [ -z "$(get_xray_daemon_pid)" ]; then
+        log_error "Xray did not stay running after start (config/runtime error)."
+        rm -f "$XRAY_PIDFILE"
+        watchdog_clear_desired
+        update_loading_progress "Error: Xray did not start. See the system log / Test Config." 100
+        return 1
     fi
 
     configure_firewall

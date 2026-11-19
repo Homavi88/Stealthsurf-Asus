@@ -745,7 +745,9 @@ test_xray_config() {
         [ -f "$(api_get_current_config)" ] && extra_cfg="-c $(api_get_current_config)"
     fi
 
+    local test_ok=0
     if ! output=$(xray -c $XRAY_CONFIG_FILE $extra_cfg -test 2>&1); then
+        test_ok=1
         message=$(echo "$output" | sed -n '/> infra\/conf:/ {s/.*> infra\/conf: //p}')
         if [ -z "$message" ]; then
             message="$output"
@@ -766,6 +768,7 @@ test_xray_config() {
         return 1
     fi
     echo "$json_content" >"/tmp/xray-response.$$.tmp" && mv -f "/tmp/xray-response.$$.tmp" "$UI_RESPONSE_FILE"
+    return "$test_ok"
 }
 
 update_loading_progress() {
