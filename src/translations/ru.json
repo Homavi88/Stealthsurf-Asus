@@ -47,7 +47,10 @@
       "xrayui_conflict_title": "Конфликт с XrayUI",
       "xrayui_conflict_pill": "XrayUI конфликт",
       "xrayui_installed_pill": "XrayUI установлен (остановлен)",
-      "xrayui_conflict_message": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте SurfGate. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN."
+      "xrayui_conflict_message": "XrayUI сейчас работает. Остановите XrayUI (VPN → XrayUI → Stop), затем запускайте SurfGate. Одновременно оба аддона нельзя: два transparent-proxy ломают интернет в LAN.",
+      "official_conflict_title": "Конфликт с официальным StealthSurf",
+      "official_conflict_pill": "StealthSurf конфликт",
+      "official_conflict_message": "Официальный StealthSurf (stealthsurf-routerd) сейчас работает. Остановите VPN в приложении StealthSurf, затем запускайте SurfGate. Одновременно оба нельзя: два transparent-proxy ломают интернет в LAN."
     },
     "ServerStatus": {
       "configuration": "Конфигурация",

@@ -144,6 +144,12 @@ initial_response() {
         xrayui_json='{"installed":false,"running":false,"conflict":null,"message":null}'
     fi
 
+    local official_json
+    official_json=$(ss_official_status_json 2>/dev/null || true)
+    if ! printf '%s' "$official_json" | jq -e . >/dev/null 2>&1; then
+        official_json='{"installed":false,"running":false,"conflict":null,"message":null}'
+    fi
+
     # integrations
     local has_scribe=false
     [ -f /jffs/scripts/scribe ] && has_scribe=true
@@ -206,6 +212,7 @@ initial_response() {
         --argjson has_scribe "$has_scribe" \
         --argjson integration_scribe "$integration_scribe" \
         --argjson xrayui "$xrayui_json" \
+        --argjson official "$official_json" \
         '
         .geodata.geoip_url = $geoipurl
         | .geodata.geosite_url = $geositeurl
@@ -262,9 +269,11 @@ initial_response() {
         | .xray.backups = $backups
         | .xray.debug = $debug
         | .xray.xrayui = $xrayui
+        | .xray.official = $official
         | .xrayui = $xrayui
-        | .conflict = $xrayui.conflict
-        | .conflict_message = $xrayui.message
+        | .official = $official
+        | .conflict = (if $official.conflict != null then $official.conflict elif $xrayui.conflict != null then $xrayui.conflict else null end)
+        | .conflict_message = (if $official.message != null then $official.message elif $xrayui.message != null then $xrayui.message else null end)
         | if $has_scribe then .integration.scribe = { enabled: $integration_scribe } else . end
         | del(.loading)
         ' "$UI_RESPONSE_FILE" >"$_tmp_response" 2>"$_jq_err"; then
@@ -318,15 +327,17 @@ initial_response() {
             --argjson backups "${backups:-[]}" \
             --argjson debug "$debug" \
             --argjson xrayui "$xrayui_json" \
+            --argjson official "$official_json" \
             '{
                 geodata: { geoip_url: $geoipurl, geosite_url: $geositeurl, community: { "geoip.dat": $geoip, "geosite.dat": $geosite }, auto_update: $geo_auto_update },
-                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, kill_switch: $kill_switch, lan_vpn_mode: $lan_vpn_mode, lan_vpn_macs: $lan_vpn_macs, ipv6_mode: $ipv6_mode, guest_vpn_mode: $guest_vpn_mode, split_bypass_domains: $split_bypass_domains, split_lock_domains: $split_lock_domains, speedtest_interval: $speedtest_interval, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui },
+                xray: { uptime: $uptime, running: ($uptime > 0), profile: $profile, skip_test: $skip_test, clients_check: $clients_check, check_connection: $check_connection, probe_url: $probe_url, probe_interval: $probe_interval, github_proxy: $github_proxy, dnsmasq: $dnsmasq, logs_dor: $logs_dor, logs_max_size: $logs_max_size, ipsec: $ipsec, startup_delay: $startup_delay, sleep_time: $sleep_time, dns_only: $dns_only, block_quic: $block_quic, tun_routing: $tun_routing, watchdog: $watchdog, watchdog_interval: $watchdog_interval, watchdog_max_attempts: $watchdog_max_attempts, subscription_auto_refresh: $sar, subscription_auto_fallback: ($saf == "true"), subscription_fallback_interval: ($sfi | tonumber), ss_catalog_auto_sync: $ss_cas, addon_update_check: $auc, addon_auto_update: $aau, kill_switch: $kill_switch, lan_vpn_mode: $lan_vpn_mode, lan_vpn_macs: $lan_vpn_macs, ipv6_mode: $ipv6_mode, guest_vpn_mode: $guest_vpn_mode, split_bypass_domains: $split_bypass_domains, split_lock_domains: $split_lock_domains, speedtest_interval: $speedtest_interval, subscriptions: { links: [], filters: [] }, hooks: {}, ui_version: $xrayui_ver, core_version: $xray_ver, core_error: $xray_err, tested_core: $tested_core, profiles: $profiles, backups: $backups, debug: $debug, xrayui: $xrayui, official: $official },
                 xrayui: $xrayui,
-                conflict: $xrayui.conflict,
-                conflict_message: $xrayui.message
+                official: $official,
+                conflict: (if $official.conflict != null then $official.conflict elif $xrayui.conflict != null then $xrayui.conflict else null end),
+                conflict_message: (if $official.message != null then $official.message elif $xrayui.message != null then $xrayui.message else null end)
             }' >"$_tmp_response" 2>"$_jq_err"; then
             log_error "Error: jq -n also failed. jq error: $(cat "$_jq_err" 2>/dev/null). Writing bare minimum response."
-            echo '{"xray":{"ui_version":"'"$XRAYUI_VERSION"'","core_version":"'"$XRAY_VERSION"'","tested_core":"'"$XRAYUI_TESTED_CORE"'","profiles":[],"backups":[]},"xrayui":{"installed":false,"running":false,"conflict":null,"message":null},"conflict":null,"conflict_message":null}' >"$_tmp_response"
+            echo '{"xray":{"ui_version":"'"$XRAYUI_VERSION"'","core_version":"'"$XRAY_VERSION"'","tested_core":"'"$XRAYUI_TESTED_CORE"'","profiles":[],"backups":[]},"xrayui":{"installed":false,"running":false,"conflict":null,"message":null},"official":{"installed":false,"running":false,"conflict":null,"message":null},"conflict":null,"conflict_message":null}' >"$_tmp_response"
         fi
         rm -f "$_jq_err"
     else

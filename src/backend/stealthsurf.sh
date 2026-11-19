@@ -40,6 +40,7 @@ import ./stealthsurf_api.sh
 import ./stealthsurf_api_ops.sh
 import ./cli_aliases.sh
 import ./xrayui_conflict.sh
+import ./official_conflict.sh
 import ./panel.sh
 
 # Short CLI (ssurf up|dn|re|st|sy|ls|ap|…) + common long names
@@ -524,8 +525,8 @@ service_event)
                 update_loading_progress "Error: another start, stop or restart is still running. Nothing was changed. Try again." 100
                 ;;
             *)
-                if ss_xrayui_running force 2>/dev/null; then
-                    update_loading_progress "$(ss_xrayui_conflict_message)" 100
+                if ss_xrayui_running force 2>/dev/null || ss_official_running force 2>/dev/null; then
+                    update_loading_progress "$(ss_dataplane_conflict_message)" 100
                 else
                     update_loading_progress "Error: Xray did not start. See the system log." 100
                 fi
@@ -540,8 +541,8 @@ service_event)
                 update_loading_progress "Xray service restarted successfully." 100
                 ;;
             *)
-                if ss_xrayui_running force 2>/dev/null; then
-                    update_loading_progress "$(ss_xrayui_conflict_message)" 100
+                if ss_xrayui_running force 2>/dev/null || ss_official_running force 2>/dev/null; then
+                    update_loading_progress "$(ss_dataplane_conflict_message)" 100
                 else
                     update_loading_progress "Error: Xray did not restart. See the system log." 100
                 fi

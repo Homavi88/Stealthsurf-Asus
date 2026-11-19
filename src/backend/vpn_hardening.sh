@@ -29,8 +29,8 @@ vpn_wan_reconnect() {
         return 0
     fi
 
-    if ss_xrayui_running 2>/dev/null; then
-        log_warn "WAN reconnect: stock XrayUI active — skip SurfGate restore"
+    if ss_xrayui_running 2>/dev/null || ss_official_running 2>/dev/null; then
+        log_warn "WAN reconnect: another transparent VPN addon active — skip SurfGate restore"
         return 0
     fi
 
@@ -679,6 +679,11 @@ vpn_preflight_run() {
         conflict=true
         ok=false
         msg="${msg}Conflict with stock XrayUI. "
+    fi
+    if ss_official_running 2>/dev/null; then
+        conflict=true
+        ok=false
+        msg="${msg}Conflict with official StealthSurf. "
     fi
 
     mkdir -p "$(dirname "$PREFLIGHT_STATUS_FILE")" 2>/dev/null || true

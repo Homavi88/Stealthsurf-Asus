@@ -1,7 +1,7 @@
 <template>
   <div class="ss-conn">
     <div v-if="xrayuiConflict" class="ss-alert" role="alert">
-      <strong>{{ $t('com.ClientStatus.xrayui_conflict_title') }}</strong>
+      <strong>{{ conflictTitle }}</strong>
       <div>{{ conflictMessage }}</div>
     </div>
 
@@ -387,15 +387,32 @@
       const xrayuiConflict = computed(
         () =>
           uiResponse?.value?.conflict === 'xrayui' ||
+          uiResponse?.value?.conflict === 'official' ||
           uiResponse?.value?.xrayui?.running === true ||
-          uiResponse?.value?.xray?.xrayui?.running === true
+          uiResponse?.value?.xray?.xrayui?.running === true ||
+          uiResponse?.value?.official?.running === true ||
+          uiResponse?.value?.xray?.official?.running === true
       );
-      const conflictMessage = computed(
-        () =>
+      const conflictMessage = computed(() => {
+        if (uiResponse?.value?.conflict === 'official') {
+          return (
+            uiResponse?.value?.conflict_message ||
+            uiResponse?.value?.official?.message ||
+            uiResponse?.value?.xray?.official?.message ||
+            t('com.ClientStatus.official_conflict_message')
+          );
+        }
+        return (
           uiResponse?.value?.conflict_message ||
           uiResponse?.value?.xrayui?.message ||
           uiResponse?.value?.xray?.xrayui?.message ||
           t('com.ClientStatus.xrayui_conflict_message')
+        );
+      });
+      const conflictTitle = computed(() =>
+        uiResponse?.value?.conflict === 'official'
+          ? t('com.ClientStatus.official_conflict_title')
+          : t('com.ClientStatus.xrayui_conflict_title')
       );
 
       const uptimeLabel = computed(() => {
@@ -673,6 +690,7 @@
         isRunning,
         xrayuiConflict,
         conflictMessage,
+        conflictTitle,
         uptimeLabel,
         profileLabel,
         canCheckConnection,
