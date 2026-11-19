@@ -119,9 +119,39 @@ vpn_kill_switch_apply() {
             $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -d fe80::/10 -j RETURN
             $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -d ::1/128 -j RETURN
         fi
-        # Packets leaving via WAN without mark → DROP
-        [ -n "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan0" -j DROP
-        [ -n "$wan1" ] && [ "$wan1" != "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan1" -j DROP
+        # LAN device modes: only devices that should use VPN are kill-switched.
+        # exclude  → listed MACs are direct (RETURN), everyone else DROP unmarked WAN
+        # selected → only listed MACs are DROP unmarked WAN; others stay direct
+        # all      → DROP any unmarked WAN
+        local mac
+        case "${lan_vpn_mode:-all}" in
+        exclude)
+            for mac in $(printf '%s' "${lan_vpn_macs:-}" | tr 'A-Z;' 'a-z ' | tr ',' ' '); do
+                case "$mac" in
+                [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f])
+                    $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -m mac --mac-source "$mac" -j RETURN
+                    ;;
+                esac
+            done
+            [ -n "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan0" -j DROP
+            [ -n "$wan1" ] && [ "$wan1" != "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan1" -j DROP
+            ;;
+        selected)
+            for mac in $(printf '%s' "${lan_vpn_macs:-}" | tr 'A-Z;' 'a-z ' | tr ',' ' '); do
+                case "$mac" in
+                [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f])
+                    [ -n "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -m mac --mac-source "$mac" -o "$wan0" -j DROP
+                    [ -n "$wan1" ] && [ "$wan1" != "$wan0" ] &&
+                        $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -m mac --mac-source "$mac" -o "$wan1" -j DROP
+                    ;;
+                esac
+            done
+            ;;
+        *)
+            [ -n "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan0" -j DROP
+            [ -n "$wan1" ] && [ "$wan1" != "$wan0" ] && $IPT -w -t filter -A "$FW_KILLSWITCH_CHAIN" -o "$wan1" -j DROP
+            ;;
+        esac
         # Hook at top of FORWARD
         $IPT -w -t filter -I FORWARD 1 -j "$FW_KILLSWITCH_CHAIN" 2>/dev/null || \
             $IPT -w -t filter -A FORWARD -j "$FW_KILLSWITCH_CHAIN"
@@ -203,6 +233,38 @@ vpn_lan_policies_sync() {
     esac
     rm -f "$tmp" 2>/dev/null
     log_info "LAN VPN mode applied: $mode"
+
+    # Private / LAN destinations must never leave via proxy if they enter Xray
+    # (e.g. phone app → 192.168.x via TPROXY). Keep this rule at the front.
+    vpn_private_direct_sync
+}
+
+# Always-on: geoip:private → direct (LAN reachability through transparent proxy)
+vpn_private_direct_sync() {
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    local tmp
+    tmp="${ADDON_TMP_DIR}/ssurf_private.$$"
+    mkdir -p "$ADDON_TMP_DIR" 2>/dev/null || true
+
+    if ! jq -e '(.outbounds // []) | any(.tag=="direct")' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        jq '
+          .outbounds = ((.outbounds // []) + [{tag:"direct",protocol:"freedom",settings:{}}])
+        ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+    fi
+
+    jq '
+      .routing = (.routing // {})
+      | .routing.rules = (
+          [{
+            name: "surfgate-private-direct",
+            type: "field",
+            ip: ["geoip:private"],
+            outboundTag: "direct"
+          }]
+          + [(.routing.rules // [])[] | select((.name // "") != "surfgate-private-direct")]
+        )
+    ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+    rm -f "$tmp" 2>/dev/null
 }
 
 # ── 5/7. IPv6 mode ──────────────────────────────────────────────────────────

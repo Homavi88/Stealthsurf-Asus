@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.31] - 2026-11-19
+
+### LAN exclude reachability
+
+- Transparent proxy: всегда `RETURN` для RFC1918 / link-local назначений (LAN↔LAN не уходит в TPROXY)
+- Xray: правило `geoip:private → direct` (`surfgate-private-direct`)
+- Kill-switch учитывает режимы exclude/selected: direct-устройства не режутся на WAN
+- Connection: подсказка — заходить по локальному IP, не DDNS; Restart VPN после Save
+
 ## [1.4.30] - 2026-11-19
 
 ### Home mobile proportions

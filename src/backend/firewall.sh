@@ -681,6 +681,19 @@ configure_firewall_client() {
         ipt $IPT_TABLE -A "$FW_CHAIN" -d "$net" -j RETURN
     done
 
+    # Always keep RFC1918 / link-local LAN destinations out of transparent proxy.
+    # source_nets only covers bridge subnets we discovered — traffic to another
+    # private segment (or hairpin via a missing CIDR) must not enter TPROXY,
+    # or LAN apps cannot reach an excluded NAS/TV by IP.
+    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 10.0.0.0/8 -j RETURN 2>/dev/null || true
+    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 172.16.0.0/12 -j RETURN 2>/dev/null || true
+    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 192.168.0.0/16 -j RETURN 2>/dev/null || true
+    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 169.254.0.0/16 -j RETURN 2>/dev/null || true
+    if is_ipv6_enabled 2>/dev/null; then
+        ip6tables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d fc00::/7 -j RETURN 2>/dev/null || true
+        ip6tables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d fe80::/10 -j RETURN 2>/dev/null || true
+    fi
+
     if [ -n "$ipsec" ] && [ "$ipsec" != "off" ]; then
         log_debug "Adding IPSET rules for $IPT_TABLE."
         local ipset_names v6_sets=""
