@@ -15,6 +15,7 @@ import ./github.sh
 import ./geodata.sh
 import ./devices.sh
 import ./vpn_hardening.sh
+import ./net_tests.sh
 import ./install.sh
 import ./update.sh
 import ./firewall.sh
@@ -192,6 +193,18 @@ service_event)
         vpn_preflight_run
         initial_response
         update_loading_progress "Preflight finished." 100
+        exit 0
+        ;;
+    speedtest)
+        speedtest_run
+        initial_response
+        update_loading_progress "Speed test finished." 100
+        exit 0
+        ;;
+    dnstest)
+        dnstest_run
+        initial_response
+        update_loading_progress "DNS leak test finished." 100
         exit 0
         ;;
     geodata)

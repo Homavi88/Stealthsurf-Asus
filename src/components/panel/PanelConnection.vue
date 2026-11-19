@@ -205,7 +205,7 @@
 
     <p class="ss-section-label">Диагностика</p>
     <div class="ss-set-card">
-      <div class="ss-set-row">
+      <div class="ss-set-row has-divider">
         <div class="ss-set-row-main">
           <div class="ss-set-row-text">
             <div class="ss-set-row-title">Preflight</div>
@@ -213,6 +213,28 @@
           </div>
           <div class="ss-set-row-control">
             <button type="button" class="ss-chip-btn" :disabled="busy" @click="runPreflight">Проверить</button>
+          </div>
+        </div>
+      </div>
+      <div class="ss-set-row has-divider">
+        <div class="ss-set-row-main">
+          <div class="ss-set-row-text">
+            <div class="ss-set-row-title">Тест скорости</div>
+            <div class="ss-set-row-sub">{{ speedSubtitle }}</div>
+          </div>
+          <div class="ss-set-row-control">
+            <button type="button" class="ss-chip-btn" :disabled="busy" @click="runSpeedTest">Запустить</button>
+          </div>
+        </div>
+      </div>
+      <div class="ss-set-row">
+        <div class="ss-set-row-main">
+          <div class="ss-set-row-text">
+            <div class="ss-set-row-title">DNS leak</div>
+            <div class="ss-set-row-sub">{{ dnsTestSubtitle }}</div>
+          </div>
+          <div class="ss-set-row-control">
+            <button type="button" class="ss-chip-btn" :disabled="busy" @click="runDnsTest">Проверить</button>
           </div>
         </div>
       </div>
@@ -375,12 +397,55 @@
         const mark = preflight.value.ok ? 'OK' : 'Проблемы';
         return `${mark}: ${preflight.value.message || '—'}`;
       });
+      type SpeedStatus = {
+        ok?: boolean;
+        message?: string;
+        checked_at?: string;
+        download_mbps?: number | null;
+        upload_mbps?: number | null;
+        latency_ms?: number | null;
+      };
+      const speedStatus = ref<SpeedStatus | null>(null);
+      const speedSubtitle = computed(() => {
+        if (!speedStatus.value) return 'Download / upload через Cloudflare · latency';
+        const mark = speedStatus.value.ok ? 'OK' : 'Ошибка';
+        return `${mark}: ${speedStatus.value.message || '—'}`;
+      });
+      type DnsTestStatus = {
+        ok?: boolean;
+        message?: string;
+        checked_at?: string;
+        leaked?: boolean;
+        exit_ip?: string | null;
+      };
+      const dnsTestStatus = ref<DnsTestStatus | null>(null);
+      const dnsTestSubtitle = computed(() => {
+        if (!dnsTestStatus.value) return 'Wiring + resolvers · сверка с WAN DNS';
+        const mark = dnsTestStatus.value.leaked ? 'Утечка' : dnsTestStatus.value.ok ? 'OK' : 'Проблемы';
+        return `${mark}: ${dnsTestStatus.value.message || '—'}`;
+      });
       const loadPreflight = async () => {
         try {
           const res = await engine.getWebData<{ ok?: boolean; message?: string; checked_at?: string }>('preflight-status');
           preflight.value = res.data || null;
         } catch {
           preflight.value = null;
+        }
+      };
+      const loadSpeedStatus = async () => {
+        try {
+          const res = await engine.getWebData<SpeedStatus>('speedtest-status');
+          speedStatus.value = res.data || null;
+        } catch {
+          speedStatus.value = null;
+        }
+      };
+      const loadDnsTestStatus = async () => {
+        try {
+          const res = await engine.getWebData<DnsTestStatus>('dnstest-status');
+          dnsTestStatus.value = res.data || null;
+        } catch {
+          dnsTestStatus.value = null;
         }
       };
       const runPreflight = async () => {
@@ -390,6 +455,28 @@
             await engine.submit(SubmitActions.preflight);
           }, false);
           await loadPreflight();
+        } finally {
+          busy.value = false;
+        }
+      };
+      const runSpeedTest = async () => {
+        busy.value = true;
+        try {
+          await engine.executeWithLoadingProgress(async () => {
+            await engine.submit(SubmitActions.speedTest);
+          }, false);
+          await loadSpeedStatus();
+        } finally {
+          busy.value = false;
+        }
+      };
+      const runDnsTest = async () => {
+        busy.value = true;
+        try {
+          await engine.executeWithLoadingProgress(async () => {
+            await engine.submit(SubmitActions.dnsTest);
+          }, false);
+          await loadDnsTestStatus();
         } finally {
           busy.value = false;
         }
@@ -490,6 +577,8 @@
         hydrate();
         ensureBoolDefaults();
         loadPreflight();
+        loadSpeedStatus();
+        loadDnsTestStatus();
         liveTimer = setInterval(() => {
           liveTick.value += 1;
         }, 2000);
@@ -528,6 +617,10 @@
         ipv6ModeSubtitle,
         preflightSubtitle,
         runPreflight,
+        speedSubtitle,
+        runSpeedTest,
+        dnsTestSubtitle,
+        runDnsTest,
         onStartupToggle,
         handleStatus,
         save,

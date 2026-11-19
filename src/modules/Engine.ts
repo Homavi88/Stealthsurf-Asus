@@ -332,6 +332,8 @@ export enum SubmitActions {
   performUpdate = 'stealthsurf_update',
   addonUpdateCheck = 'stealthsurf_addonupdatecheck',
   preflight = 'stealthsurf_preflight',
+  speedTest = 'stealthsurf_speedtest',
+  dnsTest = 'stealthsurf_dnstest',
   toggleStartupOption = 'stealthsurf_configuration_togglestartup',
   /** Absolute NVRAM set (panel); Merlin checkbox still uses toggleStartupOption. */
   setStartupOption = 'stealthsurf_configuration_setstartup',

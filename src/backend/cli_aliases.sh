@@ -70,6 +70,8 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   un --yes       uninstall
   dv|devices     VPN device log (IP / MAC / name)
   pf|preflight   NTP/WAN/TPROXY/Xray checks
+  sp|speed       download/upload Mbps + latency
+  dns|dnstest    DNS leak check (wiring + resolvers)
   panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 
@@ -192,6 +194,22 @@ ss_cli_dispatch() {
         vpn_preflight_run
         if [ -f "$PREFLIGHT_STATUS_FILE" ]; then
             cat "$PREFLIGHT_STATUS_FILE"
+            echo
+        fi
+        return $?
+        ;;
+    sp | speed | speedtest)
+        speedtest_run
+        if [ -f "$SPEEDTEST_STATUS_FILE" ]; then
+            cat "$SPEEDTEST_STATUS_FILE"
+            echo
+        fi
+        return $?
+        ;;
+    dns | dnstest | dnsleak)
+        dnstest_run
+        if [ -f "$DNSTEST_STATUS_FILE" ]; then
+            cat "$DNSTEST_STATUS_FILE"
             echo
         fi
         return $?

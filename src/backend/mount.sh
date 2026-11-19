@@ -75,6 +75,14 @@ mount_ui() {
     [ -s "$PREFLIGHT_STATUS_FILE" ] || echo '{"ok":false,"message":"not checked yet","checks":{}}' >"$PREFLIGHT_STATUS_FILE"
     rm -f "$ADDON_WEB_DIR/preflight-status.json"
     ln -s -f "$PREFLIGHT_STATUS_FILE" "$ADDON_WEB_DIR/preflight-status.json" 2>/dev/null || true
+    touch "$SPEEDTEST_STATUS_FILE" 2>/dev/null || true
+    [ -s "$SPEEDTEST_STATUS_FILE" ] || echo '{"ok":false,"message":"not checked yet","download_mbps":null,"upload_mbps":null,"latency_ms":null}' >"$SPEEDTEST_STATUS_FILE"
+    rm -f "$ADDON_WEB_DIR/speedtest-status.json"
+    ln -s -f "$SPEEDTEST_STATUS_FILE" "$ADDON_WEB_DIR/speedtest-status.json" 2>/dev/null || true
+    touch "$DNSTEST_STATUS_FILE" 2>/dev/null || true
+    [ -s "$DNSTEST_STATUS_FILE" ] || echo '{"ok":false,"message":"not checked yet","leaked":false,"resolvers":[]}' >"$DNSTEST_STATUS_FILE"
+    rm -f "$ADDON_WEB_DIR/dnstest-status.json"
+    ln -s -f "$DNSTEST_STATUS_FILE" "$ADDON_WEB_DIR/dnstest-status.json" 2>/dev/null || true
     ln -s -f "$XRAYUI_CONNECTION_STATUS_FILE" "$ADDON_WEB_DIR/connection-status.json" || log_error "Failed to create symlink for xray_connection_status.json."
     ln -s -f "$XRAYUI_SUBSCRIPTIONS_FILE" "$ADDON_WEB_DIR/subscriptions.json" || log_error "Failed to create symlink for xray_subscriptions.json."
     ln -s -f "$XRAYUI_GEOTAGS_FILE" "$ADDON_WEB_DIR/geotags.json" || log_error "Failed to create symlink for xray_geotags.json."
