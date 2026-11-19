@@ -284,9 +284,9 @@
         <a href="#settings">Настройки</a>
         <a href="#cli">CLI</a>
         <a href="#vpn">VPN</a>
+        <a href="#diag">Диагностика</a>
         <a href="#backup">Backup</a>
-        <a href="#coexist">Соседство</a>
-        <a href="#qa">Проверка</a>
+        <a href="#qa">Чеклист</a>
       </div>
     </div>
   </nav>
@@ -316,7 +316,7 @@
   <section id="toc">
     <div class="wrap">
       <h2 class="sec-h">Содержание</h2>
-      <p class="sec-p">Всё необходимое по аддону на одной странице: возможности, скриншоты, настройки, команды и безопасный backup.</p>
+      <p class="sec-p">Всё необходимое по аддону на одной странице — та же справка, что в панели <strong>Настройки → справка</strong> (<code>http://LAN:1131/help/</code>).</p>
       <div class="toc">
         <a href="#features">Возможности</a>
         <a href="#install">Установка и панель</a>
@@ -327,7 +327,7 @@
         <a href="#diag">Диагностика</a>
         <a href="#backup">Backup / restore</a>
         <a href="#coexist">Рядом с XrayUI / official</a>
-        <a href="#qa">Как проверить на роутере</a>
+        <a href="#qa">Чеклист на роутере</a>
       </div>
     </div>
   </section>
@@ -339,7 +339,7 @@
       <div class="grid-2">
         <div class="feature">
           <h3>Панель :1131</h3>
-          <p>Статус, скорость, ЦП/ОЗУ, Старт/Стоп. Настройки: аккаунт, подключение, routing, исходящие, движок, логи, клиенты, обновления.</p>
+          <p>Статус, скорость, ЦП/ОЗУ, Старт/Стоп. Настройки: аккаунт, подключение, routing, исходящие, движок, логи, клиенты, обновления, <strong>справка</strong>.</p>
         </div>
         <div class="feature">
           <h3>Каталог API</h3>
@@ -396,7 +396,7 @@ http://192.168.50.1:1131/</pre>
   <section id="panel">
     <div class="wrap">
       <h2 class="sec-h">Тур по панели</h2>
-      <p class="sec-p">Главная и разделы настроек. Скриншоты с актуальной geek UI.</p>
+      <p class="sec-p">Главная и разделы настроек. Справка: <strong>Настройки → справка</strong> (эта страница) или напрямую <code>/help/</code> на :1131.</p>
 
       <figure class="shot">
         <img src="../screenshots/00-main-menu.png" alt="Главное меню панели" loading="lazy" />
@@ -424,7 +424,7 @@ http://192.168.50.1:1131/</pre>
   <section id="settings">
     <div class="wrap">
       <h2 class="sec-h">Настройки</h2>
-      <p class="sec-p">Разделы Connection / Routing / Network / Outbounds / Engine / Logs / Clients / Updates.</p>
+      <p class="sec-p">Разделы: аккаунт · подключение · routing · сеть · исходящие · движок · логи · клиенты · обновления · <strong>справка</strong>.</p>
 
       <figure class="shot">
         <img src="../screenshots/09-settings-connection.png" alt="Подключение" loading="lazy" />
@@ -495,10 +495,12 @@ http://192.168.50.1:1131/</pre>
           <tr><td>Запуск при загрузке</td><td>Автостарт Xray после ребута роутера</td></tr>
           <tr><td>Kill-switch</td><td>Блок LAN→WAN без марки SurfGate, пока VPN «должен» быть up</td></tr>
           <tr><td>Кому VPN</td><td><code>all</code> / только MAC / все кроме MAC</td></tr>
-          <tr><td>Гостевая Wi‑Fi</td><td><code>follow</code> · <code>vpn</code> (всегда) · <code>direct</code></td></tr>
+          <tr><td>Гостевая Wi‑Fi</td><td><code>follow</code> · <code>vpn</code> (всегда TPROXY) · <code>direct</code></td></tr>
+          <tr><td>Split bypass</td><td>Домены / <code>geosite:</code> → <code>direct</code> (минуя VPN)</td></tr>
           <tr><td>IPv6</td><td><code>proxy</code> · <code>block</code> · <code>ignore</code></td></tr>
           <tr><td>DNS только через Xray</td><td>DNS leak lock на firewall</td></tr>
-          <tr><td>Диагностика</td><td>Preflight · тест скорости · DNS leak</td></tr>
+          <tr><td>Тест скорости · авто</td><td>Ручной + cron <code>6h</code> / <code>12h</code> / <code>24h</code></td></tr>
+          <tr><td>Диагностика</td><td>Preflight · скорость · DNS / IPv6 leak · WebRTC hint</td></tr>
         </tbody>
       </table>
     </div>
@@ -513,9 +515,11 @@ surfgate sy && surfgate ls
 surfgate ap &lt;id&gt;          # import + default route
 surfgate up && surfgate st
 surfgate pf               # preflight
-surfgate sp               # speed test
-surfgate dns              # DNS / IPv6 leak
-surfgate bak              # backup
+surfgate sp               # speed (Cloudflare + fallbacks)
+surfgate dns              # DNS / IPv6 leak + WebRTC hint
+surfgate bak              # backup create
+surfgate bak list
+surfgate bak restore ssurf-….tar.gz
 surfgate panel status     # http://LAN:1131/</pre>
       <table>
         <thead><tr><th>Команда</th><th>Действие</th></tr></thead>
@@ -529,7 +533,8 @@ surfgate panel status     # http://LAN:1131/</pre>
           <tr><td><code>dv</code></td><td>устройства VPN</td></tr>
           <tr><td><code>pf</code> · <code>sp</code> · <code>dns</code></td><td>preflight · скорость · leak</td></tr>
           <tr><td><code>panel …</code></td><td>start|stop|status|url|set-password</td></tr>
-          <tr><td><code>bak</code></td><td>создать backup-архив</td></tr>
+          <tr><td><code>bak</code> <code>[name]</code></td><td>создать backup</td></tr>
+          <tr><td><code>bak list</code> · <code>restore</code> · <code>clear</code></td><td>список / restore (tar allowlist) / удалить</td></tr>
           <tr><td><code>upd</code> · <code>fix</code> · <code>un --yes</code></td><td>update · doctor · uninstall</td></tr>
         </tbody>
       </table>
@@ -539,13 +544,31 @@ surfgate panel status     # http://LAN:1131/</pre>
   <section id="vpn">
     <div class="wrap">
       <h2 class="sec-h">VPN hardening</h2>
-      <p class="sec-p">Слой устойчивости поверх transparent proxy (с 1.4.13+).</p>
+      <p class="sec-p">Слой устойчивости поверх transparent proxy (1.4.13+) и polish (1.4.15+).</p>
       <div class="grid-2">
         <div class="feature"><h3>NTP wait</h3><p>Перед стартом Xray ждём синхронизацию времени (TLS/REALITY).</p></div>
         <div class="feature"><h3>WAN reconnect</h3><p>Хуки <code>wan-event</code> / <code>wan-start</code> — rebuild firewall или restart.</p></div>
         <div class="feature"><h3>Kill-switch</h3><p>Пока VPN desired — unmarked LAN→WAN режется.</p></div>
         <div class="feature"><h3>LAN / Guest / IPv6</h3><p>MAC policies, гостевые мосты, IPv6 proxy|block|ignore.</p></div>
+        <div class="feature"><h3>Split bypass</h3><p>Домены / <code>geosite:</code> → правило <code>surfgate-split-bypass</code> → <code>direct</code>. App/DPI split нет.</p></div>
+        <div class="feature"><h3>Speed cron</h3><p>Опционально каждые 6/12/24 ч (CRU <code>ssurf_speedtest</code>).</p></div>
       </div>
+
+      <h3>Гостевая Wi‑Fi (<code>guest_vpn_mode</code>)</h3>
+      <table>
+        <thead><tr><th>Значение</th><th>Ожидание</th></tr></thead>
+        <tbody>
+          <tr><td><code>follow</code></td><td>Те же MAC/LAN-правила, что у основной сети</td></tr>
+          <tr><td><code>vpn</code></td><td>Guest bridges (<code>br1</code>/<code>br2</code>/…) <strong>всегда</strong> в TPROXY, даже если LAN = selected/exclude</td></tr>
+          <tr><td><code>direct</code></td><td>Guest CIDR не попадают в transparent proxy</td></tr>
+        </tbody>
+      </table>
+      <p style="color:var(--muted);margin:0.75rem 0 0">Проверка: с телефона в guest SSID — whatismyip; при <code>vpn</code> exit IP VPN, при <code>direct</code> — WAN ISP.</p>
+
+      <h3>Split bypass (домены)</h3>
+      <p class="sec-p" style="margin-bottom:0.75rem">Connection → <strong>Split bypass</strong>: <code>example.com, geosite:category-games</code>. После Apply/Restart:</p>
+      <pre>jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+# name: surfgate-split-bypass · outboundTag: direct</pre>
     </div>
   </section>
 
@@ -572,9 +595,12 @@ surfgate panel status     # http://LAN:1131/</pre>
   <section id="backup">
     <div class="wrap">
       <h2 class="sec-h">Backup и restore</h2>
-      <p class="sec-p">Архивы в <code>/opt/share/ssurf/backup/</code>. Create — CLI или Engine → Backup. Restore — из UI.</p>
-      <pre>surfgate bak
-# архив: /opt/share/ssurf/backup/ssurf-…tar.gz  (или stealthsurf-… без имени)</pre>
+      <p class="sec-p">Архивы в <code>/opt/share/ssurf/backup/</code>. Create / restore — CLI или Engine → Backup. Перед restore — tar allowlist.</p>
+      <pre>surfgate bak                 # → ssurf-&lt;ts&gt;.tar.gz
+surfgate bak before-upgrade  # с меткой
+surfgate bak list
+surfgate bak restore ssurf-20261119-120000.tar.gz
+surfgate bak clear           # все архивы</pre>
       <h3>Что внутри</h3>
       <table>
         <thead><tr><th>Включено</th><th>Путь</th></tr></thead>
@@ -583,18 +609,17 @@ surfgate panel status     # http://LAN:1131/</pre>
           <tr><td>Сертификаты</td><td><code>/opt/etc/xray/ssurf/cert</code> (если есть)</td></tr>
           <tr><td>Настройки</td><td><code>/opt/etc/ssurf.conf</code></td></tr>
           <tr><td>Geodata data/</td><td><code>/opt/share/ssurf/data</code></td></tr>
+          <tr><td>Custom scripts</td><td><code>/jffs/ssurf_custom</code> (+ legacy <code>/jffs/stealthsurf_custom</code>)</td></tr>
         </tbody>
       </table>
       <div class="note danger-note">
-        <strong>Ограничения:</strong> не бэкапятся API-кэши каталога, логи и панель.
-        Custom scripts сейчас ищутся по legacy-пути <code>/jffs/stealthsurf_custom</code>
-        (живой каталог — <code>/jffs/ssurf_custom</code>) — хуки могут не попасть в архив.
-        Restore = <code>tar -C /</code> + <code>restart</code>; соседний XrayUI / official <code>:8800</code>
-        текущий архив не затрагивает.
+        <strong>Ограничения:</strong> не бэкапятся API-кэши каталога, логи и файлы панели.
+        Restore = валидация членов tar → <code>tar -C /</code> + <code>restart</code> Xray;
+        соседний XrayUI / official <code>:8800</code> архив не затрагивает.
       </div>
       <div class="note ok-note">
-        <strong>Безопасно:</strong> сделать <code>bak</code> → скачать tar на ПК → restore только своего
-        текущего архива из UI → <code>surfgate st</code> / <code>pf</code>.
+        <strong>Безопасно:</strong> <code>bak</code> → скачать tar на ПК →
+        <code>bak restore ssurf-….tar.gz</code> (или UI) → <code>surfgate st</code> / <code>pf</code>.
       </div>
     </div>
   </section>
@@ -621,12 +646,19 @@ surfgate panel status     # http://LAN:1131/</pre>
 
   <section id="qa">
     <div class="wrap">
-      <h2 class="sec-h">Как проверить на роутере</h2>
-      <p class="sec-p">После установки — короткий чеклист перед «всё ок».</p>
+      <h2 class="sec-h">Чеклист на роутере</h2>
+      <p class="sec-p">В CI нет живого Asus — эти проверки делаются вручную на Merlin после установки. Полный текст также в <code>docs/qa-router.md</code>.</p>
+
+      <h3>Быстрый прогон</h3>
+      <pre>surfgate pf          # NTP / WAN / TPROXY / Xray / XrayUI
+surfgate sp          # скорость (Cloudflare + fallbacks)
+surfgate dns         # DNS leak + IPv6 leak + webrtc_hint
+surfgate st          # xray + panel</pre>
+      <p style="color:var(--muted)">Панель: <code>http://&lt;lan&gt;:1131/</code> → <strong>Настройки → connection</strong> · справка: <strong>Настройки → справка</strong>.</p>
+
+      <h3>Полный чеклист</h3>
       <pre># 1. Версия и статус
-surfgate v
-surfgate st
-surfgate panel status
+surfgate v && surfgate st && surfgate panel status
 
 # 2. Ключ и каталог
 surfgate key 'stlth_…'
@@ -634,20 +666,43 @@ surfgate sy && surfgate ls
 surfgate ap &lt;id&gt; && surfgate up
 
 # 3. Диагностика
-surfgate pf
-surfgate sp
-surfgate dns
+surfgate pf && surfgate sp && surfgate dns
 
-# 4. Backup
-surfgate bak
+# 4. Guest (если есть guest SSID)
+#    guest_vpn_mode=vpn  → exit IP VPN
+#    guest_vpn_mode=direct → WAN ISP
+
+# 5. Split bypass (опционально)
+#    Connection → Split bypass → Apply/Restart
+#    jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+
+# 6. Speed cron (опционально)
+#    Connection → Авто по cron → 6h/12h/24h
+#    или: surfgate cron speedtest
+
+# 7. Backup
+surfgate bak && surfgate bak list
 ls -la /opt/share/ssurf/backup/
 
-# 5. С LAN-клиента
-#   - открыть https://ifconfig.me  (exit IP узла)
-#   - dnsleaktest.com / browserleaks.com/webrtc</pre>
-      <div class="note">
-        В панели: Connection → Проверить / Запустить тесты; Engine → Backup → Create / Restore;
-        Updates → проверка GitHub.
+# 8. С LAN-клиента
+#    https://ifconfig.me
+#    https://dnsleaktest.com
+#    https://browserleaks.com/webrtc
+
+# 9. Справка в панели
+#    Настройки → справка  ·  или  http://LAN:1131/help/</pre>
+
+      <h3>Ограничения окружения</h3>
+      <ul style="color:var(--muted);line-height:1.7;padding-left:1.2rem">
+        <li>Speed/DNS зависят от доступности Cloudflare / ipleak / fallback URL <strong>с роутера</strong>.</li>
+        <li>WebRTC — только с LAN-браузера (роутер не эмулирует браузерный WebRTC).</li>
+        <li>App/DPI split не поддерживается (нужен DPI на роутере).</li>
+        <li>Нет e2e в GitHub Actions без железа — unit-тесты + этот чеклист.</li>
+      </ul>
+
+      <div class="note ok-note" style="margin-top:1.25rem">
+        <strong>В панели:</strong> Connection → Проверить / Запустить тесты ·
+        Engine → Backup · Updates → GitHub · <strong>справка</strong> — этот гайд.
       </div>
     </div>
   </section>
