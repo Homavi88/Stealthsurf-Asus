@@ -30,6 +30,7 @@ export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineRespons
     ipv6_mode: ui.value?.xray?.ipv6_mode ?? 'proxy',
     guest_vpn_mode: ui.value?.xray?.guest_vpn_mode ?? 'follow',
     split_bypass_domains: ui.value?.xray?.split_bypass_domains ?? '',
+    split_lock_domains: ui.value?.xray?.split_lock_domains ?? '',
     speedtest_interval: ui.value?.xray?.speedtest_interval ?? 'disabled',
     probe_url: ui.value?.xray?.probe_url ?? 'https://www.google.com/generate_204',
     probe_interval: ui.value?.xray?.probe_interval ?? 30,

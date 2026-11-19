@@ -115,6 +115,36 @@ split_bypass_domains=""
 vpn_split_rules_sync
 jq -e '[.routing.rules[]|select(.name=="surfgate-split-bypass")]|length==0' "$XRAY_CONFIG_FILE" >/dev/null
 
+# ── VPN-only / fail-closed lock ─────────────────────────────────────────────
+cat >"$XRAY_CONFIG_FILE" <<'EOF'
+{"inbounds":[],"outbounds":[{"tag":"proxy","protocol":"vless"},{"tag":"direct","protocol":"freedom"}],"routing":{"rules":[{"name":"keep","type":"field","outboundTag":"proxy"}]}}
+EOF
+split_lock_domains="netflix.com, geosite:netflix"
+vpn_lock_rules_sync
+test "$(jq -r '.routing.rules[0].name' "$XRAY_CONFIG_FILE")" = "surfgate-vpn-lock"
+test "$(jq -r '.routing.rules[0].outboundTag' "$XRAY_CONFIG_FILE")" = "proxy"
+jq -e '.routing.rules[0].domain | index("netflix.com")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '[.routing.rules[]|select(.name=="keep")]|length==1' "$XRAY_CONFIG_FILE" >/dev/null
+
+# lock wins over bypass when both applied (lock synced after bypass)
+split_bypass_domains="netflix.com"
+vpn_split_rules_sync
+vpn_lock_rules_sync
+test "$(jq -r '.routing.rules[0].name' "$XRAY_CONFIG_FILE")" = "surfgate-vpn-lock"
+test "$(jq -r '.routing.rules[1].name' "$XRAY_CONFIG_FILE")" = "surfgate-split-bypass"
+
+split_lock_domains=""
+vpn_lock_rules_sync
+jq -e '[.routing.rules[]|select(.name=="surfgate-vpn-lock")]|length==0' "$XRAY_CONFIG_FILE" >/dev/null
+
+# vpn_lock_wanted
+split_lock_domains="example.com"
+vpn_lock_wanted
+split_lock_domains=""
+! vpn_lock_wanted
+split_lock_domains="  ,  "
+! vpn_lock_wanted
+
 # ── 6. Preflight JSON ───────────────────────────────────────────────────────
 cat >"$XRAY_CONFIG_FILE" <<'EOF'
 {"inbounds":[{"protocol":"dokodemo-door","tag":"all-in","port":5699}],"outbounds":[],"routing":{"rules":[]}}

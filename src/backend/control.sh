@@ -30,6 +30,7 @@ start() {
     # Sync simple LAN device mode into routing.policies before firewall
     vpn_lan_policies_sync 2>/dev/null || true
     vpn_split_rules_sync 2>/dev/null || true
+    vpn_lock_rules_sync 2>/dev/null || true
 
     migrate_tun_inbounds_config
 
@@ -163,6 +164,7 @@ start() {
 
     configure_firewall
     vpn_kill_switch_apply 2>/dev/null || true
+    vpn_service_lock_apply 2>/dev/null || true
     vpn_ipv6_block_apply 2>/dev/null || true
     vpn_preflight_run 2>/dev/null || true
 }
@@ -175,6 +177,8 @@ stop() {
     watchdog_clear_desired
     vpn_kill_switch_clear 2>/dev/null || true
     vpn_ipv6_block_clear 2>/dev/null || true
+    # Cut locked-service sessions before Xray exits (fail-closed)
+    vpn_service_lock_conntrack_flush 2>/dev/null || true
 
     update_loading_progress "Stopping $ADDON_TITLE"
 
@@ -209,6 +213,9 @@ stop() {
     fi
 
     cleanup_firewall
+
+    # Keep fail-closed DROP + LOCK ipset DNS fills while domains are configured
+    vpn_service_lock_on_xray_down 2>/dev/null || true
 
     cleanup_stale_asdfiles
 

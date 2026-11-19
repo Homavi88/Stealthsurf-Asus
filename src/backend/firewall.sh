@@ -254,6 +254,8 @@ configure_firewall() {
 cleanup_firewall() {
     vpn_kill_switch_clear 2>/dev/null || true
     vpn_ipv6_block_clear 2>/dev/null || true
+    # Service-lock chain is re-armed after cleanup when domains remain configured
+    vpn_service_lock_clear 2>/dev/null || true
     with_firewall_lock cleanup_firewall_rules
 }
 

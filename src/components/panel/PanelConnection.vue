@@ -160,7 +160,7 @@
         </div>
       </div>
 
-      <div class="ss-set-row">
+      <div class="ss-set-row has-divider">
         <div class="ss-set-row-main">
           <div class="ss-set-row-text">
             <div class="ss-set-row-title">Split bypass (домены)</div>
@@ -174,6 +174,28 @@
               type="text"
               v-model="options.split_bypass_domains"
               placeholder="example.com, geosite:category-games"
+              autocomplete="off"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div class="ss-set-row">
+        <div class="ss-set-row-main">
+          <div class="ss-set-row-text">
+            <div class="ss-set-row-title">VPN-only (fail-closed)</div>
+            <div class="ss-set-row-sub">
+              Эти сервисы только через VPN; если аддон/VPN падает — соединение режется, clearnet блокируется
+            </div>
+          </div>
+        </div>
+        <div class="ss-set-row-detail">
+          <label class="ss-field">
+            <span>Список</span>
+            <input
+              type="text"
+              v-model="options.split_lock_domains"
+              placeholder="netflix.com, geosite:netflix"
               autocomplete="off"
             />
           </label>
@@ -615,6 +637,7 @@
         if (!options.ipv6_mode) options.ipv6_mode = 'proxy';
         if (!options.guest_vpn_mode) options.guest_vpn_mode = 'follow';
         if (options.split_bypass_domains == null) options.split_bypass_domains = '';
+        if (options.split_lock_domains == null) options.split_lock_domains = '';
         if (!options.speedtest_interval) options.speedtest_interval = 'disabled';
       };
 

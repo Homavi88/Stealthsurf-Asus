@@ -30,7 +30,7 @@ apply_general_options() {
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
     local ss_catalog_auto_sync addon_update_check addon_auto_update startup_flag
     local kill_switch lan_vpn_mode lan_vpn_macs ipv6_mode guest_vpn_mode
-    local split_bypass_domains speedtest_interval
+    local split_bypass_domains split_lock_domains speedtest_interval
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -75,6 +75,7 @@ apply_general_options() {
         "ipv6_mode=" + ((.ipv6_mode // "proxy") | tostring | @sh) + "\n" +
         "guest_vpn_mode=" + ((.guest_vpn_mode // "follow") | tostring | @sh) + "\n" +
         "split_bypass_domains=" + ((.split_bypass_domains // "") | tostring | @sh) + "\n" +
+        "split_lock_domains=" + ((.split_lock_domains // "") | tostring | @sh) + "\n" +
         "speedtest_interval=" + ((.speedtest_interval // "disabled") | tostring | @sh) + "\n" +
         "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
     '); then
@@ -179,6 +180,7 @@ apply_general_options() {
     esac
     update_xrayui_config "guest_vpn_mode" "$guest_vpn_mode"
     update_xrayui_config "split_bypass_domains" "$split_bypass_domains"
+    update_xrayui_config "split_lock_domains" "$split_lock_domains"
     case "$speedtest_interval" in
     6h | 12h | 24h) ;;
     *) speedtest_interval="disabled" ;;
@@ -188,6 +190,16 @@ apply_general_options() {
     # Sync simple LAN device mode into xray routing.policies
     vpn_lan_policies_sync 2>/dev/null || true
     vpn_split_rules_sync 2>/dev/null || true
+    vpn_lock_rules_sync 2>/dev/null || true
+    if vpn_lock_wanted 2>/dev/null; then
+        vpn_service_lock_apply 2>/dev/null || true
+        # If Xray is down, still keep LOCK ipset DNS fills + DROP armed
+        if [ -z "$(get_xray_daemon_pid 2>/dev/null || true)" ]; then
+            vpn_service_lock_on_xray_down 2>/dev/null || true
+        fi
+    else
+        vpn_service_lock_clear 2>/dev/null || true
+    fi
 
     # Omit keeps existing conf when the panel payload did not include these keys.
     if [ "$subscriptionLinks" != "__omit__" ]; then

@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### VPN-only / fail-closed
+
+- Connection → **VPN-only**: `split_lock_domains` → Xray `surfgate-vpn-lock` → proxy
+- Firewall `SSURF_SVCLOCK` + ipset `SSURF_LOCK*`: unmarked clearnet к locked IP = DROP
+- При Stop Xray: conntrack flush + DROP остаётся; dnsmasq lock-строки сохраняются
+- Uninstall снимает lock; lock побеждает bypass, если домен в обоих списках
+
 ## [1.4.16] - 2026-11-19
 
 ### Help / promo

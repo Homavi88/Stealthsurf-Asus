@@ -41,8 +41,17 @@ dnsmasq_configure() {
     dnsmasq_strip_addon_block "$CONFIG"
 
     # Check if OUR xray daemon is running — if not, leave conf clean for XrayUI
+    # except VPN-lock domains: keep ipset fills so fail-closed DROP still learns IPs
     local xray_pid=$(get_xray_daemon_pid)
     if [ -z "$xray_pid" ]; then
+        if type vpn_lock_wanted >/dev/null 2>&1 && vpn_lock_wanted; then
+            pc_append "" "$CONFIG"
+            pc_append "#$ADDON_TAG start" "$CONFIG"
+            vpn_lock_dnsmasq_append "$CONFIG"
+            pc_append "#$ADDON_TAG end" "$CONFIG"
+            log_ok "dnsmasq: VPN-lock ipset rules kept (Xray down)"
+            return
+        fi
         log_warn "Xray daemon not found. Cleared our dnsmasq block; skipping reconfigure."
         return
     fi
@@ -98,6 +107,10 @@ dnsmasq_configure() {
     fi
 
     dnsmasq_xray_ipset_domains "$CONFIG"
+
+    if type vpn_lock_dnsmasq_append >/dev/null 2>&1; then
+        vpn_lock_dnsmasq_append "$CONFIG"
+    fi
 
     pc_append "#$ADDON_TAG end" "$CONFIG"
 

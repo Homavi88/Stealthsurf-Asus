@@ -103,6 +103,8 @@ ipv6_mode="proxy"
 guest_vpn_mode="follow"
 # Comma-separated domains / geosite: tags that bypass VPN (→ direct)
 split_bypass_domains=""
+# Comma-separated domains that must stay on VPN (fail-closed if VPN/addon down)
+split_lock_domains=""
 # disabled | 6h | 12h | 24h — optional cron speed test
 speedtest_interval="disabled"
 PREFLIGHT_STATUS_FILE="$ADDON_SHARE_DIR/preflight_status.json"
@@ -144,7 +146,10 @@ IPSET_BYPASS_NET_V4="${ADDON_TAG_UPPER}_BYPASS4_NET"
 IPSET_BYPASS_NET_V6="${ADDON_TAG_UPPER}_BYPASS6_NET"
 IPSET_PROXY_NET_V4="${ADDON_TAG_UPPER}_PROXY4_NET"
 IPSET_PROXY_NET_V6="${ADDON_TAG_UPPER}_PROXY6_NET"
+IPSET_LOCK_V4="${ADDON_TAG_UPPER}_LOCK4"
+IPSET_LOCK_V6="${ADDON_TAG_UPPER}_LOCK6"
 IPSET_LEARNED_FILE="$ADDON_SHARE_DIR/dnsmasq/learned.ipset"
+FW_SVCLOCK_CHAIN="${ADDON_TAG_UPPER}_SVCLOCK"
 
 IONICE=""
 NICE=""
