@@ -215,7 +215,10 @@ surfgate h                # справка · surfgate m — меню
 | `sp` / `speed` | тест скорости (Mbps ↓/↑ + latency) |
 | `dns` / `dnstest` | DNS leak (wiring + resolvers) |
 | `panel` `start\|stop\|status\|url\|set-password` | панель `:1131` |
-| `bak` | backup |
+| `bak` `[name]` | создать backup |
+| `bak list` | список архивов |
+| `bak restore` `<file.tar.gz>` | restore (с валидацией tar) |
+| `bak clear` `[file]` | удалить все / один архив |
 | `d` / `dg` | diagnostics |
 | `upd` `[ver]` / `uf` | обновление аддона |
 | `fix` / `doctor` | doctor |

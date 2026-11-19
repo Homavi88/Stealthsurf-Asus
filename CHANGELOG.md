@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Backup harden
+
+- Backup packs `$ADDON_USER_SCRIPTS_DIR` (`/jffs/ssurf_custom`) instead of hardcoded legacy path alone
+- Default archive name always `ssurf-…tar.gz`
+- Tar member allowlist validation before restore (and after create)
+- CLI: `surfgate bak list|restore|clear` + optional label on create
+- Safe basename for clear/restore (no path traversal); clear no longer `rm -rf` parent share
+
 ## [1.4.14] - 2026-11-19
 
 ### Speed test + DNS leak test
