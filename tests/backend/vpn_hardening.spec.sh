@@ -123,13 +123,19 @@ jq -e '.routing.rules[0].domain | index("domain:ru")' "$XRAY_CONFIG_FILE" >/dev/
 jq -e '.routing.rules[0].domain | index("domain:su")' "$XRAY_CONFIG_FILE" >/dev/null
 jq -e '.routing.rules[0].domain | index("domain:xn--p1ai")' "$XRAY_CONFIG_FILE" >/dev/null
 
-# RU services preset
+# RU services preset (must not include geosite:geolocation-ru — absent in Loyalsoldier dat)
 split_bypass_ru_tlds=false
 split_bypass_ru_services=true
 vpn_split_rules_sync
 jq -e '.routing.rules[0].domain | index("gosuslugi.ru")' "$XRAY_CONFIG_FILE" >/dev/null
 jq -e '.routing.rules[0].domain | index("vk.com")' "$XRAY_CONFIG_FILE" >/dev/null
 jq -e '.routing.rules[0].domain | index("geosite:yandex")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("geosite:category-ru")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("geosite:geolocation-ru") | not' "$XRAY_CONFIG_FILE" >/dev/null
+# also ensure the preset helper itself never emits the bad tag
+case "$(vpn_split_ru_services_domains)" in
+*geolocation-ru*) echo "FAIL: ru services preset still has geolocation-ru" >&2; exit 1 ;;
+esac
 
 split_bypass_domains=""
 split_bypass_ru_tlds=false

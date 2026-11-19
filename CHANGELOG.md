@@ -7,6 +7,11 @@
 - Кнопка **Установить** больше не вылезает за край на телефоне (колонка + компактный размер)
 - Баннер не показывается, если latest == installed (убирает «v1.4.27 → v1.4.27»)
 
+### Fix Xray start (routing)
+
+- Убран `geosite:geolocation-ru` из RU whitelist bypass — тега нет в Loyalsoldier geosite.dat, из‑за него `failed to build routing configuration`
+- Сообщение при ошибке Start показывает деталь из `xray -test`
+
 ## [1.4.27] - 2026-11-19
 
 ### Update detection

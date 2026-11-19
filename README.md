@@ -333,7 +333,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
-| **1.4.28** | Home update banner fits on mobile; no false update when already latest |
+| **1.4.28** | Mobile update banner; fix RU bypass geosite (Xray start routing error) |
 | **1.4.27** | Reliable update detect via GitHub mirrors (browser + router) |
 | **1.4.26** | Home update banner + Install; skip geosite/geoip re-download on update |
 | **1.4.25** | Mobile panel: status card + horizontal settings nav |

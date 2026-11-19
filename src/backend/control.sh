@@ -76,7 +76,14 @@ start() {
             log_error "Xray configuration test failed — aborting start."
             # Do not leave "vpn desired" sticky when Xray never came up (UI shows offline ghost).
             watchdog_clear_desired
-            update_loading_progress "Error: Xray config invalid (corrupt JSON?). Check Test Config / system log." 100
+            # Prefer the last infra/conf detail from test_xray_config (stored in UI response)
+            local test_detail
+            test_detail=$(jq -r '.xray.test // empty' "$UI_RESPONSE_FILE" 2>/dev/null | head -c 160)
+            if [ -n "$test_detail" ]; then
+                update_loading_progress "Error: Xray config invalid — $test_detail" 100
+            else
+                update_loading_progress "Error: Xray config invalid (routing/geosite?). Check Logs / Test Config." 100
+            fi
             return 1
         fi
     fi
