@@ -456,21 +456,23 @@ EOF
 
     rm -f "$temp_config"
 
-    if [ -f "$XRAY_PIDFILE" ]; then
+    # Only restart when Xray was already running. Do NOT use bare $? after
+    # `if [ -f PIDFILE ]` — a missing pidfile leaves $?=1 and falsely rolls back.
+    if [ -f "$XRAY_PIDFILE" ] || [ -n "$(get_xray_daemon_pid 2>/dev/null)" ]; then
         update_loading_progress "Restarting Xray service..." 35
-        restart
+        if ! restart; then
+            log_error "Failed to restart Xray service after applying new configuration."
+            cp "$backup_config" "$XRAY_CONFIG_FILE"
+            restart || true
+            update_loading_progress "Error: Xray did not start with the new configuration. The previous one was restored." 100
+            exit 1
+        fi
         update_loading_progress "Xray service restarted successfully."
+        log_ok "Xray service restarted successfully with the new configuration."
+    else
+        log_ok "Configuration saved. Xray is stopped — start it from the panel when ready."
+        update_loading_progress "Configuration saved (Xray stopped)." 100
     fi
-
-    if [ $? -ne 0 ]; then
-        log_error "Failed to restart Xray service after applying new configuration."
-        cp "$backup_config" "$XRAY_CONFIG_FILE"
-        restart
-        update_loading_progress "Error: Xray did not start with the new configuration. The previous one was restored." 100
-        exit 1
-    fi
-
-    log_ok "Xray service restarted successfully with the new configuration."
 
     rm -f "$backup_config"
 }

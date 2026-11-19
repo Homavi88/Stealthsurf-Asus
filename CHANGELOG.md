@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.4.27] - 2026-11-19
+
+### Update detection
+
+- Проверка обновлений в браузере через зеркала GitHub (`gh-proxy.com` и др.) — api.github.com часто недоступен из РФ
+- Updates / Home показывают **Установить**, даже если проверка с роутера не прошла, но браузер нашёл новый релиз
+- Backend: fallback на список releases + лучший порядок зеркал
+
+### Home clarity + Apply fix
+
+- Метка **active** только когда VPN online; при offline — «в конфиге» (не путать с работающим VPN)
+- Подсказка у START яснее: VPN выключен / работает
+- **Apply** при остановленном Xray больше не откатывает конфиг из‑за бага `$?` после проверки PIDFILE
+
 ## [1.4.26] - 2026-11-19
 
 ### Home update banner + faster package update

@@ -24,11 +24,12 @@ github_proxy_url() {
 }
 
 # Built-in GitHub release mirrors (blocked regions). Prefixed to https://github.com/...
+# Prefer mirrors that also proxy api.github.com (update checks).
 github_default_mirrors() {
     printf '%s\n' \
-        'https://ghfast.top/' \
         'https://gh-proxy.com/' \
         'https://cdn.gh-proxy.org/' \
+        'https://ghfast.top/' \
         'https://gitproxy.click/' \
         'https://github.moeyy.xyz/'
 }

@@ -7,23 +7,23 @@
         <a class="ss-upd-repo__link" :href="repoUrl" target="_blank" rel="noopener">{{ repo }}</a>
         <div class="ss-upd-repo__meta">
           <span>установлено <b>v{{ current }}</b></span>
-          <span v-if="status?.latest">latest <b>v{{ status.latest }}</b></span>
+          <span v-if="displayLatest">latest <b>v{{ displayLatest }}</b></span>
         </div>
-        <div class="ss-upd-repo__msg" :class="{ 'is-update': !!status?.update_available }">
-          {{ status?.message || 'Проверка ещё не выполнялась' }}
+        <div class="ss-upd-repo__msg" :class="{ 'is-update': updateAvailable }">
+          {{ displayMessage }}
         </div>
         <div class="ss-upd-repo__checked" v-if="status?.checked_at">последняя проверка: {{ checkedLabel }}</div>
         <div class="ss-upd-actions">
           <button
-            v-if="status?.update_available && status?.latest"
+            v-if="updateAvailable && displayLatest"
             type="button"
             class="ss-primary-btn start"
             :disabled="busy"
             @click="installNow"
           >
-            Установить v{{ status.latest }}
+            Установить v{{ displayLatest }}
           </button>
-          <button type="button" class="ss-primary-btn" :class="status?.update_available ? 'ss-upd-check' : 'start'" :disabled="busy" @click="checkNow">
+          <button type="button" class="ss-primary-btn" :class="updateAvailable ? 'ss-upd-check' : 'start'" :disabled="busy" @click="checkNow">
             Проверить сейчас
           </button>
         </div>
@@ -85,6 +85,7 @@
   import Version from '../Version.vue';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
+  import { checkSurfGateUpdate } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     repo?: string;
@@ -106,6 +107,8 @@
       const { options, hydrate, persist } = useGeneralOptions(props.config, uiResponse);
       const busy = ref(false);
       const status = ref<UpdateStatus | null>(null);
+      const clientLatest = ref('');
+      const clientUpdate = ref(false);
       const checkInterval = ref('24h');
       const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
 
@@ -118,6 +121,19 @@
           uiResponse?.value?.xray?.ui_version ||
           '—'
       );
+      const displayLatest = computed(() => clientLatest.value || status.value?.latest || '');
+      const updateAvailable = computed(
+        () => Boolean((status.value?.update_available && displayLatest.value) || (clientUpdate.value && displayLatest.value))
+      );
+      const displayMessage = computed(() => {
+        if (updateAvailable.value && displayLatest.value) {
+          return `Доступна новая версия: v${displayLatest.value} (установлено v${current.value})`;
+        }
+        if (clientLatest.value && !updateAvailable.value) {
+          return `Актуально (v${current.value})`;
+        }
+        return status.value?.message || 'Проверка ещё не выполнялась';
+      });
 
       const checkEnabled = computed(() => options.addon_update_check !== 'disabled' && !!options.addon_update_check);
       const checkSubtitle = computed(() =>
@@ -162,21 +178,39 @@
         }
       };
 
+      const checkClient = async () => {
+        try {
+          const info = await checkSurfGateUpdate(
+            uiResponse?.value?.xray?.ui_version,
+            uiResponse?.value?.xray?.github_proxy
+          );
+          clientLatest.value = info.latest;
+          clientUpdate.value = info.updateAvailable;
+          if (info.latest) {
+            window.xray.server.stealthsurf_version_latest = info.latest;
+          }
+        } catch {
+          /* router check may still succeed */
+        }
+      };
+
       const checkNow = async () => {
         busy.value = true;
         savePanelNav({ view: 'settings', section: 'updates' });
         try {
+          await checkClient();
           await engine.executeWithLoadingProgress(async () => {
             await engine.submit(SubmitActions.addonUpdateCheck);
           }, false);
           await loadStatus();
+          await checkClient();
         } finally {
           busy.value = false;
         }
       };
 
       const installNow = async () => {
-        const version = status.value?.latest;
+        const version = displayLatest.value;
         if (!version) return;
         if (!window.confirm(`Установить SurfGate v${version} с GitHub? Роутер скачает пакет и переустановит аддон.`)) {
           return;
@@ -186,6 +220,7 @@
         try {
           await updateProgress.value?.run(version);
           await loadStatus();
+          await checkClient();
         } finally {
           busy.value = false;
         }
@@ -225,7 +260,8 @@
       onMounted(() => {
         hydrate();
         ensureDefaults();
-        loadStatus();
+        void loadStatus();
+        void checkClient();
       });
 
       watch(
@@ -245,6 +281,9 @@
         repo,
         repoUrl,
         current,
+        displayLatest,
+        updateAvailable,
+        displayMessage,
         checkEnabled,
         checkSubtitle,
         checkInterval,

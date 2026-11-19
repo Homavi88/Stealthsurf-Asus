@@ -72,30 +72,44 @@ addon_update_check_run() {
     mkdir -p "$ADDON_TMP_DIR" 2>/dev/null || true
     log_info "Checking GitHub for SurfGate updates ($repo)…"
 
-    if ! github_download "$api_url" "$out" 40 "releases/latest"; then
-        # Fallback: HTML redirect of /releases/latest → tag in Location / final URL path
+    # 1) releases/latest JSON  2) releases list JSON  3) HTML scrape
+    if github_download "$api_url" "$out" 40 "releases/latest"; then
+        latest=$(jq -r '.tag_name // empty' "$out" 2>/dev/null | sed 's/^v//')
+        if [ "$(jq -r '.prerelease // false' "$out" 2>/dev/null)" = "true" ]; then
+            log_debug "Latest GitHub release is a prerelease: v$latest"
+            # Prefer first non-prerelease from list when /latest is a prerelease
+            local list_out="${ADDON_TMP_DIR}/ssurf_release_list.json"
+            if github_download "https://api.github.com/repos/${repo}/releases?per_page=10" "$list_out" 40 "releases/list"; then
+                local stable
+                stable=$(jq -r '[.[] | select(.draft==false and .prerelease==false) | .tag_name] | .[0] // empty' "$list_out" 2>/dev/null | sed 's/^v//')
+                [ -n "$stable" ] && latest="$stable"
+                rm -f "$list_out" 2>/dev/null
+            fi
+        fi
+    fi
+
+    if [ -z "$latest" ]; then
+        local list_out="${ADDON_TMP_DIR}/ssurf_release_list.json"
+        if github_download "https://api.github.com/repos/${repo}/releases?per_page=10" "$list_out" 40 "releases/list"; then
+            latest=$(jq -r '[.[] | select(.draft==false and .prerelease==false) | .tag_name] | .[0] // empty' "$list_out" 2>/dev/null | sed 's/^v//')
+            [ -z "$latest" ] && latest=$(jq -r '.[0].tag_name // empty' "$list_out" 2>/dev/null | sed 's/^v//')
+        fi
+        rm -f "$list_out" 2>/dev/null
+    fi
+
+    if [ -z "$latest" ]; then
+        # Fallback: HTML of /releases/latest → tag in path
         local html_url="https://github.com/${repo}/releases/latest"
         if github_download "$html_url" "$out" 20 "releases/latest.html"; then
             latest=$(grep -oE 'tag/v?[0-9]+\.[0-9]+(\.[0-9]+)?' "$out" 2>/dev/null | head -n1 | sed 's|^tag/||; s|^v||')
-        fi
-        if [ -z "$latest" ]; then
-            addon_update_status_write "" "$current" false "GitHub check failed"
-            log_warn "Addon update check: could not reach GitHub releases"
-            return 1
-        fi
-    else
-        latest=$(jq -r '.tag_name // empty' "$out" 2>/dev/null | sed 's/^v//')
-        # Prefer non-prerelease; if latest is prerelease, keep it only when no stable tag
-        if [ "$(jq -r '.prerelease // false' "$out" 2>/dev/null)" = "true" ]; then
-            log_debug "Latest GitHub release is a prerelease: v$latest"
         fi
     fi
 
     rm -f "$out" 2>/dev/null
 
     if [ -z "$latest" ]; then
-        addon_update_status_write "" "$current" false "Empty tag from GitHub"
-        log_warn "Addon update check: empty latest tag"
+        addon_update_status_write "" "$current" false "GitHub check failed"
+        log_warn "Addon update check: could not reach GitHub releases"
         return 1
     fi
 

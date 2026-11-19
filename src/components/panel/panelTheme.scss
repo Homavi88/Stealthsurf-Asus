@@ -550,6 +550,17 @@
   color: var(--ss-green);
 }
 
+.ss-cell-tag.is-muted {
+  color: var(--ss-muted);
+}
+
+.ss-home-error {
+  color: var(--ss-danger);
+  font-size: 12px;
+  margin: 10px 0 0;
+  line-height: 1.35;
+}
+
 .ss-data-table .is-on {
   color: var(--ss-green);
 }

@@ -125,8 +125,9 @@
             <td>
               <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
               <div class="ss-cell-sub ss-mono">{{ c._ss_location_title || c.location || '—' }}</div>
-              <div v-if="isActiveRoute(c)" class="ss-cell-tag">active</div>
-              <div v-else-if="isImported(c)" class="ss-cell-tag">imported</div>
+              <div v-if="running && isActiveRoute(c)" class="ss-cell-tag">active</div>
+              <div v-else-if="!running && isActiveRoute(c)" class="ss-cell-tag is-muted">в конфиге</div>
+              <div v-else-if="isImported(c)" class="ss-cell-tag is-muted">imported</div>
             </td>
             <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
             <td class="ss-mono" :class="c.is_online === false ? 'is-off' : 'is-on'">
@@ -144,7 +145,7 @@
     <div class="ss-card">
       <div class="ss-loc-meta" style="margin-bottom: 12px">
         <div class="name">{{ activeTitle }}</div>
-        <div class="sub ss-mono">{{ running ? 'активен · stop остановит VPN' : 'выберите endpoint · start импортирует и запустит' }}</div>
+        <div class="sub ss-mono">{{ homeActionHint }}</div>
       </div>
       <button
         type="button"
@@ -158,8 +159,11 @@
       <p v-if="conflict" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
         {{ conflictHint }}
       </p>
-      <p v-else-if="lastError" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
+      <p v-else-if="lastError" class="ss-mono ss-home-error">
         {{ lastError }}
+      </p>
+      <p v-else-if="!running && startFailedHint" class="ss-mono ss-home-error">
+        {{ startFailedHint }}
       </p>
     </div>
 
@@ -173,6 +177,7 @@
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
+  import { checkSurfGateUpdate } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     current?: string;
@@ -262,9 +267,21 @@
         if (live.value.official && !running.value) return 'status: offline · official StealthSurf active';
         if (running.value) return 'status: online';
         if (live.value.desired && !running.value) {
-          return 'status: offline · SurfGate Xray не запущен — нажмите START';
+          return 'status: offline · Xray не запущен — нажмите START';
         }
         return 'status: offline';
+      });
+
+      const homeActionHint = computed(() => {
+        if (running.value) return 'VPN работает · stop остановит';
+        if (conflict.value) return 'конфликт с другим VPN — остановите его сначала';
+        if (selectedId.value == null) return 'выберите endpoint · start импортирует и запустит';
+        return 'VPN выключен · start запустит выбранный endpoint';
+      });
+
+      const startFailedHint = computed(() => {
+        if (running.value || !lastError.value) return '';
+        return lastError.value;
       });
 
       const displayIp = computed(() => live.value.wan_ip || window.xray?.router?.wan_ip || '');
@@ -273,10 +290,17 @@
         return (live.value.vpn_server || '').trim();
       });
 
+      const clientLatest = ref('');
+      const clientUpdate = ref(false);
+
+      const updateLatest = computed(() => clientLatest.value || updateStatus.value?.latest || '');
       const updateAvailable = computed(
-        () => Boolean(updateStatus.value?.update_available && updateStatus.value?.latest)
+        () =>
+          Boolean(updateLatest.value) &&
+          Boolean(
+            (updateStatus.value?.update_available && updateStatus.value?.latest) || clientUpdate.value
+          )
       );
-      const updateLatest = computed(() => updateStatus.value?.latest || '');
       const updateCurrent = computed(
         () =>
           updateStatus.value?.current ||
@@ -294,17 +318,33 @@
         }
       };
 
+      const checkClientUpdate = async () => {
+        try {
+          const info = await checkSurfGateUpdate(
+            uiResponse.value?.xray?.ui_version,
+            uiResponse.value?.xray?.github_proxy
+          );
+          clientLatest.value = info.latest;
+          clientUpdate.value = info.updateAvailable;
+          if (info.latest) window.xray.server.stealthsurf_version_latest = info.latest;
+        } catch {
+          /* optional */
+        }
+      };
+
       const refreshUpdateStatus = async () => {
+        await checkClientUpdate();
         try {
           await engine.submit(SubmitActions.addonUpdateCheck);
           await loadUpdateStatus();
         } catch {
           /* optional background check */
         }
+        await checkClientUpdate();
       };
 
       const installUpdate = async () => {
-        const version = updateStatus.value?.latest;
+        const version = updateLatest.value;
         if (!version || updateBusy.value) return;
         if (!window.confirm(`Установить SurfGate v${version} с GitHub?`)) return;
         updateBusy.value = true;
@@ -312,6 +352,7 @@
         try {
           await updateProgress.value?.run(version);
           await loadUpdateStatus();
+          await checkClientUpdate();
         } finally {
           updateBusy.value = false;
         }
@@ -539,8 +580,17 @@
             await new Promise((r) => setTimeout(r, 800));
           }
           await loadCatalog();
+          if (wantRunning && !running.value) {
+            lastError.value =
+              'Xray не запустился — Settings → Logs или Test Config. Метка «в конфиге» ≠ VPN online.';
+          }
         } catch (e) {
-          lastError.value = e instanceof Error ? e.message : 'ошибка start/stop';
+          lastError.value =
+            e instanceof Error
+              ? e.message
+              : wantRunning
+                ? 'Xray не запустился — откройте Logs / Test Config'
+                : 'ошибка stop';
         } finally {
           busy.value = false;
         }
@@ -580,6 +630,8 @@
         statusLabel,
         conflict,
         conflictHint,
+        homeActionHint,
+        startFailedHint,
         selectEndpoint,
         isActiveRoute,
         displayIp,
