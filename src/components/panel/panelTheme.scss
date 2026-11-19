@@ -196,29 +196,18 @@
   }
 }
 
-/* Override .ss-primary-btn { width: 100% } — that overflowed the banner on phones */
+/* Override .ss-primary-btn { width: 100% } — keep banner CTA compact */
 .ss-update-banner .ss-update-banner__btn {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   width: auto;
   max-width: 100%;
   min-width: 0;
   margin: 0;
-  padding: 10px 14px;
+  padding: 8px 12px;
   font-size: 11px;
   letter-spacing: 0.04em;
   white-space: nowrap;
   box-sizing: border-box;
-}
-
-@media (max-width: 860px) {
-  .ss-update-banner {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .ss-update-banner .ss-update-banner__btn {
-    width: 100%;
-  }
 }
 
 .ss-hero {
@@ -674,6 +663,115 @@
     padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(28px + env(safe-area-inset-bottom, 0px));
   }
 
+  /* Home: tighter hero + CTAs so tables aren't dwarfed */
+  .ss-hero {
+    padding: 6px 4px 4px;
+  }
+
+  .ss-hero-hud {
+    width: 56px;
+    height: 56px;
+    margin: 2px auto 10px;
+  }
+
+  .ss-hero-hud-core {
+    width: 11px;
+    height: 11px;
+  }
+
+  .ss-brand-hero {
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+
+  .ss-brand-hero-sub {
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+
+  .ss-ip-pill {
+    margin-top: 8px;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .ss-update-banner {
+    flex-wrap: nowrap;
+    gap: 8px 10px;
+    margin-bottom: 10px;
+    padding: 10px 12px;
+  }
+
+  .ss-update-banner__title {
+    font-size: 13px;
+  }
+
+  .ss-update-banner__meta {
+    font-size: 11px;
+  }
+
+  .ss-update-banner .ss-update-banner__btn {
+    flex: 0 0 auto;
+    width: auto;
+    padding: 8px 11px;
+    font-size: 10px;
+  }
+
+  .ss-metrics-table {
+    margin: 10px 0 10px;
+  }
+
+  .ss-data-table {
+    font-size: 11px;
+  }
+
+  .ss-data-table th,
+  .ss-data-table td {
+    padding: 7px 6px;
+  }
+
+  .ss-data-table thead th {
+    font-size: 9px;
+  }
+
+  .ss-cell-title {
+    font-size: 12px;
+  }
+
+  .ss-cell-sub {
+    font-size: 10px;
+  }
+
+  /* Endpoints: hide proto on phones (often in title); keep status + volume */
+  .ss-endpoints-table th:nth-child(3),
+  .ss-endpoints-table td:nth-child(3) {
+    display: none;
+  }
+
+  .ss-endpoints-table th:nth-child(4),
+  .ss-endpoints-table td:nth-child(4) {
+    width: 68px;
+  }
+
+  .ss-endpoints-table th:nth-child(5),
+  .ss-endpoints-table td:nth-child(5) {
+    width: 72px;
+  }
+
+  .ss-primary-btn {
+    padding: 11px 14px;
+    font-size: 12px;
+  }
+
+  .ss-loc-meta .name {
+    font-size: 13px;
+  }
+
+  .ss-card {
+    padding: 12px 12px;
+    margin-bottom: 8px;
+  }
+
   .ss-settings-layout {
     grid-template-columns: 1fr;
   }
@@ -739,6 +837,22 @@
 
   .ss-pane-heading {
     margin-top: 2px;
+  }
+}
+
+/* Very narrow: stack update banner only when text would crush the button */
+@media (max-width: 360px) {
+  .ss-update-banner {
+    flex-wrap: wrap;
+  }
+
+  .ss-update-banner .ss-update-banner__btn {
+    width: 100%;
+  }
+
+  .ss-endpoints-table th:nth-child(5),
+  .ss-endpoints-table td:nth-child(5) {
+    display: none;
   }
 }
 
