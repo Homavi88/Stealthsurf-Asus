@@ -72,7 +72,7 @@ subscriptions)
     ;;
 cron)
     case "$2" in
-    logrotate | geodata | subscription_refresh | subscription_fallback | ss_catalog_sync | addon_update | ipset_save | watchdog)
+    logrotate | geodata | subscription_refresh | subscription_fallback | ss_catalog_sync | addon_update | speedtest | ipset_save | watchdog)
         cron_job_lock "$2" || exit 0
         update_loading_progress() { :; }
         ;;
@@ -101,6 +101,9 @@ cron)
         ;;
     addon_update)
         cron_addon_update_check_run
+        ;;
+    speedtest)
+        cron_speedtest_run
         ;;
     watchdog)
         cron_watchdog_run

@@ -245,8 +245,8 @@ vpn_ipv6_block_clear() {
 }
 
 # ── 8. Guest Wi-Fi ──────────────────────────────────────────────────────────
-# follow = include guest nets (default)
-# vpn    = force guest into VPN (same as follow for redirect-all; still include nets)
+# follow = same as main LAN policy (selected/exclude apply to guest too)
+# vpn    = always TPROXY guest bridges even when lan_vpn_mode=selected/exclude
 # direct = exclude guest bridge nets from transparent proxy source list
 vpn_guest_ifaces() {
     local guest_ifs="" g n
@@ -268,26 +268,103 @@ vpn_guest_nets_v4() {
     done | sed '/^$/d' | sort -u
 }
 
-# Filter source_nets list: when guest_vpn_mode=direct, drop guest CIDRs
+# Filter source_nets list: when guest_vpn_mode=direct, drop guest CIDRs.
+# When guest_vpn_mode=vpn, ensure guest CIDRs stay listed (union with detected guest nets).
 vpn_filter_source_nets() {
     local nets="$1"
     local mode="${guest_vpn_mode:-follow}"
     case "$mode" in
-    direct) ;;
+    direct)
+        local guest_nets n g skip
+        guest_nets=$(vpn_guest_nets_v4)
+        for n in $nets; do
+            skip=0
+            for g in $guest_nets; do
+                [ "$n" = "$g" ] && skip=1 && break
+            done
+            [ "$skip" = "0" ] && printf '%s ' "$n"
+        done
+        ;;
+    vpn)
+        printf '%s\n' $nets $(vpn_guest_nets_v4) | sed '/^$/d' | sort -u | tr '\n' ' '
+        ;;
     *)
         printf '%s' "$nets"
-        return 0
         ;;
     esac
-    local guest_nets exclude n g skip
-    guest_nets=$(vpn_guest_nets_v4)
-    for n in $nets; do
-        skip=0
-        for g in $guest_nets; do
-            [ "$n" = "$g" ] && skip=1 && break
-        done
-        [ "$skip" = "0" ] && printf '%s ' "$n"
-    done
+}
+
+# True when guest must be forced through TPROXY regardless of MAC policies.
+vpn_guest_force_wanted() {
+    [ "${guest_vpn_mode:-follow}" = "vpn" ]
+}
+
+# Print guest IPv4 CIDRs for forced redirect (empty if not wanted / none found).
+vpn_guest_force_nets() {
+    vpn_guest_force_wanted || return 0
+    vpn_guest_nets_v4
+}
+
+# ── Domain split (bypass list → direct) ─────────────────────────────────────
+# split_bypass_domains: comma/space/newline separated hostnames or geosite: tags
+vpn_split_rules_sync() {
+    load_xrayui_config
+    local raw="${split_bypass_domains:-}"
+    local tmp domains_json
+
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+
+    # Normalise → JSON string array (keep geosite: / domain: / full: prefixes)
+    domains_json=$(printf '%s' "$raw" | tr ';\n' ',,' | tr -s ',' ',' | sed 's/^,//; s/,$//' |
+        awk -F',' '
+          BEGIN { printf "[" }
+          {
+            n=0
+            for (i=1;i<=NF;i++) {
+              gsub(/^[ \t]+|[ \t]+$/, "", $i)
+              if ($i=="") continue
+              if (n++) printf ","
+              printf "\"%s\"", $i
+            }
+          }
+          END { printf "]" }
+        ')
+
+    tmp="${ADDON_TMP_DIR}/ssurf_split.$$"
+    mkdir -p "$ADDON_TMP_DIR" 2>/dev/null || true
+
+    if [ "$domains_json" = "[]" ] || [ -z "$domains_json" ]; then
+        jq '
+          .routing = (.routing // {})
+          | .routing.rules = (
+              [(.routing.rules // [])[] | select((.name // "") != "surfgate-split-bypass")]
+            )
+        ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+        log_info "Split bypass domains cleared"
+        return 0
+    fi
+
+    # Ensure a freedom/direct outbound exists for bypass
+    if ! jq -e '(.outbounds // []) | any(.tag=="direct")' "$XRAY_CONFIG_FILE" >/dev/null 2>&1; then
+        jq '
+          .outbounds = ((.outbounds // []) + [{tag:"direct",protocol:"freedom",settings:{}}])
+        ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+    fi
+
+    jq --argjson domains "$domains_json" '
+      .routing = (.routing // {})
+      | .routing.rules = (
+          [{
+            name: "surfgate-split-bypass",
+            type: "field",
+            domain: $domains,
+            outboundTag: "direct"
+          }]
+          + [(.routing.rules // [])[] | select((.name // "") != "surfgate-split-bypass")]
+        )
+    ' "$XRAY_CONFIG_FILE" >"$tmp" && mv -f "$tmp" "$XRAY_CONFIG_FILE"
+    rm -f "$tmp" 2>/dev/null
+    log_info "Split bypass domains applied ($domains_json)"
 }
 
 # ── 6. Preflight ────────────────────────────────────────────────────────────

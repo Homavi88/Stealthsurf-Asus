@@ -70,8 +70,8 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   un --yes       uninstall
   dv|devices     VPN device log (IP / MAC / name)
   pf|preflight   NTP/WAN/TPROXY/Xray checks
-  sp|speed       download/upload Mbps + latency
-  dns|dnstest    DNS leak check (wiring + resolvers)
+  sp|speed       download/upload Mbps + latency (cron: speedtest_interval)
+  dns|dnstest    DNS/IPv6 leak + WebRTC hint for LAN browser
   panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 

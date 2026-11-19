@@ -302,6 +302,9 @@ CI публикует GitHub Release на тег `v*`.
 
 ## Документация и лицензия
 
-- **Промо / гайд (HTML):** [docs/promo/index.html](./docs/promo/index.html)
-- Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net)
-- Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · [CC BY-NC-SA 4.0](./LICENSE)
+- **Промо / гайд (HTML):** [docs/promo/index.html](./docs/promo/index.html) · в панели: **Настройки → справка**
+- QA VPN на роутере: [`docs/qa-router.md`](./docs/qa-router.md) (guest force, split bypass, speed cron, DNS/IPv6/WebRTC)
+- Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net) · [API](https://docs.stealthsurf.net/api)
+- Upstream XrayUI: [daniellavrushin.github.io/asuswrt-merlin-xrayui](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/)
+- Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · лицензия [CC BY-NC-SA 4.0](./LICENSE) (© Daniel Lavrushin / contributors)
+- Changelog: [CHANGELOG.md](./CHANGELOG.md)
