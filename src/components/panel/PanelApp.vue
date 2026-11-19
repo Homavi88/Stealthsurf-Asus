@@ -66,12 +66,17 @@
       };
 
       onMounted(() => {
-        if (typeof window.hideLoading === 'function') window.hideLoading();
-        const loading = document.getElementById('Loading');
-        if (loading) {
-          loading.style.visibility = 'hidden';
-          loading.style.display = 'none';
-          loading.style.pointerEvents = 'none';
+        if (typeof window.hideLoading === 'function') {
+          window.hideLoading();
+        } else {
+          const loading = document.getElementById('Loading');
+          if (loading) {
+            loading.classList.remove('is-visible');
+            loading.style.visibility = 'hidden';
+            loading.style.display = 'none';
+            loading.style.pointerEvents = 'none';
+            loading.setAttribute('aria-hidden', 'true');
+          }
         }
         syncConfig();
         timer = window.setInterval(() => {

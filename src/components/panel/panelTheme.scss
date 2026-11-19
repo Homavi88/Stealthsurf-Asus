@@ -79,7 +79,7 @@
   z-index: 1;
   max-width: 520px;
   margin: 0 auto;
-  padding: 16px 16px 40px;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(40px + env(safe-area-inset-bottom, 0px));
   animation: ss-shell-enter 0.4s ease-out;
 }
 
@@ -574,6 +574,13 @@
   cursor: not-allowed;
 }
 
+.ss-settings-top {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
 .ss-settings-layout {
   display: grid;
   grid-template-columns: 250px 1fr;
@@ -581,9 +588,80 @@
   align-items: start;
 }
 
+.ss-mobile-nav {
+  display: none;
+}
+
 @media (max-width: 860px) {
+  .ss-panel-shell {
+    padding: calc(12px + env(safe-area-inset-top, 0px)) 12px calc(28px + env(safe-area-inset-bottom, 0px));
+  }
+
   .ss-settings-layout {
     grid-template-columns: 1fr;
+  }
+
+  .ss-settings-aside {
+    display: none;
+  }
+
+  .ss-settings-title {
+    margin-bottom: 10px;
+  }
+
+  .ss-mobile-nav {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    margin: 0 -12px 14px;
+    padding: 8px 12px;
+    background: linear-gradient(180deg, rgba(11, 15, 20, 0.96) 0%, rgba(11, 15, 20, 0.88) 100%);
+    border-bottom: 1px solid var(--ss-line);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+
+  .ss-mobile-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ss-mobile-nav-item {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--ss-line);
+    background: rgba(18, 24, 33, 0.9);
+    color: var(--ss-text);
+    border-radius: 999px;
+    padding: 8px 12px;
+    font-family: var(--ss-font-mono);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .ss-mobile-nav-item.is-active {
+    background: rgba(61, 184, 255, 0.16);
+    border-color: rgba(61, 184, 255, 0.45);
+    color: var(--ss-blue);
+  }
+
+  .ss-mobile-nav-item .ss-nav-ico {
+    width: 18px;
+    height: 18px;
+    font-size: 9px;
+  }
+
+  .ss-pane-heading {
+    margin-top: 2px;
   }
 }
 

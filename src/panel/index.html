@@ -61,21 +61,70 @@
         display: none;
         align-items: center;
         justify-content: center;
-        background: rgba(5, 8, 12, 0.65);
+        padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
+        box-sizing: border-box;
+        background: rgba(5, 8, 12, 0.78);
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
         color: #e6e8eb;
         font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
         text-align: center;
         pointer-events: none;
       }
-      #Loading.popup_bg[style*='visibility: visible'],
-      #Loading.popup_bg[style*='visibility:visible'] {
+      #Loading.popup_bg.is-visible {
         display: flex !important;
+        visibility: visible !important;
         pointer-events: auto;
       }
+      #Loading .ss-load-card {
+        width: min(360px, 100%);
+        margin: 0 auto;
+        padding: 20px 18px 16px;
+        border-radius: 12px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: linear-gradient(180deg, #1a222e 0%, #121820 100%);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+        text-align: left;
+      }
       #Loading #proceeding_main_txt,
-      #Loading #proceeding_txt {
+      #Loading .ss-load-msg {
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        font-size: 0.95rem;
+        font-weight: 600;
+        line-height: 1.35;
+        color: #e6e8eb;
+        word-break: break-word;
+      }
+      #Loading #proceeding_txt,
+      #Loading .ss-load-pct {
+        margin-top: 10px;
         font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        color: #3db8ff;
+        letter-spacing: 0.02em;
+      }
+      #Loading .ss-load-bar {
+        margin-top: 14px;
+        height: 6px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+        overflow: hidden;
+      }
+      #Loading .ss-load-bar__fill {
+        height: 100%;
+        width: 0%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #2a9fd8, #3db8ff);
+        transition: width 0.25s ease;
+      }
+      @media (max-width: 640px) {
+        #Loading.popup_bg {
+          align-items: flex-start;
+          padding-top: max(72px, calc(env(safe-area-inset-top) + 56px));
+        }
+        #Loading .ss-load-card {
+          width: 100%;
+        }
       }
     </style>
   </head>
@@ -86,15 +135,14 @@
       <div id="ss-panel-boot-err" class="err" hidden></div>
     </div>
 
-    <div id="Loading" class="popup_bg" style="visibility: hidden">
-      <table cellpadding="5" id="loadingBlock" class="loadingBlock" style="margin: auto; width: 100%; height: 100%">
-        <tr>
-          <td>
-            <div id="proceeding_main_txt"></div>
-            <div id="proceeding_txt" style="margin-top: 0.5rem"></div>
-          </td>
-        </tr>
-      </table>
+    <div id="Loading" class="popup_bg" style="visibility: hidden; display: none" aria-hidden="true">
+      <div id="loadingBlock" class="ss-load-card" role="status" aria-live="polite">
+        <div id="proceeding_main_txt" class="ss-load-msg"></div>
+        <div class="ss-load-bar" aria-hidden="true">
+          <div id="ss-load-bar-fill" class="ss-load-bar__fill"></div>
+        </div>
+        <div id="proceeding_txt" class="ss-load-pct"></div>
+      </div>
     </div>
     <div id="overDiv" style="position: absolute; visibility: hidden; z-index: 10000"></div>
 
@@ -122,18 +170,24 @@
       };
       window.hideLoading = function () {
         var loading = document.getElementById('Loading');
+        var fill = document.getElementById('ss-load-bar-fill');
         if (loading) {
+          loading.classList.remove('is-visible');
           loading.style.visibility = 'hidden';
           loading.style.display = 'none';
           loading.style.pointerEvents = 'none';
+          loading.setAttribute('aria-hidden', 'true');
         }
+        if (fill) fill.style.width = '0%';
       };
       window.showLoading = function (_delay, flag) {
         var loading = document.getElementById('Loading');
         if (!loading) return;
+        loading.classList.add('is-visible');
         loading.style.visibility = 'visible';
-        loading.style.display = '';
+        loading.style.display = 'flex';
         loading.style.pointerEvents = 'auto';
+        loading.setAttribute('aria-hidden', 'false');
         if (flag && typeof window.updateLoadingProgress === 'function') {
           try {
             window.updateLoadingProgress(flag);
