@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [1.4.14] - 2026-11-19
 
 ### Speed test + DNS leak test
 
