@@ -56,6 +56,12 @@ jobs:
           grep -q '_ss_location_code\|catalogLocationLabel\|locations' /tmp/ss-ci-pkg/ssurf/app.js
           grep -q 'geodata_is_list_file' /tmp/ss-ci-pkg/ssurf/stealthsurf
           sh tests/backend/geodata_sanitize.spec.sh
+          sh tests/backend/vpn_hardening.spec.sh
+          sh tests/backend/net_tests.spec.sh
+          grep -q 'speedtest_run' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'dnstest_run' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'stealthsurf_speedtest' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          grep -q 'stealthsurf_dnstest' /tmp/ss-ci-pkg/ssurf/panel/app.js
           sh -n /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/ssurf/stealthsurf

@@ -102,6 +102,8 @@ ipv6_mode="proxy"
 # follow | vpn | direct — guest Wi-Fi bridges
 guest_vpn_mode="follow"
 PREFLIGHT_STATUS_FILE="$ADDON_SHARE_DIR/preflight_status.json"
+SPEEDTEST_STATUS_FILE="$ADDON_SHARE_DIR/speedtest_status.json"
+DNSTEST_STATUS_FILE="$ADDON_SHARE_DIR/dnstest_status.json"
 ADDON_UPDATE_STATUS_FILE="$ADDON_SHARE_DIR/addon_update_status.json"
 ADDON_APP_LOG="$ADDON_LOGS_DIR/ssurf_app.log"
 DEVICES_VPN_HISTORY_LOG="$ADDON_LOGS_DIR/devices_vpn_history.log"

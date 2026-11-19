@@ -210,6 +210,9 @@ surfgate h                # справка · surfgate m — меню
 | `stats` `<id>` · `traffic` | статистика / трафик |
 | `renew` `<id>` · `topup` `<amount>` | продление / пополнение |
 | `dv` / `devices` | устройства VPN (IP / MAC / имя) |
+| `pf` / `preflight` | NTP / WAN / TPROXY / Xray |
+| `sp` / `speed` | тест скорости (Mbps ↓/↑ + latency) |
+| `dns` / `dnstest` | DNS leak (wiring + resolvers) |
 | `panel` `start\|stop\|status\|url\|set-password` | панель `:1131` |
 | `bak` | backup |
 | `d` / `dg` | diagnostics |

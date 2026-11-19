@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Speed test + DNS leak test
+
+- Panel Connection → Диагностика: тест скорости (Cloudflare ↓/↑ + latency) и DNS leak
+- CLI: `surfgate sp|speed`, `surfgate dns|dnstest` — JSON status under `/opt/share/ssurf/`
+- DNS leak: wiring (`dns_only` / `sys:dns-out` / dokodemo :53 / firewall lock) + resolver probe vs WAN DNS
+
 ## [1.4.13] - 2026-11-18
 
 ### VPN hardening, app logs, GitHub auto-update
