@@ -110,15 +110,30 @@
           <label class="ss-field">
             <span>Режим</span>
             <select v-model="options.lan_vpn_mode">
-              <option value="all">Все устройства</option>
-              <option value="selected">Только выбранные</option>
-              <option value="exclude">Все, кроме выбранных</option>
+              <option value="all">Все устройства через VPN</option>
+              <option value="selected">VPN только для отмеченных</option>
+              <option value="exclude">VPN для всех, кроме отмеченных (они — direct)</option>
             </select>
           </label>
-          <label v-if="options.lan_vpn_mode !== 'all'" class="ss-field">
-            <span>MAC (через запятую)</span>
-            <input type="text" v-model="options.lan_vpn_macs" placeholder="aa:bb:cc:dd:ee:ff, …" autocomplete="off" />
-          </label>
+          <div v-if="options.lan_vpn_mode !== 'all'" class="ss-lan-devices">
+            <div class="ss-lan-devices__hint">
+              {{
+                options.lan_vpn_mode === 'exclude'
+                  ? 'Отметьте устройства, которые идут напрямую в интернет (мимо VPN).'
+                  : 'Отметьте устройства, которые должны идти через VPN; остальные — direct.'
+              }}
+            </div>
+            <label v-for="d in lanDevices" :key="d.mac" class="ss-lan-devices__row">
+              <input type="checkbox" :checked="isLanMacSelected(d.mac)" @change="onLanMacChange(d.mac, $event)" />
+              <span class="ss-lan-devices__name">{{ d.name || d.mac }}</span>
+              <span class="ss-mono ss-lan-devices__meta">{{ d.ip || '—' }} · {{ d.mac }}</span>
+            </label>
+            <p v-if="!lanDevices.length" class="ss-lan-devices__empty">Список LAN пуст — подождите пару секунд или введите MAC вручную ниже.</p>
+            <label class="ss-field">
+              <span>MAC вручную (через запятую)</span>
+              <input type="text" v-model="options.lan_vpn_macs" placeholder="aa:bb:cc:dd:ee:ff, …" autocomplete="off" />
+            </label>
+          </div>
         </div>
       </div>
 
@@ -436,14 +451,52 @@
         catalogSyncEnabled.value ? `Интервал: ${options.ss_catalog_auto_sync}` : 'Сейчас каталог обновляется только вручную'
       );
 
+      type LanDevice = { ip?: string; mac: string; name?: string };
+      const lanDevices = ref<LanDevice[]>([]);
+      const normalizeMac = (m: string) => String(m || '').trim().toLowerCase();
+      const selectedLanMacs = computed(() =>
+        String(options.lan_vpn_macs || '')
+          .split(/[,;\s]+/)
+          .map(normalizeMac)
+          .filter((m) => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(m))
+      );
+      const isLanMacSelected = (mac: string) => selectedLanMacs.value.includes(normalizeMac(mac));
+      const toggleLanMac = (mac: string, on: boolean) => {
+        const m = normalizeMac(mac);
+        if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(m)) return;
+        const set = new Set(selectedLanMacs.value);
+        if (on) set.add(m);
+        else set.delete(m);
+        options.lan_vpn_macs = Array.from(set).join(', ');
+      };
+      const onLanMacChange = (mac: string, ev: Event) => {
+        const t = ev.target as HTMLInputElement | null;
+        toggleLanMac(mac, !!t?.checked);
+      };
+      const loadLanDevices = async () => {
+        try {
+          const res = await engine.getWebData<LanDevice[]>('lan-devices');
+          const list = Array.isArray(res.data) ? res.data : [];
+          lanDevices.value = list
+            .map((d) => ({
+              ip: d.ip || '',
+              mac: normalizeMac(d.mac),
+              name: d.name || ''
+            }))
+            .filter((d) => /^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(d.mac));
+        } catch {
+          lanDevices.value = [];
+        }
+      };
+
       const lanModeSubtitle = computed(() => {
         switch (options.lan_vpn_mode) {
           case 'selected':
-            return 'VPN только для указанных MAC';
+            return 'VPN только для отмеченных устройств; остальные идут напрямую';
           case 'exclude':
-            return 'VPN для всех, кроме указанных MAC';
+            return 'VPN для всех, кроме отмеченных — они идут напрямую в интернет';
           default:
-            return 'Весь LAN через transparent proxy';
+            return 'Весь LAN через transparent proxy (VPN)';
         }
       });
       const guestModeSubtitle = computed(() => {
@@ -664,6 +717,7 @@
         loadPreflight();
         loadSpeedStatus();
         loadDnsTestStatus();
+        loadLanDevices();
         liveTimer = setInterval(() => {
           liveTick.value += 1;
         }, 2000);
@@ -699,6 +753,9 @@
         catalogInterval,
         setCatalogSync,
         lanModeSubtitle,
+        lanDevices,
+        isLanMacSelected,
+        onLanMacChange,
         guestModeSubtitle,
         ipv6ModeSubtitle,
         preflightSubtitle,

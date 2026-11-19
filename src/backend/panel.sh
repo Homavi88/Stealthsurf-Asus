@@ -670,17 +670,165 @@ panel_bootstrap_json() {
         }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
 }
 
+# Query outbound traffic counters (no -reset) → $ADDON_SHARE_DIR/xray_stats.json
+panel_outbound_stats_query() {
+    local api_addr stats_json
+    stats_json="$ADDON_SHARE_DIR/xray_stats.json"
+    mkdir -p "$ADDON_SHARE_DIR" 2>/dev/null || true
+    api_addr=$(api_get_listen_address 2>/dev/null) || return 1
+    [ -n "$(get_xray_daemon_pid 2>/dev/null)" ] || return 1
+    xray api statsquery -s "$api_addr" -pattern 'outbound>>>' >"$stats_json" 2>/dev/null || return 1
+    return 0
+}
+
+# Accumulate positive deltas into TRAFFIC_LIFETIME_FILE (persists across restarts).
+panel_traffic_lifetime_tick() {
+    local stats_json lifetime_file snap_file tmp cur_json
+    stats_json="$ADDON_SHARE_DIR/xray_stats.json"
+    lifetime_file="${TRAFFIC_LIFETIME_FILE:-$ADDON_SHARE_DIR/traffic_lifetime.json}"
+    snap_file="${TRAFFIC_SNAPSHOT_FILE:-$ADDON_TMP_DIR/traffic_snapshot.json}"
+    mkdir -p "$ADDON_SHARE_DIR" "$ADDON_TMP_DIR" "$ADDON_WEB_DIR" 2>/dev/null || true
+
+    panel_outbound_stats_query || return 0
+    [ -s "$stats_json" ] || return 0
+
+    [ -s "$lifetime_file" ] || echo '{"vpn_up":0,"vpn_down":0,"direct_up":0,"direct_down":0,"by_tag":{},"updated_at":""}' >"$lifetime_file"
+    [ -s "$snap_file" ] || echo '{}' >"$snap_file"
+
+    # Build current absolute map: tag -> {up,down}
+    cur_json=$(
+        jq -c '
+          reduce (.stat // [])[] as $s ({};
+            ($s.name // "") as $n
+            | if ($n | startswith("outbound>>>") and (endswith(">>>traffic>>>uplink") or endswith(">>>traffic>>>downlink"))) then
+                ($n | split(">>>")[1]) as $tag
+                | ($s.value // 0 | tonumber) as $v
+                | if ($n | endswith(">>>uplink")) then .[$tag].up = $v
+                  else .[$tag].down = $v end
+              else . end)
+        ' "$stats_json" 2>/dev/null
+    ) || cur_json='{}'
+    [ -n "$cur_json" ] || cur_json='{}'
+
+    tmp="${lifetime_file}.$$"
+    jq -n -c \
+        --argjson cur "$cur_json" \
+        --slurpfile life "$lifetime_file" \
+        --slurpfile snap "$snap_file" \
+        --arg now "$(date -u '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || date '+%Y-%m-%d %H:%M:%S')" '
+      ($life[0] // {vpn_up:0,vpn_down:0,direct_up:0,direct_down:0,by_tag:{}}) as $L
+      | ($snap[0] // {}) as $S
+      | def delta($tag; $field):
+          (($cur[$tag][$field] // 0) | tonumber) as $c
+          | (($S[$tag][$field] // 0) | tonumber) as $p
+          | if $c >= $p then ($c - $p) else $c end;
+      reduce ($cur | keys[]) as $tag (
+        $L;
+        .by_tag[$tag] = ((.by_tag[$tag] // {up:0, down:0})
+          | .up = ((.up // 0) + delta($tag; "up"))
+          | .down = ((.down // 0) + delta($tag; "down")))
+        | if ($tag | startswith("ss-")) then
+            .vpn_up = ((.vpn_up // 0) + delta($tag; "up"))
+            | .vpn_down = ((.vpn_down // 0) + delta($tag; "down"))
+          elif $tag == "direct" then
+            .direct_up = ((.direct_up // 0) + delta($tag; "up"))
+            | .direct_down = ((.direct_down // 0) + delta($tag; "down"))
+          else . end
+      )
+      | .updated_at = $now
+    ' >"$tmp" 2>/dev/null && mv -f "$tmp" "$lifetime_file" || rm -f "$tmp"
+
+    printf '%s\n' "$cur_json" >"$snap_file"
+
+    ln -s -f "$lifetime_file" "$ADDON_WEB_DIR/traffic-lifetime.json" 2>/dev/null ||
+        cp -f "$lifetime_file" "$ADDON_WEB_DIR/traffic-lifetime.json" 2>/dev/null || true
+    [ -L "$ADDON_WEB_DIR/traffic-lifetime.cab" ] ||
+        ln -s -f "traffic-lifetime.json" "$ADDON_WEB_DIR/traffic-lifetime.cab" 2>/dev/null || true
+}
+
+# Address of the active stealthsurf-default outbound (VPN server host/IP).
+panel_vpn_server_from_config() {
+    [ -f "$XRAY_CONFIG_FILE" ] || {
+        echo ""
+        return 0
+    }
+    jq -r '
+      (.routing.rules // []
+        | map(select(.name == "stealthsurf-default"))
+        | .[0].outboundTag // empty) as $tag
+      | if ($tag | length) == 0 then
+          empty
+        else
+          (.outbounds // [] | map(select(.tag == $tag)) | .[0]) as $o
+          | ($o.settings.vnext[0].address
+             // $o.settings.servers[0].address
+             // $o.settings.address
+             // empty)
+        end
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null | head -n1
+}
+
+# Publish LAN clients (ip/mac/name) for Settings → Connection device picker.
+panel_lan_devices_publish() {
+    local map_file out
+    out="${ADDON_SHARE_DIR}/lan_devices.json"
+    mkdir -p "$ADDON_SHARE_DIR" "$ADDON_WEB_DIR" 2>/dev/null || true
+    if ! type devices_vpn_build_ipmap >/dev/null 2>&1; then
+        echo '[]' >"$out"
+        return 0
+    fi
+    devices_vpn_build_ipmap
+    map_file="${DEVICES_VPN_MAP:-$ADDON_TMP_DIR/devices_ipmap.tsv}"
+    if [ ! -s "$map_file" ]; then
+        echo '[]' >"$out"
+    else
+        awk -F'\t' '
+          NF >= 2 && $2 != "" {
+            ip=$1; mac=tolower($2); name=$3;
+            gsub(/\\/,"\\\\",name); gsub(/"/,"\\\"",name);
+            printf "%s\t%s\t%s\n", ip, mac, name
+          }
+        ' "$map_file" |
+            awk -F'\t' '
+              BEGIN { print "[" }
+              {
+                if (seen[$2]++) next
+                if (n++) printf ","
+                printf "{\"ip\":\"%s\",\"mac\":\"%s\",\"name\":\"%s\"}", $1, $2, ($3==""?$2:$3)
+              }
+              END { print "]" }
+            ' >"${out}.$$" && mv -f "${out}.$$" "$out"
+    fi
+    ln -s -f "$out" "$ADDON_WEB_DIR/lan-devices.json" 2>/dev/null ||
+        cp -f "$out" "$ADDON_WEB_DIR/lan-devices.json" 2>/dev/null || true
+}
+
 # Live dashboard metrics for the light panel (CPU / RAM / traffic counters).
 panel_live_json() {
     panel_load_settings
     load_xrayui_config 2>/dev/null || true
 
-    local running=false pid=0
+    local running=false pid=0 desired=false fw_up=false official=false
     pid=$(get_xray_daemon_pid 2>/dev/null) || pid=0
     case "$pid" in
     '' | *[!0-9]*) pid=0 ;;
     esac
     [ "$pid" -gt 0 ] && running=true
+    # Secondary signals: desired-state file + our firewall chain still installed.
+    [ -f "${XRAY_DESIRED_STATE_FILE:-/tmp/ssurf_xray.desired}" ] && desired=true
+    if type firewall_is_configured >/dev/null 2>&1 && firewall_is_configured 2>/dev/null; then
+        fw_up=true
+    fi
+    # If pid briefly missing but we still want VPN and firewall is up — treat as running
+    # (avoids false "offline" flicker / pidof gaps right after start).
+    if [ "$running" = false ] && [ "$desired" = true ] && [ "$fw_up" = true ]; then
+        running=true
+        pid=$(get_xray_daemon_pids 2>/dev/null | head -n1)
+        case "$pid" in '' | *[!0-9]*) pid=0 ;; esac
+    fi
+    if type ss_official_running >/dev/null 2>&1 && ss_official_running 2>/dev/null; then
+        official=true
+    fi
 
     local cpu_pct=0
     # BusyBox-friendly one-shot CPU estimate from /proc/stat idle ratio.
@@ -729,62 +877,158 @@ panel_live_json() {
         case "$app_rss_mb" in '' | *[!0-9]*) app_rss_mb=0 ;; esac
     fi
 
-    local wan_ip
+    local wan_ip vpn_server=""
     wan_ip=$(nvram get wan_ipaddr 2>/dev/null)
+    if [ "$running" = true ]; then
+        vpn_server=$(panel_vpn_server_from_config 2>/dev/null || true)
+    fi
 
     local vpn_up=0 vpn_down=0 direct_up=0 direct_down=0
-    # Best-effort cumulative counters from last xray stats snapshot (bytes).
+    local sess_vpn_up=0 sess_vpn_down=0 sess_direct_up=0 sess_direct_down=0
+    local by_tag_json='{}'
+    local lifetime_file="${TRAFFIC_LIFETIME_FILE:-$ADDON_SHARE_DIR/traffic_lifetime.json}"
+
+    # Session counters (current Xray process) from last outbound stats query.
     if [ -f "$ADDON_SHARE_DIR/xray_stats.json" ]; then
-        # startswith/endswith — no ONIGURUMA regex needed
-        vpn_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        vpn_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        direct_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        direct_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        sess_vpn_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        sess_vpn_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        sess_direct_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        sess_direct_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+    fi
+    case "$sess_vpn_up" in '' | *[!0-9]*) sess_vpn_up=0 ;; esac
+    case "$sess_vpn_down" in '' | *[!0-9]*) sess_vpn_down=0 ;; esac
+    case "$sess_direct_up" in '' | *[!0-9]*) sess_direct_up=0 ;; esac
+    case "$sess_direct_down" in '' | *[!0-9]*) sess_direct_down=0 ;; esac
+
+    # Lifetime totals (persisted) — preferred for home Σ / endpoint volume.
+    if [ -s "$lifetime_file" ]; then
+        vpn_up=$(jq -r '.vpn_up // 0' "$lifetime_file" 2>/dev/null)
+        vpn_down=$(jq -r '.vpn_down // 0' "$lifetime_file" 2>/dev/null)
+        direct_up=$(jq -r '.direct_up // 0' "$lifetime_file" 2>/dev/null)
+        direct_down=$(jq -r '.direct_down // 0' "$lifetime_file" 2>/dev/null)
+        by_tag_json=$(jq -c '.by_tag // {}' "$lifetime_file" 2>/dev/null) || by_tag_json='{}'
+    else
+        vpn_up=$sess_vpn_up
+        vpn_down=$sess_vpn_down
+        direct_up=$sess_direct_up
+        direct_down=$sess_direct_down
     fi
     case "$vpn_up" in '' | *[!0-9]*) vpn_up=0 ;; esac
     case "$vpn_down" in '' | *[!0-9]*) vpn_down=0 ;; esac
     case "$direct_up" in '' | *[!0-9]*) direct_up=0 ;; esac
     case "$direct_down" in '' | *[!0-9]*) direct_down=0 ;; esac
+    case "$by_tag_json" in
+    '' | null) by_tag_json='{}' ;;
+    esac
+    echo "$by_tag_json" | jq -e 'type=="object"' >/dev/null 2>&1 || by_tag_json='{}'
 
-    # Refresh stats asynchronously so next poll is fresher (ignore errors).
-    if [ "$running" = true ] && type api_get_connection_status >/dev/null 2>&1; then
-        (api_get_connection_status >/dev/null 2>&1 &) || true
+    # Refresh stats + lifetime asynchronously so next poll is fresher.
+    if [ "$running" = true ]; then
+        (
+            panel_traffic_lifetime_tick >/dev/null 2>&1 || true
+            type api_get_connection_status >/dev/null 2>&1 && api_get_connection_status >/dev/null 2>&1 || true
+        ) &
     fi
+    # Keep LAN device list warm for Settings → Connection (cheap; runs in background).
+    (panel_lan_devices_publish >/dev/null 2>&1 &) || true
 
-    local ts
+    local ts out
     ts=$(date +%s 2>/dev/null) || ts=0
 
-    jq -nc \
-        --argjson ok true \
-        --argjson running "$running" \
-        --argjson pid "$pid" \
-        --argjson cpu_pct "$cpu_pct" \
-        --argjson mem_used_mb "$mem_used_mb" \
-        --argjson mem_total_mb "$mem_total_mb" \
-        --argjson app_rss_mb "$app_rss_mb" \
-        --arg wan_ip "$wan_ip" \
-        --argjson vpn_up "$vpn_up" \
-        --argjson vpn_down "$vpn_down" \
-        --argjson direct_up "$direct_up" \
-        --argjson direct_down "$direct_down" \
-        --argjson ts "$ts" \
-        '{
-          ok: $ok,
-          running: $running,
-          pid: $pid,
-          cpu_pct: $cpu_pct,
-          mem_used_mb: $mem_used_mb,
-          mem_total_mb: $mem_total_mb,
-          app_rss_mb: $app_rss_mb,
-          wan_ip: $wan_ip,
-          traffic: {
-            vpn_up: $vpn_up,
-            vpn_down: $vpn_down,
-            direct_up: $direct_up,
-            direct_down: $direct_down
-          },
-          ts: $ts
-        }' 2>/dev/null || echo '{"ok":false,"error":"jq failed"}'
+    # Never fail the whole status payload — UI must always get running/pid.
+    out=$(
+        jq -nc \
+            --argjson ok true \
+            --argjson running "$running" \
+            --argjson pid "$pid" \
+            --argjson desired "$desired" \
+            --argjson fw_up "$fw_up" \
+            --argjson official "$official" \
+            --argjson cpu_pct "$cpu_pct" \
+            --argjson mem_used_mb "$mem_used_mb" \
+            --argjson mem_total_mb "$mem_total_mb" \
+            --argjson app_rss_mb "$app_rss_mb" \
+            --arg wan_ip "$wan_ip" \
+            --arg vpn_server "$vpn_server" \
+            --argjson vpn_up "$vpn_up" \
+            --argjson vpn_down "$vpn_down" \
+            --argjson direct_up "$direct_up" \
+            --argjson direct_down "$direct_down" \
+            --argjson sess_vpn_up "$sess_vpn_up" \
+            --argjson sess_vpn_down "$sess_vpn_down" \
+            --argjson sess_direct_up "$sess_direct_up" \
+            --argjson sess_direct_down "$sess_direct_down" \
+            --argjson by_tag "$by_tag_json" \
+            --argjson ts "$ts" \
+            '{
+              ok: $ok,
+              running: $running,
+              pid: $pid,
+              desired: $desired,
+              fw_up: $fw_up,
+              official: $official,
+              cpu_pct: $cpu_pct,
+              mem_used_mb: $mem_used_mb,
+              mem_total_mb: $mem_total_mb,
+              app_rss_mb: $app_rss_mb,
+              wan_ip: $wan_ip,
+              vpn_server: $vpn_server,
+              traffic: {
+                vpn_up: $vpn_up,
+                vpn_down: $vpn_down,
+                direct_up: $direct_up,
+                direct_down: $direct_down,
+                session: {
+                  vpn_up: $sess_vpn_up,
+                  vpn_down: $sess_vpn_down,
+                  direct_up: $sess_direct_up,
+                  direct_down: $sess_direct_down
+                },
+                by_tag: $by_tag
+              },
+              ts: $ts
+            }' 2>/dev/null
+    ) || out=""
+
+    if [ -z "$out" ]; then
+        # Traffic/by_tag parse failed — still report running so UI does not stick offline.
+        out=$(
+            jq -nc \
+                --argjson running "$running" \
+                --argjson pid "$pid" \
+                --argjson desired "$desired" \
+                --argjson fw_up "$fw_up" \
+                --argjson official "$official" \
+                --argjson cpu_pct "$cpu_pct" \
+                --argjson mem_used_mb "$mem_used_mb" \
+                --argjson mem_total_mb "$mem_total_mb" \
+                --argjson app_rss_mb "$app_rss_mb" \
+                --arg wan_ip "${wan_ip:-}" \
+                --arg vpn_server "${vpn_server:-}" \
+                --argjson ts "$ts" \
+                '{
+                  ok: true,
+                  running: $running,
+                  pid: $pid,
+                  desired: $desired,
+                  fw_up: $fw_up,
+                  official: $official,
+                  cpu_pct: $cpu_pct,
+                  mem_used_mb: $mem_used_mb,
+                  mem_total_mb: $mem_total_mb,
+                  app_rss_mb: $app_rss_mb,
+                  wan_ip: $wan_ip,
+                  vpn_server: $vpn_server,
+                  traffic: {
+                    vpn_up: 0, vpn_down: 0, direct_up: 0, direct_down: 0,
+                    session: { vpn_up: 0, vpn_down: 0, direct_up: 0, direct_down: 0 },
+                    by_tag: {}
+                  },
+                  ts: $ts
+                }' 2>/dev/null
+        ) || out="{\"ok\":true,\"running\":$running,\"pid\":$pid,\"ts\":$ts}"
+    fi
+    printf '%s\n' "$out"
 }
 
 # Accept POST JSON: { "action": "stealthsurf_…", "settings": { … } }

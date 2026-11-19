@@ -252,8 +252,9 @@
 
 .ss-ip-pill {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: 6px 8px;
   margin-top: 12px;
   padding: 6px 10px;
   border-radius: 6px;
@@ -263,6 +264,78 @@
   font-size: 12px;
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
+
+  .ss-ip-sep {
+    opacity: 0.45;
+  }
+
+  .ss-ip-vpn {
+    color: var(--ss-accent, #5b9fd4);
+  }
+}
+
+.ss-total-row {
+  th,
+  td {
+    border-top: 1px solid rgba(120, 160, 200, 0.25);
+    padding-top: 10px;
+  }
+
+  th {
+    color: var(--ss-accent, #5b9fd4);
+  }
+}
+
+.ss-muted {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
+.ss-lan-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+
+  &__hint {
+    font-size: 12px;
+    opacity: 0.7;
+    line-height: 1.35;
+  }
+
+  &__empty {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.55;
+  }
+
+  &__row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    grid-template-rows: auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(120, 160, 200, 0.18);
+    background: rgba(0, 0, 0, 0.12);
+    cursor: pointer;
+
+    input {
+      grid-row: 1 / span 2;
+    }
+  }
+
+  &__name {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  &__meta {
+    font-size: 11px;
+    opacity: 0.55;
+  }
 }
 
 .ss-card {

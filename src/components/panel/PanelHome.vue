@@ -21,9 +21,11 @@
       </div>
       <h1 class="ss-brand-hero">SurfGate</h1>
       <p class="ss-brand-hero-sub">merlin · panel :1131 · xray</p>
-      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'status: online' : 'status: offline' }}</p>
-      <div class="ss-ip-pill" v-if="displayIp">
-        <span class="ss-mono">wan {{ displayIp }}</span>
+      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ statusLabel }}</p>
+      <div class="ss-ip-pill" v-if="displayIp || displayVpnServer">
+        <span class="ss-mono" v-if="displayIp">wan {{ displayIp }}</span>
+        <span class="ss-mono ss-ip-sep" v-if="displayIp && displayVpnServer">·</span>
+        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer">vpn {{ displayVpnServer }}</span>
       </div>
     </section>
 
@@ -45,7 +47,7 @@
     </table>
 
     <div class="ss-card ss-card-flush">
-      <p class="ss-card-title">throughput</p>
+      <p class="ss-card-title">throughput · накоплено</p>
       <table class="ss-data-table ss-mono" aria-label="throughput">
         <thead>
           <tr>
@@ -67,6 +69,11 @@
             <td>{{ fmtRate(rates.directDown) }}</td>
             <td>{{ fmtRate(rates.directUp) }}</td>
             <td>{{ fmtBytes(vol.direct) }}</td>
+          </tr>
+          <tr class="ss-total-row">
+            <th scope="row">всего</th>
+            <td colspan="2" class="ss-muted">все подключения</td>
+            <td>{{ fmtBytes(vol.vpn + vol.direct) }}</td>
           </tr>
         </tbody>
       </table>
@@ -146,15 +153,28 @@
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
 
+  type TrafficByTag = Record<string, { up?: number; down?: number }>;
+  type LiveTraffic = {
+    vpn_up: number;
+    vpn_down: number;
+    direct_up: number;
+    direct_down: number;
+    session?: { vpn_up: number; vpn_down: number; direct_up: number; direct_down: number };
+    by_tag?: TrafficByTag;
+  };
   type LiveStatus = {
     ok?: boolean;
     running?: boolean;
+    desired?: boolean;
+    fw_up?: boolean;
+    official?: boolean;
     cpu_pct: number;
     mem_used_mb: number;
     mem_total_mb: number;
     app_rss_mb: number;
     wan_ip?: string;
-    traffic?: { vpn_up: number; vpn_down: number; direct_up: number; direct_down: number };
+    vpn_server?: string;
+    traffic?: LiveTraffic;
     ts?: number;
   };
 
@@ -178,7 +198,8 @@
       });
       const rates = ref<Rates>({ vpnUp: 0, vpnDown: 0, directUp: 0, directDown: 0 });
       const vol = ref({ vpn: 0, direct: 0 });
-      let prevTraffic: LiveStatus['traffic'] | null = null;
+      const byTag = ref<TrafficByTag>({});
+      let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -190,6 +211,7 @@
 
       const conflict = computed(
         () =>
+          live.value.official === true ||
           uiResponse.value?.conflict === 'xrayui' ||
           uiResponse.value?.conflict === 'official' ||
           uiResponse.value?.xrayui?.running === true ||
@@ -198,13 +220,23 @@
           uiResponse.value?.xray?.official?.running === true
       );
       const conflictHint = computed(() => {
-        if (uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
+        if (live.value.official || uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
           return 'conflict: official StealthSurf is running — stop it first';
         }
         return 'conflict: stock xrayui is running — stop it first';
       });
+      const statusLabel = computed(() => {
+        if (live.value.official && !running.value) return 'status: offline · official StealthSurf active';
+        if (running.value) return 'status: online';
+        if (live.value.desired && !running.value) return 'status: offline · vpn desired (xray not detected)';
+        return 'status: offline';
+      });
 
       const displayIp = computed(() => live.value.wan_ip || window.xray?.router?.wan_ip || '');
+      const displayVpnServer = computed(() => {
+        if (!running.value) return '';
+        return (live.value.vpn_server || '').trim();
+      });
 
       const memLabel = computed(() => {
         const u = (live.value.mem_used_mb / 1024).toFixed(1).replace('.', ',');
@@ -264,11 +296,12 @@
       };
 
       const volumeFor = (c: SsCatalogConfig) => {
-        // Prefer per-config traffic cache when present on the object
+        const tag = catalogTag(c);
+        const row = tag ? byTag.value[tag] : undefined;
+        if (row) return (Number(row.up) || 0) + (Number(row.down) || 0);
         const anyC = c as SsCatalogConfig & { traffic_bytes?: number; bytes?: number };
         if (typeof anyC.traffic_bytes === 'number') return anyC.traffic_bytes;
         if (typeof anyC.bytes === 'number') return anyC.bytes;
-        if (isImported(c) && locations.value.filter(isImported).length === 1) return vol.value.vpn;
         return 0;
       };
 
@@ -345,22 +378,36 @@
           const data = (await res.json()) as LiveStatus;
           if (!data?.ok && data?.ok !== undefined) return;
 
-          const t = data.traffic || { vpn_up: 0, vpn_down: 0, direct_up: 0, direct_down: 0 };
+          const t = data.traffic || {
+            vpn_up: 0,
+            vpn_down: 0,
+            direct_up: 0,
+            direct_down: 0
+          };
+          const sess = t.session || {
+            vpn_up: t.vpn_up || 0,
+            vpn_down: t.vpn_down || 0,
+            direct_up: t.direct_up || 0,
+            direct_down: t.direct_down || 0
+          };
           const ts = data.ts || Date.now() / 1000;
-          if (prevTraffic && prevTs && ts > prevTs) {
+          // Rates from session counters (reset on Xray restart); Σ from lifetime totals.
+          if (prevSession && prevTs && ts > prevTs) {
             const dt = ts - prevTs;
+            const d = (a: number, b: number) => Math.max(0, a - b);
             rates.value = {
-              vpnUp: Math.max(0, (t.vpn_up - prevTraffic.vpn_up) / dt),
-              vpnDown: Math.max(0, (t.vpn_down - prevTraffic.vpn_down) / dt),
-              directUp: Math.max(0, (t.direct_up - prevTraffic.direct_up) / dt),
-              directDown: Math.max(0, (t.direct_down - prevTraffic.direct_down) / dt)
+              vpnUp: d(sess.vpn_up, prevSession.vpn_up) / dt,
+              vpnDown: d(sess.vpn_down, prevSession.vpn_down) / dt,
+              directUp: d(sess.direct_up, prevSession.direct_up) / dt,
+              directDown: d(sess.direct_down, prevSession.direct_down) / dt
             };
           }
           vol.value = {
             vpn: (t.vpn_up || 0) + (t.vpn_down || 0),
             direct: (t.direct_up || 0) + (t.direct_down || 0)
           };
-          prevTraffic = t;
+          byTag.value = t.by_tag || {};
+          prevSession = sess;
           prevTs = ts;
           live.value = {
             cpu_pct: data.cpu_pct || 0,
@@ -368,15 +415,19 @@
             mem_total_mb: data.mem_total_mb || 0,
             app_rss_mb: data.app_rss_mb || 0,
             wan_ip: data.wan_ip,
+            vpn_server: data.vpn_server,
             running: data.running,
+            desired: data.desired,
+            fw_up: data.fw_up,
+            official: data.official,
             traffic: t,
             ts
           };
-          if (typeof data.running === 'boolean') {
+          if (typeof data.running === 'boolean' && window.xray?.server) {
             window.xray.server.isRunning = data.running;
           }
         } catch {
-          /* mock / offline */
+          /* keep last known status — do not force offline on poll errors */
         }
       };
 
@@ -387,9 +438,10 @@
           lastError.value = 'выберите подключение из списка API';
           return;
         }
+        const wantRunning = !running.value;
         busy.value = true;
         try {
-          if (running.value) {
+          if (!wantRunning) {
             await engine.executeWithLoadingProgress(async () => {
               await engine.submit(SubmitActions.serverStop);
             }, false);
@@ -401,7 +453,12 @@
               await engine.submit(SubmitActions.serverStart);
             }, false);
           }
-          await pollLive();
+          // Re-poll a few times — Xray PID / firewall may appear a second after start.
+          for (let i = 0; i < 4; i++) {
+            await pollLive();
+            if (running.value === wantRunning) break;
+            await new Promise((r) => setTimeout(r, 800));
+          }
           await loadCatalog();
         } catch (e) {
           lastError.value = e instanceof Error ? e.message : 'ошибка start/stop';
@@ -438,11 +495,13 @@
         rates,
         vol,
         running,
+        statusLabel,
         conflict,
         conflictHint,
         selectEndpoint,
         isActiveRoute,
         displayIp,
+        displayVpnServer,
         memLabel,
         activeTitle,
         isImported,

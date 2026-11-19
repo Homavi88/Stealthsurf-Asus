@@ -143,6 +143,12 @@ api_write_config() {
   "policy": {
     "levels": {
       "0": { "statsUserUplink": true, "statsUserDownlink": true }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true,
+      "statsOutboundUplink": true,
+      "statsOutboundDownlink": true
     }
   },
   $observatory_block
@@ -172,11 +178,14 @@ api_get_connected_clients() {
     return
   fi
 
+  # Do not write outbound counters here — panel lifetime traffic uses xray_stats.json
+  # without -reset. User emails go to a separate temp file.
   if ! xray api statsquery \
     -s "$api_addr" \
     -pattern 'user>>>' \
-    -reset >"$stats_json" 2>/dev/null; then
+    -reset >"$email_json.raw" 2>/dev/null; then
     log_debug "StatsService unreachable on $api_addr (LAN device log still available)"
+    rm -f "$email_json.raw"
     return
   fi
 
@@ -186,7 +195,8 @@ api_get_connected_clients() {
         | map(.name | split(">>>")[1])
         | unique
         | map({ ip:"", mac:"", name:., outbound:"inbound", last_seen:"", email:[.] })
-    ' "$stats_json" >"$email_json" 2>/dev/null || echo '[]' >"$email_json"
+    ' "$email_json.raw" >"$email_json" 2>/dev/null || echo '[]' >"$email_json"
+  rm -f "$email_json.raw"
 
   if [ -s "$email_json" ] && [ "$(jq 'length' "$email_json" 2>/dev/null || echo 0)" != "0" ]; then
     jq -c -s '.[0] + .[1] | unique_by(.ip + "|" + (.email|join(",")) )' \

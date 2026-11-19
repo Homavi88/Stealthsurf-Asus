@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.21] - 2026-11-19
+
+### Home + LAN devices + traffic
+
+- Главная: рядом с WAN показывается **vpn <server>** активного outbound (stealthsurf-default)
+- Настройки → connection → **Устройства VPN**: чеклист LAN-устройств для режимов «только выбранные» / «все кроме» (direct мимо VPN)
+- Status online: устойчивее (pidfile + /proc + desired/firewall); status JSON не падает из‑за traffic jq
+- Throughput: накопленный трафик VPN/direct/всего и volume по endpoint — сохраняется между рестартами Xray (`traffic_lifetime.json`); включены outbound stats в API-конфиге
+
 ## [1.4.20] - 2026-11-19
 
 ### Update download
