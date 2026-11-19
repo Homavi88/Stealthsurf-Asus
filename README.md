@@ -5,255 +5,247 @@
 <h1 align="center">SurfGate</h1>
 
 <p align="center">
-  <strong>Своя панель на роутере Asuswrt-Merlin — по аналогии с официальным StealthSurf</strong><br>
-  Отдельный адрес <code>LAN:1131</code> (официальный — <code>:8800</code>) · вкладка Merlin · API · transparent proxy · CLI <code>surfgate</code>
+  <strong>Своя панель VPN на Asuswrt-Merlin</strong><br>
+  <code>LAN:1131</code> · transparent proxy · StealthSurf API · CLI <code>surfgate</code><br>
+  Не пересекается с официальным StealthSurf на <code>:8800</code>
 </p>
 
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <a href="#установка"><img alt="Merlin" src="https://img.shields.io/badge/Asuswrt--Merlin-addon-1f2a2e?style=flat-square"></a>
-  <a href="https://docs.stealthsurf.net"><img alt="StealthSurf API" src="https://img.shields.io/badge/provider-StealthSurf-0b3d2e?style=flat-square"></a>
   <img alt="Version" src="https://img.shields.io/badge/version-1.4.14-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
-  <a href="#установка"><strong>Установка</strong></a> ·
-  <a href="#панель-1131"><strong>Панель :1131</strong></a> ·
-  <a href="#рядом-с-официальным-stealthsurf"><strong>Официальный :8800</strong></a> ·
-  <a href="#что-нового-в-118"><strong>Changelog</strong></a> ·
-  <a href="#cli-за-минуту"><strong>CLI</strong></a>
+  <a href="./docs/promo/index.html"><strong>📘 Промо / гайд (HTML)</strong></a>
+  ·
+  <a href="#установка"><strong>Установка</strong></a>
+  ·
+  <a href="#cli"><strong>CLI</strong></a>
+  ·
+  <a href="#возможности"><strong>Возможности</strong></a>
+  ·
+  <a href="#backup"><strong>Backup</strong></a>
+  ·
+  <a href="./CHANGELOG.md"><strong>Changelog</strong></a>
 </p>
 
 ---
 
-Один API-ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**. Основной UI — **панель SurfGate** на порту **1131** (как у [официального приложения](https://stealthsurf.net/routers) на `:8800`, но отдельный аддон). Файлы лежат в `/jffs/addons/ssurf` и **не трогают** официальный `/jffs/addons/stealthsurf`.
+Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
+Актуальная версия **1.4.14**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
-Актуальная версия **1.4.14** (бренд **SurfGate**; провайдер и API по-прежнему StealthSurf).
+> **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
+
+## Содержание
+
+1. [Установка](#установка)
+2. [Панель :1131](#панель-1131)
+3. [Старт за 5 шагов](#старт-за-5-шагов)
+4. [Возможности](#возможности)
+5. [Веб-интерфейс (скриншоты)](#веб-интерфейс)
+6. [Настройки Connection](#настройки-connection)
+7. [CLI](#cli)
+8. [Диагностика](#диагностика)
+9. [Backup / restore](#backup)
+10. [Рядом с official / XrayUI](#рядом-с-официальным-stealthsurf)
+11. [Проверка на роутере](#проверка-на-роутере)
+12. [Сборка](#сборка)
+13. [Что нового](#что-нового)
 
 ## Установка
 
-Нужны Merlin, JFFS custom scripts и Entware (`amtm`). Одна команда на роутере:
+Нужны Merlin, JFFS custom scripts и Entware (`amtm`):
 
 ```sh
 /opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
 ```
 
-Затем откройте панель:
+Панель:
 
 ```text
 http://192.168.50.1:1131/
 ```
 
-(подставьте свой LAN IP; рядом официальный StealthSurf может слушать `:8800`).  
-Опционально: logout → login в WebUI → **VPN → SurfGate**.  
-Пакет: [**Releases → latest**](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest) (`asuswrt-merlin-surfgate.tar.gz`).
+(подставьте свой LAN IP). Пакет: [Releases → latest](https://github.com/Homavi88/Stealthsurf-Asus/releases/latest) — `asuswrt-merlin-surfgate.tar.gz`.
 
-Обновление с 1.0.x / 1.1.x / 1.2.x / 1.3.x — тем же `install.sh`; ключи `stlth_…` мигрируют из `/opt/etc/stealthsurf.conf` → `/opt/etc/ssurf.conf`. CLI: `surfgate` (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf`).
+Обновление с 1.x — тем же `install.sh`; ключи мигрируют `stealthsurf.conf` → `ssurf.conf`.  
+CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf`).
 
-### Панель :1131
+## Панель :1131
 
 | | |
 | --- | --- |
 | URL | `http://<lan_ip>:1131/` |
 | Файлы | `/jffs/addons/ssurf` |
 | Скрипт | `/jffs/scripts/ssurf` |
+| Conf / Xray | `/opt/etc/ssurf.conf` · `/opt/etc/xray/ssurf` |
 | Служба | `surfgate panel start\|stop\|restart\|status` |
 | Пароль | `surfgate panel set-password` (Basic Auth, опционально) |
-| Отдельный IP | в `/opt/etc/ssurf.conf`: `panel_ip=192.168.50.2` → alias на `br0` |
-| Порт | `panel_port=1131` (по умолчанию) |
+| Порт / IP | `panel_port=1131`, опц. `panel_ip=…` в conf |
 
-### Рядом с официальным StealthSurf
+Опционально: logout → login в WebUI → **VPN → SurfGate** (Merlin-вкладка).
 
-| | SurfGate (этот аддон) | Официальный VPN |
-| --- | --- | --- |
-| Каталог | `/jffs/addons/ssurf` | `/jffs/addons/stealthsurf` |
-| Скрипт | `/jffs/scripts/ssurf` | (свой daemon) |
-| Панель | `:1131` | `:8800` (`stealthsurf-routerd`) |
-| Web data | `/www/user/ssurf`, `/ext/ssurf/` | — |
-| Conf / Xray | `/opt/etc/ssurf.conf`, `/opt/etc/xray/ssurf` | — |
-| Firewall | `SSURF_*`, table 78 | — |
-| Установка | этот `install.sh` | `curl …/merlin.sh \| sh` |
+## Старт за 5 шагов
 
-**1.2.0** ошибочно ставился в `/jffs/addons/stealthsurf` и мог затереть официальный пакет. С **1.2.1** путь свой; с **1.4.11** runtime полностью на теге `ssurf`. Если официальная панель `:8800` пропала:
-
-```sh
-# 1) убрать наш аддон
-surfgate un --yes 2>/dev/null || ssurf un --yes 2>/dev/null || sh /jffs/scripts/ssurf uninstall
-
-# 2) поставить официальный заново
-curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
-```
-
-Если CLI «битый» — восстановление **нашего** аддона (не трогает official):
-
-```sh
-/opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh
-```
-
-## Что нового в 1.1.8+
-
-| | |
-| --- | --- |
-| **1.4.14 Speed + DNS leak tests** | Panel/CLI speed test (Cloudflare) + DNS leak diagnostics |
-| **1.4.13 VPN hardening + logs** | NTP/WAN reconnect, kill-switch, LAN/guest/IPv6 modes, preflight; app/device logs; GitHub auto-update |
-| **1.4.12 Geek panel + install** | Тёмная geek-панель (IBM Plex, таблицы); цветной install-лог; hardened geosite/geoip; VPN device log (IP/MAC/name) |
-| **1.4.11 Isolate ssurf** | Runtime `ssurf` (скрипт/cron/`/ext`/FW `SSURF_*`); не трогает official `/jffs/addons/stealthsurf` |
-| **1.4.10 Live /ext** | API keys/catalog JSON видны сразу после сохранения (live webdir) |
-| **1.4.9 Panel restart on upgrade** | После установки всегда новый `panel-httpd` (нет stale CGI → HTTP 500) |
-| **1.4.8 Bootstrap CGI fix** | `panel-httpd` вызывает addon через `/bin/sh` — больше нет bootstrap HTTP 500 |
-| **1.4.7 Bundled panel-httpd** | Статический `bin/panel-httpd` в пакете — панель без opkg/BusyBox httpd |
-| **1.4.5 jq/lighttpd** | jq без ONIGURUMA (stamp каталога); панель через lighttpd если нет BusyBox httpd |
-| **1.4.4 Panel httpd** | Entware/BusyBox httpd автоустановка + проверка апплета; fallback bind :1131 |
-| **1.4.3 Hardening** | Connection Save не затирает subscriptions; payload-чанки чистятся; Stop на Home при конфликте XrayUI; live-статус Xray |
-| **1.4.2 Boot VPN** | Автозапуск после ребута: абсолютная запись `stealthsurf_startup`, без flip-гонки в панели; пустой флаг = enabled |
-| **1.4.1 Settings UI** | Светлые настройки с iOS-тумблерами (Подключение); вложенные поля только при включённом тумблере |
-| **1.4.0 SurfGate** | Бренд **SurfGate** в UI/CLI/доках; пакет `asuswrt-merlin-surfgate.tar.gz`; CLI `surfgate` (+ `ssurf`/`ss`); API/пути провайдера без изменений |
-| **1.3.0 Light panel** | Светлая главная `:1131` (статус, скорость, объём, ЦП/ОЗУ, Старт/Стоп) + настройки по разделам; Merlin-вкладка без изменений |
-| **1.2.1 Path fix** | Пакет в `/jffs/addons/ssurf` — больше не затирает официальный `/jffs/addons/stealthsurf` (`:8800`) |
-| **1.2.0 Standalone panel** | Своя панель на `LAN:1131`; CGI API; опциональный secondary IP `panel_ip`; CLI `panel` |
-| **1.1.16 Coexistence** | Удаление/стоп не трогает XrayUI (cron, TUN, dnsmasq, scribe, uninstall); порты `5699`/`10185`/`10186`; TUN table `251` |
-| **1.1.15 Account UX** | Stats/Traffic в Vue-модалке (без Please wait); локация как страна (`Netherlands (NL)`); настройки/billing за кнопкой **Manage** |
-| **1.1.14 API control** | Каталог: expires/локация/auto-renew + paid/cloud; PATCH settings; autofit под ISP; traffic/stats; renew/top-up; CLI `autofit\|patch\|stats\|traffic\|renew\|topup` |
-| **1.1.13 probe diagnosis** | У 🔴 outbound — короткая причина (timeout/reality/udp…), tooltip с подсказкой, кнопка **API ↻** пересобирает `ss-*` из каталога; CLI `refresh <id>` |
-| **1.1.12 UI** | Убрана вкладка Simple — WebUI всегда показывает полный advanced-интерфейс |
-| **1.1.11 popular rules** | Routing → Rules → «Популярные сервисы»: geosite/geoip пресет (YouTube, Instagram, Telegram, Kinopub, …) в одном domain + IP правиле |
-| **1.1.10 titles** | В правилах / балансировщиках / SNI / sockopt / import — title из API вместо только `ss-<id>` |
-| **1.1.9 geodata** | Мусор `outbound-ss-*.json` убирается из `data/` — больше нет `invalid attribute: ss-…` при recompile |
-| **Автосинк каталога** | General Options → SurfGate: опрос API по интервалу, сравнение настроек `ss-*`, автообновление при изменениях у провайдера |
-| **Платформа XrayUI** | Полноценный WebUI: outbounds, routing, DNS, clients online, geodata, updates |
-| **API-ключи** | Несколько `stlth_…`, баланс/реферал (RUB), sync каталога, импорт → `ss-<id>` |
-| **Короткий CLI** | `surfgate` / `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `bal` `dv` `panel` `h` `m` |
-| **Изоляция от XrayUI** | Свои config / PID / firewall mark / geodata; при работающем XrayUI — баннер и блокировка Start |
-| **Статус outbounds** | После импорта включаются probes — в списке 🟢 / 🟡 / 🔴 |
-| **Дефолтный профиль** | `all-in` + `direct` + `block`; импорт ставит выбранный узел default-маршрутом |
+1. API-ключ → **Sync catalog**
+2. Выбрать конфиг → **Import** (`ss-<id>` + default route)
+3. **Start** — в Outbounds 🟢/🔴
+4. По желанию: Connection (kill-switch, DNS-only, LAN MAC) / Routing
+5. Устройства в Wi‑Fi уже через StealthSurf
 
 ## Возможности
 
 | | |
 | --- | --- |
-| **Каталог из API** | Sync / автосинк VPN + paid/cloud, expires/локация/auto-renew, PATCH settings, autofit под ISP, traffic/stats, renew/top-up |
-| **Transparent proxy** | Весь LAN через Xray (`ipsec=off`) или smart proxy (`redirect` + geosite) |
-| **Routing** | domain / geosite / geoip → `ss-<id>`, пресеты XrayUI |
-| **Надёжность** | автостарт, watchdog, backup, geodata |
-| **CLI** | `surfgate` / `ssurf` / `ss` · `up` `dn` `re` `st` `sy` `ls` `ap` `dv` `panel` · `h` / `m` |
+| **Панель :1131** | Статус, throughput, ЦП/ОЗУ, настройки по разделам |
+| **Каталог API** | Sync / автосинк, import, autofit, traffic/stats, renew/top-up |
+| **Transparent proxy** | Весь LAN (`ipsec=off`) или smart proxy (`redirect` + geosite) |
+| **VPN hardening** | NTP, WAN reconnect, kill-switch, LAN/guest/IPv6, DNS lock, preflight |
+| **Диагностика** | Speed test, DNS/IPv6 leak, Observatory probes |
+| **Логи** | App / Access / Error / Devices |
+| **Updates** | GitHub check + опциональный auto-install |
+| **CLI** | `surfgate` · `up dn re st sy ls ap pf sp dns bak panel` |
+| **Изоляция** | `ssurf` paths · `SSURF_*` · table 78 — рядом с official `:8800` и XrayUI |
 
-Протоколы ядра Xray: VLESS / Trojan / Shadowsocks / Hysteria / WireGuard и остальное, что умеет установленный Xray-core.
+Протоколы: всё, что умеет установленный Xray-core (VLESS / Trojan / SS / Hysteria / WireGuard…).
 
 ## Веб-интерфейс
 
-Основной UI — **панель SurfGate** на `http://<lan_ip>:1131/`: статус, скорость, объём, ЦП/ОЗУ и Старт/Стоп на главной; остальное — в **Настройки** по разделам. Вкладка Merlin **VPN → SurfGate** сохраняет классический FormTable.
-
 <p align="center">
-  <img src="./docs/screenshots/01-status-running.png" alt="SurfGate home — connected" width="420">
+  <img src="./docs/screenshots/01-status-running.png" alt="Home" width="420">
 </p>
 
-| Аккаунт / каталог | Подключение (тумблеры) |
+| Аккаунт | Подключение |
 | --- | --- |
 | ![Аккаунт](./docs/screenshots/08-settings-account.png) | ![Подключение](./docs/screenshots/09-settings-connection.png) |
 
 <p align="center">
-  <img src="./docs/screenshots/09b-settings-connection-open.png" alt="SurfGate connection — expanded toggle details" width="920">
+  <img src="./docs/screenshots/09b-settings-connection-open.png" alt="Connection details" width="920">
 </p>
 
-| Маршрутизация | Сеть и службы |
+| Routing | Сеть / DNS |
 | --- | --- |
-| ![Маршрутизация](./docs/screenshots/03-routing.png) | ![Сеть](./docs/screenshots/04-mode-dns.png) |
+| ![Routing](./docs/screenshots/03-routing.png) | ![DNS](./docs/screenshots/04-mode-dns.png) |
 
-| Исходящие | Движок / профили |
+| Outbounds | Engine / backup |
 | --- | --- |
-| ![Исходящие](./docs/screenshots/10-settings-outbounds.png) | ![Движок](./docs/screenshots/11-settings-engine.png) |
+| ![Outbounds](./docs/screenshots/10-settings-outbounds.png) | ![Engine](./docs/screenshots/11-settings-engine.png) |
 
-| Логи | Клиенты online | Обновления |
+| Logs | Clients | Updates |
 | --- | --- | --- |
-| ![Логи](./docs/screenshots/12-settings-logs.png) | ![Клиенты](./docs/screenshots/13-settings-clients.png) | ![Обновления](./docs/screenshots/14-settings-updates.png) |
+| ![Logs](./docs/screenshots/12-settings-logs.png) | ![Clients](./docs/screenshots/13-settings-clients.png) | ![Updates](./docs/screenshots/14-settings-updates.png) |
 
-<p align="center">
-  <img src="./docs/screenshots/05-xrayui-conflict.png" alt="SurfGate — конфликт с XrayUI" width="420">
-</p>
+Полный тур со подписями — в [промо-странице](./docs/promo/index.html).
 
-## Старт за 5 шагов
+## Настройки Connection
 
-1. Вставить API-ключ → **Sync catalog**
-2. Выбрать подключения → **Import** (становятся `ss-<id>` + default route)
-3. **Start** — в Outbounds появятся 🟢/🔴 статусы
-4. По желанию: routing / General Options
-5. Устройства в Wi‑Fi идут через StealthSurf без системного VPN на телефонах
+| Опция | Смысл |
+| --- | --- |
+| Запуск при загрузке | Автостарт Xray после ребута |
+| Kill-switch | Блок LAN→WAN без марки, пока VPN desired |
+| Кому VPN | `all` / selected MAC / exclude MAC |
+| Гостевая Wi‑Fi | `follow` · `vpn` · `direct` |
+| IPv6 | `proxy` · `block` · `ignore` |
+| DNS только через Xray | DNS leak lock |
+| Диагностика | Preflight · скорость · DNS leak |
 
-## CLI за минуту
-
-Бинарники: **`surfgate`** · **`ssurf`** · **`ss`** (одно и то же). Справка: `surfgate h` · меню: `surfgate m`.
+## CLI
 
 ```sh
 surfgate key 'stlth_…'
 surfgate sy && surfgate ls
-surfgate ap <id>          # import + default route + status probes
-surfgate up && surfgate st
-surfgate dv               # устройства VPN: IP / MAC / имя
-surfgate h                # справка · surfgate m — меню
+surfgate ap <id> && surfgate up
+surfgate pf && surfgate sp && surfgate dns
+surfgate bak
+surfgate panel status
+surfgate h    # справка · surfgate m — меню
 ```
 
 | Команда | Действие |
 | --- | --- |
-| `up` / `on` | старт |
-| `dn` / `off` | стоп |
-| `re` / `rs` | рестарт |
-| `st` | статус (xray + панель + каталог + баланс) |
-| `sy` | sync каталога API |
-| `ls` / `l` | список конфигов |
-| `ap` / `ic` / `imp` `<id>` | import → `ss-<id>` |
-| `refresh` `<id>` | пересобрать `ss-*` из API |
-| `bal` | баланс |
-| `key` `'stlth_…'` | задать API-ключ |
-| `addk` `<k>` `[lbl]` · `rmkey` `<k>` | добавить / удалить ключ |
-| `autofit` `<id>` | подобрать сервер/протокол |
-| `patch` `<id>` | PATCH settings (`SS_PATCH_BODY`) |
-| `stats` `<id>` · `traffic` | статистика / трафик |
-| `renew` `<id>` · `topup` `<amount>` | продление / пополнение |
-| `dv` / `devices` | устройства VPN (IP / MAC / имя) |
-| `pf` / `preflight` | NTP / WAN / TPROXY / Xray |
-| `sp` / `speed` | тест скорости (Mbps ↓/↑ + latency) |
-| `dns` / `dnstest` | DNS leak (wiring + resolvers) |
-| `panel` `start\|stop\|status\|url\|set-password` | панель `:1131` |
-| `bak` | backup |
-| `d` / `dg` | diagnostics |
-| `upd` `[ver]` / `uf` | обновление аддона |
-| `fix` / `doctor` | doctor |
-| `v` / `ver` | версия |
-| `un --yes` | uninstall |
-| `h` / `?` · `m` | справка · интерактивное меню |
+| `up` / `dn` / `re` | старт / стоп / рестарт |
+| `st` | статус |
+| `sy` · `ls` | sync · список каталога |
+| `ap` / `ic` `<id>` | import → `ss-<id>` |
+| `refresh` · `autofit` | пересборка / подбор |
+| `bal` · `stats` · `traffic` | баланс / статистика |
+| `dv` | устройства VPN |
+| `pf` · `sp` · `dns` | preflight · скорость · leak |
+| `panel …` | start\|stop\|status\|url\|set-password |
+| `bak` | backup-архив |
+| `upd` · `fix` · `un --yes` | update · doctor · uninstall |
 
-Примеры: `surfgate up` · `surfgate sy && surfgate ls` · `surfgate ap 101 && surfgate re` · `surfgate panel status`.
+## Диагностика
 
-## Рядом с XrayUI
+| Тест | CLI | Что делает |
+| --- | --- | --- |
+| Preflight | `surfgate pf` | NTP, WAN, TPROXY, Xray, конфликт XrayUI |
+| Speed | `surfgate sp` | Mbps ↓/↑ + latency |
+| DNS leak | `surfgate dns` | wiring + resolvers vs WAN DNS, IPv6 |
 
-SurfGate **1.1.16+** держит своё состояние и **безопасен при удалении/остановке** рядом с stock XrayUI:
+WebRTC проверяйте с клиента: [browserleaks.com/webrtc](https://browserleaks.com/webrtc).
 
-| | SurfGate | Stock XrayUI |
+## Backup
+
+```sh
+surfgate bak
+# → /opt/share/ssurf/backup/*.tar.gz
+```
+
+**В архиве:** профили `/opt/etc/xray/ssurf/*.json`, cert (если есть), `/opt/etc/ssurf.conf`, `/opt/share/ssurf/data`.  
+**Restore:** UI → Engine → Backup (CLI restore пока нет). После restore — `restart` Xray.  
+**Не входит:** API-кэши каталога, логи, файлы панели. Подробности и ограничения — в [промо → Backup](./docs/promo/index.html#backup).
+
+## Рядом с официальным StealthSurf
+
+| | SurfGate | Official |
+| --- | --- | --- |
+| Каталог | `/jffs/addons/ssurf` | `/jffs/addons/stealthsurf` |
+| Панель | `:1131` | `:8800` |
+| Conf / Xray | `ssurf.conf` · `/opt/etc/xray/ssurf` | — |
+| Firewall | `SSURF_*` · table 78 | — |
+
+### Рядом с stock XrayUI
+
+Не включайте transparent proxy у обоих сразу. SurfGate покажет баннер конфликта и запретит Start.
+
+| | SurfGate | XrayUI |
 | --- | --- | --- |
 | Profile | `/opt/etc/xray/ssurf/config.json` | `/opt/etc/xray/config.json` |
-| Conf | `/opt/etc/ssurf.conf` | `/opt/etc/xrayui.conf` |
-| Settings | `stealthsurf_*` (Merlin action protocol) | `xray_*` |
 | PID | `/var/run/ssurf-xray.pid` | `/var/run/xray.pid` |
-| Firewall | `SSURF*` · mark `0x20000` · table `78` | `XRAYUI*` · `0x10000` · `77` |
-| TUN | table `251` · prio `47/53` · iface `ss0` | table `250` · `49/51` · `xray0` |
-| Ports | dokodemo `5699` · API `10185` · metrics `10186` | `5599` · `10085` · `10086` |
-| Cron / Scribe | `ssurf_*` · `syslog-ng.d/ssurf` | `xrayui*` · `syslog-ng.d/xrayui` |
-
-Общее: `/opt/sbin/xray`, community `geoip.dat` / `geosite.dat` (uninstall SurfGate их не удаляет, если XrayUI установлен).  
-Стоп SurfGate снимает только `#ssurf` из dnsmasq и свои firewall/TUN правила.  
-**Не включайте transparent proxy у обоих аддонов одновременно** — SurfGate покажет баннер «Конфликт с XrayUI» и запретит Start, пока XrayUI работает.
+| FW / mark | `SSURF*` · `0x20000` · 78 | `XRAYUI*` · `0x10000` · 77 |
+| Ports | `5699` / `10185` / `10186` | `5599` / `10085` / `10086` |
 
 <p align="center">
-  <img src="./docs/screenshots/05-xrayui-conflict.png" alt="XrayUI conflict banner" width="720">
+  <img src="./docs/screenshots/05-xrayui-conflict.png" alt="XrayUI conflict" width="720">
 </p>
+
+Если официальная панель `:8800` пропала после старых установок:
+
+```sh
+surfgate un --yes 2>/dev/null || sh /jffs/scripts/ssurf uninstall
+curl -fsSL https://cdn.stealthsurf.net/app/router/merlin.sh | sh
+```
+
+## Проверка на роутере
+
+```sh
+surfgate v && surfgate st && surfgate panel status
+surfgate key 'stlth_…' && surfgate sy && surfgate ls
+surfgate ap <id> && surfgate up
+surfgate pf && surfgate sp && surfgate dns
+surfgate bak
+```
+
+С LAN-клиента: exit IP (`ifconfig.me`), [dnsleaktest.com](https://dnsleaktest.com), WebRTC leak.
 
 ## Как устроено
 
 ```text
 LAN / Wi‑Fi ──► iptables TPROXY ──► Xray (all-in :5699)
                                       │
-               outbounds ss-<id>  ◄────┤  routing (stealthsurf-default)
+               outbounds ss-<id>  ◄────┤  routing
                                       ▼
                               StealthSurf nodes
                                       ▲
@@ -270,9 +262,20 @@ pnpm run pack   # → packaged/asuswrt-merlin-surfgate.tar.gz
 
 CI публикует GitHub Release на тег `v*`.
 
+## Что нового
+
+| | |
+| --- | --- |
+| **1.4.14** | Speed + DNS leak tests (panel/CLI) |
+| **1.4.13** | VPN hardening, app/device logs, GitHub auto-update |
+| **1.4.12** | Geek panel, install UX, geodata, VPN devices |
+| **1.4.11** | Полная изоляция runtime `ssurf` |
+| **1.4.0** | Бренд SurfGate, пакет `asuswrt-merlin-surfgate.tar.gz` |
+
+Полный журнал: [CHANGELOG.md](./CHANGELOG.md).
+
 ## Документация и лицензия
 
-- Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net) · [API](https://docs.stealthsurf.net/api)
-- Upstream XrayUI: [daniellavrushin.github.io/asuswrt-merlin-xrayui](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/)
-- Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · лицензия [CC BY-NC-SA 4.0](./LICENSE) (© Daniel Lavrushin / contributors)
-- Changelog: [CHANGELOG.md](./CHANGELOG.md)
+- **Промо / гайд (HTML):** [docs/promo/index.html](./docs/promo/index.html)
+- Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net)
+- Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · [CC BY-NC-SA 4.0](./LICENSE)

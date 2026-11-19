@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Docs
+
+- Promo HTML guide `docs/promo/index.html` (features, settings, CLI, VPN, backup, screenshots)
+- README restructured: TOC, Connection settings, diagnostics, backup, router QA checklist
+
 ## [1.4.14] - 2026-11-19
 
 ### Speed test + DNS leak test

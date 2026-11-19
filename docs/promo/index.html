@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SurfGate — панель VPN для Asuswrt-Merlin</title>
+  <meta name="description" content="SurfGate: панель :1131, transparent proxy через StealthSurf, CLI surfgate, kill-switch, DNS leak, backup. Документация и скриншоты." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg0: #0c1014;
+      --bg1: #12181f;
+      --bg2: #1a222c;
+      --line: rgba(148, 163, 184, 0.16);
+      --text: #e8eef5;
+      --muted: #93a0b0;
+      --brand: #3dd6c6;
+      --brand-dim: #1f9e91;
+      --accent: #5b9cff;
+      --warn: #f0b429;
+      --danger: #ef6b6b;
+      --ok: #3ecf8e;
+      --max: 1120px;
+      --radius: 4px;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, rgba(61, 214, 198, 0.12), transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, rgba(91, 156, 255, 0.10), transparent 50%),
+        linear-gradient(180deg, var(--bg0), #080b0e 40%, var(--bg0));
+      line-height: 1.55;
+    }
+    a { color: var(--brand); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    code, kbd, .mono {
+      font-family: "IBM Plex Mono", ui-monospace, monospace;
+      font-size: 0.92em;
+    }
+    .wrap { width: min(100% - 2rem, var(--max)); margin-inline: auto; }
+
+    /* Nav */
+    .topnav {
+      position: sticky; top: 0; z-index: 40;
+      backdrop-filter: blur(14px);
+      background: rgba(8, 11, 14, 0.78);
+      border-bottom: 1px solid var(--line);
+    }
+    .topnav .inner {
+      display: flex; align-items: center; gap: 1rem;
+      justify-content: space-between;
+      padding: 0.75rem 0;
+      width: min(100% - 2rem, var(--max));
+      margin-inline: auto;
+    }
+    .logo {
+      font-weight: 700; letter-spacing: 0.04em;
+      color: var(--text); text-decoration: none;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .logo span {
+      width: 0.55rem; height: 0.55rem; border-radius: 50%;
+      background: var(--brand);
+      box-shadow: 0 0 12px var(--brand);
+    }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 0.85rem 1.1rem; font-size: 0.9rem; }
+    .nav-links a { color: var(--muted); text-decoration: none; }
+    .nav-links a:hover { color: var(--text); }
+
+    /* Hero */
+    .hero {
+      position: relative;
+      min-height: min(92vh, 820px);
+      display: grid;
+      align-items: end;
+      overflow: hidden;
+      border-bottom: 1px solid var(--line);
+    }
+    .hero-bg {
+      position: absolute; inset: 0;
+      background:
+        linear-gradient(90deg, rgba(8,11,14,0.92) 0%, rgba(8,11,14,0.55) 42%, rgba(8,11,14,0.25) 100%),
+        url("../screenshots/01-status-running.png") right center / cover no-repeat;
+      transform: scale(1.02);
+      animation: heroIn 1.1s ease-out both;
+    }
+    @keyframes heroIn {
+      from { opacity: 0; transform: scale(1.06); }
+      to { opacity: 1; transform: scale(1.02); }
+    }
+    .hero-copy {
+      position: relative;
+      padding: 4.5rem 0 3.25rem;
+      max-width: 36rem;
+      animation: rise 0.8s 0.15s ease-out both;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(18px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .hero h1 {
+      margin: 0 0 0.65rem;
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      font-weight: 700;
+    }
+    .hero .tagline {
+      margin: 0 0 1.4rem;
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 34rem;
+    }
+    .cta-row { display: flex; flex-wrap: wrap; gap: 0.75rem; }
+    .btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.7rem 1.05rem;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      font-weight: 600;
+      font-size: 0.95rem;
+      text-decoration: none;
+      transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+    }
+    .btn:hover { transform: translateY(-1px); text-decoration: none; }
+    .btn-primary { background: var(--brand); color: #062822; }
+    .btn-ghost {
+      background: transparent; color: var(--text);
+      border-color: var(--line);
+    }
+    .btn-ghost:hover { border-color: var(--brand); color: var(--brand); }
+    .meta-row {
+      margin-top: 1.5rem;
+      display: flex; flex-wrap: wrap; gap: 0.5rem;
+      font-size: 0.8rem; color: var(--muted);
+    }
+    .pill {
+      border: 1px solid var(--line);
+      padding: 0.25rem 0.55rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.03);
+    }
+
+    section { padding: 3.5rem 0; border-bottom: 1px solid var(--line); }
+    .sec-h {
+      margin: 0 0 0.4rem;
+      font-size: clamp(1.55rem, 3vw, 2rem);
+      letter-spacing: -0.02em;
+    }
+    .sec-p { margin: 0 0 1.75rem; color: var(--muted); max-width: 42rem; }
+
+    .grid-2 {
+      display: grid;
+      gap: 1.25rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+    .feature {
+      padding: 1.1rem 0 0.2rem;
+      border-top: 1px solid var(--line);
+    }
+    .feature h3 {
+      margin: 0 0 0.35rem;
+      font-size: 1.05rem;
+      font-weight: 600;
+    }
+    .feature p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 0.65rem 0.55rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    th { color: var(--muted); font-weight: 500; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    td code { color: var(--brand); }
+
+    .shot {
+      margin: 0 0 2rem;
+      animation: fadeUp 0.6s ease both;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+    .shot figcaption {
+      margin-top: 0.65rem;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .shot img {
+      display: block;
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--bg2);
+    }
+    .shot-pair {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      margin-bottom: 2rem;
+    }
+
+    pre {
+      margin: 0 0 1rem;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      background: var(--bg1);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.86rem;
+      line-height: 1.5;
+    }
+    .note {
+      padding: 0.9rem 1rem;
+      border-left: 3px solid var(--warn);
+      background: rgba(240, 180, 41, 0.08);
+      color: var(--muted);
+      margin: 1rem 0 1.5rem;
+      font-size: 0.95rem;
+    }
+    .note strong { color: var(--text); }
+    .ok-note { border-left-color: var(--ok); background: rgba(62, 207, 142, 0.08); }
+    .danger-note { border-left-color: var(--danger); background: rgba(239, 107, 107, 0.08); }
+
+    .toc {
+      display: grid;
+      gap: 0.35rem 1.5rem;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      margin-bottom: 0.5rem;
+    }
+    .toc a { color: var(--muted); }
+    .toc a:hover { color: var(--brand); }
+
+    footer {
+      padding: 2.5rem 0 3rem;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    footer .inner { width: min(100% - 2rem, var(--max)); margin-inline: auto; }
+
+    @media (max-width: 720px) {
+      .hero-bg { background-position: 65% center; }
+      .hero-copy { max-width: 100%; padding-top: 3rem; }
+      .nav-links { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <nav class="topnav" aria-label="Разделы">
+    <div class="inner">
+      <a class="logo" href="#top"><span></span>SurfGate</a>
+      <div class="nav-links">
+        <a href="#install">Установка</a>
+        <a href="#panel">Панель</a>
+        <a href="#settings">Настройки</a>
+        <a href="#cli">CLI</a>
+        <a href="#vpn">VPN</a>
+        <a href="#backup">Backup</a>
+        <a href="#coexist">Соседство</a>
+        <a href="#qa">Проверка</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="hero-bg" role="img" aria-label="Скриншот главной панели SurfGate"></div>
+    <div class="wrap hero-copy">
+      <h1>SurfGate</h1>
+      <p class="tagline">
+        Своя панель VPN на Asuswrt-Merlin: весь LAN/Wi‑Fi через узлы StealthSurf.
+        Порт <strong style="color:var(--text)">:1131</strong> · CLI <code>surfgate</code> · без конфликта с официальным <code>:8800</code>.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="#install">Установить</a>
+        <a class="btn btn-ghost" href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest">Скачать релиз</a>
+        <a class="btn btn-ghost" href="../../README.md">README на GitHub</a>
+      </div>
+      <div class="meta-row">
+        <span class="pill">v1.4.14+</span>
+        <span class="pill">панель :1131</span>
+        <span class="pill">runtime ssurf</span>
+        <span class="pill">Xray transparent proxy</span>
+      </div>
+    </div>
+  </header>
+
+  <section id="toc">
+    <div class="wrap">
+      <h2 class="sec-h">Содержание</h2>
+      <p class="sec-p">Всё необходимое по аддону на одной странице: возможности, скриншоты, настройки, команды и безопасный backup.</p>
+      <div class="toc">
+        <a href="#features">Возможности</a>
+        <a href="#install">Установка и панель</a>
+        <a href="#panel">Тур по UI</a>
+        <a href="#settings">Настройки по разделам</a>
+        <a href="#cli">Команды терминала</a>
+        <a href="#vpn">VPN hardening</a>
+        <a href="#diag">Диагностика</a>
+        <a href="#backup">Backup / restore</a>
+        <a href="#coexist">Рядом с XrayUI / official</a>
+        <a href="#qa">Как проверить на роутере</a>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <h2 class="sec-h">Возможности</h2>
+      <p class="sec-p">Один ключ <code>stlth_…</code> — каталог StealthSurf, импорт узлов и transparent proxy для всей сети.</p>
+      <div class="grid-2">
+        <div class="feature">
+          <h3>Панель :1131</h3>
+          <p>Статус, скорость, ЦП/ОЗУ, Старт/Стоп. Настройки: аккаунт, подключение, routing, исходящие, движок, логи, клиенты, обновления.</p>
+        </div>
+        <div class="feature">
+          <h3>Каталог API</h3>
+          <p>Sync / автосинк, импорт → <code>ss-&lt;id&gt;</code>, autofit, traffic/stats, renew/top-up, несколько ключей.</p>
+        </div>
+        <div class="feature">
+          <h3>VPN hardening</h3>
+          <p>NTP wait, WAN reconnect, kill-switch, LAN MAC modes, guest Wi‑Fi, IPv6 proxy/block, DNS-only lock, preflight.</p>
+        </div>
+        <div class="feature">
+          <h3>Диагностика</h3>
+          <p>Тест скорости (Cloudflare + fallbacks), DNS/IPv6 leak check, Observatory probes 🟢/🟡/🔴, CLI diagnostics.</p>
+        </div>
+        <div class="feature">
+          <h3>Изоляция runtime</h3>
+          <p>Пути <code>ssurf</code>, FW <code>SSURF_*</code>, table 78, PID свой. Official StealthSurf на <code>:8800</code> и stock XrayUI не затираются.</p>
+        </div>
+        <div class="feature">
+          <h3>CLI <code>surfgate</code></h3>
+          <p>Короткие команды: <code>up dn re st sy ls ap pf sp dns bak panel</code>. Алиасы <code>ssurf</code> / <code>ss</code>.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <h2 class="sec-h">Установка</h2>
+      <p class="sec-p">Нужны Asuswrt-Merlin, JFFS custom scripts и Entware (<code>amtm</code>).</p>
+      <pre>/opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/install.sh | sh</pre>
+      <p style="color:var(--muted)">Пакет вручную: Releases → <code>asuswrt-merlin-surfgate.tar.gz</code>.</p>
+      <h3 style="margin-top:2rem">Открыть панель</h3>
+      <pre>http://&lt;LAN_IP&gt;:1131/
+# пример
+http://192.168.50.1:1131/</pre>
+      <table>
+        <thead><tr><th>Параметр</th><th>Значение</th></tr></thead>
+        <tbody>
+          <tr><td>Файлы</td><td><code>/jffs/addons/ssurf</code></td></tr>
+          <tr><td>Скрипт</td><td><code>/jffs/scripts/ssurf</code></td></tr>
+          <tr><td>Conf</td><td><code>/opt/etc/ssurf.conf</code></td></tr>
+          <tr><td>Xray profiles</td><td><code>/opt/etc/xray/ssurf/</code></td></tr>
+          <tr><td>Служба панели</td><td><code>surfgate panel start|stop|status</code></td></tr>
+          <tr><td>Пароль (опц.)</td><td><code>surfgate panel set-password</code></td></tr>
+          <tr><td>Порт / IP</td><td><code>panel_port=1131</code>, опц. <code>panel_ip=…</code> в conf</td></tr>
+        </tbody>
+      </table>
+      <div class="note ok-note" style="margin-top:1.5rem">
+        <strong>Старт за 5 шагов:</strong> ключ → Sync → Import → Start → устройства в Wi‑Fi уже через StealthSurf.
+      </div>
+    </div>
+  </section>
+
+  <section id="panel">
+    <div class="wrap">
+      <h2 class="sec-h">Тур по панели</h2>
+      <p class="sec-p">Главная и разделы настроек. Скриншоты с актуальной geek UI.</p>
+
+      <figure class="shot">
+        <img src="../screenshots/00-main-menu.png" alt="Главное меню панели" loading="lazy" />
+        <figcaption><strong>Меню</strong> — навигация по разделам панели SurfGate.</figcaption>
+      </figure>
+
+      <figure class="shot">
+        <img src="../screenshots/01-status-running.png" alt="Главная — VPN запущен" loading="lazy" />
+        <figcaption><strong>Home</strong> — статус Xray, throughput, метрики ЦП/ОЗУ, Старт / Перезапуск / Стоп.</figcaption>
+      </figure>
+
+      <div class="shot-pair">
+        <figure class="shot">
+          <img src="../screenshots/02-catalog.png" alt="Каталог" loading="lazy" />
+          <figcaption><strong>Каталог</strong> — конфиги StealthSurf после sync, импорт в <code>ss-*</code>.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../screenshots/08-settings-account.png" alt="Аккаунт" loading="lazy" />
+          <figcaption><strong>Аккаунт</strong> — ключи <code>stlth_…</code>, баланс, Manage / sync.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="settings">
+    <div class="wrap">
+      <h2 class="sec-h">Настройки</h2>
+      <p class="sec-p">Разделы Connection / Routing / Network / Outbounds / Engine / Logs / Clients / Updates.</p>
+
+      <figure class="shot">
+        <img src="../screenshots/09-settings-connection.png" alt="Подключение" loading="lazy" />
+        <figcaption>
+          <strong>Подключение</strong> — автозапуск, kill-switch, режим LAN (все / selected / exclude MAC),
+          гостевая Wi‑Fi, IPv6, DNS-only, диагностика (preflight / speed / DNS leak).
+        </figcaption>
+      </figure>
+
+      <figure class="shot">
+        <img src="../screenshots/09b-settings-connection-open.png" alt="Подключение — раскрытые поля" loading="lazy" />
+        <figcaption><strong>Подключение (детали)</strong> — вложенные поля у тумблеров и режимов.</figcaption>
+      </figure>
+
+      <div class="shot-pair">
+        <figure class="shot">
+          <img src="../screenshots/03-routing.png" alt="Маршрутизация" loading="lazy" />
+          <figcaption><strong>Routing</strong> — правила domain / geosite / geoip → outbound.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../screenshots/04-mode-dns.png" alt="Сеть и DNS" loading="lazy" />
+          <figcaption><strong>Сеть / DNS</strong> — ipset mode, DNS leak protection wiring.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shot-pair">
+        <figure class="shot">
+          <img src="../screenshots/06-routing-builder.png" alt="Routing builder" loading="lazy" />
+          <figcaption><strong>Routing builder</strong> — сборка правил.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../screenshots/07-routing-suggest.png" alt="Популярные сервисы" loading="lazy" />
+          <figcaption><strong>Популярные сервисы</strong> — пресеты geosite/geoip.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shot-pair">
+        <figure class="shot">
+          <img src="../screenshots/10-settings-outbounds.png" alt="Исходящие" loading="lazy" />
+          <figcaption><strong>Outbounds</strong> — <code>ss-*</code> узлы и статусы Observatory.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../screenshots/11-settings-engine.png" alt="Движок" loading="lazy" />
+          <figcaption><strong>Engine</strong> — профили, backup manager, geodata, низкоуровневые опции.</figcaption>
+        </figure>
+      </div>
+
+      <div class="shot-pair">
+        <figure class="shot">
+          <img src="../screenshots/12-settings-logs.png" alt="Логи" loading="lazy" />
+          <figcaption><strong>Logs</strong> — App / Access / Error / Devices.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="../screenshots/13-settings-clients.png" alt="Клиенты" loading="lazy" />
+          <figcaption><strong>Clients</strong> — LAN-клиенты online (IP / MAC / имя).</figcaption>
+        </figure>
+      </div>
+
+      <figure class="shot">
+        <img src="../screenshots/14-settings-updates.png" alt="Обновления" loading="lazy" />
+        <figcaption><strong>Updates</strong> — проверка GitHub-релизов Homavi88/Stealthsurf-Asus, опциональный auto-install.</figcaption>
+      </figure>
+
+      <h3>Ключевые тумблеры Connection</h3>
+      <table>
+        <thead><tr><th>Опция</th><th>Зачем</th></tr></thead>
+        <tbody>
+          <tr><td>Запуск при загрузке</td><td>Автостарт Xray после ребута роутера</td></tr>
+          <tr><td>Kill-switch</td><td>Блок LAN→WAN без марки SurfGate, пока VPN «должен» быть up</td></tr>
+          <tr><td>Кому VPN</td><td><code>all</code> / только MAC / все кроме MAC</td></tr>
+          <tr><td>Гостевая Wi‑Fi</td><td><code>follow</code> · <code>vpn</code> (всегда) · <code>direct</code></td></tr>
+          <tr><td>IPv6</td><td><code>proxy</code> · <code>block</code> · <code>ignore</code></td></tr>
+          <tr><td>DNS только через Xray</td><td>DNS leak lock на firewall</td></tr>
+          <tr><td>Диагностика</td><td>Preflight · тест скорости · DNS leak</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="cli">
+    <div class="wrap">
+      <h2 class="sec-h">Команды терминала</h2>
+      <p class="sec-p">Бинарники <code>surfgate</code> · <code>ssurf</code> · <code>ss</code>. Справка: <code>surfgate h</code> · меню: <code>surfgate m</code>.</p>
+      <pre>surfgate key 'stlth_…'
+surfgate sy && surfgate ls
+surfgate ap &lt;id&gt;          # import + default route
+surfgate up && surfgate st
+surfgate pf               # preflight
+surfgate sp               # speed test
+surfgate dns              # DNS / IPv6 leak
+surfgate bak              # backup
+surfgate panel status     # http://LAN:1131/</pre>
+      <table>
+        <thead><tr><th>Команда</th><th>Действие</th></tr></thead>
+        <tbody>
+          <tr><td><code>up</code> / <code>dn</code> / <code>re</code></td><td>старт / стоп / рестарт</td></tr>
+          <tr><td><code>st</code></td><td>статус xray + панель + каталог</td></tr>
+          <tr><td><code>sy</code> · <code>ls</code></td><td>sync каталога · список</td></tr>
+          <tr><td><code>ap</code> / <code>ic</code> <code>&lt;id&gt;</code></td><td>import → <code>ss-&lt;id&gt;</code></td></tr>
+          <tr><td><code>refresh</code> · <code>autofit</code></td><td>пересборка / подбор сервера</td></tr>
+          <tr><td><code>bal</code> · <code>stats</code> · <code>traffic</code></td><td>баланс / статистика</td></tr>
+          <tr><td><code>dv</code></td><td>устройства VPN</td></tr>
+          <tr><td><code>pf</code> · <code>sp</code> · <code>dns</code></td><td>preflight · скорость · leak</td></tr>
+          <tr><td><code>panel …</code></td><td>start|stop|status|url|set-password</td></tr>
+          <tr><td><code>bak</code></td><td>создать backup-архив</td></tr>
+          <tr><td><code>upd</code> · <code>fix</code> · <code>un --yes</code></td><td>update · doctor · uninstall</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="vpn">
+    <div class="wrap">
+      <h2 class="sec-h">VPN hardening</h2>
+      <p class="sec-p">Слой устойчивости поверх transparent proxy (с 1.4.13+).</p>
+      <div class="grid-2">
+        <div class="feature"><h3>NTP wait</h3><p>Перед стартом Xray ждём синхронизацию времени (TLS/REALITY).</p></div>
+        <div class="feature"><h3>WAN reconnect</h3><p>Хуки <code>wan-event</code> / <code>wan-start</code> — rebuild firewall или restart.</p></div>
+        <div class="feature"><h3>Kill-switch</h3><p>Пока VPN desired — unmarked LAN→WAN режется.</p></div>
+        <div class="feature"><h3>LAN / Guest / IPv6</h3><p>MAC policies, гостевые мосты, IPv6 proxy|block|ignore.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="diag">
+    <div class="wrap">
+      <h2 class="sec-h">Диагностика</h2>
+      <p class="sec-p">Из панели Connection или CLI. JSON-статусы в <code>/opt/share/ssurf/</code>.</p>
+      <table>
+        <thead><tr><th>Тест</th><th>CLI</th><th>Что проверяет</th></tr></thead>
+        <tbody>
+          <tr><td>Preflight</td><td><code>surfgate pf</code></td><td>NTP, WAN IP, TPROXY, Xray, dokodemo, конфликт XrayUI</td></tr>
+          <tr><td>Speed</td><td><code>surfgate sp</code></td><td>↓/↑ Mbps + latency (Cloudflare, с fallback URL)</td></tr>
+          <tr><td>DNS leak</td><td><code>surfgate dns</code></td><td>wiring + resolvers vs WAN DNS, IPv6 leak при <code>block</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <strong>WebRTC</strong> с роутера не эмулируется. С LAN-клиента откройте
+        <a href="https://browserleaks.com/webrtc" rel="noopener">browserleaks.com/webrtc</a>
+        и <a href="https://dnsleaktest.com" rel="noopener">dnsleaktest.com</a>.
+      </div>
+    </div>
+  </section>
+
+  <section id="backup">
+    <div class="wrap">
+      <h2 class="sec-h">Backup и restore</h2>
+      <p class="sec-p">Архивы в <code>/opt/share/ssurf/backup/</code>. Create — CLI или Engine → Backup. Restore — из UI.</p>
+      <pre>surfgate bak
+# архив: /opt/share/ssurf/backup/ssurf-…tar.gz  (или stealthsurf-… без имени)</pre>
+      <h3>Что внутри</h3>
+      <table>
+        <thead><tr><th>Включено</th><th>Путь</th></tr></thead>
+        <tbody>
+          <tr><td>Профили Xray</td><td><code>/opt/etc/xray/ssurf/*.json</code></td></tr>
+          <tr><td>Сертификаты</td><td><code>/opt/etc/xray/ssurf/cert</code> (если есть)</td></tr>
+          <tr><td>Настройки</td><td><code>/opt/etc/ssurf.conf</code></td></tr>
+          <tr><td>Geodata data/</td><td><code>/opt/share/ssurf/data</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note danger-note">
+        <strong>Ограничения:</strong> не бэкапятся API-кэши каталога, логи и панель.
+        Custom scripts сейчас ищутся по legacy-пути <code>/jffs/stealthsurf_custom</code>
+        (живой каталог — <code>/jffs/ssurf_custom</code>) — хуки могут не попасть в архив.
+        Restore = <code>tar -C /</code> + <code>restart</code>; соседний XrayUI / official <code>:8800</code>
+        текущий архив не затрагивает.
+      </div>
+      <div class="note ok-note">
+        <strong>Безопасно:</strong> сделать <code>bak</code> → скачать tar на ПК → restore только своего
+        текущего архива из UI → <code>surfgate st</code> / <code>pf</code>.
+      </div>
+    </div>
+  </section>
+
+  <section id="coexist">
+    <div class="wrap">
+      <h2 class="sec-h">Рядом с другими аддонами</h2>
+      <figure class="shot">
+        <img src="../screenshots/05-xrayui-conflict.png" alt="Конфликт с XrayUI" loading="lazy" />
+        <figcaption><strong>Конфликт XrayUI</strong> — если stock XrayUI уже гоняет transparent proxy, SurfGate блокирует Start.</figcaption>
+      </figure>
+      <table>
+        <thead><tr><th></th><th>SurfGate</th><th>Official StealthSurf</th><th>Stock XrayUI</th></tr></thead>
+        <tbody>
+          <tr><td>Панель</td><td><code>:1131</code></td><td><code>:8800</code></td><td>Merlin WebUI</td></tr>
+          <tr><td>JFFS</td><td><code>/jffs/addons/ssurf</code></td><td><code>/jffs/addons/stealthsurf</code></td><td>xrayui</td></tr>
+          <tr><td>Conf</td><td><code>ssurf.conf</code></td><td>—</td><td><code>xrayui.conf</code></td></tr>
+          <tr><td>FW</td><td><code>SSURF_*</code> · table 78</td><td>—</td><td><code>XRAYUI_*</code> · 77</td></tr>
+        </tbody>
+      </table>
+      <p style="color:var(--muted);margin-top:1rem">Не включайте transparent proxy у SurfGate и XrayUI одновременно.</p>
+    </div>
+  </section>
+
+  <section id="qa">
+    <div class="wrap">
+      <h2 class="sec-h">Как проверить на роутере</h2>
+      <p class="sec-p">После установки — короткий чеклист перед «всё ок».</p>
+      <pre># 1. Версия и статус
+surfgate v
+surfgate st
+surfgate panel status
+
+# 2. Ключ и каталог
+surfgate key 'stlth_…'
+surfgate sy && surfgate ls
+surfgate ap &lt;id&gt; && surfgate up
+
+# 3. Диагностика
+surfgate pf
+surfgate sp
+surfgate dns
+
+# 4. Backup
+surfgate bak
+ls -la /opt/share/ssurf/backup/
+
+# 5. С LAN-клиента
+#   - открыть https://ifconfig.me  (exit IP узла)
+#   - dnsleaktest.com / browserleaks.com/webrtc</pre>
+      <div class="note">
+        В панели: Connection → Проверить / Запустить тесты; Engine → Backup → Create / Restore;
+        Updates → проверка GitHub.
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="inner">
+      <p>
+        <strong style="color:var(--text)">SurfGate</strong> ·
+        <a href="https://github.com/Homavi88/Stealthsurf-Asus">GitHub</a> ·
+        <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest">Releases</a> ·
+        <a href="https://docs.stealthsurf.net">StealthSurf docs</a> ·
+        <a href="../../CHANGELOG.md">Changelog</a>
+      </p>
+      <p>Провайдер и API — StealthSurf. Лицензия CC BY-NC-SA 4.0 (атрибуция upstream XrayUI).</p>
+      <p>Открыть локально: <code>docs/promo/index.html</code> (скриншоты из <code>docs/screenshots/</code>).</p>
+    </div>
+  </footer>
+</body>
+</html>
