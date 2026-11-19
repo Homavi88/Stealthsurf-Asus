@@ -119,12 +119,22 @@
             <div class="ss-lan-devices__hint">
               {{
                 options.lan_vpn_mode === 'exclude'
-                  ? 'Отметьте устройства, которые идут напрямую в интернет (мимо VPN).'
+                  ? 'Отметьте устройства, которые идут в интернет напрямую (мимо VPN).'
                   : 'Отметьте устройства, которые должны идти через VPN; остальные — direct.'
               }}
             </div>
-            <div class="ss-lan-devices__hint">
-              Заход с телефона (он в VPN) на excluded-устройство: в приложении только локальный IP из списка (например 192.168.50.112), не DDNS и не облачное имя. Один Wi‑Fi (не guest). После Save правила firewall обновятся сами, если VPN уже запущен; иначе — Start/Restart VPN.
+            <ol v-if="options.lan_vpn_mode === 'exclude'" class="ss-lan-devices__steps">
+              <li>Режим: «VPN для всех, кроме отмеченных».</li>
+              <li>Галочка только на устройстве, которое должно быть direct (NAS, ТВ, принтер…).</li>
+              <li>Save — если VPN уже online, firewall обновится сам; иначе Start / Restart VPN.</li>
+              <li>
+                С телефона в том же Wi‑Fi (не guest) открывайте устройство по IP из списка
+                (например <span class="ss-mono">192.168.50.112</span>) — не DDNS и не облачное имя.
+              </li>
+              <li>На телефоне отключите «случайный MAC» или отметьте актуальный MAC в списке.</li>
+            </ol>
+            <div v-else class="ss-lan-devices__hint">
+              После Save при работающем VPN firewall обновится сам. Доступ в LAN — по локальному IP, не по DDNS.
             </div>
             <label v-for="d in lanDevices" :key="d.mac" class="ss-lan-devices__row">
               <input type="checkbox" :checked="isLanMacSelected(d.mac)" @change="onLanMacChange(d.mac, $event)" />
