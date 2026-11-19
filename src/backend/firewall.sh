@@ -580,6 +580,63 @@ configure_firewall_server() {
     done
 }
 
+# Private destinations must never enter TPROXY/REDIRECT (LAN reachability).
+firewall_private_dst_bypass() {
+    local tbl="${1:-mangle}"
+    local cidr
+    for cidr in 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 169.254.0.0/16; do
+        iptables -w -t "$tbl" -C "$FW_CHAIN" -d "$cidr" -j RETURN 2>/dev/null ||
+            iptables -w -t "$tbl" -I "$FW_CHAIN" 1 -d "$cidr" -j RETURN 2>/dev/null || true
+    done
+    if is_ipv6_enabled 2>/dev/null; then
+        for cidr in fc00::/7 fe80::/10; do
+            ip6tables -w -t "$tbl" -C "$FW_CHAIN" -d "$cidr" -j RETURN 2>/dev/null ||
+                ip6tables -w -t "$tbl" -I "$FW_CHAIN" 1 -d "$cidr" -j RETURN 2>/dev/null || true
+        done
+    fi
+}
+
+# Resolve lan_vpn_macs → current IPs (leases/ARP) and RETURN those destinations.
+# Covers exclude hosts even if a client uses a hostname that somehow still
+# lands on the device IP after DNS.
+firewall_excluded_host_bypass() {
+    local tbl="${1:-mangle}"
+    local mode mac ip
+    load_xrayui_config 2>/dev/null || true
+    mode="${lan_vpn_mode:-all}"
+    case "$mode" in
+    exclude | selected) ;;
+    *) return 0 ;;
+    esac
+    [ -n "${lan_vpn_macs:-}" ] || return 0
+
+    # Only exclude-mode MACs are intentional direct hosts we must keep reachable.
+    [ "$mode" = "exclude" ] || return 0
+
+    if type devices_vpn_build_ipmap >/dev/null 2>&1; then
+        devices_vpn_build_ipmap 2>/dev/null || true
+    fi
+    local mapfile="${DEVICES_VPN_MAP:-$ADDON_TMP_DIR/devices_ipmap.tsv}"
+
+    for mac in $(printf '%s' "${lan_vpn_macs:-}" | tr 'A-Z;' 'a-z ' | tr ',' ' '); do
+        case "$mac" in
+        [0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]) ;;
+        *) continue ;;
+        esac
+        ip=""
+        if [ -f "$mapfile" ]; then
+            ip=$(awk -F'\t' -v m="$mac" 'tolower($2)==m && $1 ~ /^[0-9.]+$/ { print $1; exit }' "$mapfile" 2>/dev/null)
+        fi
+        if [ -z "$ip" ] && [ -r /proc/net/arp ]; then
+            ip=$(awk -v m="$mac" 'NR>1 && tolower($4)==tolower(m) { print $1; exit }' /proc/net/arp 2>/dev/null)
+        fi
+        [ -n "$ip" ] || continue
+        iptables -w -t "$tbl" -C "$FW_CHAIN" -d "$ip" -j RETURN 2>/dev/null ||
+            iptables -w -t "$tbl" -I "$FW_CHAIN" 1 -d "$ip" -j RETURN 2>/dev/null || true
+        log_debug "LAN exclude dst bypass: $mac → $ip"
+    done
+}
+
 configure_firewall_client() {
     local inbounds inbound dokodemo_port protocols tcp_enabled udp_enabled
     local IPT_TYPE=$1
@@ -681,18 +738,13 @@ configure_firewall_client() {
         ipt $IPT_TABLE -A "$FW_CHAIN" -d "$net" -j RETURN
     done
 
-    # Always keep RFC1918 / link-local LAN destinations out of transparent proxy.
-    # source_nets only covers bridge subnets we discovered — traffic to another
-    # private segment (or hairpin via a missing CIDR) must not enter TPROXY,
-    # or LAN apps cannot reach an excluded NAS/TV by IP.
-    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 10.0.0.0/8 -j RETURN 2>/dev/null || true
-    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 172.16.0.0/12 -j RETURN 2>/dev/null || true
-    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 192.168.0.0/16 -j RETURN 2>/dev/null || true
-    iptables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d 169.254.0.0/16 -j RETURN 2>/dev/null || true
-    if is_ipv6_enabled 2>/dev/null; then
-        ip6tables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d fc00::/7 -j RETURN 2>/dev/null || true
-        ip6tables -w -t "$IPT_TABLE" -A "$FW_CHAIN" -d fe80::/10 -j RETURN 2>/dev/null || true
-    fi
+    # Keep private / LAN destinations out of transparent proxy.
+    # Critical when Merlin disables CTF/flow-cache for TPROXY: LAN↔LAN then
+    # hits br_netfilter + mangle PREROUTING; without this, a phone on VPN
+    # cannot reach an excluded device by 192.168.x.x.
+    # INSERT at top so later policy TPROXY appends never win.
+    firewall_private_dst_bypass "$IPT_TABLE"
+    firewall_excluded_host_bypass "$IPT_TABLE"
 
     if [ -n "$ipsec" ] && [ "$ipsec" != "off" ]; then
         log_debug "Adding IPSET rules for $IPT_TABLE."
@@ -929,6 +981,10 @@ EOF
     # Hook chain into  PREROUTING:
     log_info "Hooking "$FW_CHAIN" chain into $IPT_TABLE PREROUTING."
     ipt_ensure "$IPT_TABLE" PREROUTING -A -j "$FW_CHAIN"
+
+    # Re-assert private/exclude bypass at chain head after all inserts above.
+    firewall_private_dst_bypass "$IPT_TABLE"
+    firewall_excluded_host_bypass "$IPT_TABLE"
 
     if [ "$POST_RESTART_DNSMASQ" = "false" ]; then
         if [ "$FIREWALL_FROM_HOOK" = "true" ] && dnsmasq_has_xrayui_block; then

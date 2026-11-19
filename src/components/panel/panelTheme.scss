@@ -358,6 +358,18 @@
     line-height: 1.35;
   }
 
+  &__steps {
+    margin: 0;
+    padding: 0 0 0 1.15rem;
+    font-size: 12px;
+    opacity: 0.78;
+    line-height: 1.45;
+
+    li + li {
+      margin-top: 4px;
+    }
+  }
+
   &__empty {
     margin: 0;
     font-size: 12px;

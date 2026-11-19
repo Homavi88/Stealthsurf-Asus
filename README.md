@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.31-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.32-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 ---
 
 Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
-Актуальная версия **1.4.31**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
+Актуальная версия **1.4.32**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
 > **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
 
@@ -157,6 +157,18 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 | IPv6 | `proxy` · `block` · `ignore` |
 | DNS только через Xray | DNS leak lock |
 | Диагностика | Preflight · скорость · DNS leak |
+
+### Устройство в LAN без VPN (exclude), но доступно с телефона
+
+Нужно, например, чтобы NAS/ТВ ходили в интернет напрямую, а с телефона (он в VPN) вы всё равно открывали их в домашней сети.
+
+1. **Connection → Кому включать VPN** → режим **«VPN для всех, кроме отмеченных»**.
+2. Поставьте галочку **только** на устройстве, которое должно быть direct.
+3. **Save.** Если VPN уже online — firewall обновится сам; иначе **Start / Restart VPN**.
+4. С телефона в **том же Wi‑Fi** (не guest) в приложении указывайте **локальный IP** из списка (`192.168.x.x`), не DDNS и не облачное имя.
+5. На телефоне отключите «случайный MAC» или отметьте актуальный MAC.
+
+Исключение = «не гонять **его** трафик через VPN». Доступ **к нему** с других устройств в LAN идёт по локальному IP; с 1.4.32 private-адреса не затягиваются в TPROXY.
 
 ## VPN-only / fail-closed
 
@@ -333,6 +345,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
+| **1.4.32** | LAN↔LAN TPROXY bypass; firewall refresh on Save for exclude hosts |
 | **1.4.31** | LAN exclude: private dst out of TPROXY; kill-switch respects direct MACs |
 | **1.4.30** | Home mobile proportions: compact hero/banner/CTAs, clearer endpoints |
 | **1.4.29** | Clear update reload button; Engine: change Xray-core version |
