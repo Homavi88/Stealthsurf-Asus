@@ -50,7 +50,9 @@ jobs:
           test -f docs/promo/index.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
-          grep -q 'XRAYUI_VERSION="1.4.17"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.4.18"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'del(.reverse)' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'ssImportConfigs' /tmp/ss-ci-pkg/ssurf/panel/app.js
           grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_PKG_NAME"\|ADDON_PKG_NAME="ssurf"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'OFFICIAL_SS_DAEMON' /tmp/ss-ci-pkg/ssurf/stealthsurf
@@ -127,6 +129,7 @@ jobs:
           sh tests/backend/ss_catalog_enrich.spec.sh
           sh tests/backend/test-xrayui-detect.sh
           sh tests/backend/test-official-detect.sh
+          sh tests/backend/test-legacy-reverse-strip.sh
           sh tests/backend/test-coexistence.sh
           sh tests/backend/test-official-path.sh
           sh tests/backend/test-panel-httpd.sh

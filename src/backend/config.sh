@@ -50,8 +50,12 @@ ensure_xray_scaffold() {
 EOF
     fi
 
+    # Xray ≥26.9 dropped top-level "legacy reverse" (bridges/portals). SurfGate is a
+    # client transparent proxy — strip it so start/test no longer fail with:
+    #   "legacy reverse" has been removed and migrated to "VLESS Reverse Proxy"
     jq '
-      .log = (.log // {})
+      del(.reverse)
+      | .log = (.log // {})
       | .log.loglevel = (.log.loglevel // "warning")
       | .inbounds = (.inbounds // [])
       | .outbounds = (.outbounds // [])

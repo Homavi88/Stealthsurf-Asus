@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.4.18] - 2026-11-19
+
+### API home → start
+
+- Главная панель `:1131`: выбор endpoint из каталога API **импортирует** outbound (`ss-*`) и ставит `stealthsurf-default`, затем Start поднимает Xray
+- Переключение endpoint при уже запущенном VPN — import + restart через finalize
+- Статус в таблице: `node ok/off` (доступность у провайдера), бейдж `active` для текущего default route
+
+### Xray 26.9.9
+
+- Удаляется top-level `legacy reverse` (bridges/portals) в scaffold и при normalize — иначе start падает с *"legacy reverse has been removed"*
+
 ## [1.4.17] - 2026-11-19
 
 ### VPN-only / fail-closed
