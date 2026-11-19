@@ -29,6 +29,23 @@
       </div>
     </section>
 
+    <div v-if="updateAvailable" class="ss-update-banner" role="status">
+      <div class="ss-update-banner__text">
+        <div class="ss-update-banner__title">Доступна новая версия</div>
+        <div class="ss-update-banner__meta ss-mono">
+          v{{ updateCurrent }} → <strong>v{{ updateLatest }}</strong>
+        </div>
+      </div>
+      <button
+        type="button"
+        class="ss-primary-btn start ss-update-banner__btn"
+        :disabled="busy || updateBusy"
+        @click="installUpdate"
+      >
+        {{ updateBusy ? '…' : 'Установить' }}
+      </button>
+    </div>
+
     <table class="ss-data-table ss-metrics-table ss-mono" aria-label="system metrics">
       <thead>
         <tr>
@@ -145,6 +162,8 @@
         {{ lastError }}
       </p>
     </div>
+
+    <panel-update-progress ref="updateProgress" />
   </div>
 </template>
 
@@ -152,6 +171,16 @@
   import { computed, defineComponent, inject, onBeforeUnmount, onMounted, Ref, ref, watch } from 'vue';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
+  import PanelUpdateProgress from './PanelUpdateProgress.vue';
+  import { savePanelNav } from './panelNav';
+
+  interface UpdateStatus {
+    current?: string;
+    latest?: string;
+    update_available?: boolean;
+    checked_at?: string;
+    message?: string;
+  }
 
   type TrafficByTag = Record<string, { up?: number; down?: number }>;
   type LiveTraffic = {
@@ -182,6 +211,7 @@
 
   export default defineComponent({
     name: 'PanelHome',
+    components: { PanelUpdateProgress },
     emits: ['open-settings'],
     setup() {
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
@@ -199,6 +229,9 @@
       const rates = ref<Rates>({ vpnUp: 0, vpnDown: 0, directUp: 0, directDown: 0 });
       const vol = ref({ vpn: 0, direct: 0 });
       const byTag = ref<TrafficByTag>({});
+      const updateStatus = ref<UpdateStatus | null>(null);
+      const updateBusy = ref(false);
+      const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
       let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
@@ -239,6 +272,50 @@
         if (!running.value) return '';
         return (live.value.vpn_server || '').trim();
       });
+
+      const updateAvailable = computed(
+        () => Boolean(updateStatus.value?.update_available && updateStatus.value?.latest)
+      );
+      const updateLatest = computed(() => updateStatus.value?.latest || '');
+      const updateCurrent = computed(
+        () =>
+          updateStatus.value?.current ||
+          window.xray?.custom_settings?.stealthsurf_version ||
+          uiResponse.value?.xray?.ui_version ||
+          '—'
+      );
+
+      const loadUpdateStatus = async () => {
+        try {
+          const res = await engine.getWebData<UpdateStatus>('addon-update-status');
+          updateStatus.value = res.data || null;
+        } catch {
+          /* keep previous */
+        }
+      };
+
+      const refreshUpdateStatus = async () => {
+        try {
+          await engine.submit(SubmitActions.addonUpdateCheck);
+          await loadUpdateStatus();
+        } catch {
+          /* optional background check */
+        }
+      };
+
+      const installUpdate = async () => {
+        const version = updateStatus.value?.latest;
+        if (!version || updateBusy.value) return;
+        if (!window.confirm(`Установить SurfGate v${version} с GitHub?`)) return;
+        updateBusy.value = true;
+        savePanelNav({ view: 'home' });
+        try {
+          await updateProgress.value?.run(version);
+          await loadUpdateStatus();
+        } finally {
+          updateBusy.value = false;
+        }
+      };
 
       const memLabel = computed(() => {
         const u = (live.value.mem_used_mb / 1024).toFixed(1).replace('.', ',');
@@ -472,6 +549,9 @@
       onMounted(async () => {
         await loadCatalog();
         await pollLive();
+        await loadUpdateStatus();
+        // Background GitHub check so the banner appears without opening Updates
+        void refreshUpdateStatus();
         timer = setInterval(() => {
           void pollLive();
         }, 2000);
@@ -512,7 +592,13 @@
         flagFor,
         volumeFor,
         refreshCatalog,
-        toggle
+        toggle,
+        updateAvailable,
+        updateLatest,
+        updateCurrent,
+        updateBusy,
+        updateProgress,
+        installUpdate
       };
     }
   });

@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.26] - 2026-11-19
+
+### Home update banner + faster package update
+
+- Главная: баннер «Доступна новая версия» + кнопка **Установить** (проверка GitHub при открытии)
+- Обновление пакета **не перекачивает** `geosite.dat` / `geoip.dat`, если они уже на месте (≥100 КБ)
+- Также сохраняются `v2dat` / `xraydatbuilder` / `rtls-scanner` / `b4sni` / `Country.mmdb`, если уже установлены
+- Принудительное обновление geo — как раньше: Settings / cron `if_changed`
+
 ## [1.4.25] - 2026-11-19
 
 ### Mobile panel

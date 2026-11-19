@@ -155,6 +155,56 @@
   transform: scale(0.97);
 }
 
+.ss-update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--ss-radius);
+  border: 1px solid rgba(61, 184, 255, 0.35);
+  background: linear-gradient(135deg, rgba(61, 184, 255, 0.16) 0%, rgba(18, 24, 33, 0.9) 70%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.ss-update-banner__title {
+  font-family: var(--ss-font);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ss-text);
+}
+
+.ss-update-banner__meta {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--ss-muted);
+
+  strong {
+    color: var(--ss-blue);
+    font-weight: 600;
+  }
+}
+
+.ss-update-banner__btn {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 118px;
+  padding: 10px 16px;
+  margin: 0;
+}
+
+@media (max-width: 420px) {
+  .ss-update-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ss-update-banner__btn {
+    width: 100%;
+  }
+}
+
 .ss-hero {
   text-align: center;
   padding: 18px 8px 10px;
