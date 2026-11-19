@@ -45,10 +45,11 @@
         </div>
 
         <footer class="ss-upd-modal__foot" v-if="phase === 'done' || phase === 'error'">
-          <button v-if="phase === 'done'" type="button" class="ss-primary-btn start" @click="reloadPanel">
-            Перезагрузить панель
+          <p v-if="phase === 'done'" class="ss-upd-modal__hint">Чтобы увидеть новую версию, обновите страницу панели</p>
+          <button v-if="phase === 'done'" type="button" class="ss-upd-reload-btn" @click="reloadPanel">
+            Обновить страницу
           </button>
-          <button v-else type="button" class="ss-primary-btn" @click="close">Закрыть</button>
+          <button v-else type="button" class="ss-upd-reload-btn ss-upd-reload-btn--muted" @click="close">Закрыть</button>
         </footer>
       </div>
     </div>
@@ -353,14 +354,43 @@
     }
   }
 
+  .ss-upd-modal__hint {
+    margin: 0 0 4px;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #8b939e;
+  }
+
   .ss-upd-modal__foot {
     padding: 0 20px 18px;
     display: flex;
     flex-direction: column;
     gap: 8px;
+  }
 
-    .ss-primary-btn {
-      width: 100%;
-    }
+  .ss-upd-reload-btn {
+    width: 100%;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 8px;
+    padding: 14px 16px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: none;
+    cursor: pointer;
+    background: #3db8ff;
+    color: #061018;
+  }
+
+  .ss-upd-reload-btn:active {
+    filter: brightness(0.95);
+  }
+
+  .ss-upd-reload-btn--muted {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e6e8eb;
+    border: 1px solid rgba(255, 255, 255, 0.12);
   }
 </style>

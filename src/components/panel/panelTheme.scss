@@ -1066,6 +1066,26 @@
   color: var(--ss-text);
 }
 
+/* X-RAY Core link in FormTable header — keep visible on dark panel */
+.ss-panel-light .ss-core-version-inline.core-version,
+.ss-panel-light .core-version {
+  float: none;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  margin-left: 10px;
+  color: var(--ss-muted);
+  font-family: var(--ss-font-mono);
+  font-size: 11px;
+}
+
+.ss-panel-light .core-version a {
+  color: var(--ss-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .ss-panel-light .FormTable,
 .ss-panel-light table.FormTable,
 .ss-panel-root .FormTable,

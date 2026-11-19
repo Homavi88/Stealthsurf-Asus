@@ -9,11 +9,25 @@
         <tr>
           <td colspan="2">
             {{ $t('com.ClientStatus.configuration') }}
-            <xray-version></xray-version>
+            <xray-version class="ss-core-version-inline"></xray-version>
           </td>
         </tr>
       </thead>
       <tbody>
+        <tr class="ss-core-version-row">
+          <th>Xray-core</th>
+          <td>
+            <div class="ss-core-version-block">
+              <div class="ss-core-version-line">
+                <span class="ss-mono">v{{ coreVersionLabel }}</span>
+                <span v-if="newerThanTested" class="ss-core-untested" :title="untestedHint">новее тестовой {{ testedCore }}</span>
+              </div>
+              <button type="button" class="ss-core-version-btn" @click="openCoreVersion">Сменить версию ядра</button>
+              <p class="ss-core-version-hint">Список релизов Xray-core с GitHub. SurfGate тестировался с {{ testedCore }}.</p>
+            </div>
+            <xray-core-version-modal ref="coreVersionModal" v-model:current-version="coreVersionBound" />
+          </td>
+        </tr>
         <tr>
           <th>{{ $t('com.ClientStatus.connection_status') }}</th>
           <td>
@@ -74,6 +88,8 @@
   import { useI18n } from 'vue-i18n';
   import ProcessUptime from './ProcessUptime.vue';
   import XrayVersion from './XrayVersion.vue';
+  import XrayCoreVersionModal from '@modal/XrayCoreVersionModal.vue';
+  import { coreNewerThanTested, getTestedCore } from '@/modules/CoreVersion';
   import Profiles from './Profiles.vue';
   import Backup from './Backup.vue';
 
@@ -85,6 +101,7 @@
       ConfigModal,
       ProcessUptime,
       XrayVersion,
+      XrayCoreVersionModal,
       Profiles,
       Backup
     },
@@ -111,6 +128,29 @@
       }));
 
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse')!;
+      const coreVersionModal = ref<{ show: () => void } | null>(null);
+      const coreVersionBound = ref('');
+      const testedCore = getTestedCore();
+      const newerThanTested = computed(() => coreNewerThanTested());
+      const untestedHint = computed(() => t('com.XrayVersion.newer_than_tested_hint', [testedCore]));
+      const coreVersionLabel = computed(() => {
+        const v = uiResponse?.value?.xray?.core_version || coreVersionBound.value;
+        if (v) return String(v).replace(/^v/i, '');
+        const err = uiResponse?.value?.xray?.core_error;
+        if (err === 'not installed') return t('com.XrayVersion.not_installed');
+        if (err) return t('com.XrayVersion.not_working');
+        return '—';
+      });
+      watch(
+        () => uiResponse?.value?.xray?.core_version,
+        (v) => {
+          if (v) coreVersionBound.value = String(v);
+        },
+        { immediate: true }
+      );
+      const openCoreVersion = () => {
+        coreVersionModal.value?.show();
+      };
 
       const xrayuiConflict = computed(
         () =>
@@ -221,12 +261,54 @@
         show_config_modal,
         manage_general_options,
         testConfig,
-        handleStatus
+        handleStatus,
+        coreVersionModal,
+        coreVersionBound,
+        coreVersionLabel,
+        testedCore,
+        newerThanTested,
+        untestedHint,
+        openCoreVersion
       };
     }
   });
 </script>
 <style scoped>
+  .ss-core-version-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .ss-core-version-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 14px;
+  }
+  .ss-core-untested {
+    color: #ff9a3c;
+    font-size: 11px;
+  }
+  .ss-core-version-btn {
+    border: 1px solid rgba(61, 184, 255, 0.45);
+    background: rgba(61, 184, 255, 0.14);
+    color: #3db8ff;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .ss-core-version-hint {
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.35;
+    opacity: 0.65;
+  }
   .FormTable td span.label.flag {
     margin-left: 5px;
   }
