@@ -1,6 +1,7 @@
 # Changelog
 
-## Unreleased
+## [1.4.15] - 2026-11-19
+
 
 ### Panel help
 

@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.14-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.15-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -33,7 +33,7 @@
 ---
 
 Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
-Актуальная версия **1.4.14**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
+Актуальная версия **1.4.15**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
 > **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
 
@@ -292,6 +292,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
+| **1.4.15** | Panel help, backup harden, VPN polish |
 | **1.4.14** | Speed + DNS leak tests (panel/CLI) |
 | **1.4.13** | VPN hardening, app/device logs, GitHub auto-update |
 | **1.4.12** | Geek panel, install UX, geodata, VPN devices |
