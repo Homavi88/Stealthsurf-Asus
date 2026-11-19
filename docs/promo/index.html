@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SurfGate — панель VPN для Asuswrt-Merlin</title>
-  <meta name="description" content="SurfGate: панель :1131, transparent proxy через StealthSurf, CLI surfgate, kill-switch, DNS leak, backup. Документация и скриншоты." />
+  <meta name="description" content="SurfGate: панель :1131, transparent proxy через StealthSurf, CLI surfgate, kill-switch, VPN-only fail-closed, DNS leak, backup. Документация и скриншоты." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
@@ -305,7 +305,7 @@
         <a class="btn btn-ghost btn-ext-readme" href="../../README.md">README на GitHub</a>
       </div>
       <div class="meta-row">
-        <span class="pill">v1.4.16+</span>
+        <span class="pill">v1.4.17+</span>
         <span class="pill">панель :1131</span>
         <span class="pill">runtime ssurf</span>
         <span class="pill">Xray transparent proxy</span>
@@ -324,6 +324,7 @@
         <a href="#settings">Настройки по разделам</a>
         <a href="#cli">Команды терминала</a>
         <a href="#vpn">VPN hardening</a>
+        <a href="#vpn-only">VPN-only</a>
         <a href="#diag">Диагностика</a>
         <a href="#backup">Backup / restore</a>
         <a href="#coexist">Рядом с XrayUI / official</a>
@@ -546,7 +547,7 @@ surfgate panel status     # http://LAN:1131/</pre>
   <section id="vpn">
     <div class="wrap">
       <h2 class="sec-h">VPN hardening</h2>
-      <p class="sec-p">Слой устойчивости поверх transparent proxy (1.4.13+) и polish (1.4.16+).</p>
+      <p class="sec-p">Слой устойчивости поверх transparent proxy (1.4.13+) · polish (1.4.16+) · <strong>VPN-only fail-closed (1.4.17+)</strong>.</p>
       <div class="grid-2">
         <div class="feature"><h3>NTP wait</h3><p>Перед стартом Xray ждём синхронизацию времени (TLS/REALITY).</p></div>
         <div class="feature"><h3>WAN reconnect</h3><p>Хуки <code>wan-event</code> / <code>wan-start</code> — rebuild firewall или restart.</p></div>
@@ -573,19 +574,36 @@ surfgate panel status     # http://LAN:1131/</pre>
       <pre>jq '.routing.rules[]|select(.name=="surfgate-split-bypass")' /opt/etc/xray/ssurf/*.json
 # outboundTag: direct</pre>
 
-      <h3>VPN-only / fail-closed</h3>
+      <h3 id="vpn-only">VPN-only / fail-closed (1.4.17+)</h3>
       <p class="sec-p" style="margin-bottom:0.75rem">
-        Connection → <strong>VPN-only</strong>: сервисы, которые <em>нельзя</em> пускать в clearnet.
-        Xray-правило <code>surfgate-vpn-lock</code> → proxy; literal-домены в ipset <code>SSURF_LOCK*</code>;
-        unmarked пакеты к этим IP — DROP. При Stop Xray / падении VPN — conntrack flush + DROP остаётся.
+        Когда сервису <strong>нельзя</strong> уходить в clearnet (банк, работа, стриминг): даже если аддон выключится,
+        VPN у провайдера отвалится или exit IP станет ISP — соединение должно <em>сразу оборваться</em>, а не утечь.
       </p>
-      <pre>jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+      <table>
+        <thead><tr><th>Слой</th><th>Действие</th></tr></thead>
+        <tbody>
+          <tr><td>Панель</td><td>Connection → <strong>VPN-only (fail-closed)</strong> → домены → Apply/Restart</td></tr>
+          <tr><td>Xray</td><td>Правило <code>surfgate-vpn-lock</code> → primary proxy (первым в <code>routing.rules</code>)</td></tr>
+          <tr><td>ipset</td><td>Literal-домены → <code>SSURF_LOCK4</code> / <code>LOCK6</code> (dnsmasq <code>ipset=/…</code>)</td></tr>
+          <tr><td>Firewall</td><td><code>SSURF_SVCLOCK</code>: unmarked → WAN к LOCK IP = <strong>DROP</strong> (и ESTABLISHED)</td></tr>
+          <tr><td>Stop</td><td><code>surfgate dn</code>: flush conntrack + DROP остаётся armed; uninstall снимает lock</td></tr>
+        </tbody>
+      </table>
+      <pre># после Apply/Restart
+jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
 # name: surfgate-vpn-lock · outboundTag: proxy
+
 iptables -w -t filter -nvL SSURF_SVCLOCK
-ipset list SSURF_LOCK4 | head</pre>
+ipset list SSURF_LOCK4 | head
+
+# проверка fail-closed
+surfgate dn
+# с LAN: locked сервис не открывается через ISP
+surfgate up</pre>
       <p style="color:var(--muted);margin:0.75rem 0 0">
-        Лучше с <code>ipsec=redirect</code> (DNS заполняет LOCK/PROXY). Для <code>geosite:</code> fail-closed DROP
-        по IP ограничен — routing в Xray всё равно принуждает к VPN, пока core жив.
+        Лучше с <code>ipsec=redirect</code> (DNS заполняет LOCK/PROXY). Для чистых <code>geosite:</code> IP-DROP слабее —
+        пока Xray жив, routing всё равно гонит в VPN. Если домен и в bypass, и в lock — <strong>побеждает lock</strong>.
+        Подробнее: <a href="../qa-router.md">docs/qa-router.md</a> · README → VPN-only.
       </p>
     </div>
   </section>
@@ -694,27 +712,28 @@ surfgate pf && surfgate sp && surfgate dns
 #    Connection → Split bypass → Apply/Restart
 #    jq '.routing.rules[]|select(.name=="surfgate-split-bypass")' /opt/etc/xray/ssurf/*.json
 
-# 5b. VPN-only fail-closed (опционально)
-#    Connection → VPN-only → netflix.com → Apply/Restart
-#    jq '.routing.rules[0]' …  # surfgate-vpn-lock → proxy
-#    surfgate dn   # Stop Xray
-#    iptables -nvL SSURF_SVCLOCK   # DROP still armed
-#    # traffic to locked IPs must fail (no clearnet)
+# 6. VPN-only fail-closed (рекомендуется для критичных сервисов)
+#    Connection → VPN-only → example.com → Apply/Restart
+#    jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json   # surfgate-vpn-lock → proxy
+#    surfgate dn
+#    iptables -w -t filter -nvL SSURF_SVCLOCK             # DROP still armed
+#    # с LAN: locked сервис НЕ открывается через ISP
+#    surfgate up
 
-# 6. Speed cron (опционально)
+# 7. Speed cron (опционально)
 #    Connection → Авто по cron → 6h/12h/24h
 #    или: surfgate cron speedtest
 
-# 7. Backup
+# 8. Backup
 surfgate bak && surfgate bak list
 ls -la /opt/share/ssurf/backup/
 
-# 8. С LAN-клиента
+# 9. С LAN-клиента
 #    https://ifconfig.me
 #    https://dnsleaktest.com
 #    https://browserleaks.com/webrtc
 
-# 9. Справка в панели
+# 10. Справка в панели
 #    Настройки → справка  ·  или  http://LAN:1131/help/</pre>
 
       <h3>Ограничения окружения</h3>
@@ -722,6 +741,7 @@ ls -la /opt/share/ssurf/backup/
         <li>Speed/DNS зависят от доступности Cloudflare / ipleak / fallback URL <strong>с роутера</strong>.</li>
         <li>WebRTC — только с LAN-браузера (роутер не эмулирует браузерный WebRTC).</li>
         <li>App/DPI split не поддерживается (нужен DPI на роутере).</li>
+        <li>VPN-only: для <code>geosite:</code> IP-DROP слабее, чем для literal-доменов; лучше <code>ipsec=redirect</code>.</li>
         <li>Нет e2e в GitHub Actions без железа — unit-тесты + этот чеклист.</li>
       </ul>
 

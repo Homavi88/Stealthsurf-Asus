@@ -1,4 +1,4 @@
-# QA на роутере (SurfGate VPN polish)
+# QA на роутере (SurfGate VPN polish + VPN-only)
 
 В CI нет живого Asus — эти проверки делаются вручную на Merlin после установки пакета.
 
