@@ -131,7 +131,7 @@
         {{ busy ? '…' : running ? 'stop' : 'start' }}
       </button>
       <p v-if="conflict" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
-        conflict: stock xrayui is running — stop it first
+        {{ conflictHint }}
       </p>
     </div>
   </div>
@@ -185,9 +185,18 @@
       const conflict = computed(
         () =>
           uiResponse.value?.conflict === 'xrayui' ||
+          uiResponse.value?.conflict === 'official' ||
           uiResponse.value?.xrayui?.running === true ||
-          uiResponse.value?.xray?.xrayui?.running === true
+          uiResponse.value?.xray?.xrayui?.running === true ||
+          uiResponse.value?.official?.running === true ||
+          uiResponse.value?.xray?.official?.running === true
       );
+      const conflictHint = computed(() => {
+        if (uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
+          return 'conflict: official StealthSurf is running — stop it first';
+        }
+        return 'conflict: stock xrayui is running — stop it first';
+      });
 
       const displayIp = computed(() => live.value.wan_ip || window.xray?.router?.wan_ip || '');
 
@@ -356,6 +365,7 @@
         vol,
         running,
         conflict,
+        conflictHint,
         displayIp,
         memLabel,
         activeTitle,

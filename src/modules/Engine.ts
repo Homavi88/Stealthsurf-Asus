@@ -237,6 +237,8 @@ export class EngineResponseConfig {
   };
   /** Stock XrayUI coexistence — parallel transparent proxy is forbidden. */
   public xrayui?: EngineXrayuiStatus;
+  /** Official StealthSurf (stealthsurf-routerd) coexistence — same LAN conflict. */
+  public official?: EngineXrayuiStatus;
   public conflict?: string | null;
   public conflict_message?: string | null;
   public xray?: {
@@ -295,6 +297,12 @@ export class EngineResponseConfig {
     /** disabled | 6h | 12h | 24h */
     speedtest_interval?: string;
     xrayui?: {
+      installed?: boolean;
+      running?: boolean;
+      conflict?: string | null;
+      message?: string | null;
+    };
+    official?: {
       installed?: boolean;
       running?: boolean;
       conflict?: string | null;

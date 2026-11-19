@@ -29,6 +29,7 @@ load_xrayui_config() { :; }
 update_xrayui_config() { :; }
 get_xray_daemon_pid() { echo ""; }
 ss_xrayui_running() { return 1; }
+ss_official_running() { return 1; }
 is_ipv6_enabled() { return 1; }
 setup_script_file() { printf '%s\n' "$2" >>"$TMP/hooks.txt"; }
 ntp_ready() { echo ntp_called >>"$TMP/ntp.txt"; }

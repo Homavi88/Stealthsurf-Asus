@@ -91,7 +91,10 @@ jobs:
           grep -q 'probe_hint_timeout' /tmp/ss-ci-pkg/ssurf/app.js
           grep -q 'xray.running' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ss_refuse_if_xrayui' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'ss_refuse_if_official\|ss_refuse_if_dataplane_conflict' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'stealthsurf-routerd' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ss-conflict-banner' /tmp/ss-ci-pkg/ssurf/app.js
+          grep -q 'official_conflict_message' /tmp/ss-ci-pkg/ssurf/app.js
           test -f docs/screenshots/01-status-running.png
           test -f docs/screenshots/05-xrayui-conflict.png
           test -f docs/screenshots/08-settings-account.png
@@ -123,6 +126,7 @@ jobs:
           sh tests/backend/ss_catalog_sync.spec.sh
           sh tests/backend/ss_catalog_enrich.spec.sh
           sh tests/backend/test-xrayui-detect.sh
+          sh tests/backend/test-official-detect.sh
           sh tests/backend/test-coexistence.sh
           sh tests/backend/test-official-path.sh
           sh tests/backend/test-panel-httpd.sh

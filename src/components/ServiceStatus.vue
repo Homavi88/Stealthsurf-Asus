@@ -1,7 +1,7 @@
 <template>
   <div>
     <div v-if="xrayuiConflict" class="ss-conflict-banner" role="alert">
-      <b>{{ $t('com.ClientStatus.xrayui_conflict_title') }}</b>
+      <b>{{ conflictTitle }}</b>
       — {{ conflictMessage }}
     </div>
     <table width="100%" class="FormTable">
@@ -18,7 +18,7 @@
           <th>{{ $t('com.ClientStatus.connection_status') }}</th>
           <td>
             <span class="label" :class="connectionClasses" v-text="statusLabel"></span>
-            <span v-if="xrayuiConflict" class="label label-error ss-conflict-pill">{{ $t('com.ClientStatus.xrayui_conflict_pill') }}</span>
+            <span v-if="xrayuiConflict" class="label label-error ss-conflict-pill">{{ conflictPill }}</span>
             <span v-else-if="xrayuiInstalled" class="label label-warning ss-conflict-pill">{{ $t('com.ClientStatus.xrayui_installed_pill') }}</span>
             <span v-if="!isRunning">
               <a class="button_gen button_gen_small button_info" href="#" @click.prevent="testConfig()" title="try to retrieve a server-side error">!</a>
@@ -115,20 +115,42 @@
       const xrayuiConflict = computed(
         () =>
           uiResponse?.value?.conflict === 'xrayui' ||
+          uiResponse?.value?.conflict === 'official' ||
           uiResponse?.value?.xrayui?.running === true ||
-          uiResponse?.value?.xray?.xrayui?.running === true
+          uiResponse?.value?.xray?.xrayui?.running === true ||
+          uiResponse?.value?.official?.running === true ||
+          uiResponse?.value?.xray?.official?.running === true
       );
       const xrayuiInstalled = computed(
         () =>
           (uiResponse?.value?.xrayui?.installed === true || uiResponse?.value?.xray?.xrayui?.installed === true) &&
           !xrayuiConflict.value
       );
-      const conflictMessage = computed(
-        () =>
+      const conflictMessage = computed(() => {
+        if (uiResponse?.value?.conflict === 'official') {
+          return (
+            uiResponse?.value?.conflict_message ||
+            uiResponse?.value?.official?.message ||
+            uiResponse?.value?.xray?.official?.message ||
+            t('com.ClientStatus.official_conflict_message')
+          );
+        }
+        return (
           uiResponse?.value?.conflict_message ||
           uiResponse?.value?.xrayui?.message ||
           uiResponse?.value?.xray?.xrayui?.message ||
           t('com.ClientStatus.xrayui_conflict_message')
+        );
+      });
+      const conflictTitle = computed(() =>
+        uiResponse?.value?.conflict === 'official'
+          ? t('com.ClientStatus.official_conflict_title')
+          : t('com.ClientStatus.xrayui_conflict_title')
+      );
+      const conflictPill = computed(() =>
+        uiResponse?.value?.conflict === 'official'
+          ? t('com.ClientStatus.official_conflict_pill')
+          : t('com.ClientStatus.xrayui_conflict_pill')
       );
 
       // Prefer StealthSurf-owned running state from backend (uptime/running), not Merlin pid.xray
@@ -194,6 +216,8 @@
         xrayuiConflict,
         xrayuiInstalled,
         conflictMessage,
+        conflictTitle,
+        conflictPill,
         show_config_modal,
         manage_general_options,
         testConfig,

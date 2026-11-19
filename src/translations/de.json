@@ -42,7 +42,10 @@
       "xrayui_conflict_title": "Konflikt mit XrayUI",
       "xrayui_conflict_pill": "XrayUI-Konflikt",
       "xrayui_installed_pill": "XrayUI installiert (gestoppt)",
-      "xrayui_conflict_message": "XrayUI läuft. Stoppen Sie XrayUI (VPN → XrayUI → Stop) und starten Sie danach SurfGate. Beide Add-ons dürfen nicht parallel als Transparent-Proxy laufen — sonst bricht das LAN-Internet."
+      "xrayui_conflict_message": "XrayUI läuft. Stoppen Sie XrayUI (VPN → XrayUI → Stop) und starten Sie danach SurfGate. Beide Add-ons dürfen nicht parallel als Transparent-Proxy laufen — sonst bricht das LAN-Internet.",
+      "official_conflict_title": "Konflikt mit offiziellem StealthSurf",
+      "official_conflict_pill": "StealthSurf-Konflikt",
+      "official_conflict_message": "Offizielles StealthSurf (stealthsurf-routerd) läuft. Stoppen Sie VPN in der StealthSurf-App und starten Sie danach SurfGate. Beide dürfen nicht parallel als Transparent-Proxy laufen — sonst bricht das LAN-Internet."
     },
     "ServerStatus": {
       "configuration": "Konfiguration",

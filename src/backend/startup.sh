@@ -35,11 +35,11 @@ startup() {
 
     local xray_pid=$(get_xray_daemon_pid)
 
-    if ss_xrayui_running force 2>/dev/null; then
-        log_warn "$(ss_xrayui_conflict_message)"
+    if ss_xrayui_running force 2>/dev/null || ss_official_running force 2>/dev/null; then
+        log_warn "$(ss_dataplane_conflict_message)"
         watchdog_clear_desired 2>/dev/null || true
         if [ -n "$xray_pid" ]; then
-            log_warn "Stopping SurfGate while stock XrayUI is active."
+            log_warn "Stopping SurfGate while another transparent VPN addon is active."
             stop
         fi
     else
