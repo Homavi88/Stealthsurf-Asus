@@ -69,8 +69,10 @@
     <p class="ss-section-label">Установка вручную</p>
     <div class="ss-set-card ss-upd-manual">
       <p class="ss-upd-manual__hint">Выбор версии и changelog — нажмите на версию ниже:</p>
-      <version />
+      <version @install="onManualInstall" />
     </div>
+
+    <panel-update-progress ref="updateProgress" />
   </div>
 </template>
 
@@ -81,6 +83,8 @@
   import useGeneralOptions from '@modal/GeneralOptionsModal';
   import SsSettingsRow from './SsSettingsRow.vue';
   import Version from '../Version.vue';
+  import PanelUpdateProgress from './PanelUpdateProgress.vue';
+  import { savePanelNav } from './panelNav';
 
   interface UpdateStatus {
     repo?: string;
@@ -93,7 +97,7 @@
 
   export default defineComponent({
     name: 'PanelUpdates',
-    components: { SsSettingsRow, Version },
+    components: { SsSettingsRow, Version, PanelUpdateProgress },
     props: {
       config: { type: Object as PropType<XrayObject>, required: true }
     },
@@ -103,6 +107,7 @@
       const busy = ref(false);
       const status = ref<UpdateStatus | null>(null);
       const checkInterval = ref('24h');
+      const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
 
       const repo = computed(() => status.value?.repo || 'Homavi88/Stealthsurf-Asus');
       const repoUrl = computed(() => `https://github.com/${repo.value}/releases`);
@@ -159,10 +164,11 @@
 
       const checkNow = async () => {
         busy.value = true;
+        savePanelNav({ view: 'settings', section: 'updates' });
         try {
           await engine.executeWithLoadingProgress(async () => {
             await engine.submit(SubmitActions.addonUpdateCheck);
-          });
+          }, false);
           await loadStatus();
         } finally {
           busy.value = false;
@@ -176,10 +182,20 @@
           return;
         }
         busy.value = true;
+        savePanelNav({ view: 'settings', section: 'updates' });
         try {
-          await engine.executeWithLoadingProgress(async () => {
-            await engine.submit(SubmitActions.performUpdate, { version });
-          });
+          await updateProgress.value?.run(version);
+          await loadStatus();
+        } finally {
+          busy.value = false;
+        }
+      };
+
+      const onManualInstall = async (version?: string) => {
+        busy.value = true;
+        savePanelNav({ view: 'settings', section: 'updates' });
+        try {
+          await updateProgress.value?.run(version);
           await loadStatus();
         } finally {
           busy.value = false;
@@ -192,6 +208,7 @@
           return;
         }
         busy.value = true;
+        savePanelNav({ view: 'settings', section: 'updates' });
         try {
           await persist('connection');
         } finally {
@@ -235,6 +252,8 @@
         checkedLabel,
         checkNow,
         installNow,
+        onManualInstall,
+        updateProgress,
         save
       };
     }

@@ -77,7 +77,8 @@
     components: {
       Modal
     },
-    setup() {
+    emits: ['install'],
+    setup(_props, { emit }) {
       const { t } = useI18n();
       const md = markdownit({ html: false, breaks: true });
       const COOKIE_NAME = 'xrayui_dontupdate';
@@ -92,6 +93,7 @@
       const releasesFailed = ref(false);
       const selected_version = ref<string>('');
       const refusedToUpdateVersion = ref(engine.getCookie(COOKIE_NAME));
+      const isPanel = !!(window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__;
 
       const selectedRelease = computed(() => releases.value.find((r) => r.version === selected_version.value));
       const changelog = computed(() => (selectedRelease.value?.body ? md.render(selectedRelease.value.body) : ''));
@@ -162,6 +164,11 @@
       const update = async () => {
         const version = selected_version.value;
         if (version && isDowngrade.value && !confirm(t('com.Version.downgrade_confirm', [version, current_version.value]))) return;
+        if (isPanel) {
+          updateModal.value?.close?.();
+          emit('install', version || undefined);
+          return;
+        }
         await engine.executeWithLoadingProgress(async () => {
           // no version -> backend falls back to the latest release, same as before
           await engine.submit(SubmitActions.performUpdate, version ? { version } : undefined);

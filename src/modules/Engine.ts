@@ -860,15 +860,30 @@ export class Engine {
     }
   }
 
-  async executeWithLoadingProgress(action: () => Promise<void>, windowReload = true): Promise<void> {
-    let loadingProgress = new EngineLoadingProgress(0, 'Please, wait');
-    window.showLoading(null, loadingProgress);
-
-    await action();
-    await this.checkLoadingProgress(loadingProgress, windowReload);
+  /** Standalone :1131 panel keeps nav in memory — avoid forced reload unless asked. */
+  private defaultWindowReload(): boolean {
+    return !(window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__;
   }
 
-  async checkLoadingProgress(loadingProgress: EngineLoadingProgress, windowReload = true): Promise<void> {
+  async executeWithLoadingProgress(
+    action: () => Promise<void>,
+    windowReload?: boolean,
+    onProgress?: (progress: EngineLoadingProgress) => void
+  ): Promise<void> {
+    const reload = typeof windowReload === 'boolean' ? windowReload : this.defaultWindowReload();
+    let loadingProgress = new EngineLoadingProgress(0, 'Please, wait');
+    window.showLoading(null, loadingProgress);
+    onProgress?.(loadingProgress);
+
+    await action();
+    await this.checkLoadingProgress(loadingProgress, reload, onProgress);
+  }
+
+  async checkLoadingProgress(
+    loadingProgress: EngineLoadingProgress,
+    windowReload = true,
+    onProgress?: (progress: EngineLoadingProgress) => void
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const checkProgressInterval = setInterval(async () => {
         try {
@@ -876,6 +891,7 @@ export class Engine {
           if (response.loading) {
             loadingProgress = response.loading;
             window.updateLoadingProgress(loadingProgress);
+            onProgress?.(loadingProgress);
           } else {
             clearInterval(checkProgressInterval);
             window.hideLoading();

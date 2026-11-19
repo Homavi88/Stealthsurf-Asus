@@ -1,14 +1,16 @@
 <template>
   <div class="ss-panel-root">
     <div class="ss-panel-shell" :class="{ 'ss-settings-wide': view === 'settings' }">
-      <panel-home v-if="view === 'home'" @open-settings="view = 'settings'" />
+      <panel-home v-if="view === 'home'" @open-settings="openSettings" />
       <panel-settings
         v-else
         :config="config"
-        @back="view = 'home'"
+        :initial-section="initialSection"
+        @back="goHome"
         @apply="apply_settings"
         @show-transport="show_transport"
         @show-sniffing="show_sniffing"
+        @section-change="onSectionChange"
       />
     </div>
     <sniffing-modal ref="sniffingModal" />
@@ -28,6 +30,7 @@
   import PanelSettings from './PanelSettings.vue';
   import SniffingModal from '@modal/SniffingModal.vue';
   import StreamSettingsModal from '@modal/StreamSettingsModal.vue';
+  import { loadPanelNav, savePanelNav, PanelSectionId, PanelView } from './panelNav';
   import './panelTheme.scss';
 
   export default defineComponent({
@@ -35,7 +38,9 @@
     components: { PanelHome, PanelSettings, SniffingModal, StreamSettingsModal },
     setup() {
       const { t } = useI18n();
-      const view = ref<'home' | 'settings'>('home');
+      const saved = loadPanelNav();
+      const view = ref<PanelView>(saved.view);
+      const initialSection = ref<PanelSectionId>(saved.section || 'connection');
       const config = ref(engine.xrayConfig);
       const sniffingModal = ref();
       const transportModal = ref();
@@ -43,6 +48,21 @@
 
       const syncConfig = () => {
         config.value = engine.xrayConfig;
+      };
+
+      const openSettings = () => {
+        view.value = 'settings';
+        savePanelNav({ view: 'settings', section: initialSection.value });
+      };
+
+      const goHome = () => {
+        view.value = 'home';
+        savePanelNav({ view: 'home', section: initialSection.value });
+      };
+
+      const onSectionChange = (section: PanelSectionId) => {
+        initialSection.value = section;
+        savePanelNav({ view: 'settings', section });
       };
 
       onMounted(() => {
@@ -86,17 +106,22 @@
           }
           throw e;
         }
+        savePanelNav({ view: 'settings', section: initialSection.value });
         await engine.executeWithLoadingProgress(async () => {
           await engine.submit(SubmitActions.configurationApply, config.value);
-        });
+        }, false);
         window.alert(t('labels.apply') || 'Applied');
       };
 
       return {
         view,
         config,
+        initialSection,
         sniffingModal,
         transportModal,
+        openSettings,
+        goHome,
+        onSectionChange,
         show_transport,
         show_sniffing,
         apply_settings

@@ -50,7 +50,7 @@ jobs:
           test -f docs/promo/index.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
-          grep -q 'XRAYUI_VERSION="1.4.21"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.4.22"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'del(.reverse)' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ssImportConfigs' /tmp/ss-ci-pkg/ssurf/panel/app.js
           grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-ci-pkg/ssurf/stealthsurf

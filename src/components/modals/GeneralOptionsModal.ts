@@ -50,6 +50,8 @@ export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineRespons
   const hydrate = () => Object.assign(options, makeBase());
 
   const persist = async (mode: 'full' | 'connection' = 'full') => {
+    // Panel: keep current settings page (no full reload → home).
+    const reload = !(window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__;
     await engine.executeWithLoadingProgress(async () => {
       options = options.normalise();
       const raw = { ...toRaw(options) } as Record<string, unknown>;
@@ -60,7 +62,7 @@ export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineRespons
         delete raw.hooks;
       }
       await engine.submit(SubmitActions.generalOptionsApply, raw);
-    });
+    }, reload);
   };
 
   return {

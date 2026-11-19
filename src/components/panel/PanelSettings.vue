@@ -12,7 +12,7 @@
             type="button"
             class="ss-nav-item"
             :class="{ 'is-active': section === item.id }"
-            @click="section = item.id"
+            @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
@@ -25,7 +25,7 @@
             type="button"
             class="ss-nav-item"
             :class="{ 'is-active': section === item.id }"
-            @click="section = item.id"
+            @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
@@ -38,7 +38,7 @@
             type="button"
             class="ss-nav-item"
             :class="{ 'is-active': section === item.id }"
-            @click="section = item.id"
+            @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
@@ -121,18 +121,9 @@
   import PanelUpdates from './PanelUpdates.vue';
   import PanelConnection from './PanelConnection.vue';
   import PanelHelp from './PanelHelp.vue';
+  import { PanelSectionId } from './panelNav';
 
-  type SectionId =
-    | 'account'
-    | 'connection'
-    | 'routing'
-    | 'network'
-    | 'outbounds'
-    | 'engine'
-    | 'logs'
-    | 'clients'
-    | 'updates'
-    | 'help';
+  type SectionId = PanelSectionId;
 
   export default defineComponent({
     name: 'PanelSettings',
@@ -152,11 +143,12 @@
       PanelHelp
     },
     props: {
-      config: { type: Object as PropType<XrayObject>, required: true }
+      config: { type: Object as PropType<XrayObject>, required: true },
+      initialSection: { type: String as PropType<SectionId>, default: 'connection' }
     },
-    emits: ['back', 'apply', 'show-transport', 'show-sniffing'],
-    setup(_props, { emit }) {
-      const section = ref<SectionId>('connection');
+    emits: ['back', 'apply', 'show-transport', 'show-sniffing', 'section-change'],
+    setup(props, { emit }) {
+      const section = ref<SectionId>(props.initialSection || 'connection');
       const navPrimary = [
         { id: 'account' as const, label: 'account', icon: 'A' },
         { id: 'connection' as const, label: 'connection', icon: 'C' },
@@ -179,6 +171,11 @@
       // Connection has its own Save; avoid double Apply
       const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 
+      const setSection = (id: SectionId) => {
+        section.value = id;
+        emit('section-change', id);
+      };
+
       const emitTransport = (payload: unknown) => emit('show-transport', payload);
       const emitSniffing = (payload: unknown) => emit('show-sniffing', payload);
 
@@ -189,6 +186,7 @@
         navMore,
         currentLabel,
         needsApply,
+        setSection,
         emitTransport,
         emitSniffing
       };
