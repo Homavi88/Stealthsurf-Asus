@@ -11,12 +11,19 @@ fail() {
     exit 1
 }
 
+INST="$ROOT/src/backend/install.sh"
+LOGS="$ROOT/src/backend/logs.sh"
+
 grep -q 'xray_config_is_valid' "$CFG" || fail "missing xray_config_is_valid"
 grep -q 'repair_xray_config_if_corrupt' "$CFG" || fail "missing repair_xray_config_if_corrupt"
 grep -q 'Quarantined bad config' "$CFG" || fail "repair must quarantine corrupt file"
 grep -q 'repair_xray_config_if_corrupt' "$CFG" || fail "ensure_xray_scaffold must call repair"
 grep -q 'config invalid' "$CTL" || fail "start must abort when test_xray_config fails"
 grep -q 'XRAY_CONFIG_FILE.new' "$RSP" || fail "apply_config must use atomic write"
+grep -q 'ensure_xray_scaffold' "$INST" || fail "install must repair config before logrotate/jq"
+awk '/ensure_xray_scaffold/{s=NR} /logrotate_setup/{l=NR} END{exit !(s && l && s < l)}' "$INST" ||
+  fail "install must call ensure_xray_scaffold before logrotate_setup"
+grep -q 'config missing/invalid' "$LOGS" || fail "logrotate must tolerate invalid config.json"
 
 # Functional: NUL file is not valid JSON object
 TMP=$(mktemp -d)
