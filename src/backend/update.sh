@@ -144,28 +144,37 @@ update() {
         return 1
     fi
 
+    # Prefer Entware curl/wget + GitHub mirrors via github_download.
+    # Firmware BusyBox wget lacks GNU progress flags and often cannot do HTTPS.
     local asset="asuswrt-merlin-surfgate.tar.gz"
     local asset_legacy="asuswrt-merlin-stealthsurf.tar.gz"
-    local url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset")
-    local url_legacy=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset_legacy")
+    local url="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset"
+    local url_legacy="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest/download/$asset_legacy"
 
     if [ "$specific_version" != "latest" ]; then
-        url=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset")
-        url_legacy=$(github_proxy_url "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset_legacy")
+        url="https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset"
+        url_legacy="https://github.com/Homavi88/Stealthsurf-Asus/releases/download/v$specific_version/$asset_legacy"
     fi
 
     mkdir -p "$ADDON_TMP_DIR" 2>/dev/null
     local temp_file="$ADDON_TMP_DIR/$asset"
     local jffs_addons_path="/jffs/addons"
+    # Package is several MB; reject HTML error pages / empty bodies.
+    local min_bytes=102400
 
     log_info "Downloading the version:$specific_version..."
     update_loading_progress "Downloading the version:$specific_version..."
-    if wget -q --show-progress -O "$temp_file" "$url"; then
+    rm -f "$temp_file"
+    if github_download "$url" "$temp_file" "$min_bytes" "$asset"; then
         log_info "Download completed successfully."
-    elif wget -q --show-progress -O "$temp_file" "$url_legacy"; then
+    elif github_download "$url_legacy" "$temp_file" "$min_bytes" "$asset_legacy"; then
         log_info "Download completed via legacy asset $asset_legacy."
     else
         log_error "Failed to download the $specific_version version. Exiting."
+        log_error "Tried: $url"
+        log_error "And:   $url_legacy"
+        log_error "Fetcher: $(github_https_bin 2>/dev/null || echo none) — install Entware curl if missing."
+        log_error "Manual: /opt/bin/curl -fsSL -o /tmp/$asset '$url' && tar -xzf /tmp/$asset -C /jffs/addons && mv /jffs/addons/ssurf/stealthsurf /jffs/scripts/ssurf && chmod 777 /jffs/scripts/ssurf && /jffs/scripts/ssurf install"
         return 1
     fi
 

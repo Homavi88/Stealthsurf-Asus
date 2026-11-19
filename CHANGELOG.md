@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.20] - 2026-11-19
+
+### Update download
+
+- `surfgate update` / панель Install больше не вызывают BusyBox `wget` с GNU-флагами (из‑за этого было «Failed to download»)
+- Пакет качается через `github_download`: Entware curl/wget + зеркала GitHub
+
 ## [1.4.19] - 2026-11-19
 
 ### Updates UI
