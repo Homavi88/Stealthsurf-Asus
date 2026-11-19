@@ -21,7 +21,7 @@
       </div>
       <h1 class="ss-brand-hero">SurfGate</h1>
       <p class="ss-brand-hero-sub">merlin · panel :1131 · xray</p>
-      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ running ? 'status: online' : 'status: offline' }}</p>
+      <p class="ss-status-title" :class="{ 'is-off': !running }">{{ statusLabel }}</p>
       <div class="ss-ip-pill" v-if="displayIp || displayVpnServer">
         <span class="ss-mono" v-if="displayIp">wan {{ displayIp }}</span>
         <span class="ss-mono ss-ip-sep" v-if="displayIp && displayVpnServer">·</span>
@@ -165,6 +165,9 @@
   type LiveStatus = {
     ok?: boolean;
     running?: boolean;
+    desired?: boolean;
+    fw_up?: boolean;
+    official?: boolean;
     cpu_pct: number;
     mem_used_mb: number;
     mem_total_mb: number;
@@ -208,6 +211,7 @@
 
       const conflict = computed(
         () =>
+          live.value.official === true ||
           uiResponse.value?.conflict === 'xrayui' ||
           uiResponse.value?.conflict === 'official' ||
           uiResponse.value?.xrayui?.running === true ||
@@ -216,10 +220,16 @@
           uiResponse.value?.xray?.official?.running === true
       );
       const conflictHint = computed(() => {
-        if (uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
+        if (live.value.official || uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
           return 'conflict: official StealthSurf is running — stop it first';
         }
         return 'conflict: stock xrayui is running — stop it first';
+      });
+      const statusLabel = computed(() => {
+        if (live.value.official && !running.value) return 'status: offline · official StealthSurf active';
+        if (running.value) return 'status: online';
+        if (live.value.desired && !running.value) return 'status: offline · vpn desired (xray not detected)';
+        return 'status: offline';
       });
 
       const displayIp = computed(() => live.value.wan_ip || window.xray?.router?.wan_ip || '');
@@ -407,14 +417,17 @@
             wan_ip: data.wan_ip,
             vpn_server: data.vpn_server,
             running: data.running,
+            desired: data.desired,
+            fw_up: data.fw_up,
+            official: data.official,
             traffic: t,
             ts
           };
-          if (typeof data.running === 'boolean') {
+          if (typeof data.running === 'boolean' && window.xray?.server) {
             window.xray.server.isRunning = data.running;
           }
         } catch {
-          /* mock / offline */
+          /* keep last known status — do not force offline on poll errors */
         }
       };
 
@@ -425,9 +438,10 @@
           lastError.value = 'выберите подключение из списка API';
           return;
         }
+        const wantRunning = !running.value;
         busy.value = true;
         try {
-          if (running.value) {
+          if (!wantRunning) {
             await engine.executeWithLoadingProgress(async () => {
               await engine.submit(SubmitActions.serverStop);
             }, false);
@@ -439,7 +453,12 @@
               await engine.submit(SubmitActions.serverStart);
             }, false);
           }
-          await pollLive();
+          // Re-poll a few times — Xray PID / firewall may appear a second after start.
+          for (let i = 0; i < 4; i++) {
+            await pollLive();
+            if (running.value === wantRunning) break;
+            await new Promise((r) => setTimeout(r, 800));
+          }
           await loadCatalog();
         } catch (e) {
           lastError.value = e instanceof Error ? e.message : 'ошибка start/stop';
@@ -476,6 +495,7 @@
         rates,
         vol,
         running,
+        statusLabel,
         conflict,
         conflictHint,
         selectEndpoint,

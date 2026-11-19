@@ -333,12 +333,27 @@ is_xray_daemon_pid() {
 }
 
 get_xray_daemon_pids() {
-    local pid
+    local pid cmdline found=0
     for pid in $(/bin/pidof xray 2>/dev/null); do
         if is_xray_daemon_pid "$pid"; then
             echo "$pid"
+            found=1
         fi
     done
+    # Fallback: /proc scan when pidof misses our process (BusyBox gaps / non-"xray" argv0).
+    if [ "$found" -eq 0 ]; then
+        for pid in /proc/[0-9]*; do
+            pid=${pid#/proc/}
+            [ -r "/proc/$pid/cmdline" ] || continue
+            cmdline=$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null)
+            case "$cmdline" in
+            *xray*) ;;
+            *) continue ;;
+            esac
+            is_xray_daemon_pid "$pid" || continue
+            echo "$pid"
+        done
+    fi
 }
 
 get_xray_daemon_pid() {
@@ -348,6 +363,15 @@ get_xray_daemon_pid() {
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && is_xray_daemon_pid "$pid"; then
             echo "$pid"
             return 0
+        fi
+        # Pidfile points at a live process still using our config dir.
+        if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null && [ -r "/proc/$pid/cmdline" ]; then
+            case " $(tr '\0' ' ' <"/proc/$pid/cmdline") " in
+            *" $XRAY_CONFIG_DIR/"*)
+                echo "$pid"
+                return 0
+                ;;
+            esac
         fi
     fi
 

@@ -16,5 +16,9 @@ grep -q 'lan-devices' "$ROOT/src/backend/mount.sh" || fail "mount must publish l
 grep -q 'panel_traffic_lifetime_tick' "$PANEL" || fail "missing lifetime traffic accumulator"
 grep -q 'statsOutboundUplink' "$ROOT/src/backend/api.sh" || fail "API config must enable outbound stats"
 grep -q 'traffic-lifetime' "$ROOT/src/backend/mount.sh" || fail "mount must publish traffic-lifetime"
+grep -q 'XRAY_DESIRED_STATE_FILE\|ssurf_xray.desired' "$PANEL" || fail "live status should use desired-state fallback"
+grep -q 'fw_up' "$PANEL" || fail "live status should expose fw_up"
+# Fail-soft: never stick the UI on ok:false when traffic jq breaks
+grep -q 'Never fail the whole status payload' "$PANEL" || fail "live JSON must have fail-soft fallback"
 
-echo "ok: vpn_server + lan-devices + lifetime traffic wiring"
+echo "ok: vpn_server + lan-devices + lifetime traffic + online status wiring"
