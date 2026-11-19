@@ -430,9 +430,11 @@ EOF
     fi
 
     log_info "Existing configuration backed up to $backup_config."
-    cp "$temp_config" "$XRAY_CONFIG_FILE"
-    if [ $? -ne 0 ]; then
+    # Atomic replace — avoids NUL-padded / truncated config.json on flash power-loss mid-cp.
+    local apply_tmp="$XRAY_CONFIG_FILE.new.$$"
+    if ! cp "$temp_config" "$apply_tmp" || ! jq -e 'type == "object"' "$apply_tmp" >/dev/null 2>&1 || ! mv -f "$apply_tmp" "$XRAY_CONFIG_FILE"; then
         log_error "Failed to apply new configuration to $XRAY_CONFIG_FILE."
+        rm -f "$apply_tmp"
         cp "$backup_config" "$XRAY_CONFIG_FILE"
         if [ $? -ne 0 ]; then
             log_error "Critical: Failed to restore configuration from backup."

@@ -71,7 +71,17 @@ start() {
     if [ "$skip_test" = "true" ]; then
         log_info "Skipping Xray configuration test as per user settings."
     else
-        test_xray_config
+        if ! test_xray_config; then
+            log_error "Xray configuration test failed — aborting start."
+            update_loading_progress "Error: Xray config invalid (corrupt JSON?). Check Test Config / system log." 100
+            return 1
+        fi
+    fi
+
+    if ! xray_config_is_valid "$XRAY_CONFIG_FILE"; then
+        log_error "Xray config still invalid after scaffold — aborting start."
+        update_loading_progress "Error: Xray config is corrupt. Re-import endpoint or restore backup." 100
+        return 1
     fi
 
     log_info "Starting $ADDON_TITLE"
