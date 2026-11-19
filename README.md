@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.27-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.28-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 ---
 
 Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
-Актуальная версия **1.4.27**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
+Актуальная версия **1.4.28**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
 > **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
 
@@ -333,6 +333,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
+| **1.4.28** | Home update banner fits on mobile; no false update when already latest |
 | **1.4.27** | Reliable update detect via GitHub mirrors (browser + router) |
 | **1.4.26** | Home update banner + Install; skip geosite/geoip re-download on update |
 | **1.4.25** | Mobile panel: status card + horizontal settings nav |
