@@ -226,7 +226,21 @@ surfgate h                # справка · surfgate m — меню
 | `un --yes` | uninstall |
 | `h` / `?` · `m` | справка · интерактивное меню |
 
-Примеры: `surfgate up` · `surfgate sy && surfgate ls` · `surfgate ap 101 && surfgate re` · `surfgate panel status`.
+Примеры: `surfgate up` · `surfgate sy && surfgate ls` · `surfgate ap 101 && surfgate re` · `surfgate panel status` · `surfgate bak restore ssurf-….tar.gz`.
+
+## Backup
+
+```sh
+surfgate bak                 # → /opt/share/ssurf/backup/ssurf-<ts>.tar.gz
+surfgate bak before-upgrade  # с меткой
+surfgate bak list
+surfgate bak restore ssurf-20261119-120000.tar.gz
+surfgate bak clear           # все архивы
+```
+
+**В архиве:** профили `/opt/etc/xray/ssurf/*.json`, cert, `/opt/etc/ssurf.conf`, `/opt/share/ssurf/data`, custom scripts `/jffs/ssurf_custom` (+ legacy `/jffs/stealthsurf_custom` если есть).  
+**Restore:** UI или CLI; перед распаковкой — allowlist путей (отклоняет чужие члены tar). После restore — `restart` Xray.  
+**Не входит:** API-кэши каталога, логи, файлы панели.
 
 ## Рядом с XrayUI
 
