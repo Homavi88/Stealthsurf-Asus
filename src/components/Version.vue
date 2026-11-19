@@ -1,12 +1,12 @@
 <template>
-  <div class="version">
+  <div class="version" :class="{ 'is-panel': isPanel }">
     <a href="#" @click.prevent="open_update">
       <span class="button_gen button_gen_small button_info" :title="$t('com.Version.tooltip_update_avialable')" v-if="hasUpdate">!</span>
       SurfGate v{{ current_version }}</a
     >
   </div>
-  <modal ref="updateModal" width="760" :title="$t('com.Version.modal_title')">
-    <div class="version-modal">
+  <modal ref="updateModal" :width="isPanel ? '520' : '760'" :variant="isPanel ? 'panel' : 'default'" :title="modalTitle">
+    <div class="version-modal" :class="{ 'version-modal--panel': isPanel }">
       <div class="version-status" :class="{ 'has-update': hasUpdate, 'up-to-date': !hasUpdate }">
         <div class="version-status__pills">
           <div class="version-pill" :class="{ 'version-pill--muted': hasUpdate }">
@@ -25,7 +25,8 @@
         </div>
         <div class="version-status__badge version-status__badge--update" v-else>
           <span class="version-status__icon" aria-hidden="true">↑</span>
-          <span v-html="$t('com.Version.new_version', [latest_version])"></span>
+          <span v-if="isPanel">Доступна новая версия: {{ latest_version }}</span>
+          <span v-else v-html="$t('com.Version.new_version', [latest_version])"></span>
         </div>
       </div>
 
@@ -48,7 +49,9 @@
       <p class="changelog-link" v-html="$t('com.Version.open_chengelog')"></p>
     </div>
     <template v-slot:footer v-if="hasUpdate || selected_version">
-      <button class="button_gen button_gen_small" v-if="hasUpdate" @click.prevent="dont_want_update">{{ $t('com.Version.dont_want_update', [latest_version]) }}</button>
+      <button type="button" class="button_gen button_gen_small" v-if="hasUpdate" @click.prevent="dont_want_update">
+        {{ $t('com.Version.dont_want_update', [latest_version]) }}
+      </button>
       <input class="button_gen button_gen_small button-primary" type="button" :value="installLabel" @click.prevent="update" />
     </template>
   </modal>
@@ -99,16 +102,18 @@
       const changelog = computed(() => (selectedRelease.value?.body ? md.render(selectedRelease.value.body) : ''));
       const compareSelected = computed(() => (selected_version.value && current_version.value ? vCompare(selected_version.value, current_version.value) : 1));
       const isDowngrade = computed(() => compareSelected.value === -1);
+      const modalTitle = computed(() => t('com.Version.modal_title'));
       const installLabel = computed(() => {
         if (!selected_version.value) return t('com.Version.update_now');
         if (compareSelected.value === 0) return t('com.Version.reinstall_now', [selected_version.value]);
         if (compareSelected.value === -1) return t('com.Version.downgrade_now', [selected_version.value]);
-        if (selected_version.value === latest_version.value) return t('com.Version.update_now');
+        if (selected_version.value === latest_version.value) {
+          return isPanel ? `Установить v${selected_version.value}` : t('com.Version.update_now');
+        }
         return t('com.Version.install_version', [selected_version.value]);
       });
 
       const checkLatest = async (proxy?: string) => {
-        // one call returns both the latest release and the list used for the downgrade selector
         const gh_releases_url = `https://api.github.com/repos/Homavi88/Stealthsurf-Asus/releases?per_page=${RELEASES_TO_SHOW + 5}`;
         try {
           const list = await engine.fetchGithubJson<any[]>(gh_releases_url, proxy);
@@ -121,7 +126,6 @@
               prerelease: !!r.prerelease,
               body: r.body || ''
             }));
-          // look for the latest stable before cutting the list, and keep it selectable if prereleases pushed it past the cut
           const latestRelease = all.find((r) => !r.prerelease);
           const shown = all.slice(0, RELEASES_TO_SHOW);
           if (latestRelease && !shown.includes(latestRelease)) shown.push(latestRelease);
@@ -133,7 +137,8 @@
           hasUpdate.value = !!current_version.value && vCompare(latest_version.value, current_version.value) === 1;
           if (hasUpdate.value === true) {
             window.xray.server.stealthsurf_version_latest = latest_version.value;
-            if (refusedToUpdateVersion.value != latest_version.value) {
+            // Panel: don't auto-pop changelog — user opens via updates / version link.
+            if (!isPanel && refusedToUpdateVersion.value != latest_version.value) {
               updateModal.value.show();
             }
           }
@@ -170,7 +175,6 @@
           return;
         }
         await engine.executeWithLoadingProgress(async () => {
-          // no version -> backend falls back to the latest release, same as before
           await engine.submit(SubmitActions.performUpdate, version ? { version } : undefined);
         });
       };
@@ -191,6 +195,8 @@
         selected_version,
         isDowngrade,
         installLabel,
+        modalTitle,
+        isPanel,
         open_update,
         update,
         dont_want_update
@@ -210,6 +216,32 @@
       position: absolute;
       bottom: 0;
       right: 5px;
+    }
+
+    &.is-panel {
+      padding-top: 0;
+      a {
+        position: static;
+        color: #3db8ff;
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 13px;
+        font-weight: 500;
+        text-decoration: underline;
+      }
+      .button_info {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        margin-right: 6px;
+        padding: 0 4px;
+        border-radius: 4px;
+        border: 1px solid rgba(61, 184, 255, 0.4);
+        background: rgba(61, 184, 255, 0.12);
+        color: #3db8ff;
+        font-size: 11px;
+      }
     }
   }
 
@@ -457,5 +489,165 @@
   .version-modal :deep(a) {
     color: #ffcc00;
     text-decoration: underline;
+  }
+
+  /* —— Panel (SurfGate :1131) —— */
+  .version-modal--panel {
+    gap: 12px;
+
+    .version-status {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-left: 3px solid #8b939e;
+      border-radius: 8px;
+      padding: 12px 14px;
+
+      &.up-to-date {
+        border-left-color: #3dd68c;
+      }
+      &.has-update {
+        border-left-color: #3db8ff;
+      }
+    }
+
+    .version-status__arrow {
+      color: #3db8ff;
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      font-weight: 500;
+    }
+
+    .version-pill {
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      font-family: 'IBM Plex Mono', ui-monospace, monospace;
+      color: #e6e8eb;
+
+      &--latest {
+        border-color: rgba(61, 184, 255, 0.45);
+        box-shadow: none;
+        .version-pill__num {
+          color: #3db8ff;
+        }
+      }
+    }
+
+    .version-status__badge {
+      border-radius: 6px;
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      font-size: 12px;
+
+      &--ok {
+        color: #b8f0d0;
+        background: rgba(61, 214, 140, 0.12);
+        border: 1px solid rgba(61, 214, 140, 0.28);
+      }
+
+      &--update {
+        color: #cfe9ff;
+        background: rgba(61, 184, 255, 0.12);
+        border: 1px solid rgba(61, 184, 255, 0.28);
+      }
+    }
+
+    .version-select {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+
+      label {
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: #8b939e;
+      }
+
+      select {
+        width: 100%;
+        padding: 10px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(0, 0, 0, 0.28);
+        color: #e6e8eb;
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 13px;
+      }
+
+      &__warn,
+      &__error {
+        color: #ff8a5c;
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      }
+    }
+
+    .changelog-card {
+      background: rgba(0, 0, 0, 0.28);
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: 8px;
+      max-height: 42vh;
+      overflow: auto;
+    }
+
+    .changelog {
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      font-size: 13px;
+      color: #dce8f0;
+
+      :deep(h1),
+      :deep(h2),
+      :deep(h3) {
+        display: block;
+        margin: 0 0 10px;
+        padding: 0;
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #8b939e;
+        background: none;
+        border: none;
+      }
+
+      :deep(blockquote) {
+        background: rgba(61, 184, 255, 0.08);
+        border: 1px solid rgba(61, 184, 255, 0.2);
+        border-left: 3px solid #3db8ff;
+        color: #cfe9ff;
+        border-radius: 6px;
+
+        strong,
+        em {
+          color: #eaf6ff;
+        }
+      }
+
+      :deep(code) {
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        color: #3db8ff;
+        background: rgba(61, 184, 255, 0.1);
+        border: 1px solid rgba(61, 184, 255, 0.2);
+        font-weight: 500;
+      }
+
+      :deep(a) {
+        color: #3db8ff;
+      }
+    }
+
+    .changelog-link {
+      color: #8b939e;
+      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+
+      :deep(a) {
+        color: #3db8ff;
+      }
+    }
+
+    :deep(a) {
+      color: #3db8ff;
+    }
   }
 </style>

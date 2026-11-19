@@ -445,13 +445,13 @@
     },
     "Version": {
       "tooltip_update_avialable": "a more recent update is available",
-      "modal_title": "XRAYUI Version Log",
+      "modal_title": "SurfGate Update",
       "current_version": "Current version: {0}",
-      "new_version": "A newer version is available: <strong style='color:#FFCC00'>{0}</strong>",
+      "new_version": "A newer version is available: <strong style='color:#3db8ff'>{0}</strong>",
       "version_is_up_to_date": "The installed version is up to date.",
       "open_chengelog": "open full <a target='_blank' href='https://github.com/Homavi88/Stealthsurf-Asus/blob/main/CHANGELOG.md'>changelog</a>",
-      "update_now": "update now!",
-      "dont_want_update": "Don't want to update to {0}",
+      "update_now": "Update",
+      "dont_want_update": "Don't update to {0}",
       "label_select_version": "Version to install",
       "latest_suffix": "(latest)",
       "installed_suffix": "(installed)",
@@ -461,7 +461,7 @@
       "downgrade_now": "downgrade to {0}",
       "reinstall_now": "reinstall {0}",
       "install_version": "install {0}",
-      "downgrade_confirm": "Downgrade XRAYUI from {1} to {0}? Older releases may not support all settings of your current configuration."
+      "downgrade_confirm": "Downgrade SurfGate from {1} to {0}? Older releases may not support all settings of your current configuration."
     },
     "Reality": {
       "modal_title": "REALITY Settings",

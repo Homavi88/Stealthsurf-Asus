@@ -1,6 +1,13 @@
 <template>
   <Teleport to="#stealthsurf-modals">
-    <div class="xray-modal-overlay" v-if="isVisible" @mousedown.self="close" role="dialog" aria-modal="true">
+    <div
+      class="xray-modal-overlay"
+      :class="{ 'is-panel': variant === 'panel' }"
+      v-if="isVisible"
+      @mousedown.self="close"
+      role="dialog"
+      aria-modal="true"
+    >
       <div class="xray-modal-content" @click.stop :style="{ width }">
         <header class="xray-modal-header">
           <h2>
@@ -8,7 +15,7 @@
               {{ title }}
             </slot>
           </h2>
-          <button class="close-btn" @click="close" aria-label="Close modal">×</button>
+          <button class="close-btn" type="button" @click="close" aria-label="Close modal">×</button>
         </header>
         <div class="xray-modal-body">
           <slot></slot>
@@ -16,7 +23,7 @@
         <footer class="xray-modal-footer">
           <span class="row-buttons">
             <slot name="footer">
-              <button @click.prevent="close" class="button_gen button_gen_small">
+              <button type="button" @click.prevent="close" class="button_gen button_gen_small">
                 {{ $t('labels.close') }}
               </button>
             </slot>
@@ -41,6 +48,10 @@
       width: {
         type: String,
         default: '755'
+      },
+      variant: {
+        type: String as () => 'default' | 'panel',
+        default: 'default'
       }
     },
     setup(props, { emit }) {
@@ -50,7 +61,6 @@
       const show = (onClose?: () => void) => {
         isVisible.value = true;
         if (onClose) onCloseCallback = onClose;
-        // Add Escape key listener when modal is shown
         document.addEventListener('keydown', handleKeyDown);
       };
 
@@ -60,7 +70,6 @@
         if (typeof onCloseCallback === 'function') {
           onCloseCallback();
         }
-        // Remove Escape key listener when modal is closed
         document.removeEventListener('keydown', handleKeyDown);
       };
 
@@ -74,7 +83,12 @@
         document.removeEventListener('keydown', handleKeyDown);
       });
 
-      return { isVisible, show, close, width: props.width.endsWith('%') ? props.width : `${props.width.replace('px', '')}px` };
+      return {
+        isVisible,
+        show,
+        close,
+        width: props.width.endsWith('%') ? props.width : `${props.width.replace('px', '')}px`
+      };
     }
   });
 </script>
@@ -132,6 +146,7 @@
       border: none;
       font-size: 1.5rem;
       cursor: pointer;
+      color: inherit;
     }
 
     .xray-modal-body {
@@ -159,6 +174,102 @@
       .row-buttons {
         width: 100%;
         text-align: right;
+      }
+    }
+
+    /* SurfGate standalone panel — graphite glass, IBM Plex */
+    &.is-panel {
+      z-index: 10050;
+      padding: 24px 16px;
+      background: rgba(5, 8, 12, 0.72);
+      -webkit-backdrop-filter: blur(8px);
+      backdrop-filter: blur(8px);
+      align-items: flex-start;
+
+      .xray-modal-content {
+        margin-top: min(8vh, 48px);
+        background: linear-gradient(180deg, #151b24 0%, #10151c 100%);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+        padding: 0;
+        color: #e6e8eb;
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        width: min(520px, 100%);
+        max-height: calc(100vh - 3rem);
+      }
+
+      .xray-modal-header {
+        padding: 16px 18px 10px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+        h2 {
+          font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+          font-size: 16px;
+          font-weight: 600;
+          letter-spacing: 0.01em;
+          color: #e6e8eb;
+        }
+      }
+
+      .close-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 6px;
+        color: #8b939e;
+        font-size: 22px;
+        line-height: 1;
+
+        &:hover {
+          background: rgba(255, 255, 255, 0.06);
+          color: #e6e8eb;
+        }
+      }
+
+      .xray-modal-body {
+        margin: 0;
+        padding: 14px 18px 8px;
+        text-align: left;
+
+        :deep(a) {
+          color: #3db8ff;
+        }
+      }
+
+      .xray-modal-footer {
+        margin: 0;
+        padding: 12px 18px 16px;
+        border-top: 1px solid rgba(255, 255, 255, 0.08);
+
+        .row-buttons {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          text-align: stretch;
+        }
+
+        :deep(.button_gen),
+        :deep(input.button_gen) {
+          width: 100%;
+          margin: 0 !important;
+          padding: 12px 14px !important;
+          border-radius: 8px !important;
+          border: 1px solid rgba(120, 160, 200, 0.35) !important;
+          background: transparent !important;
+          color: #dce8f0 !important;
+          font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          box-shadow: none !important;
+          cursor: pointer;
+        }
+
+        :deep(.button-primary),
+        :deep(input.button-primary) {
+          background: linear-gradient(180deg, rgba(61, 184, 255, 0.28), rgba(61, 184, 255, 0.16)) !important;
+          border-color: rgba(61, 184, 255, 0.45) !important;
+          color: #eaf6ff !important;
+        }
       }
     }
   }
