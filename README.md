@@ -212,8 +212,8 @@ surfgate h                # справка · surfgate m — меню
 | `renew` `<id>` · `topup` `<amount>` | продление / пополнение |
 | `dv` / `devices` | устройства VPN (IP / MAC / имя) |
 | `pf` / `preflight` | NTP / WAN / TPROXY / Xray |
-| `sp` / `speed` | тест скорости (Mbps ↓/↑ + latency) |
-| `dns` / `dnstest` | DNS leak (wiring + resolvers) |
+| `sp` / `speed` | тест скорости (Mbps ↓/↑ + latency; cron `speedtest_interval`) |
+| `dns` / `dnstest` | DNS / IPv6 leak + WebRTC hint для LAN-браузера |
 | `panel` `start\|stop\|status\|url\|set-password` | панель `:1131` |
 | `bak` | backup |
 | `d` / `dg` | diagnostics |
@@ -272,6 +272,7 @@ CI публикует GitHub Release на тег `v*`.
 
 ## Документация и лицензия
 
+- QA VPN на роутере: [`docs/qa-router.md`](./docs/qa-router.md) (guest force, split bypass, speed cron, DNS/IPv6/WebRTC)
 - Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net) · [API](https://docs.stealthsurf.net/api)
 - Upstream XrayUI: [daniellavrushin.github.io/asuswrt-merlin-xrayui](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/)
 - Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · лицензия [CC BY-NC-SA 4.0](./LICENSE) (© Daniel Lavrushin / contributors)

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### VPN polish
+
+- `guest_vpn_mode=vpn` реально отличается от `follow`: guest bridges всегда TPROXY даже при LAN selected/exclude
+- Split bypass доменов / `geosite:` → правило Xray `surfgate-split-bypass` → `direct`
+- Speedtest: fallback download URL + опциональный cron (`speedtest_interval` 6h/12h/24h)
+- DNS leak: IPv6 leak при `ipv6_mode=block` + `webrtc_hint` для проверки с LAN-браузера
+- QA на роутере: [`docs/qa-router.md`](./docs/qa-router.md)
+
 ## [1.4.14] - 2026-11-19
 
 ### Speed test + DNS leak test

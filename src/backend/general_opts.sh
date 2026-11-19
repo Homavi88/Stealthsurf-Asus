@@ -30,6 +30,7 @@ apply_general_options() {
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
     local ss_catalog_auto_sync addon_update_check addon_auto_update startup_flag
     local kill_switch lan_vpn_mode lan_vpn_macs ipv6_mode guest_vpn_mode
+    local split_bypass_domains speedtest_interval
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -73,6 +74,8 @@ apply_general_options() {
         "lan_vpn_macs=" + ((.lan_vpn_macs // "") | tostring | @sh) + "\n" +
         "ipv6_mode=" + ((.ipv6_mode // "proxy") | tostring | @sh) + "\n" +
         "guest_vpn_mode=" + ((.guest_vpn_mode // "follow") | tostring | @sh) + "\n" +
+        "split_bypass_domains=" + ((.split_bypass_domains // "") | tostring | @sh) + "\n" +
+        "speedtest_interval=" + ((.speedtest_interval // "disabled") | tostring | @sh) + "\n" +
         "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
     '); then
         log_error "Failed to parse general options payload."
@@ -175,9 +178,16 @@ apply_general_options() {
     *) guest_vpn_mode="follow" ;;
     esac
     update_xrayui_config "guest_vpn_mode" "$guest_vpn_mode"
+    update_xrayui_config "split_bypass_domains" "$split_bypass_domains"
+    case "$speedtest_interval" in
+    6h | 12h | 24h) ;;
+    *) speedtest_interval="disabled" ;;
+    esac
+    update_xrayui_config "speedtest_interval" "$speedtest_interval"
 
     # Sync simple LAN device mode into xray routing.policies
     vpn_lan_policies_sync 2>/dev/null || true
+    vpn_split_rules_sync 2>/dev/null || true
 
     # Omit keeps existing conf when the panel payload did not include these keys.
     if [ "$subscriptionLinks" != "__omit__" ]; then
@@ -202,6 +212,7 @@ apply_general_options() {
     cron_subscription_fallback_add
     cron_ss_catalog_sync_add
     cron_addon_update_check_add
+    cron_speedtest_add
     cron_ipset_save_add
     cron_watchdog_add
 

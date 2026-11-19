@@ -62,6 +62,12 @@ jobs:
           grep -q 'dnstest_run' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'stealthsurf_speedtest' /tmp/ss-ci-pkg/ssurf/panel/app.js
           grep -q 'stealthsurf_dnstest' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          grep -q 'vpn_guest_force_nets\|vpn_split_rules_sync' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'cron_speedtest_add\|CRU_SPEEDTEST_ID' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'split_bypass_domains\|speedtest_interval' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'webrtc_hint\|ipv6_leaked' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'split_bypass_domains\|speedtest_interval' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          test -f docs/qa-router.md
           sh -n /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/ssurf/stealthsurf

@@ -91,6 +91,30 @@ guest_vpn_mode=follow
 filtered2=$(vpn_filter_source_nets "192.168.1.0/24 192.168.2.0/24")
 echo "$filtered2" | grep -q '192.168.2.0/24'
 
+# guest=vpn unions guest nets even if missing from input list
+guest_vpn_mode=vpn
+filtered3=$(vpn_filter_source_nets "192.168.1.0/24")
+echo "$filtered3" | grep -q '192.168.2.0/24'
+vpn_guest_force_wanted
+guest_force=$(vpn_guest_force_nets)
+echo "$guest_force" | grep -q '192.168.2.0/24'
+
+# ── Domain split bypass ─────────────────────────────────────────────────────
+cat >"$XRAY_CONFIG_FILE" <<'EOF'
+{"inbounds":[],"outbounds":[{"tag":"proxy","protocol":"vless"}],"routing":{"rules":[{"name":"keep","type":"field","outboundTag":"proxy"}]}}
+EOF
+split_bypass_domains="example.com, geosite:category-games"
+vpn_split_rules_sync
+test "$(jq -r '.routing.rules[0].name' "$XRAY_CONFIG_FILE")" = "surfgate-split-bypass"
+test "$(jq -r '.routing.rules[0].outboundTag' "$XRAY_CONFIG_FILE")" = "direct"
+test "$(jq -r '.outbounds[]|select(.tag=="direct")|.protocol' "$XRAY_CONFIG_FILE")" = "freedom"
+jq -e '.routing.rules[0].domain | index("example.com")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '[.routing.rules[]|select(.name=="keep")]|length==1' "$XRAY_CONFIG_FILE" >/dev/null
+
+split_bypass_domains=""
+vpn_split_rules_sync
+jq -e '[.routing.rules[]|select(.name=="surfgate-split-bypass")]|length==0' "$XRAY_CONFIG_FILE" >/dev/null
+
 # ── 6. Preflight JSON ───────────────────────────────────────────────────────
 cat >"$XRAY_CONFIG_FILE" <<'EOF'
 {"inbounds":[{"protocol":"dokodemo-door","tag":"all-in","port":5699}],"outbounds":[],"routing":{"rules":[]}}

@@ -29,6 +29,7 @@ start() {
 
     # Sync simple LAN device mode into routing.policies before firewall
     vpn_lan_policies_sync 2>/dev/null || true
+    vpn_split_rules_sync 2>/dev/null || true
 
     migrate_tun_inbounds_config
 

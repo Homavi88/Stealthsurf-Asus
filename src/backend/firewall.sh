@@ -880,6 +880,17 @@ configure_firewall_client() {
         [ "$tcp_enabled" = "yes" ] && apply_policy_rules "$IPT_TABLE" tcp "$policies_file" "$source_nets" $IPT_JOURNAL_FLAGS
         [ "$udp_enabled" = "yes" ] && apply_policy_rules "$IPT_TABLE" udp "$policies_file" "$source_nets" $IPT_JOURNAL_FLAGS
 
+        # Guest Wi-Fi force-VPN: redirect guest CIDRs even when lan_vpn_mode=selected/exclude
+        if type vpn_guest_force_nets >/dev/null 2>&1; then
+            local guest_force_nets=""
+            guest_force_nets=$(vpn_guest_force_nets 2>/dev/null || true)
+            if [ -n "$guest_force_nets" ]; then
+                log_info "Guest VPN force: redirecting guest nets ($guest_force_nets)"
+                [ "$tcp_enabled" = "yes" ] && emit_policy_rules "$IPT_TABLE" tcp redirect "" ANY "$guest_force_nets" $IPT_JOURNAL_FLAGS
+                [ "$udp_enabled" = "yes" ] && emit_policy_rules "$IPT_TABLE" udp redirect "" ANY "$guest_force_nets" $IPT_JOURNAL_FLAGS
+            fi
+        fi
+
         # Exclude dokodemo-door port from TPROXY  destination
         log_info "Excluding dokodemo-door port $dokodemo_port from $IPT_TABLE."
         insert_rule "$IPT_TABLE" -m addrtype --dst-type LOCAL -p tcp --dport "$dokodemo_port" -j RETURN

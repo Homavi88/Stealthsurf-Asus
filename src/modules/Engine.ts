@@ -289,6 +289,10 @@ export class EngineResponseConfig {
     ipv6_mode?: string;
     /** follow | vpn | direct */
     guest_vpn_mode?: string;
+    /** Comma-separated domains / geosite: tags bypassing VPN */
+    split_bypass_domains?: string;
+    /** disabled | 6h | 12h | 24h */
+    speedtest_interval?: string;
     xrayui?: {
       installed?: boolean;
       running?: boolean;
