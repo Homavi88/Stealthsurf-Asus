@@ -78,6 +78,10 @@ lan_vpn_macs=""
 vpn_lan_policies_sync
 test "$(jq -r '[.routing.policies[]|select(.name|startswith("surfgate-lan-"))]|length' "$XRAY_CONFIG_FILE")" = "0"
 test "$(jq -r '[.routing.policies[]|select(.name=="keep-me")]|length' "$XRAY_CONFIG_FILE")" = "1"
+# Private LAN destinations always direct (so apps on LAN can reach excluded devices)
+test "$(jq -r '.routing.rules[0].name' "$XRAY_CONFIG_FILE")" = "surfgate-private-direct"
+test "$(jq -r '.routing.rules[0].outboundTag' "$XRAY_CONFIG_FILE")" = "direct"
+jq -e '.routing.rules[0].ip | index("geoip:private")' "$XRAY_CONFIG_FILE" >/dev/null
 
 # ── 8. Guest filter ─────────────────────────────────────────────────────────
 guest_vpn_mode=direct

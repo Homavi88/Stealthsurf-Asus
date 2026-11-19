@@ -123,6 +123,9 @@
                   : 'Отметьте устройства, которые должны идти через VPN; остальные — direct.'
               }}
             </div>
+            <div class="ss-lan-devices__hint">
+              Заход с телефона в LAN: в приложении указывайте локальный IP из списка ниже (192.168.x.x), не DDNS и не «имя из интернета» — иначе трафик уйдёт в VPN и устройство будет «недоступно». Один Wi‑Fi с роутером (не guest), без AP isolation; на телефоне отключите случайный MAC или отметьте актуальный. После Save — Restart VPN.
+            </div>
             <label v-for="d in lanDevices" :key="d.mac" class="ss-lan-devices__row">
               <input type="checkbox" :checked="isLanMacSelected(d.mac)" @change="onLanMacChange(d.mac, $event)" />
               <span class="ss-lan-devices__name">{{ d.name || d.mac }}</span>
