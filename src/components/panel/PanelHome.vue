@@ -25,7 +25,7 @@
       <div class="ss-ip-pill" v-if="displayIp || displayVpnServer">
         <span class="ss-mono" v-if="displayIp">wan {{ displayIp }}</span>
         <span class="ss-mono ss-ip-sep" v-if="displayIp && displayVpnServer">·</span>
-        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer">vpn {{ displayVpnServer }}</span>
+        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer" title="Адрес VPN-сервера из конфига (не exit IP как на 2ip.ru)">server {{ displayVpnServer }}</span>
       </div>
     </section>
 

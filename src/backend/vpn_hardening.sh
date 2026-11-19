@@ -354,14 +354,44 @@ vpn_primary_proxy_tag() {
     ' "$XRAY_CONFIG_FILE" 2>/dev/null || echo "proxy"
 }
 
+# Preset: Russian TLDs → direct (.рф as punycode xn--p1ai for dnsmasq/ipset)
+vpn_split_ru_tld_domains() {
+    printf '%s' 'domain:ru,domain:su,domain:xn--p1ai'
+}
+
+# Preset: RU services whitelist → direct (geosite where available + literals)
+vpn_split_ru_services_domains() {
+    printf '%s' \
+        'geosite:category-ru,geosite:category-gov-ru,geosite:geolocation-ru,geosite:yandex,' \
+        'gosuslugi.ru,mos.ru,nalog.ru,cbr.ru,' \
+        'sberbank.ru,sber.ru,tinkoff.ru,tbank.ru,vtb.ru,alfabank.ru,gazprombank.ru,raiffeisen.ru,' \
+        'vk.com,vk.ru,ok.ru,mail.ru,my.mail.ru,yandex.ru,ya.ru,yandex.net,yandex.com,' \
+        'ozon.ru,wildberries.ru,wb.ru,avito.ru,dns-shop.ru,citilink.ru,mvideo.ru,' \
+        'mts.ru,megafon.ru,beeline.ru,tele2.ru,t2.ru,rostelecom.ru,' \
+        'rutube.ru,kinopoisk.ru,ivi.ru,okko.tv,premier.one,' \
+        'rbc.ru,ria.ru,tass.ru,lenta.ru,kommersant.ru'
+}
+
 # ── Domain split (bypass list → direct) ─────────────────────────────────────
 # split_bypass_domains: comma/space/newline separated hostnames or geosite: tags
+# + optional presets: split_bypass_ru_tlds / split_bypass_ru_services
 vpn_split_rules_sync() {
     load_xrayui_config
     local raw="${split_bypass_domains:-}"
     local tmp domains_json
 
     [ -f "$XRAY_CONFIG_FILE" ] || return 0
+
+    case "${split_bypass_ru_tlds:-false}" in
+    true | 1 | yes | on)
+        raw="${raw},$(vpn_split_ru_tld_domains)"
+        ;;
+    esac
+    case "${split_bypass_ru_services:-false}" in
+    true | 1 | yes | on)
+        raw="${raw},$(vpn_split_ru_services_domains)"
+        ;;
+    esac
 
     # Normalise → JSON string array (keep geosite: / domain: / full: prefixes)
     domains_json=$(vpn_domains_to_json "$raw")

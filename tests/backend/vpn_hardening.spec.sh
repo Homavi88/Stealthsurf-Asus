@@ -105,6 +105,8 @@ cat >"$XRAY_CONFIG_FILE" <<'EOF'
 {"inbounds":[],"outbounds":[{"tag":"proxy","protocol":"vless"}],"routing":{"rules":[{"name":"keep","type":"field","outboundTag":"proxy"}]}}
 EOF
 split_bypass_domains="example.com, geosite:category-games"
+split_bypass_ru_tlds=false
+split_bypass_ru_services=false
 vpn_split_rules_sync
 test "$(jq -r '.routing.rules[0].name' "$XRAY_CONFIG_FILE")" = "surfgate-split-bypass"
 test "$(jq -r '.routing.rules[0].outboundTag' "$XRAY_CONFIG_FILE")" = "direct"
@@ -112,7 +114,26 @@ test "$(jq -r '.outbounds[]|select(.tag=="direct")|.protocol' "$XRAY_CONFIG_FILE
 jq -e '.routing.rules[0].domain | index("example.com")' "$XRAY_CONFIG_FILE" >/dev/null
 jq -e '[.routing.rules[]|select(.name=="keep")]|length==1' "$XRAY_CONFIG_FILE" >/dev/null
 
+# RU TLD preset
 split_bypass_domains=""
+split_bypass_ru_tlds=true
+split_bypass_ru_services=false
+vpn_split_rules_sync
+jq -e '.routing.rules[0].domain | index("domain:ru")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("domain:su")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("domain:xn--p1ai")' "$XRAY_CONFIG_FILE" >/dev/null
+
+# RU services preset
+split_bypass_ru_tlds=false
+split_bypass_ru_services=true
+vpn_split_rules_sync
+jq -e '.routing.rules[0].domain | index("gosuslugi.ru")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("vk.com")' "$XRAY_CONFIG_FILE" >/dev/null
+jq -e '.routing.rules[0].domain | index("geosite:yandex")' "$XRAY_CONFIG_FILE" >/dev/null
+
+split_bypass_domains=""
+split_bypass_ru_tlds=false
+split_bypass_ru_services=false
 vpn_split_rules_sync
 jq -e '[.routing.rules[]|select(.name=="surfgate-split-bypass")]|length==0' "$XRAY_CONFIG_FILE" >/dev/null
 

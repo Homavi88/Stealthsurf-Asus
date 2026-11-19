@@ -30,7 +30,8 @@ apply_general_options() {
     local tun_routing watchdog watchdog_interval watchdog_max_attempts
     local ss_catalog_auto_sync addon_update_check addon_auto_update startup_flag
     local kill_switch lan_vpn_mode lan_vpn_macs ipv6_mode guest_vpn_mode
-    local split_bypass_domains split_lock_domains speedtest_interval
+    local split_bypass_domains split_bypass_ru_tlds split_bypass_ru_services
+    local split_lock_domains speedtest_interval
     local _genopts_vars
     if ! _genopts_vars=$(echo "$genopts" | jq -r '
         "github_proxy=" + ((.github_proxy // "") | tostring | @sh) + "\n" +
@@ -75,6 +76,8 @@ apply_general_options() {
         "ipv6_mode=" + ((.ipv6_mode // "proxy") | tostring | @sh) + "\n" +
         "guest_vpn_mode=" + ((.guest_vpn_mode // "follow") | tostring | @sh) + "\n" +
         "split_bypass_domains=" + ((.split_bypass_domains // "") | tostring | @sh) + "\n" +
+        "split_bypass_ru_tlds=" + ((.split_bypass_ru_tlds // "false") | tostring | @sh) + "\n" +
+        "split_bypass_ru_services=" + ((.split_bypass_ru_services // "false") | tostring | @sh) + "\n" +
         "split_lock_domains=" + ((.split_lock_domains // "") | tostring | @sh) + "\n" +
         "speedtest_interval=" + ((.speedtest_interval // "disabled") | tostring | @sh) + "\n" +
         "startup_flag=" + (if has("startup") then (.startup | tostring) else "omit" end | @sh)
@@ -180,6 +183,10 @@ apply_general_options() {
     esac
     update_xrayui_config "guest_vpn_mode" "$guest_vpn_mode"
     update_xrayui_config "split_bypass_domains" "$split_bypass_domains"
+    [ "$split_bypass_ru_tlds" = "true" ] || split_bypass_ru_tlds="false"
+    update_xrayui_config "split_bypass_ru_tlds" "$split_bypass_ru_tlds"
+    [ "$split_bypass_ru_services" = "true" ] || split_bypass_ru_services="false"
+    update_xrayui_config "split_bypass_ru_services" "$split_bypass_ru_services"
     update_xrayui_config "split_lock_domains" "$split_lock_domains"
     case "$speedtest_interval" in
     6h | 12h | 24h) ;;

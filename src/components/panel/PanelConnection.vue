@@ -175,11 +175,25 @@
         </div>
       </div>
 
+      <ss-settings-row
+        title="Исключить российские сайты"
+        subtitle="Сайты в зонах .ru, .su и .рф будут загружаться напрямую"
+        :toggle="!!options.split_bypass_ru_tlds"
+        @update:toggle="(v) => (options.split_bypass_ru_tlds = v)"
+      />
+
+      <ss-settings-row
+        title="Сервисы из белого списка напрямую"
+        subtitle="Точечный список: госуслуги, банки, операторы связи, VK/OK/Yandex, маркетплейсы, СМИ — пойдут напрямую. Остальные сайты идут через VPN"
+        :toggle="!!options.split_bypass_ru_services"
+        @update:toggle="(v) => (options.split_bypass_ru_services = v)"
+      />
+
       <div class="ss-set-row has-divider">
         <div class="ss-set-row-main">
           <div class="ss-set-row-text">
             <div class="ss-set-row-title">Split bypass (домены)</div>
-            <div class="ss-set-row-sub">Эти домены идут в direct, минуя VPN</div>
+            <div class="ss-set-row-sub">Дополнительный список доменов в direct, минуя VPN</div>
           </div>
         </div>
         <div class="ss-set-row-detail">
@@ -687,7 +701,9 @@
           'geo_auto_update',
           'debug',
           'kill_switch',
-          'dns_only'
+          'dns_only',
+          'split_bypass_ru_tlds',
+          'split_bypass_ru_services'
         ]) {
           if (typeof o[key] !== 'boolean') o[key] = false;
         }
