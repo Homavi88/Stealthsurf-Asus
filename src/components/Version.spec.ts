@@ -49,15 +49,15 @@ describe('Version.vue', () => {
 
   it('opens without a stored version and shows the one reported by the router', async () => {
     const { wrapper, respond } = mountWith({});
-    expect(label(wrapper)).toBe('XRAYUI v');
+    expect(label(wrapper)).toBe('SurfGate v');
     await respond('0.70.0');
-    expect(label(wrapper)).toBe('! XRAYUI v0.70.0');
+    expect(label(wrapper)).toBe('! SurfGate v0.70.0');
   });
 
   it('adds the patch number to a two-part stored version', async () => {
     const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70' });
     await respond('9.9.9');
-    expect(label(wrapper)).toBe('! XRAYUI v0.70.0');
+    expect(label(wrapper)).toBe('! SurfGate v0.70.0');
   });
 
   it('shows markup in the release notes as text', async () => {
@@ -73,6 +73,6 @@ describe('Version.vue', () => {
   it('prefers the stored version', async () => {
     const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70.1' });
     await respond('9.9.9');
-    expect(label(wrapper)).toBe('XRAYUI v0.70.1');
+    expect(label(wrapper)).toBe('SurfGate v0.70.1');
   });
 });

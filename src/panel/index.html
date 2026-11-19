@@ -55,10 +55,27 @@
         font-size: 0.8rem;
       }
       #Loading.popup_bg {
+        position: fixed;
+        inset: 0;
+        z-index: 10040;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(5, 8, 12, 0.65);
+        color: #e6e8eb;
+        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        text-align: center;
         pointer-events: none;
       }
-      #Loading.popup_bg[style*='visible'] {
+      #Loading.popup_bg[style*='visibility: visible'],
+      #Loading.popup_bg[style*='visibility:visible'] {
+        display: flex !important;
         pointer-events: auto;
+      }
+      #Loading #proceeding_main_txt,
+      #Loading #proceeding_txt {
+        font-family: 'IBM Plex Mono', ui-monospace, monospace;
+        font-size: 0.9rem;
       }
     </style>
   </head>
@@ -111,7 +128,20 @@
           loading.style.pointerEvents = 'none';
         }
       };
-      window.showLoading = function () {};
+      window.showLoading = function (_delay, flag) {
+        var loading = document.getElementById('Loading');
+        if (!loading) return;
+        loading.style.visibility = 'visible';
+        loading.style.display = '';
+        loading.style.pointerEvents = 'auto';
+        if (flag && typeof window.updateLoadingProgress === 'function') {
+          try {
+            window.updateLoadingProgress(flag);
+          } catch (_e) {
+            /* app.js may not have wired updateLoadingProgress yet */
+          }
+        }
+      };
       window.overlib = function (msg) {
         var el = document.getElementById('overDiv');
         if (!el) return;

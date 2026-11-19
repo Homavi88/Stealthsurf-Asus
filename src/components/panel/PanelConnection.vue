@@ -655,7 +655,7 @@
         try {
           await engine.executeWithLoadingProgress(async () => {
             await engine.submit(action);
-          });
+          }, false);
         } finally {
           busy.value = false;
         }

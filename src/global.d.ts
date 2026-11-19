@@ -40,6 +40,8 @@ export interface XrayUiGlobal {
 declare global {
   interface Window {
     xray: XrayUiGlobal;
+    __SS_PANEL__?: boolean;
+    __SS_PANEL_META__?: Record<string, unknown>;
     confirm: (message?: string) => boolean;
     hint: (message: string) => void;
     overlib: (message: string) => void;

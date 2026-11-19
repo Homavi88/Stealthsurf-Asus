@@ -84,10 +84,15 @@ window.updateLoadingProgress = (progress?: EngineLoadingProgress) => {
   }
 
   loading.style.visibility = 'visible';
+  loading.style.display = '';
+  loading.style.pointerEvents = 'auto';
 
   if (progress?.message) {
     // eslint-disable-next-line xss/no-mixed-html
     window.showtext(proceedingMainText, progress.message + '<br />');
+  }
+  if (typeof progress?.progress === 'number' && progress.progress > 0) {
+    window.showtext(proceedingText, `<span style="color:#FFFFCC;">${progress.progress}%</span>`);
   }
 };
 
