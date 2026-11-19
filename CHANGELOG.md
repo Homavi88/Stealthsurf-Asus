@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.27] - 2026-11-19
+
+### Update detection
+
+- Проверка обновлений в браузере через зеркала GitHub (`gh-proxy.com` и др.) — api.github.com часто недоступен из РФ
+- Updates / Home показывают **Установить**, даже если проверка с роутера не прошла, но браузер нашёл новый релиз
+- Backend: fallback на список releases + лучший порядок зеркал
+
 ## [1.4.26] - 2026-11-19
 
 ### Home update banner + faster package update

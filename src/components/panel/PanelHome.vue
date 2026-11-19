@@ -173,6 +173,7 @@
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
+  import { checkSurfGateUpdate } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     current?: string;
@@ -273,10 +274,17 @@
         return (live.value.vpn_server || '').trim();
       });
 
+      const clientLatest = ref('');
+      const clientUpdate = ref(false);
+
+      const updateLatest = computed(() => clientLatest.value || updateStatus.value?.latest || '');
       const updateAvailable = computed(
-        () => Boolean(updateStatus.value?.update_available && updateStatus.value?.latest)
+        () =>
+          Boolean(updateLatest.value) &&
+          Boolean(
+            (updateStatus.value?.update_available && updateStatus.value?.latest) || clientUpdate.value
+          )
       );
-      const updateLatest = computed(() => updateStatus.value?.latest || '');
       const updateCurrent = computed(
         () =>
           updateStatus.value?.current ||
@@ -294,17 +302,33 @@
         }
       };
 
+      const checkClientUpdate = async () => {
+        try {
+          const info = await checkSurfGateUpdate(
+            uiResponse.value?.xray?.ui_version,
+            uiResponse.value?.xray?.github_proxy
+          );
+          clientLatest.value = info.latest;
+          clientUpdate.value = info.updateAvailable;
+          if (info.latest) window.xray.server.stealthsurf_version_latest = info.latest;
+        } catch {
+          /* optional */
+        }
+      };
+
       const refreshUpdateStatus = async () => {
+        await checkClientUpdate();
         try {
           await engine.submit(SubmitActions.addonUpdateCheck);
           await loadUpdateStatus();
         } catch {
           /* optional background check */
         }
+        await checkClientUpdate();
       };
 
       const installUpdate = async () => {
-        const version = updateStatus.value?.latest;
+        const version = updateLatest.value;
         if (!version || updateBusy.value) return;
         if (!window.confirm(`Установить SurfGate v${version} с GitHub?`)) return;
         updateBusy.value = true;
@@ -312,6 +336,7 @@
         try {
           await updateProgress.value?.run(version);
           await loadUpdateStatus();
+          await checkClientUpdate();
         } finally {
           updateBusy.value = false;
         }

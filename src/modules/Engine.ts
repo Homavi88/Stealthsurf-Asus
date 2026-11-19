@@ -474,17 +474,36 @@ export class Engine {
   }
 
   public async fetchGithubJson<T = any>(url: string, proxy: string | undefined | null, config?: any): Promise<T> {
-    const proxied = this.githubProxyUrl(url, proxy);
-    if (proxied !== url) {
+    // Same mirror order as backend github.sh — api.github.com is often blocked without a proxy.
+    const mirrors = ['https://gh-proxy.com/', 'https://cdn.gh-proxy.org/', 'https://ghfast.top/', 'https://gitproxy.click/', 'https://github.moeyy.xyz/'];
+    const candidates: string[] = [];
+    const push = (u: string) => {
+      if (u && !candidates.includes(u)) candidates.push(u);
+    };
+    push(this.githubProxyUrl(url, proxy));
+    push(url);
+    try {
+      const host = new URL(url).hostname;
+      if (host === 'github.com' || host.endsWith('.github.com') || host.endsWith('githubusercontent.com')) {
+        for (const m of mirrors) push(`${m}${url}`);
+      }
+    } catch {
+      /* ignore bad url */
+    }
+
+    let lastErr: unknown;
+    for (const candidate of candidates) {
       try {
-        const r = await axios.get<T>(proxied, config);
+        const r = await axios.get<T>(candidate, config);
         return r.data;
       } catch (e) {
-        console.warn('[xrayui] github proxy failed, falling back to direct:', proxied, e);
+        lastErr = e;
+        if (candidate !== url) {
+          console.warn('[xrayui] github candidate failed:', candidate, e);
+        }
       }
     }
-    const r = await axios.get<T>(url, config);
-    return r.data;
+    throw lastErr || new Error('GitHub JSON fetch failed');
   }
 
   private readonly amngCustomLimit = 8 * 1024;
