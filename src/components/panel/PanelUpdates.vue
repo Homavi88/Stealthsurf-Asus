@@ -14,7 +14,18 @@
         </div>
         <div class="ss-upd-repo__checked" v-if="status?.checked_at">последняя проверка: {{ checkedLabel }}</div>
         <div class="ss-upd-actions">
-          <button type="button" class="ss-primary-btn start" :disabled="busy" @click="checkNow">Проверить сейчас</button>
+          <button
+            v-if="status?.update_available && status?.latest"
+            type="button"
+            class="ss-primary-btn start"
+            :disabled="busy"
+            @click="installNow"
+          >
+            Установить v{{ status.latest }}
+          </button>
+          <button type="button" class="ss-primary-btn" :class="status?.update_available ? 'ss-upd-check' : 'start'" :disabled="busy" @click="checkNow">
+            Проверить сейчас
+          </button>
         </div>
       </div>
     </div>
@@ -57,6 +68,7 @@
 
     <p class="ss-section-label">Установка вручную</p>
     <div class="ss-set-card ss-upd-manual">
+      <p class="ss-upd-manual__hint">Выбор версии и changelog — нажмите на версию ниже:</p>
       <version />
     </div>
   </div>
@@ -157,6 +169,23 @@
         }
       };
 
+      const installNow = async () => {
+        const version = status.value?.latest;
+        if (!version) return;
+        if (!window.confirm(`Установить SurfGate v${version} с GitHub? Роутер скачает пакет и переустановит аддон.`)) {
+          return;
+        }
+        busy.value = true;
+        try {
+          await engine.executeWithLoadingProgress(async () => {
+            await engine.submit(SubmitActions.performUpdate, { version });
+          });
+          await loadStatus();
+        } finally {
+          busy.value = false;
+        }
+      };
+
       const save = async () => {
         if (!uiResponse?.value?.xray) {
           window.alert('Настройки ещё загружаются. Подождите и сохраните снова.');
@@ -205,6 +234,7 @@
         setCheckEnabled,
         checkedLabel,
         checkNow,
+        installNow,
         save
       };
     }
@@ -266,17 +296,40 @@
 
   .ss-upd-actions {
     margin-top: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ss-primary-btn.ss-upd-check {
+    background: transparent;
+    color: var(--ss-text, #dce8f0);
+    border: 1px solid rgba(120, 160, 200, 0.35);
+    box-shadow: none;
+  }
+
+  .ss-primary-btn.ss-upd-check:hover:not(:disabled) {
+    border-color: rgba(120, 160, 200, 0.55);
+    filter: brightness(1.05);
   }
 
   .ss-upd-manual {
     padding: 12px 16px 20px;
+
+    &__hint {
+      margin: 0 0 8px;
+      font-size: 12px;
+      opacity: 0.65;
+    }
+
     :deep(.version) {
       position: relative;
       padding-top: 0;
       a {
         position: static;
-        color: inherit;
+        color: var(--ss-accent, #5b9fd4);
         font-size: 13px;
+        text-decoration: underline;
       }
     }
   }

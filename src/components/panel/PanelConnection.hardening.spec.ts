@@ -13,4 +13,8 @@ describe('VPN hardening wiring', () => {
   it('keeps addon update check action for GitHub auto-update (#9)', () => {
     expect(SubmitActions.addonUpdateCheck).toBe('stealthsurf_addonupdatecheck');
   });
+
+  it('keeps performUpdate for Settings → Updates install button', () => {
+    expect(SubmitActions.performUpdate).toBe('stealthsurf_update');
+  });
 });
