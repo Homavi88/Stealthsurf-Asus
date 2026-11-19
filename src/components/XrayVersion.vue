@@ -39,17 +39,18 @@
         modal.value.show();
       };
 
-      onMounted(async () => {
+      onMounted(() => {
         watch(
-          () => [uiResponse?.value.xray?.core_version, uiResponse?.value.xray?.core_error],
+          () => [uiResponse?.value.xray?.core_version, uiResponse?.value.xray?.core_error] as const,
           ([version, error]) => {
             if (version) {
-              stealthsurf_version.value = version;
+              stealthsurf_version.value = String(version);
               core_error.value = '';
             } else if (error) {
-              core_error.value = error;
+              core_error.value = String(error);
             }
-          }
+          },
+          { immediate: true }
         );
       });
       return { stealthsurf_version, core_error, label, newerThanTested, untestedNote, untestedHint, modal, show };
