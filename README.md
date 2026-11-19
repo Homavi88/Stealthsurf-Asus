@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.16-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.17-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -25,6 +25,8 @@
   ·
   <a href="#возможности"><strong>Возможности</strong></a>
   ·
+  <a href="#vpn-only-fail-closed"><strong>VPN-only</strong></a>
+  ·
   <a href="#backup"><strong>Backup</strong></a>
   ·
   <a href="./CHANGELOG.md"><strong>Changelog</strong></a>
@@ -33,7 +35,7 @@
 ---
 
 Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
-Актуальная версия **1.4.16**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
+Актуальная версия **1.4.17**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
 > **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
 
@@ -45,13 +47,14 @@
 4. [Возможности](#возможности)
 5. [Веб-интерфейс (скриншоты)](#веб-интерфейс)
 6. [Настройки Connection](#настройки-connection)
-7. [CLI](#cli)
-8. [Диагностика](#диагностика)
-9. [Backup / restore](#backup)
-10. [Рядом с official / XrayUI](#рядом-с-официальным-stealthsurf)
-11. [Проверка на роутере](#проверка-на-роутере)
-12. [Сборка](#сборка)
-13. [Что нового](#что-нового)
+7. [VPN-only / fail-closed](#vpn-only-fail-closed)
+8. [CLI](#cli)
+9. [Диагностика](#диагностика)
+10. [Backup / restore](#backup)
+11. [Рядом с official / XrayUI](#рядом-с-официальным-stealthsurf)
+12. [Проверка на роутере](#проверка-на-роутере)
+13. [Сборка](#сборка)
+14. [Что нового](#что-нового)
 
 ## Установка
 
@@ -92,7 +95,7 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 1. API-ключ → **Sync catalog**
 2. Выбрать конфиг → **Import** (`ss-<id>` + default route)
 3. **Start** — в Outbounds 🟢/🔴
-4. По желанию: Connection (kill-switch, DNS-only, LAN MAC) / Routing
+4. По желанию: Connection (kill-switch, **VPN-only**, DNS-only, LAN MAC) / Routing
 5. Устройства в Wi‑Fi уже через StealthSurf
 
 ## Возможности
@@ -102,7 +105,7 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 | **Панель :1131** | Статус, throughput, ЦП/ОЗУ, настройки по разделам |
 | **Каталог API** | Sync / автосинк, import, autofit, traffic/stats, renew/top-up |
 | **Transparent proxy** | Весь LAN (`ipsec=off`) или smart proxy (`redirect` + geosite) |
-| **VPN hardening** | NTP, WAN reconnect, kill-switch, VPN-only fail-closed, LAN/guest/IPv6, DNS lock, preflight |
+| **VPN hardening** | NTP, WAN reconnect, kill-switch, **VPN-only fail-closed**, LAN/guest/IPv6, DNS lock, preflight |
 | **Диагностика** | Speed test, DNS/IPv6 leak, Observatory probes |
 | **Логи** | App / Access / Error / Devices |
 | **Updates** | GitHub check + опциональный auto-install |
@@ -152,6 +155,37 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 | IPv6 | `proxy` · `block` · `ignore` |
 | DNS только через Xray | DNS leak lock |
 | Диагностика | Preflight · скорость · DNS leak |
+
+## VPN-only / fail-closed
+
+Нужно, чтобы конкретный сервис (банк, стриминг, работа) **всегда** шёл через VPN — и при падении аддона / VPN у провайдера / смене exit на ISP **сразу обрывал** соединение, а не утекал в clearnet.
+
+**Панель:** Настройки → Connection → **VPN-only (fail-closed)** → список доменов → Apply / Restart.  
+**Справка:** [промо → VPN hardening](./docs/promo/index.html#vpn) · [QA на роутере](./docs/qa-router.md#vpn-only--fail-closed).
+
+| Слой | Что делает |
+| --- | --- |
+| Xray `surfgate-vpn-lock` | Домены → primary proxy outbound (правило первым в `routing.rules`) |
+| ipset `SSURF_LOCK4` / `LOCK6` | Literal-домены заполняются через dnsmasq `ipset=/…` |
+| iptables `SSURF_SVCLOCK` | Unmarked пакеты к LOCK IP → **DROP** (включая ESTABLISHED) |
+| Stop (`surfgate dn`) | Flush conntrack по LOCK IP + DROP остаётся armed |
+| Uninstall | Снимает lock / ipset / dnsmasq-строки |
+
+```sh
+# после Apply/Restart
+jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+# name: surfgate-vpn-lock · outboundTag: proxy
+
+iptables -w -t filter -nvL SSURF_SVCLOCK
+ipset list SSURF_LOCK4 | head
+
+# fail-closed: Stop Xray — сервис не должен открыться через ISP
+surfgate dn
+# traffic to locked IPs → timeout / refuse
+surfgate up
+```
+
+Рекомендуется `ipsec=redirect` (DNS наполняет LOCK/PROXY). Чистые `geosite:` теги принуждают к VPN, пока Xray жив; IP-level DROP сильнее для literal-хостов. Если домен в bypass и lock сразу — **побеждает lock**.
 
 ## CLI
 
@@ -263,10 +297,13 @@ surfgate v && surfgate st && surfgate panel status
 surfgate key 'stlth_…' && surfgate sy && surfgate ls
 surfgate ap <id> && surfgate up
 surfgate pf && surfgate sp && surfgate dns
+# VPN-only (если настроен): jq '.routing.rules[0]' /opt/etc/xray/ssurf/*.json
+# surfgate dn → iptables -nvL SSURF_SVCLOCK → locked сервис недоступен clearnet
 surfgate bak
 ```
 
-С LAN-клиента: exit IP (`ifconfig.me`), [dnsleaktest.com](https://dnsleaktest.com), WebRTC leak.
+С LAN-клиента: exit IP (`ifconfig.me`), [dnsleaktest.com](https://dnsleaktest.com), WebRTC leak.  
+Полный чеклист (guest / split / VPN-only / speed cron): [`docs/qa-router.md`](./docs/qa-router.md) и панель **Настройки → справка**.
 
 ## Как устроено
 
@@ -294,6 +331,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
+| **1.4.17** | VPN-only fail-closed для выбранных сервисов |
 | **1.4.16** | Полный чеклист роутера в справке панели |
 | **1.4.15** | Panel help, backup harden, VPN polish |
 | **1.4.14** | Speed + DNS leak tests (panel/CLI) |
@@ -307,7 +345,7 @@ CI публикует GitHub Release на тег `v*`.
 ## Документация и лицензия
 
 - **Промо / гайд (HTML):** [docs/promo/index.html](./docs/promo/index.html) · в панели: **Настройки → справка**
-- QA VPN на роутере: [`docs/qa-router.md`](./docs/qa-router.md) (guest force, split bypass, speed cron, DNS/IPv6/WebRTC)
+- QA VPN на роутере: [`docs/qa-router.md`](./docs/qa-router.md) (guest, split bypass, **VPN-only fail-closed**, speed cron, DNS/IPv6/WebRTC)
 - Провайдер: [docs.stealthsurf.net](https://docs.stealthsurf.net) · [API](https://docs.stealthsurf.net/api)
 - Upstream XrayUI: [daniellavrushin.github.io/asuswrt-merlin-xrayui](https://daniellavrushin.github.io/asuswrt-merlin-xrayui/)
 - Атрибуция: [ATTRIBUTION.md](./ATTRIBUTION.md) · лицензия [CC BY-NC-SA 4.0](./LICENSE) (© Daniel Lavrushin / contributors)

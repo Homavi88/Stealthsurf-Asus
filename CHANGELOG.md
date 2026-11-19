@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.17] - 2026-11-19
 
 ### VPN-only / fail-closed
 
@@ -8,6 +8,7 @@
 - Firewall `SSURF_SVCLOCK` + ipset `SSURF_LOCK*`: unmarked clearnet к locked IP = DROP
 - При Stop Xray: conntrack flush + DROP остаётся; dnsmasq lock-строки сохраняются
 - Uninstall снимает lock; lock побеждает bypass, если домен в обоих списках
+- Документация: README, `docs/promo` (справка панели), `docs/qa-router.md`
 
 ## [1.4.16] - 2026-11-19
 
