@@ -15,7 +15,7 @@ ADDON_TITLE="SurfGate"
 # Merlin/UI action_script prefix (Homavi88 panel protocol). Not the official addon.
 ADDON_ACTION_PREFIX="stealthsurf"
 
-XRAYUI_VERSION="1.4.14"
+XRAYUI_VERSION="1.4.15"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -101,6 +101,10 @@ lan_vpn_macs=""
 ipv6_mode="proxy"
 # follow | vpn | direct — guest Wi-Fi bridges
 guest_vpn_mode="follow"
+# Comma-separated domains / geosite: tags that bypass VPN (→ direct)
+split_bypass_domains=""
+# disabled | 6h | 12h | 24h — optional cron speed test
+speedtest_interval="disabled"
 PREFLIGHT_STATUS_FILE="$ADDON_SHARE_DIR/preflight_status.json"
 SPEEDTEST_STATUS_FILE="$ADDON_SHARE_DIR/speedtest_status.json"
 DNSTEST_STATUS_FILE="$ADDON_SHARE_DIR/dnstest_status.json"

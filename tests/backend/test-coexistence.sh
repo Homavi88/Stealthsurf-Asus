@@ -147,8 +147,12 @@ grep -q '10185' "$ROOT/src/backend/api.sh" && pass "api listen 10185" || bad "ap
 grep -q '10186' "$ROOT/src/backend/api.sh" && pass "metrics 10186" || bad "metrics 10186"
 grep -q '"port": 5699' "$ROOT/src/backend/config.sh" && pass "dokodemo 5699" || bad "dokodemo 5699"
 
-# --- backup naming ---
+# --- backup naming / harden ---
 grep -q 'ssurf-\${timestamp}' "$ROOT/src/backend/backup.sh" && pass "backup prefix ssurf" || bad "backup prefix ssurf"
+grep -q 'ADDON_USER_SCRIPTS_DIR' "$ROOT/src/backend/backup.sh" && pass "backup uses ADDON_USER_SCRIPTS_DIR" || bad "backup uses ADDON_USER_SCRIPTS_DIR"
+grep -q 'backup_tar_validate' "$ROOT/src/backend/backup.sh" && pass "backup tar validate" || bad "backup tar validate"
+grep -q 'bak restore' "$ROOT/src/backend/cli_aliases.sh" && pass "CLI bak restore" || bad "CLI bak restore"
+grep -q 'ADDON_USER_SCRIPTS_DIR' "$ROOT/src/backend/backup.sh" && pass "custom scripts var primary" || bad "custom scripts var primary"
 
 # --- globals isolation ---
 g="$ROOT/src/backend/_globals.sh"

@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.15] - 2026-11-19
+
+
+### Panel help
+
+- В панели **Настройки → справка** — промо-гайд из `docs/promo` (также `/help/` на `:1131`)
+
+### Backup harden
+
+- Backup packs `$ADDON_USER_SCRIPTS_DIR` (`/jffs/ssurf_custom`) instead of hardcoded legacy path alone
+- Default archive name always `ssurf-…tar.gz`
+- Tar member allowlist validation before restore (and after create)
+- CLI: `surfgate bak list|restore|clear` + optional label on create
+- Safe basename for clear/restore (no path traversal); clear no longer `rm -rf` parent share
+
+### VPN polish
+
+- `guest_vpn_mode=vpn` реально отличается от `follow`: guest bridges всегда TPROXY даже при LAN selected/exclude
+- Split bypass доменов / `geosite:` → правило Xray `surfgate-split-bypass` → `direct`
+- Speedtest: fallback download URL + опциональный cron (`speedtest_interval` 6h/12h/24h)
+- DNS leak: IPv6 leak при `ipv6_mode=block` + `webrtc_hint` для проверки с LAN-браузера
+- QA на роутере: [`docs/qa-router.md`](./docs/qa-router.md)
+
 ## [1.4.14] - 2026-11-19
 
 ### Speed test + DNS leak test

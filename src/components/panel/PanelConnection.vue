@@ -141,7 +141,7 @@
         </div>
       </div>
 
-      <div class="ss-set-row">
+      <div class="ss-set-row has-divider">
         <div class="ss-set-row-main">
           <div class="ss-set-row-text">
             <div class="ss-set-row-title">IPv6</div>
@@ -156,6 +156,26 @@
               <option value="block">Блокировать IPv6</option>
               <option value="ignore">Не трогать</option>
             </select>
+          </label>
+        </div>
+      </div>
+
+      <div class="ss-set-row">
+        <div class="ss-set-row-main">
+          <div class="ss-set-row-text">
+            <div class="ss-set-row-title">Split bypass (домены)</div>
+            <div class="ss-set-row-sub">Эти домены идут в direct, минуя VPN</div>
+          </div>
+        </div>
+        <div class="ss-set-row-detail">
+          <label class="ss-field">
+            <span>Список</span>
+            <input
+              type="text"
+              v-model="options.split_bypass_domains"
+              placeholder="example.com, geosite:category-games"
+              autocomplete="off"
+            />
           </label>
         </div>
       </div>
@@ -226,16 +246,33 @@
             <button type="button" class="ss-chip-btn" :disabled="busy" @click="runSpeedTest">Запустить</button>
           </div>
         </div>
+        <div class="ss-set-row-detail">
+          <label class="ss-field">
+            <span>Авто по cron</span>
+            <select v-model="options.speedtest_interval">
+              <option value="disabled">Выкл</option>
+              <option value="6h">каждые 6 ч</option>
+              <option value="12h">каждые 12 ч</option>
+              <option value="24h">раз в сутки</option>
+            </select>
+          </label>
+        </div>
       </div>
       <div class="ss-set-row">
         <div class="ss-set-row-main">
           <div class="ss-set-row-text">
-            <div class="ss-set-row-title">DNS leak</div>
+            <div class="ss-set-row-title">DNS / IPv6 leak</div>
             <div class="ss-set-row-sub">{{ dnsTestSubtitle }}</div>
           </div>
           <div class="ss-set-row-control">
             <button type="button" class="ss-chip-btn" :disabled="busy" @click="runDnsTest">Проверить</button>
           </div>
+        </div>
+        <div class="ss-set-row-detail">
+          <p class="ss-set-row-sub">
+            WebRTC с роутера не проверить — откройте с LAN-устройства:
+            <a :href="webrtcHint" target="_blank" rel="noopener">browserleaks.com/webrtc</a>
+          </p>
         </div>
       </div>
     </div>
@@ -375,7 +412,7 @@
           case 'direct':
             return 'Гостевые мосты br1/br2… без VPN';
           case 'vpn':
-            return 'Гостевая сеть всегда через VPN';
+            return 'Гостевые br* всегда TPROXY, даже если LAN = selected/exclude';
           default:
             return 'Те же правила, что у основной LAN';
         }
@@ -416,11 +453,17 @@
         message?: string;
         checked_at?: string;
         leaked?: boolean;
+        ipv6_leaked?: boolean;
         exit_ip?: string | null;
+        exit_ip6?: string | null;
+        webrtc_hint?: string | null;
       };
       const dnsTestStatus = ref<DnsTestStatus | null>(null);
+      const webrtcHint = computed(
+        () => dnsTestStatus.value?.webrtc_hint || 'https://browserleaks.com/webrtc'
+      );
       const dnsTestSubtitle = computed(() => {
-        if (!dnsTestStatus.value) return 'Wiring + resolvers · сверка с WAN DNS';
+        if (!dnsTestStatus.value) return 'Wiring + resolvers · IPv6 · сверка с WAN DNS';
         const mark = dnsTestStatus.value.leaked ? 'Утечка' : dnsTestStatus.value.ok ? 'OK' : 'Проблемы';
         return `${mark}: ${dnsTestStatus.value.message || '—'}`;
       });
@@ -571,6 +614,8 @@
         if (options.lan_vpn_macs == null) options.lan_vpn_macs = '';
         if (!options.ipv6_mode) options.ipv6_mode = 'proxy';
         if (!options.guest_vpn_mode) options.guest_vpn_mode = 'follow';
+        if (options.split_bypass_domains == null) options.split_bypass_domains = '';
+        if (!options.speedtest_interval) options.speedtest_interval = 'disabled';
       };
 
       onMounted(() => {
@@ -620,6 +665,7 @@
         speedSubtitle,
         runSpeedTest,
         dnsTestSubtitle,
+        webrtcHint,
         runDnsTest,
         onStartupToggle,
         handleStatus,

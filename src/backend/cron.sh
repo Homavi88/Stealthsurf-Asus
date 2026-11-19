@@ -9,6 +9,7 @@ CRU_SS_CATALOG_SYNC_ID="ssurf_catalog_sync"
 CRU_IPSET_SAVE_ID="ssurf_ipset_save"
 CRU_WATCHDOG_ID="ssurf_watchdog"
 CRU_ADDON_UPDATE_ID="ssurf_addon_update"
+CRU_SPEEDTEST_ID="ssurf_speedtest"
 XRAY_DESIRED_STATE_FILE="/tmp/ssurf_xray.desired"
 WATCHDOG_STATE_FILE="/tmp/ssurf_watchdog.state"
 WATCHDOG_STABLE_SECONDS=600
@@ -296,6 +297,49 @@ cron_addon_update_check_run() {
     addon_update_check_run
 }
 
+cron_speedtest_add() {
+    log_info "Configuring $CRU_SPEEDTEST_ID cron job for $ADDON_TITLE"
+    load_xrayui_config
+    local speedtest_interval="${speedtest_interval:-disabled}"
+    cron_job_delete "$CRU_SPEEDTEST_ID"
+
+    local cron_expr=""
+    case "$speedtest_interval" in
+    6h) cron_expr="50 */6 * * *" ;;
+    12h) cron_expr="55 */12 * * *" ;;
+    24h) cron_expr="10 5 * * *" ;;
+    *)
+        log_info "CRON job $CRU_SPEEDTEST_ID skipped (speedtest_interval=$speedtest_interval)"
+        return
+        ;;
+    esac
+
+    cru a "$CRU_SPEEDTEST_ID" "$cron_expr $ADDON_SCRIPT cron speedtest" || {
+        log_error "Failed to add CRU job $CRU_SPEEDTEST_ID"
+        return
+    }
+    log_ok "CRON job $CRU_SPEEDTEST_ID for $ADDON_TITLE added successfully ($speedtest_interval)"
+}
+
+cron_speedtest_run() {
+    update_loading_progress() { :; }
+    load_xrayui_config
+    local speedtest_interval="${speedtest_interval:-disabled}"
+    case "$speedtest_interval" in
+    6h | 12h | 24h) ;;
+    *)
+        log_info "Scheduled speed test disabled — skip"
+        return 0
+        ;;
+    esac
+    if type speedtest_run >/dev/null 2>&1; then
+        speedtest_run
+        return $?
+    fi
+    log_warn "speedtest_run unavailable"
+    return 1
+}
+
 cron_jobs_add() {
 
     log_info "Adding cron jobs for $ADDON_TITLE"
@@ -305,6 +349,7 @@ cron_jobs_add() {
     cron_subscription_fallback_add
     cron_ss_catalog_sync_add
     cron_addon_update_check_add
+    cron_speedtest_add
     cron_ipset_save_add
     cron_watchdog_add
 }

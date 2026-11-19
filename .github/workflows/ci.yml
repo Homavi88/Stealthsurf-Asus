@@ -41,9 +41,16 @@ jobs:
           test -f /tmp/ss-ci-pkg/ssurf/panel/index.html
           test -f /tmp/ss-ci-pkg/ssurf/panel/app.js
           test -f /tmp/ss-ci-pkg/ssurf/index.panel.html
+          # In-panel help (promo guide packaged under /help/)
+          test -f /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          test -f /tmp/ss-ci-pkg/ssurf/panel/help/screenshots/01-status-running.png
+          grep -q './screenshots/' /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          ! grep -q '../screenshots/' /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          grep -q 'PanelHelp\|section === .help.\|справка' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          test -f docs/promo/index.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
-          grep -q 'XRAYUI_VERSION="1.4.14"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.4.15"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ADDON_JFFS_ADN_DIR="/jffs/addons/$ADDON_PKG_NAME"\|ADDON_PKG_NAME="ssurf"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'OFFICIAL_SS_DAEMON' /tmp/ss-ci-pkg/ssurf/stealthsurf
@@ -58,10 +65,20 @@ jobs:
           sh tests/backend/geodata_sanitize.spec.sh
           sh tests/backend/vpn_hardening.spec.sh
           sh tests/backend/net_tests.spec.sh
+          sh tests/backend/backup.spec.sh
           grep -q 'speedtest_run' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'dnstest_run' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'stealthsurf_speedtest' /tmp/ss-ci-pkg/ssurf/panel/app.js
           grep -q 'stealthsurf_dnstest' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          grep -q 'ADDON_USER_SCRIPTS_DIR' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'backup_tar_validate' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'bak restore' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'vpn_guest_force_nets\|vpn_split_rules_sync' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'cron_speedtest_add\|CRU_SPEEDTEST_ID' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'split_bypass_domains\|speedtest_interval' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'webrtc_hint\|ipv6_leaked' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'split_bypass_domains\|speedtest_interval' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          test -f docs/qa-router.md
           sh -n /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ensure_xray_scaffold' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'stealthsurf-default' /tmp/ss-ci-pkg/ssurf/stealthsurf

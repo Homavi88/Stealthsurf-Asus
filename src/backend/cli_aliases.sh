@@ -64,14 +64,14 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   renew <id>     renew config   topup <amount>
   key <stlth_>   set-key        addk <k> [lbl] add-key
   rmkey <k>      remove-key
-  bak            backup         d|dg           diagnostics
+  bak …          backup         d|dg           diagnostics
   upd [ver]      update         uf             update latest
   v|ver          version        fix|doctor     fixme
   un --yes       uninstall
   dv|devices     VPN device log (IP / MAC / name)
   pf|preflight   NTP/WAN/TPROXY/Xray checks
-  sp|speed       download/upload Mbps + latency
-  dns|dnstest    DNS leak check (wiring + resolvers)
+  sp|speed       download/upload Mbps + latency (cron: speedtest_interval)
+  dns|dnstest    DNS/IPv6 leak + WebRTC hint for LAN browser
   panel …        standalone UI on :1131 (start|stop|status|url|set-password)
   h|?            help           m|menu         меню
 
@@ -81,6 +81,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   refresh-outbound update-settings autofit server-stats traffic
   renew topup backup diagnostics mount_ui remount_ui
   panel start|stop|restart|status|url|set-password
+  bak [name] | bak list | bak restore <file.tar.gz>
 
 Примеры:
   surfgate up
@@ -88,6 +89,9 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   surfgate sy && surfgate ls
   surfgate ic 101 && surfgate re
   surfgate panel status          # http://LAN:1131/
+  surfgate bak                   # create backup
+  surfgate bak list
+  surfgate bak restore ssurf-….tar.gz
   surfgate refresh 69191
   surfgate autofit 69191
   surfgate st
@@ -327,8 +331,41 @@ ss_cli_dispatch() {
         return $?
         ;;
     bak | backup)
-        backup_configuration
-        return $?
+        case "${2:-}" in
+        '' | create)
+            [ "${2:-}" = "create" ] && [ -n "${3:-}" ] && BACKUP_NAME="$3"
+            backup_configuration
+            return $?
+            ;;
+        list | ls)
+            backup_list
+            return 0
+            ;;
+        restore | rs)
+            [ -n "${3:-}" ] || {
+                ss_cli_echo "usage: surfgate bak restore <ssurf-….tar.gz>"
+                return 1
+            }
+            BACKUP_RESTORE_FILE="$3"
+            backup_restore_configuration
+            return $?
+            ;;
+        clear)
+            if [ -n "${3:-}" ]; then
+                BACKUP_CLEAR_FILE="$3"
+            else
+                BACKUP_CLEAR_ALL=1
+            fi
+            backup_clear
+            return $?
+            ;;
+        *)
+            # custom backup name: surfgate bak my-label
+            BACKUP_NAME="$2"
+            backup_configuration
+            return $?
+            ;;
+        esac
         ;;
     d | dg | diag)
         diagnostics_env
