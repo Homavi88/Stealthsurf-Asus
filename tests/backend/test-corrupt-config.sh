@@ -19,6 +19,8 @@ grep -q 'repair_xray_config_if_corrupt' "$CFG" || fail "missing repair_xray_conf
 grep -q 'Quarantined bad config' "$CFG" || fail "repair must quarantine corrupt file"
 grep -q 'repair_xray_config_if_corrupt' "$CFG" || fail "ensure_xray_scaffold must call repair"
 grep -q 'config invalid' "$CTL" || fail "start must abort when test_xray_config fails"
+grep -q 'watchdog_clear_desired' "$CTL" || fail "failed start must clear desired state"
+grep -q 'did not stay running' "$CTL" || fail "start must verify Xray PID after launch"
 grep -q 'XRAY_CONFIG_FILE.new' "$RSP" || fail "apply_config must use atomic write"
 grep -q 'ensure_xray_scaffold' "$INST" || fail "install must repair config before logrotate/jq"
 awk '/ensure_xray_scaffold/{s=NR} /logrotate_setup/{l=NR} END{exit !(s && l && s < l)}' "$INST" ||
