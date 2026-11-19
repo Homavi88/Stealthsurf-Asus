@@ -142,6 +142,28 @@ export default defineConfig(({ mode }) => {
             fs.copyFileSync(join(__dirname, 'src', 'panel', 'index.html'), join(panelDir, 'index.html'));
             fs.copyFileSync(join(__dirname, 'src', 'panel', 'index.html'), join(__dirname, 'dist', 'index.panel.html'));
             fs.copyFileSync(join(__dirname, 'dist', 'app.js'), join(panelDir, 'app.js'));
+
+            // In-panel help (promo guide + screenshots) → /help/ on :1131
+            const helpSrc = join(__dirname, 'docs', 'promo', 'index.html');
+            const shotsSrc = join(__dirname, 'docs', 'screenshots');
+            const helpDir = join(panelDir, 'help');
+            const helpShots = join(helpDir, 'screenshots');
+            if (fs.existsSync(helpSrc) && fs.existsSync(shotsSrc)) {
+              fs.mkdirSync(helpShots, { recursive: true });
+              let helpHtml = fs.readFileSync(helpSrc, 'utf8');
+              helpHtml = helpHtml.replaceAll('../screenshots/', './screenshots/');
+              helpHtml = helpHtml.replaceAll('../../README.md', 'https://github.com/Homavi88/Stealthsurf-Asus#readme');
+              helpHtml = helpHtml.replaceAll('../../CHANGELOG.md', 'https://github.com/Homavi88/Stealthsurf-Asus/blob/main/CHANGELOG.md');
+              fs.writeFileSync(join(helpDir, 'index.html'), helpHtml);
+              for (const name of fs.readdirSync(shotsSrc)) {
+                if (!/\.(png|jpe?g|webp|gif)$/i.test(name)) continue;
+                fs.copyFileSync(join(shotsSrc, name), join(helpShots, name));
+              }
+              console.log('Panel help copied to dist/panel/help/.');
+            } else {
+              console.warn('Panel help skipped: docs/promo or docs/screenshots missing.');
+            }
+
             console.log('Files copied successfully (Merlin ASP + standalone panel).');
           } catch (e) {
             // Fail the build rather than leaving dist/ in a half-written state that would then be deployed.

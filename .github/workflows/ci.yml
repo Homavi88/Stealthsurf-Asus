@@ -41,6 +41,13 @@ jobs:
           test -f /tmp/ss-ci-pkg/ssurf/panel/index.html
           test -f /tmp/ss-ci-pkg/ssurf/panel/app.js
           test -f /tmp/ss-ci-pkg/ssurf/index.panel.html
+          # In-panel help (promo guide packaged under /help/)
+          test -f /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          test -f /tmp/ss-ci-pkg/ssurf/panel/help/screenshots/01-status-running.png
+          grep -q './screenshots/' /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          ! grep -q '../screenshots/' /tmp/ss-ci-pkg/ssurf/panel/help/index.html
+          grep -q 'PanelHelp\|section === .help.\|справка' /tmp/ss-ci-pkg/ssurf/panel/app.js
+          test -f docs/promo/index.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
           grep -q 'XRAYUI_VERSION="1.4.14"' /tmp/ss-ci-pkg/ssurf/stealthsurf

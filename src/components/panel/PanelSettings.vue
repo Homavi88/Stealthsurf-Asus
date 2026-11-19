@@ -46,7 +46,12 @@
         </div>
       </aside>
 
-      <section class="ss-settings-pane" :class="{ 'is-native': section === 'connection' || section === 'account' }">
+      <section
+        class="ss-settings-pane"
+        :class="{
+          'is-native': section === 'connection' || section === 'account' || section === 'help'
+        }"
+      >
         <h2 class="ss-pane-heading">{{ currentLabel }}</h2>
 
         <div v-if="section === 'account'" class="ss-panel-light">
@@ -88,6 +93,10 @@
           <panel-updates :config="config" />
         </div>
 
+        <div v-else-if="section === 'help'" class="ss-panel-help">
+          <panel-help />
+        </div>
+
         <div class="ss-apply-wrap" v-if="needsApply">
           <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">apply</button>
         </div>
@@ -111,6 +120,7 @@
   import SniLogs from '../SniLogs.vue';
   import PanelUpdates from './PanelUpdates.vue';
   import PanelConnection from './PanelConnection.vue';
+  import PanelHelp from './PanelHelp.vue';
 
   type SectionId =
     | 'account'
@@ -121,7 +131,8 @@
     | 'engine'
     | 'logs'
     | 'clients'
-    | 'updates';
+    | 'updates'
+    | 'help';
 
   export default defineComponent({
     name: 'PanelSettings',
@@ -137,7 +148,8 @@
       LogsManager,
       SniLogs,
       PanelUpdates,
-      PanelConnection
+      PanelConnection,
+      PanelHelp
     },
     props: {
       config: { type: Object as PropType<XrayObject>, required: true }
@@ -158,7 +170,8 @@
       const navMore = [
         { id: 'logs' as const, label: 'logs', icon: 'L' },
         { id: 'clients' as const, label: 'clients', icon: 'U' },
-        { id: 'updates' as const, label: 'updates', icon: 'V' }
+        { id: 'updates' as const, label: 'updates', icon: 'V' },
+        { id: 'help' as const, label: 'справка', icon: '?' }
       ];
 
       const all = [...navPrimary, ...navEngine, ...navMore];
