@@ -37,8 +37,13 @@ window.LoadingTime = (seconds: number, flag: string | EngineLoadingProgress | un
   }
 
   const text = 'Please wait...';
+  const barFill = document.getElementById('ss-load-bar-fill');
   window.showtext(proceedingMainText, text);
+  loading.classList.add('is-visible');
   loading.style.visibility = 'visible';
+  loading.style.display = 'flex';
+  loading.style.pointerEvents = 'auto';
+  loading.setAttribute('aria-hidden', 'false');
 
   let progressPercentage = 0;
   let currentStep = 0;
@@ -50,7 +55,8 @@ window.LoadingTime = (seconds: number, flag: string | EngineLoadingProgress | un
     progressPercentage = currentStep;
 
     window.showtext(proceedingMainText, text);
-    window.showtext(proceedingText, `<span style="color:#FFFFCC;">${progressPercentage}%</span>`);
+    window.showtext(proceedingText, `${progressPercentage}%`);
+    if (barFill) barFill.style.width = `${progressPercentage}%`;
 
     if (currentStep < totalSteps) {
       setTimeout(updateLoading, stepDuration);
@@ -59,6 +65,7 @@ window.LoadingTime = (seconds: number, flag: string | EngineLoadingProgress | un
       progressPercentage = 0;
       window.showtext(proceedingMainText, text);
       window.showtext(proceedingText, '');
+      if (barFill) barFill.style.width = '100%';
 
       if (flag !== 'waiting') {
         setTimeout(() => {
@@ -77,22 +84,27 @@ window.updateLoadingProgress = (progress?: EngineLoadingProgress) => {
   const proceedingMainText = document.getElementById('proceeding_main_txt');
   const proceedingText = document.getElementById('proceeding_txt');
   const loading = document.getElementById('Loading');
+  const barFill = document.getElementById('ss-load-bar-fill');
 
   if (!proceedingMainText || !proceedingText || !loading) {
     console.error('Required DOM elements not found.');
     return;
   }
 
+  loading.classList.add('is-visible');
   loading.style.visibility = 'visible';
-  loading.style.display = '';
+  loading.style.display = 'flex';
   loading.style.pointerEvents = 'auto';
+  loading.setAttribute('aria-hidden', 'false');
 
   if (progress?.message) {
     // eslint-disable-next-line xss/no-mixed-html
-    window.showtext(proceedingMainText, progress.message + '<br />');
+    window.showtext(proceedingMainText, progress.message);
   }
   if (typeof progress?.progress === 'number' && progress.progress > 0) {
-    window.showtext(proceedingText, `<span style="color:#FFFFCC;">${progress.progress}%</span>`);
+    const pct = Math.min(100, Math.max(0, progress.progress));
+    window.showtext(proceedingText, `${pct}%`);
+    if (barFill) barFill.style.width = `${pct}%`;
   }
 };
 

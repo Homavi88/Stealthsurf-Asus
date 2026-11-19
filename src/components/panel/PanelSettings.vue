@@ -1,10 +1,26 @@
 <template>
-  <div>
-    <button type="button" class="ss-back-link" @click="$emit('back')">← home</button>
-    <h2 class="ss-settings-title">settings</h2>
+  <div class="ss-settings-page">
+    <header class="ss-settings-top">
+      <button type="button" class="ss-back-link" @click="$emit('back')">← home</button>
+      <h2 class="ss-settings-title">settings</h2>
+    </header>
+
+    <nav class="ss-mobile-nav" aria-label="Settings sections">
+      <button
+        v-for="item in allNav"
+        :key="'m-' + item.id"
+        type="button"
+        class="ss-mobile-nav-item"
+        :class="{ 'is-active': section === item.id }"
+        @click="setSection(item.id)"
+      >
+        <span class="ss-nav-ico">{{ item.icon }}</span>
+        {{ item.label }}
+      </button>
+    </nav>
 
     <div class="ss-settings-layout">
-      <aside>
+      <aside class="ss-settings-aside">
         <div class="ss-nav-group">
           <button
             v-for="item in navPrimary"
@@ -166,8 +182,8 @@
         { id: 'help' as const, label: 'справка', icon: '?' }
       ];
 
-      const all = [...navPrimary, ...navEngine, ...navMore];
-      const currentLabel = computed(() => all.find((i) => i.id === section.value)?.label || 'settings');
+      const allNav = [...navPrimary, ...navEngine, ...navMore];
+      const currentLabel = computed(() => allNav.find((i) => i.id === section.value)?.label || 'settings');
       // Connection has its own Save; avoid double Apply
       const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 
@@ -184,6 +200,7 @@
         navPrimary,
         navEngine,
         navMore,
+        allNav,
         currentLabel,
         needsApply,
         setSection,
