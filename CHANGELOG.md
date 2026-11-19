@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.24] - 2026-11-19
+
+### RU direct bypass
+
+- Connection: **Исключить российские сайты** — `.ru` / `.su` / `.рф` → direct
+- Connection: **Сервисы из белого списка напрямую** — госуслуги, банки, операторы, VK/OK/Yandex, маркетплейсы, СМИ → direct
+- Пишется в правило `surfgate-split-bypass` вместе с ручным списком доменов
+
 ## [1.4.23] - 2026-11-19
 
 ### Corrupt config recovery

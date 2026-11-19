@@ -293,6 +293,10 @@ export class EngineResponseConfig {
     guest_vpn_mode?: string;
     /** Comma-separated domains / geosite: tags bypassing VPN */
     split_bypass_domains?: string;
+    /** .ru / .su / .рф → direct */
+    split_bypass_ru_tlds?: boolean;
+    /** Curated RU services whitelist → direct */
+    split_bypass_ru_services?: boolean;
     split_lock_domains?: string;
     /** disabled | 6h | 12h | 24h */
     speedtest_interval?: string;

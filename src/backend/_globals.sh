@@ -15,7 +15,7 @@ ADDON_TITLE="SurfGate"
 # Merlin/UI action_script prefix (Homavi88 panel protocol). Not the official addon.
 ADDON_ACTION_PREFIX="stealthsurf"
 
-XRAYUI_VERSION="1.4.23"
+XRAYUI_VERSION="1.4.24"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 
@@ -103,6 +103,10 @@ ipv6_mode="proxy"
 guest_vpn_mode="follow"
 # Comma-separated domains / geosite: tags that bypass VPN (→ direct)
 split_bypass_domains=""
+# true → .ru / .su / .рф (xn--p1ai) go direct
+split_bypass_ru_tlds="false"
+# true → curated RU services whitelist (gosuslugi, banks, VK/OK/Yandex, …) → direct
+split_bypass_ru_services="false"
 # Comma-separated domains that must stay on VPN (fail-closed if VPN/addon down)
 split_lock_domains=""
 # disabled | 6h | 12h | 24h — optional cron speed test

@@ -83,6 +83,10 @@ initial_response() {
     *) guest_vpn_mode="follow" ;;
     esac
     local split_bypass_domains="${split_bypass_domains:-}"
+    local split_bypass_ru_tlds="${split_bypass_ru_tlds:-false}"
+    [ "$split_bypass_ru_tlds" = "true" ] || split_bypass_ru_tlds="false"
+    local split_bypass_ru_services="${split_bypass_ru_services:-false}"
+    [ "$split_bypass_ru_services" = "true" ] || split_bypass_ru_services="false"
     local split_lock_domains="${split_lock_domains:-}"
     local speedtest_interval="${speedtest_interval:-disabled}"
     case "$speedtest_interval" in
@@ -197,6 +201,8 @@ initial_response() {
         --arg ipv6_mode "$ipv6_mode" \
         --arg guest_vpn_mode "$guest_vpn_mode" \
         --arg split_bypass_domains "$split_bypass_domains" \
+        --argjson split_bypass_ru_tlds "$split_bypass_ru_tlds" \
+        --argjson split_bypass_ru_services "$split_bypass_ru_services" \
         --arg split_lock_domains "$split_lock_domains" \
         --arg speedtest_interval "$speedtest_interval" \
         --arg hook_before_firewall_start "$hook_before_firewall_start" \
@@ -253,6 +259,8 @@ initial_response() {
         | .xray.ipv6_mode = $ipv6_mode
         | .xray.guest_vpn_mode = $guest_vpn_mode
         | .xray.split_bypass_domains = $split_bypass_domains
+        | .xray.split_bypass_ru_tlds = $split_bypass_ru_tlds
+        | .xray.split_bypass_ru_services = $split_bypass_ru_services
         | .xray.split_lock_domains = $split_lock_domains
         | .xray.speedtest_interval = $speedtest_interval
         | .xray.subscriptions.filters = (if $sf == "" then [] else ($sf | split("|")) end)
