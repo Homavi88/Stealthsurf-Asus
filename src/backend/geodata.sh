@@ -25,6 +25,12 @@ geodata_fetch_one() {
 }
 
 update_community_geodata() {
+    # Modes:
+    #   (empty)          — always download and install (manual / URL change)
+    #   if_changed       — download, then skip install if byte-identical (cron)
+    #   skip_if_present  — no network if both .dat already on disk and large enough
+    #                      (package install/update — geosite/geoip are shared, not in tarball)
+    local mode="${1:-}"
     update_loading_progress "Updating community geodata files..."
     load_xrayui_config
 
@@ -39,7 +45,8 @@ update_community_geodata() {
         geoip_fallback="$FALLBACK_GEOIP_URL"
     fi
 
-    local xray_bin xray_dir
+    local xray_bin xray_dir min_bytes
+    min_bytes="${GEODATA_MIN_BYTES:-102400}"
     xray_bin=$(which xray 2>/dev/null || true)
     if [ -z "$xray_bin" ]; then
         log_error "xray binary not found — cannot place geosite/geoip"
@@ -48,6 +55,20 @@ update_community_geodata() {
     fi
     xray_dir=$(dirname "$xray_bin")
     mkdir -p "$ADDON_TMP_DIR" "$xray_dir" 2>/dev/null || true
+
+    if [ "$mode" = "skip_if_present" ]; then
+        local gs_sz=0 gi_sz=0
+        [ -f "$xray_dir/geosite.dat" ] && gs_sz=$(wc -c <"$xray_dir/geosite.dat" | tr -d ' ')
+        [ -f "$xray_dir/geoip.dat" ] && gi_sz=$(wc -c <"$xray_dir/geoip.dat" | tr -d ' ')
+        case "$gs_sz" in '' | *[!0-9]*) gs_sz=0 ;; esac
+        case "$gi_sz" in '' | *[!0-9]*) gi_sz=0 ;; esac
+        if [ "$gs_sz" -ge "$min_bytes" ] && [ "$gi_sz" -ge "$min_bytes" ]; then
+            log_ok "Community geodata already present — skip download ($(install_ui_humansize "$gs_sz") + $(install_ui_humansize "$gi_sz"))"
+            type install_ui_status >/dev/null 2>&1 && install_ui_status ok "geodata already present (skip download)"
+            return 0
+        fi
+        log_info "Community geodata missing or too small — downloading…"
+    fi
 
     type install_ui_status >/dev/null 2>&1 && install_ui_status run "geosite.dat + geoip.dat → $xray_dir"
 
@@ -63,7 +84,7 @@ update_community_geodata() {
         return 1
     fi
 
-    if [ "$1" = "if_changed" ] &&
+    if [ "$mode" = "if_changed" ] &&
         cmp -s "$ADDON_TMP_DIR/geosite.dat" "$xray_dir/geosite.dat" &&
         cmp -s "$ADDON_TMP_DIR/geoip.dat" "$xray_dir/geoip.dat"; then
         rm -f "$ADDON_TMP_DIR/geosite.dat" "$ADDON_TMP_DIR/geoip.dat"

@@ -50,7 +50,7 @@ jobs:
           test -f docs/promo/index.html
           # Must NOT unpack into stealthsurf/ (official VPN path)
           test ! -e /tmp/ss-ci-pkg/stealthsurf
-          grep -q 'XRAYUI_VERSION="1.4.25"' /tmp/ss-ci-pkg/ssurf/stealthsurf
+          grep -q 'XRAYUI_VERSION="1.4.26"' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'del(.reverse)' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'ssImportConfigs' /tmp/ss-ci-pkg/ssurf/panel/app.js
           grep -q 'ADDON_TITLE="SurfGate"' /tmp/ss-ci-pkg/ssurf/stealthsurf
@@ -136,6 +136,7 @@ jobs:
           sh tests/backend/test-coexistence.sh
           sh tests/backend/test-official-path.sh
           sh tests/backend/test-panel-httpd.sh
+          sh tests/backend/test-geodata-skip.sh
           grep -q 'panel_busybox_has_httpd\|panel_ensure_httpd' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'panel_find_lighttpd\|panel_start_lighttpd' /tmp/ss-ci-pkg/ssurf/stealthsurf
           test -x /tmp/ss-ci-pkg/ssurf/bin/panel-httpd.aarch64

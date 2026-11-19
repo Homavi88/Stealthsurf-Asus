@@ -140,63 +140,87 @@ EOF
     mkdir -p "$ADDON_TMP_DIR" || log_error "Failed to create $ADDON_TMP_DIR."
 
     # Companion tools stay upstream (XrayUI releases); only the addon tarball is ours.
+    # On package update keep existing binaries — no need to re-fetch every release.
     install_ui_step "module: geodata builder"
-    local builder_url="https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz"
-    if github_download "$builder_url" "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" 1024 "xraydatbuilder"; then
-        if tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR"; then
-            chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || true
-            install_ui_status ok "xraydatbuilder"
-        else
-            install_ui_status fail "extract xraydatbuilder"
-        fi
-        rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || true
+    if [ -x "$ADDON_SHARE_DIR/xraydatbuilder" ]; then
+        install_ui_status ok "xraydatbuilder (kept)"
     else
-        install_ui_status skip "geodata builder (custom recompile may be skipped)"
+        local builder_url="https://github.com/DanielLavrushin/asuswrt-merlin-xrayui/releases/latest/download/xrayui-datbuilder.tar.gz"
+        if github_download "$builder_url" "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" 1024 "xraydatbuilder"; then
+            if tar -xzf "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" -C "$ADDON_SHARE_DIR"; then
+                chmod +x "$ADDON_SHARE_DIR/xraydatbuilder" || true
+                install_ui_status ok "xraydatbuilder"
+            else
+                install_ui_status fail "extract xraydatbuilder"
+            fi
+            rm -f "$ADDON_TMP_DIR/xraydatbuilder.tar.gz" || true
+        else
+            install_ui_status skip "geodata builder (custom recompile may be skipped)"
+        fi
     fi
 
     install_ui_step "module: v2dat"
-    local v2dat_arch_name
-    v2dat_arch_name=$(version_get_arch_name "v2dat")
-    local v2dat_url="https://github.com/DanielLavrushin/v2dat/releases/latest/download/$v2dat_arch_name"
-    if github_download "$v2dat_url" "$ADDON_TMP_DIR/v2dat.tar.gz" 1024 "v2dat"; then
-        tar -xzf "$ADDON_TMP_DIR/v2dat.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract v2dat"
-        rm -f "$ADDON_TMP_DIR/v2dat.tar.gz" || true
-        chmod +x "$ADDON_SHARE_DIR/v2dat" || true
-        install_ui_status ok "v2dat"
+    if [ -x "$ADDON_SHARE_DIR/v2dat" ]; then
+        install_ui_status ok "v2dat (kept)"
     else
-        install_ui_status fail "v2dat"
+        local v2dat_arch_name
+        v2dat_arch_name=$(version_get_arch_name "v2dat")
+        local v2dat_url="https://github.com/DanielLavrushin/v2dat/releases/latest/download/$v2dat_arch_name"
+        if github_download "$v2dat_url" "$ADDON_TMP_DIR/v2dat.tar.gz" 1024 "v2dat"; then
+            tar -xzf "$ADDON_TMP_DIR/v2dat.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract v2dat"
+            rm -f "$ADDON_TMP_DIR/v2dat.tar.gz" || true
+            chmod +x "$ADDON_SHARE_DIR/v2dat" || true
+            install_ui_status ok "v2dat"
+        else
+            install_ui_status fail "v2dat"
+        fi
     fi
 
     install_ui_step "module: rtls-scanner + Country.mmdb"
-    local rtls_arch_name
-    rtls_arch_name=$(version_get_arch_name "rtls-scanner")
-    local rtls_scan_url="https://github.com/DanielLavrushin/rtls-scanner/releases/latest/download/$rtls_arch_name"
-    if github_download "$rtls_scan_url" "$ADDON_TMP_DIR/rtls-scanner.tar.gz" 1024 "rtls-scanner"; then
-        tar -xzf "$ADDON_TMP_DIR/rtls-scanner.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract rtls-scanner"
-        rm -f "$ADDON_TMP_DIR/rtls-scanner.tar.gz" || true
-        chmod +x "$ADDON_SHARE_DIR/rtls-scanner" || true
-        install_ui_status ok "rtls-scanner"
+    if [ -x "$ADDON_SHARE_DIR/rtls-scanner" ]; then
+        install_ui_status ok "rtls-scanner (kept)"
+    else
+        local rtls_arch_name
+        rtls_arch_name=$(version_get_arch_name "rtls-scanner")
+        local rtls_scan_url="https://github.com/DanielLavrushin/rtls-scanner/releases/latest/download/$rtls_arch_name"
+        if github_download "$rtls_scan_url" "$ADDON_TMP_DIR/rtls-scanner.tar.gz" 1024 "rtls-scanner"; then
+            tar -xzf "$ADDON_TMP_DIR/rtls-scanner.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract rtls-scanner"
+            rm -f "$ADDON_TMP_DIR/rtls-scanner.tar.gz" || true
+            chmod +x "$ADDON_SHARE_DIR/rtls-scanner" || true
+            install_ui_status ok "rtls-scanner"
+        else
+            install_ui_status fail "rtls-scanner"
+        fi
+    fi
+    local mmdb_sz=0
+    [ -f "$ADDON_SHARE_DIR/Country.mmdb" ] && mmdb_sz=$(wc -c <"$ADDON_SHARE_DIR/Country.mmdb" | tr -d ' ')
+    case "$mmdb_sz" in '' | *[!0-9]*) mmdb_sz=0 ;; esac
+    if [ "$mmdb_sz" -ge 102400 ]; then
+        install_ui_status ok "Country.mmdb (kept)"
+    else
         local mmdb_url="https://github.com/Loyalsoldier/geoip/releases/latest/download/Country.mmdb"
         if github_download "$mmdb_url" "$ADDON_SHARE_DIR/Country.mmdb" 102400 "Country.mmdb"; then
-            :
+            install_ui_status ok "Country.mmdb"
         else
             install_ui_status skip "Country.mmdb"
         fi
-    else
-        install_ui_status fail "rtls-scanner"
     fi
 
     install_ui_step "module: b4sni"
-    local b4sni_arch_name
-    b4sni_arch_name=$(version_get_arch_name "b4sni" "linux")
-    local b4sni_url="https://github.com/DanielLavrushin/b4sni/releases/latest/download/$b4sni_arch_name"
-    if github_download "$b4sni_url" "$ADDON_TMP_DIR/b4sni.tar.gz" 1024 "b4sni"; then
-        tar -xzf "$ADDON_TMP_DIR/b4sni.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract b4sni"
-        rm -f "$ADDON_TMP_DIR/b4sni.tar.gz" || true
-        chmod +x "$ADDON_SHARE_DIR/b4sni" || true
-        install_ui_status ok "b4sni"
+    if [ -x "$ADDON_SHARE_DIR/b4sni" ]; then
+        install_ui_status ok "b4sni (kept)"
     else
-        install_ui_status fail "b4sni ($b4sni_arch_name)"
+        local b4sni_arch_name
+        b4sni_arch_name=$(version_get_arch_name "b4sni" "linux")
+        local b4sni_url="https://github.com/DanielLavrushin/b4sni/releases/latest/download/$b4sni_arch_name"
+        if github_download "$b4sni_url" "$ADDON_TMP_DIR/b4sni.tar.gz" 1024 "b4sni"; then
+            tar -xzf "$ADDON_TMP_DIR/b4sni.tar.gz" -C "$ADDON_SHARE_DIR" || install_ui_status fail "extract b4sni"
+            rm -f "$ADDON_TMP_DIR/b4sni.tar.gz" || true
+            chmod +x "$ADDON_SHARE_DIR/b4sni" || true
+            install_ui_status ok "b4sni"
+        else
+            install_ui_status fail "b4sni ($b4sni_arch_name)"
+        fi
     fi
 
     mkdir -p "$XRAY_CONFIG_DIR" "$ADDON_SHARE_DIR/data" 2>/dev/null
@@ -220,8 +244,11 @@ EOF
     # Move junk out of geodata data/ (outbound-ss-* caused invalid attribute errors)
     geodata_sanitize_datadir 2>/dev/null || true
 
+    # Package update re-runs install — do not re-download multi‑MB geosite/geoip
+    # when they already sit next to xray (shared with stock XrayUI). Force refresh
+    # still available via panel / cron (update_community_geodata / if_changed).
     install_ui_step "geosite.dat + geoip.dat"
-    if update_community_geodata; then
+    if update_community_geodata skip_if_present; then
         install_ui_status ok "community geodata"
     else
         install_ui_status skip "community geodata (will retry later via cron / panel)"
