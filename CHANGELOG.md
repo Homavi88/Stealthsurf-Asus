@@ -2,10 +2,11 @@
 
 ## [1.4.21] - 2026-11-19
 
-### Home + LAN devices
+### Home + LAN devices + traffic
 
 - Главная: рядом с WAN показывается **vpn <server>** активного outbound (stealthsurf-default)
 - Настройки → connection → **Устройства VPN**: чеклист LAN-устройств для режимов «только выбранные» / «все кроме» (direct мимо VPN)
+- Throughput: накопленный трафик VPN/direct/всего и volume по endpoint — сохраняется между рестартами Xray (`traffic_lifetime.json`); включены outbound stats в API-конфиге
 
 ## [1.4.20] - 2026-11-19
 

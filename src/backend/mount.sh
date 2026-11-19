@@ -64,6 +64,10 @@ mount_ui() {
     rm -f "$ADDON_WEB_DIR/lan-devices.json"
     ln -s -f "$ADDON_SHARE_DIR/lan_devices.json" "$ADDON_WEB_DIR/lan-devices.json" 2>/dev/null || true
     [ -s "$ADDON_SHARE_DIR/lan_devices.json" ] || echo '[]' >"$ADDON_SHARE_DIR/lan_devices.json"
+    rm -f "$ADDON_WEB_DIR/traffic-lifetime.json"
+    ln -s -f "$ADDON_SHARE_DIR/traffic_lifetime.json" "$ADDON_WEB_DIR/traffic-lifetime.json" 2>/dev/null || true
+    [ -s "$ADDON_SHARE_DIR/traffic_lifetime.json" ] ||
+        echo '{"vpn_up":0,"vpn_down":0,"direct_up":0,"direct_down":0,"by_tag":{},"updated_at":""}' >"$ADDON_SHARE_DIR/traffic_lifetime.json"
     rm -f "$ADDON_WEB_DIR/devices-vpn.log"
     ln -s -f "$ADDON_LOGS_DIR/devices_vpn.log" "$ADDON_WEB_DIR/devices-vpn.log" 2>/dev/null || true
     rm -f "$ADDON_WEB_DIR/devices-vpn-history.log"
@@ -118,7 +122,7 @@ mount_ui() {
 
 mount_web_aliases() {
     local name
-    for name in xray-config xray-ui-response clients-online devices-vpn lan-devices connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions ss_paid_options ss_cloud_servers ss_tariffs ss_traffic ss_server_stats ss_available_servers ss_autofit addon-update-status preflight-status speedtest-status dnstest-status; do
+    for name in xray-config xray-ui-response clients-online devices-vpn lan-devices traffic-lifetime connection-status subscriptions geotags rtls-results b4sni api_keys balances ss_configs ss_locations ss_profile ss_subscriptions ss_paid_options ss_cloud_servers ss_tariffs ss_traffic ss_server_stats ss_available_servers ss_autofit addon-update-status preflight-status speedtest-status dnstest-status; do
         [ -L "$ADDON_WEB_DIR/$name.cab" ] || ln -s -f "$name.json" "$ADDON_WEB_DIR/$name.cab" || log_error "Failed to create symlink for $name.cab."
     done
 }

@@ -47,7 +47,7 @@
     </table>
 
     <div class="ss-card ss-card-flush">
-      <p class="ss-card-title">throughput</p>
+      <p class="ss-card-title">throughput · накоплено</p>
       <table class="ss-data-table ss-mono" aria-label="throughput">
         <thead>
           <tr>
@@ -69,6 +69,11 @@
             <td>{{ fmtRate(rates.directDown) }}</td>
             <td>{{ fmtRate(rates.directUp) }}</td>
             <td>{{ fmtBytes(vol.direct) }}</td>
+          </tr>
+          <tr class="ss-total-row">
+            <th scope="row">всего</th>
+            <td colspan="2" class="ss-muted">все подключения</td>
+            <td>{{ fmtBytes(vol.vpn + vol.direct) }}</td>
           </tr>
         </tbody>
       </table>
@@ -148,6 +153,15 @@
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
 
+  type TrafficByTag = Record<string, { up?: number; down?: number }>;
+  type LiveTraffic = {
+    vpn_up: number;
+    vpn_down: number;
+    direct_up: number;
+    direct_down: number;
+    session?: { vpn_up: number; vpn_down: number; direct_up: number; direct_down: number };
+    by_tag?: TrafficByTag;
+  };
   type LiveStatus = {
     ok?: boolean;
     running?: boolean;
@@ -157,7 +171,7 @@
     app_rss_mb: number;
     wan_ip?: string;
     vpn_server?: string;
-    traffic?: { vpn_up: number; vpn_down: number; direct_up: number; direct_down: number };
+    traffic?: LiveTraffic;
     ts?: number;
   };
 
@@ -181,7 +195,8 @@
       });
       const rates = ref<Rates>({ vpnUp: 0, vpnDown: 0, directUp: 0, directDown: 0 });
       const vol = ref({ vpn: 0, direct: 0 });
-      let prevTraffic: LiveStatus['traffic'] | null = null;
+      const byTag = ref<TrafficByTag>({});
+      let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
       let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -271,11 +286,12 @@
       };
 
       const volumeFor = (c: SsCatalogConfig) => {
-        // Prefer per-config traffic cache when present on the object
+        const tag = catalogTag(c);
+        const row = tag ? byTag.value[tag] : undefined;
+        if (row) return (Number(row.up) || 0) + (Number(row.down) || 0);
         const anyC = c as SsCatalogConfig & { traffic_bytes?: number; bytes?: number };
         if (typeof anyC.traffic_bytes === 'number') return anyC.traffic_bytes;
         if (typeof anyC.bytes === 'number') return anyC.bytes;
-        if (isImported(c) && locations.value.filter(isImported).length === 1) return vol.value.vpn;
         return 0;
       };
 
@@ -352,22 +368,36 @@
           const data = (await res.json()) as LiveStatus;
           if (!data?.ok && data?.ok !== undefined) return;
 
-          const t = data.traffic || { vpn_up: 0, vpn_down: 0, direct_up: 0, direct_down: 0 };
+          const t = data.traffic || {
+            vpn_up: 0,
+            vpn_down: 0,
+            direct_up: 0,
+            direct_down: 0
+          };
+          const sess = t.session || {
+            vpn_up: t.vpn_up || 0,
+            vpn_down: t.vpn_down || 0,
+            direct_up: t.direct_up || 0,
+            direct_down: t.direct_down || 0
+          };
           const ts = data.ts || Date.now() / 1000;
-          if (prevTraffic && prevTs && ts > prevTs) {
+          // Rates from session counters (reset on Xray restart); Σ from lifetime totals.
+          if (prevSession && prevTs && ts > prevTs) {
             const dt = ts - prevTs;
+            const d = (a: number, b: number) => Math.max(0, a - b);
             rates.value = {
-              vpnUp: Math.max(0, (t.vpn_up - prevTraffic.vpn_up) / dt),
-              vpnDown: Math.max(0, (t.vpn_down - prevTraffic.vpn_down) / dt),
-              directUp: Math.max(0, (t.direct_up - prevTraffic.direct_up) / dt),
-              directDown: Math.max(0, (t.direct_down - prevTraffic.direct_down) / dt)
+              vpnUp: d(sess.vpn_up, prevSession.vpn_up) / dt,
+              vpnDown: d(sess.vpn_down, prevSession.vpn_down) / dt,
+              directUp: d(sess.direct_up, prevSession.direct_up) / dt,
+              directDown: d(sess.direct_down, prevSession.direct_down) / dt
             };
           }
           vol.value = {
             vpn: (t.vpn_up || 0) + (t.vpn_down || 0),
             direct: (t.direct_up || 0) + (t.direct_down || 0)
           };
-          prevTraffic = t;
+          byTag.value = t.by_tag || {};
+          prevSession = sess;
           prevTs = ts;
           live.value = {
             cpu_pct: data.cpu_pct || 0,

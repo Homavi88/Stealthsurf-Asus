@@ -274,6 +274,23 @@
   }
 }
 
+.ss-total-row {
+  th,
+  td {
+    border-top: 1px solid rgba(120, 160, 200, 0.25);
+    padding-top: 10px;
+  }
+
+  th {
+    color: var(--ss-accent, #5b9fd4);
+  }
+}
+
+.ss-muted {
+  opacity: 0.55;
+  font-size: 11px;
+}
+
 .ss-lan-devices {
   display: flex;
   flex-direction: column;

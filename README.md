@@ -333,7 +333,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
-| **1.4.21** | Home: vpn server IP; LAN device checklist for VPN/direct |
+| **1.4.21** | Home: vpn IP + lifetime traffic; LAN VPN/direct checklist |
 | **1.4.20** | Update: github_download вместо BusyBox wget |
 | **1.4.19** | Updates: кнопка «Установить» при доступной версии |
 | **1.4.18** | API home: выбрать endpoint → Start (import + Xray); strip legacy reverse |
