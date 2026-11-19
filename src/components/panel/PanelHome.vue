@@ -95,22 +95,23 @@
             :key="String(c.id)"
             class="ss-row-click"
             :class="{ 'is-active': selectedId === c.id }"
-            @click="selectedId = c.id"
+            @click="selectEndpoint(c)"
           >
             <td class="ss-flag-cell">{{ flagFor(c) }}</td>
             <td>
               <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
               <div class="ss-cell-sub ss-mono">{{ c._ss_location_title || c.location || '—' }}</div>
-              <div v-if="isImported(c)" class="ss-cell-tag">in outbounds</div>
+              <div v-if="isActiveRoute(c)" class="ss-cell-tag">active</div>
+              <div v-else-if="isImported(c)" class="ss-cell-tag">imported</div>
             </td>
             <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
             <td class="ss-mono" :class="c.is_online === false ? 'is-off' : 'is-on'">
-              {{ c.is_online === false ? 'offline' : 'online' }}
+              {{ c.is_online === false ? 'node off' : 'node ok' }}
             </td>
             <td class="ss-num ss-mono">{{ fmtBytes(volumeFor(c)) }}</td>
           </tr>
           <tr v-if="!locations.length">
-            <td colspan="5" class="ss-empty">no configs — settings → account → sync catalog</td>
+            <td colspan="5" class="ss-empty">нет конфигов — настройки → аккаунт → API-ключ и sync</td>
           </tr>
         </tbody>
       </table>
@@ -119,19 +120,22 @@
     <div class="ss-card">
       <div class="ss-loc-meta" style="margin-bottom: 12px">
         <div class="name">{{ activeTitle }}</div>
-        <div class="sub ss-mono">selected · xray start/stop</div>
+        <div class="sub ss-mono">{{ running ? 'активен · stop остановит VPN' : 'выберите endpoint · start импортирует и запустит' }}</div>
       </div>
       <button
         type="button"
         class="ss-primary-btn"
         :class="running ? 'stop' : 'start'"
-        :disabled="busy || (!running && conflict)"
+        :disabled="busy || (!running && (conflict || selectedId == null))"
         @click="toggle"
       >
         {{ busy ? '…' : running ? 'stop' : 'start' }}
       </button>
       <p v-if="conflict" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
         {{ conflictHint }}
+      </p>
+      <p v-else-if="lastError" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
+        {{ lastError }}
       </p>
     </div>
   </div>
@@ -140,7 +144,7 @@
 <script lang="ts">
   import { computed, defineComponent, inject, onBeforeUnmount, onMounted, Ref, ref, watch } from 'vue';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
-  import { parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
+  import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
 
   type LiveStatus = {
     ok?: boolean;
@@ -164,6 +168,8 @@
       const locations = ref<SsCatalogConfig[]>([]);
       const selectedId = ref<number | string | null>(null);
       const busy = ref(false);
+      const lastError = ref('');
+      const activeOutboundTag = ref('');
       const live = ref<LiveStatus>({
         cpu_pct: 0,
         mem_used_mb: 0,
@@ -212,14 +218,23 @@
         (engine.xrayConfig?.outbounds || []).forEach((o) => {
           if (o.tag?.startsWith('ss-')) tags.add(o.tag);
         });
+        if (activeOutboundTag.value) tags.add(activeOutboundTag.value);
         return tags;
       });
 
-      const isImported = (c: SsCatalogConfig) => importedTags.value.has(`ss-${c.id}`) || importedTags.value.has(String(c.id));
+      const isImported = (c: SsCatalogConfig) => {
+        const tag = catalogTag(c);
+        return importedTags.value.has(tag) || importedTags.value.has(`ss-${c.id}`);
+      };
+
+      const isActiveRoute = (c: SsCatalogConfig) => {
+        const tag = catalogTag(c);
+        return Boolean(activeOutboundTag.value) && (activeOutboundTag.value === tag || activeOutboundTag.value === `ss-${c.id}`);
+      };
 
       const activeTitle = computed(() => {
         const cur = locations.value.find((c) => c.id === selectedId.value);
-        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'no endpoint selected');
+        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'endpoint не выбран');
       });
 
       const fmtBytes = (n: number) => {
@@ -257,13 +272,25 @@
         return 0;
       };
 
+      const refreshActiveRoute = async () => {
+        try {
+          const res = await engine.getWebData<{ routing?: { rules?: { name?: string; outboundTag?: string }[] } }>('xray-config');
+          const rule = (res.data?.routing?.rules || []).find((r) => r.name === 'stealthsurf-default');
+          activeOutboundTag.value = rule?.outboundTag || '';
+        } catch {
+          activeOutboundTag.value = '';
+        }
+      };
+
       const loadCatalog = async () => {
         try {
           const cfg = await engine.getWebData<SsCatalogConfig[] | { data?: SsCatalogConfig[] }>('ss_configs');
           locations.value = parseCatalogPayload(cfg?.data);
+          await refreshActiveRoute();
           if (selectedId.value == null && locations.value.length) {
+            const active = locations.value.find(isActiveRoute);
             const imported = locations.value.find(isImported);
-            selectedId.value = (imported || locations.value[0]).id;
+            selectedId.value = (active || imported || locations.value[0]).id;
           }
         } catch {
           locations.value = [];
@@ -272,10 +299,40 @@
 
       const refreshCatalog = async () => {
         busy.value = true;
+        lastError.value = '';
         try {
           await engine.submit(SubmitActions.ssSync, null, 0);
           await engine.delay(800);
           await loadCatalog();
+        } catch (e) {
+          lastError.value = e instanceof Error ? e.message : 'sync failed';
+        } finally {
+          busy.value = false;
+        }
+      };
+
+      /** Import selected API catalog config as default outbound (ss-* tag). */
+      const importSelected = async (id: number | string) => {
+        await engine.submit(SubmitActions.ssImportConfigs, { ids: [id] }, 1500);
+        activeOutboundTag.value = catalogTag(
+          locations.value.find((c) => String(c.id) === String(id)) || ({ id } as SsCatalogConfig)
+        );
+      };
+
+      const selectEndpoint = async (c: SsCatalogConfig) => {
+        selectedId.value = c.id;
+        lastError.value = '';
+        if (!running.value || busy.value || conflict.value) return;
+        // VPN already up: switch default route to the picked API config and restart via finalize.
+        busy.value = true;
+        try {
+          await engine.executeWithLoadingProgress(async () => {
+            await importSelected(c.id);
+          }, false);
+          await pollLive();
+          await loadCatalog();
+        } catch (e) {
+          lastError.value = e instanceof Error ? e.message : 'не удалось переключить endpoint';
         } finally {
           busy.value = false;
         }
@@ -325,13 +382,29 @@
 
       const toggle = async () => {
         if (conflict.value && !running.value) return;
+        lastError.value = '';
+        if (!running.value && selectedId.value == null) {
+          lastError.value = 'выберите подключение из списка API';
+          return;
+        }
         busy.value = true;
         try {
-          const action = running.value ? SubmitActions.serverStop : SubmitActions.serverStart;
-          await engine.executeWithLoadingProgress(async () => {
-            await engine.submit(action);
-          });
+          if (running.value) {
+            await engine.executeWithLoadingProgress(async () => {
+              await engine.submit(SubmitActions.serverStop);
+            }, false);
+          } else {
+            const id = selectedId.value as number | string;
+            await engine.executeWithLoadingProgress(async () => {
+              // API catalog → import as default outbound, then start Xray.
+              await importSelected(id);
+              await engine.submit(SubmitActions.serverStart);
+            }, false);
+          }
           await pollLive();
+          await loadCatalog();
+        } catch (e) {
+          lastError.value = e instanceof Error ? e.message : 'ошибка start/stop';
         } finally {
           busy.value = false;
         }
@@ -360,12 +433,15 @@
         locations,
         selectedId,
         busy,
+        lastError,
         live,
         rates,
         vol,
         running,
         conflict,
         conflictHint,
+        selectEndpoint,
+        isActiveRoute,
         displayIp,
         memLabel,
         activeTitle,

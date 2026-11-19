@@ -727,8 +727,10 @@ export class Engine {
       config.log.normalize();
     }
 
+    // Xray ≥26.9 removed top-level legacy reverse (bridges/portals).
+    // Drop it on normalize so Apply/Start never ship a rejected key.
     if (config.reverse) {
-      config.reverse = config.reverse.normalize();
+      delete config.reverse;
     }
 
     if (config.burstObservatory) {

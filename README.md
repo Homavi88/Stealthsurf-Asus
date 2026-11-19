@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/Homavi88/Stealthsurf-Asus?style=flat-square&label=release&color=2f6fed"></a>
   <a href="https://github.com/Homavi88/Stealthsurf-Asus/releases/latest"><img alt="Downloads" src="https://img.shields.io/github/downloads/Homavi88/Stealthsurf-Asus/total?style=flat-square&color=2d8a5f"></a>
-  <img alt="Version" src="https://img.shields.io/badge/version-1.4.17-2f6fed?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-1.4.18-2f6fed?style=flat-square">
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@
 ---
 
 Один ключ `stlth_…` — и весь LAN/Wi‑Fi идёт через узлы **StealthSurf**.  
-Актуальная версия **1.4.17**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
+Актуальная версия **1.4.18**. Runtime-тег **`ssurf`** (`/jffs/addons/ssurf`, `/jffs/scripts/ssurf`) — официальный `/jffs/addons/stealthsurf` не трогается.
 
 > **Полный обзор со скриншотами:** откройте [`docs/promo/index.html`](./docs/promo/index.html) в браузере (локально или через GitHub).
 
@@ -92,11 +92,13 @@ CLI: **`surfgate`** (алиасы `ssurf` / `ss`; **не** `/opt/bin/stealthsurf
 
 ## Старт за 5 шагов
 
-1. API-ключ → **Sync catalog**
-2. Выбрать конфиг → **Import** (`ss-<id>` + default route)
-3. **Start** — в Outbounds 🟢/🔴
+1. API-ключ в **Настройки → аккаунт** → Sync catalog (или ↻ на главной)
+2. На главной выбрать endpoint из списка API
+3. **Start** — SurfGate сам импортирует `ss-<id>`, ставит default route и поднимает Xray
 4. По желанию: Connection (kill-switch, **VPN-only**, DNS-only, LAN MAC) / Routing
-5. Устройства в Wi‑Fi уже через StealthSurf
+5. Устройства в Wi‑Fi уже через VPN
+
+Ручные подписки / outbound-редактор — по-прежнему в Merlin-вкладке и Outbounds; для API-ключей достаточно главной страницы.
 
 ## Возможности
 
@@ -331,6 +333,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
+| **1.4.18** | API home: выбрать endpoint → Start (import + Xray); strip legacy reverse |
 | **1.4.17** | VPN-only fail-closed для выбранных сервисов |
 | **1.4.16** | Полный чеклист роутера в справке панели |
 | **1.4.15** | Panel help, backup harden, VPN polish |
