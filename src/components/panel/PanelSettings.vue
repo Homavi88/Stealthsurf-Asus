@@ -1,11 +1,11 @@
 <template>
   <div class="ss-settings-page">
     <header class="ss-settings-top">
-      <button type="button" class="ss-back-link" @click="$emit('back')">← home</button>
-      <h2 class="ss-settings-title">settings</h2>
+      <button type="button" class="ss-back-link" @click="$emit('back')">← На главную</button>
+      <h2 class="ss-settings-title">Настройки</h2>
     </header>
 
-    <nav class="ss-mobile-nav" aria-label="Settings sections">
+    <nav class="ss-mobile-nav" aria-label="Разделы настроек">
       <button
         v-for="item in allNav"
         :key="'m-' + item.id"
@@ -21,9 +21,20 @@
 
     <div class="ss-settings-layout">
       <aside class="ss-settings-aside">
-        <div class="ss-nav-group">
+        <div class="ss-profile-card">
+          <div class="ss-profile-card__email">{{ profile.email || 'Аккаунт SurfGate' }}</div>
+          <div class="ss-profile-card__balance">{{ profile.balance || '— ₽' }}</div>
+          <div class="ss-profile-card__sub">{{ profile.label || 'Основная подписка' }}</div>
+        </div>
+
+        <div class="ss-nav-search">
+          <span aria-hidden="true">⌕</span>
+          <input v-model="navQuery" type="search" placeholder="Поиск настроек" />
+        </div>
+
+        <div class="ss-nav-group" v-if="filteredPrimary.length">
           <button
-            v-for="item in navPrimary"
+            v-for="item in filteredPrimary"
             :key="item.id"
             type="button"
             class="ss-nav-item"
@@ -32,11 +43,12 @@
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
+            <span class="ss-nav-chev">›</span>
           </button>
         </div>
-        <div class="ss-nav-group">
+        <div class="ss-nav-group" v-if="filteredEngine.length">
           <button
-            v-for="item in navEngine"
+            v-for="item in filteredEngine"
             :key="item.id"
             type="button"
             class="ss-nav-item"
@@ -45,11 +57,12 @@
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
+            <span class="ss-nav-chev">›</span>
           </button>
         </div>
-        <div class="ss-nav-group">
+        <div class="ss-nav-group" v-if="filteredMore.length">
           <button
-            v-for="item in navMore"
+            v-for="item in filteredMore"
             :key="item.id"
             type="button"
             class="ss-nav-item"
@@ -58,6 +71,7 @@
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
             {{ item.label }}
+            <span class="ss-nav-chev">›</span>
           </button>
         </div>
       </aside>
@@ -70,8 +84,8 @@
       >
         <h2 class="ss-pane-heading">{{ currentLabel }}</h2>
 
-        <div v-if="section === 'account'" class="ss-panel-light">
-          <stealth-surf-account />
+        <div v-if="section === 'account'">
+          <panel-account @profile="onProfile" />
         </div>
 
         <div v-else-if="section === 'connection'">
@@ -103,7 +117,7 @@
 
         <div v-else-if="section === 'clients'" class="ss-panel-light">
           <p v-if="!clientsCheckEnabled" class="ss-empty" style="padding: 12px">
-            Включите «Клиенты онлайн» в Connection / General Options — иначе опрос устройств не запускается (экономия RAM).
+            Включите «Клиенты онлайн» в Подключение / General Options — иначе опрос устройств не запускается (экономия RAM).
           </p>
           <clients-online v-else />
         </div>
@@ -117,7 +131,7 @@
         </div>
 
         <div class="ss-apply-wrap" v-if="needsApply">
-          <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">apply</button>
+          <button type="button" class="ss-primary-btn start" @click.prevent="$emit('apply')">Применить</button>
         </div>
       </section>
     </div>
@@ -125,10 +139,9 @@
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, inject, PropType, ref, Ref } from 'vue';
+  import { computed, defineComponent, inject, onMounted, PropType, ref, Ref } from 'vue';
   import { XrayObject } from '@/modules/XrayConfig';
-  import { EngineResponseConfig } from '@/modules/Engine';
-  import StealthSurfAccount from '../StealthSurfAccount.vue';
+  import engine, { EngineResponseConfig } from '@/modules/Engine';
   import ServiceStatus from '../ServiceStatus.vue';
   import Routing from '../Routing.vue';
   import Inbounds from '../Inbounds.vue';
@@ -141,14 +154,19 @@
   import PanelUpdates from './PanelUpdates.vue';
   import PanelConnection from './PanelConnection.vue';
   import PanelHelp from './PanelHelp.vue';
+  import PanelAccount from './PanelAccount.vue';
   import { PanelSectionId } from './panelNav';
 
   type SectionId = PanelSectionId;
 
+  type NavItem = { id: SectionId; label: string; icon: string };
+
+  type ProfileInfo = { email?: string; balance?: string; label?: string };
+
   export default defineComponent({
     name: 'PanelSettings',
     components: {
-      StealthSurfAccount,
+      PanelAccount,
       ServiceStatus,
       Routing,
       Inbounds,
@@ -171,26 +189,43 @@
       const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
       const clientsCheckEnabled = computed(() => !!uiResponse.value?.xray?.clients_check);
       const section = ref<SectionId>(props.initialSection || 'connection');
-      const navPrimary = [
-        { id: 'account' as const, label: 'account', icon: 'A' },
-        { id: 'connection' as const, label: 'connection', icon: 'C' },
-        { id: 'routing' as const, label: 'routing', icon: 'R' },
-        { id: 'network' as const, label: 'network', icon: 'N' }
+      const navQuery = ref('');
+      const profile = ref<ProfileInfo>({
+        email: '',
+        balance: '— ₽',
+        label: 'Основная подписка'
+      });
+
+      const navPrimary: NavItem[] = [
+        { id: 'account', label: 'Подписка', icon: '◈' },
+        { id: 'routing', label: 'Маршрутизация', icon: '⑂' },
+        { id: 'network', label: 'Сеть и службы', icon: '◎' },
+        { id: 'connection', label: 'Подключение', icon: '⏻' }
       ];
-      const navEngine = [
-        { id: 'outbounds' as const, label: 'outbounds', icon: 'O' },
-        { id: 'engine' as const, label: 'engine', icon: 'E' }
+      const navEngine: NavItem[] = [
+        { id: 'outbounds', label: 'Исходящие', icon: '⇢' },
+        { id: 'engine', label: 'Движок', icon: '◫' }
       ];
-      const navMore = [
-        { id: 'logs' as const, label: 'logs', icon: 'L' },
-        { id: 'clients' as const, label: 'clients', icon: 'U' },
-        { id: 'updates' as const, label: 'updates', icon: 'V' },
-        { id: 'help' as const, label: 'справка', icon: '?' }
+      const navMore: NavItem[] = [
+        { id: 'logs', label: 'Логи', icon: '▤' },
+        { id: 'clients', label: 'Клиенты', icon: '☺' },
+        { id: 'updates', label: 'Обновления', icon: '↓' },
+        { id: 'help', label: 'Справка', icon: '?' }
       ];
 
       const allNav = [...navPrimary, ...navEngine, ...navMore];
-      const currentLabel = computed(() => allNav.find((i) => i.id === section.value)?.label || 'settings');
-      // Connection has its own Save; avoid double Apply
+
+      const filterNav = (items: NavItem[]) => {
+        const q = navQuery.value.trim().toLowerCase();
+        if (!q) return items;
+        return items.filter((i) => i.label.toLowerCase().includes(q) || i.id.includes(q));
+      };
+
+      const filteredPrimary = computed(() => filterNav(navPrimary));
+      const filteredEngine = computed(() => filterNav(navEngine));
+      const filteredMore = computed(() => filterNav(navMore));
+
+      const currentLabel = computed(() => allNav.find((i) => i.id === section.value)?.label || 'Настройки');
       const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 
       const setSection = (id: SectionId) => {
@@ -198,19 +233,67 @@
         emit('section-change', id);
       };
 
+      const onProfile = (info: ProfileInfo) => {
+        profile.value = {
+          email: info.email || profile.value.email,
+          balance: info.balance || profile.value.balance,
+          label: info.label || profile.value.label
+        };
+      };
+
+      const formatRub = (n: number | null | undefined) => {
+        if (n == null || Number.isNaN(Number(n))) return '— ₽';
+        return `${Number(n).toLocaleString('ru-RU', { maximumFractionDigits: 2 })} ₽`;
+      };
+
+      const prefetchProfile = async () => {
+        try {
+          const bal = await engine.getWebData<{
+            keys?: { ok?: boolean; email?: string | null; label?: string; balance?: number | null }[];
+            total_balance?: number;
+          }>('balances');
+          const keys = bal?.data?.keys || [];
+          const ok = keys.find((k) => k.ok) || keys[0];
+          if (ok) {
+            profile.value = {
+              email: ok.email || '',
+              balance: ok.ok ? formatRub(ok.balance) : formatRub(bal?.data?.total_balance),
+              label: ok.label?.trim() || 'Основная подписка'
+            };
+          } else if (bal?.data?.total_balance != null) {
+            profile.value = {
+              ...profile.value,
+              balance: formatRub(bal.data.total_balance)
+            };
+          }
+        } catch {
+          /* optional */
+        }
+      };
+
+      onMounted(() => {
+        void prefetchProfile();
+      });
+
       const emitTransport = (payload: unknown) => emit('show-transport', payload);
       const emitSniffing = (payload: unknown) => emit('show-sniffing', payload);
 
       return {
         section,
+        navQuery,
+        profile,
         navPrimary,
         navEngine,
         navMore,
         allNav,
+        filteredPrimary,
+        filteredEngine,
+        filteredMore,
         currentLabel,
         needsApply,
         clientsCheckEnabled,
         setSection,
+        onProfile,
         emitTransport,
         emitSniffing
       };

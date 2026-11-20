@@ -1,5 +1,14 @@
 # Changelog
 
+## [Unreleased]
+
+### Panel UI redesign (:1131)
+
+- Light soft-UI theme inspired by official StealthSurf (cards, blue accents, grid background)
+- Home: status / speed / server cards, Russian labels, Connect/Disconnect CTA
+- Settings: Russian sidebar (Подписка, Маршрутизация, …), profile card, search, grouped nav
+- New native **Подписка** screen (`PanelAccount`) — Merlin tab / FormTable account UI unchanged
+
 ## [1.4.35] - 2026-11-20
 
 ### Memory / CPU (follow-up after 1.4.33)
