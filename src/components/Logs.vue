@@ -1,101 +1,105 @@
 <template>
-  <div class="formfontdesc">
-    <div class="log-card">
-      <header class="log-card-bar">
-        <h3>{{ $t('com.Logs.title') }}</h3>
-        <div class="actions">
-          <select class="input_option" v-model="file">
-            <option :value="FILE_APP">App (SurfGate)</option>
-            <option :value="FILE_ACCESS">Access (VPN connections)</option>
-            <option :value="FILE_ERROR">Error (engine)</option>
-            <option :value="FILE_DEVICES">Devices (VPN clients)</option>
-          </select>
-          <input class="button_gen button_gen_small" type="button" :value="$t('com.Logs.display')" @click.prevent="display()" />
-        </div>
-      </header>
-
-      <modal ref="logsModal" :width="modal_width" :title="$t('com.Logs.title')">
-        <div class="logs-shell">
-          <pre v-if="file === FILE_ERROR || file === FILE_APP || file === FILE_DEVICES" class="plain-log">{{ logsContent }}</pre>
-
-          <div v-else class="table-wrapper">
-            <table class="modern-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>
-                    <input v-model.trim="filters.source" placeholder="🔎 source" />
-                  </th>
-                  <th>
-                    <input v-model.trim="filters.target" placeholder="🔎 target" />
-                  </th>
-                  <th>
-                    <input v-model.trim="filters.inbound" placeholder="🔎 inbound" />
-                  </th>
-                  <th>
-                    <input v-model.trim="filters.outbound" placeholder="🔎 outbound" />
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr v-for="(log, idx) in filteredLogs" :key="idx" :class="[{ parsed: log.parsed, unparsed: !log.parsed }, log.kind]">
-                  <td v-if="!log.parsed" colspan="5">{{ log.line }}</td>
-
-                  <template v-else-if="log.kind === 'access'">
-                    <td>{{ log.time }}</td>
-                    <td>
-                      <span v-if="log.user" class="badge user">{{ log.user }}</span>
-                      <span v-if="!log.source_device && log.source_ip" class="resolved"
-                        :title="showIp.has('s:' + idx) ? log.source : log.source_ip"
-                        @click="toggleIp('s:' + idx)">{{ showIp.has('s:' + idx) ? log.source_ip : log.source }}</span>
-                      <span v-else-if="!log.source_device">{{ log.source }}</span>
-                      <a v-else class="device" :title="log.source_ip || log.source">{{ log.source_device }}</a>
-                    </td>
-                    <td>
-                      <span :class="['badge', log.type]"> <b :class="log.type === 'tcp' ? 'i-tcp' : 'i-udp'"></b>{{ log.type }} </span>
-                      <span v-if="log.target_ip" class="resolved"
-                        :title="showIp.has('t:' + idx) ? log.target : log.target_ip"
-                        @click="toggleIp('t:' + idx)">{{ showIp.has('t:' + idx) ? log.target_ip : log.target }}:{{ log.target_port }}</span>
-                      <span v-else>{{ log.target }}:{{ log.target_port }}</span>
-                    </td>
-                    <td>{{ log.inbound }}</td>
-                    <td>
-                      <span v-if="log.routing" :class="['badge', log.routing]">
-                        <b :class="log.routing === 'direct' ? 'i-direct' : 'i-rule'"></b>
-                        {{ log.routing }}
-                      </span>
-                      {{ log.outbound }}
-                    </td>
-                  </template>
-
-                  <template v-else>
-                    <td>{{ log.time }}</td>
-                    <td>
-                      <span class="badge dns"><b class="i-dns"></b>DNS</span>
-                    </td>
-                    <td :title="log.answers">{{ log.host }}</td>
-                    <td></td>
-                    <td>
-                      <span class="badge cache" v-if="log.type === 'cache'">CACHE</span>
-                      <span v-else-if="log.type === 'answer'">{{ log.latency }}ms</span>
-                    </td>
-                  </template>
-                </tr>
-
-                <tr v-if="parsedLogs.length === 0">
-                  <td colspan="5">No logs available</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <template v-slot:footer>
-          <input class="button_gen button_gen_small" type="button" value="raw" @click.prevent="engine.openText(logsContent)" />
-          <input class="button_gen button_gen_small" type="button" :value="$t('labels.close')" @click.prevent="logsModal.close" />
-        </template>
-      </modal>
+  <div class="ss-log-tool">
+    <div class="ss-log-tool__head">
+      <div class="ss-log-tool__title">{{ $t('com.Logs.title') }}</div>
+      <div class="ss-log-tool__hint">Журнал приложения и движка</div>
     </div>
+    <div class="ss-log-tool__body">
+      <label class="ss-log-field">
+        <span class="ss-log-field__label">Источник</span>
+        <select class="ss-log-select" v-model="file">
+          <option :value="FILE_APP">App (SurfGate)</option>
+          <option :value="FILE_ACCESS">Access (VPN connections)</option>
+          <option :value="FILE_ERROR">Error (engine)</option>
+          <option :value="FILE_DEVICES">Devices (VPN clients)</option>
+        </select>
+      </label>
+      <button type="button" class="ss-log-btn ss-log-btn--primary" @click.prevent="display()">
+        {{ $t('com.Logs.display') }}
+      </button>
+    </div>
+
+    <modal ref="logsModal" :width="modal_width" :title="$t('com.Logs.title')">
+      <div class="logs-shell">
+        <pre v-if="file === FILE_ERROR || file === FILE_APP || file === FILE_DEVICES" class="plain-log">{{ logsContent }}</pre>
+
+        <div v-else class="table-wrapper">
+          <table class="modern-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>
+                  <input v-model.trim="filters.source" placeholder="🔎 source" />
+                </th>
+                <th>
+                  <input v-model.trim="filters.target" placeholder="🔎 target" />
+                </th>
+                <th>
+                  <input v-model.trim="filters.inbound" placeholder="🔎 inbound" />
+                </th>
+                <th>
+                  <input v-model.trim="filters.outbound" placeholder="🔎 outbound" />
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              <tr v-for="(log, idx) in filteredLogs" :key="idx" :class="[{ parsed: log.parsed, unparsed: !log.parsed }, log.kind]">
+                <td v-if="!log.parsed" colspan="5">{{ log.line }}</td>
+
+                <template v-else-if="log.kind === 'access'">
+                  <td>{{ log.time }}</td>
+                  <td>
+                    <span v-if="log.user" class="badge user">{{ log.user }}</span>
+                    <span v-if="!log.source_device && log.source_ip" class="resolved"
+                      :title="showIp.has('s:' + idx) ? log.source : log.source_ip"
+                      @click="toggleIp('s:' + idx)">{{ showIp.has('s:' + idx) ? log.source_ip : log.source }}</span>
+                    <span v-else-if="!log.source_device">{{ log.source }}</span>
+                    <a v-else class="device" :title="log.source_ip || log.source">{{ log.source_device }}</a>
+                  </td>
+                  <td>
+                    <span :class="['badge', log.type]"> <b :class="log.type === 'tcp' ? 'i-tcp' : 'i-udp'"></b>{{ log.type }} </span>
+                    <span v-if="log.target_ip" class="resolved"
+                      :title="showIp.has('t:' + idx) ? log.target : log.target_ip"
+                      @click="toggleIp('t:' + idx)">{{ showIp.has('t:' + idx) ? log.target_ip : log.target }}:{{ log.target_port }}</span>
+                    <span v-else>{{ log.target }}:{{ log.target_port }}</span>
+                  </td>
+                  <td>{{ log.inbound }}</td>
+                  <td>
+                    <span v-if="log.routing" :class="['badge', log.routing]">
+                      <b :class="log.routing === 'direct' ? 'i-direct' : 'i-rule'"></b>
+                      {{ log.routing }}
+                    </span>
+                    {{ log.outbound }}
+                  </td>
+                </template>
+
+                <template v-else>
+                  <td>{{ log.time }}</td>
+                  <td>
+                    <span class="badge dns"><b class="i-dns"></b>DNS</span>
+                  </td>
+                  <td :title="log.answers">{{ log.host }}</td>
+                  <td></td>
+                  <td>
+                    <span class="badge cache" v-if="log.type === 'cache'">CACHE</span>
+                    <span v-else-if="log.type === 'answer'">{{ log.latency }}ms</span>
+                  </td>
+                </template>
+              </tr>
+
+              <tr v-if="parsedLogs.length === 0">
+                <td colspan="5">No logs available</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <template v-slot:footer>
+        <button type="button" class="ss-log-btn" @click.prevent="engine.openText(logsContent)">raw</button>
+        <button type="button" class="ss-log-btn ss-log-btn--primary" @click.prevent="logsModal.close">{{ $t('labels.close') }}</button>
+      </template>
+    </modal>
   </div>
 </template>
 
@@ -287,28 +291,90 @@
 </script>
 
 <style scoped lang="scss">
-  .log-card {
-    background: #475a5f;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.45);
-    overflow: hidden;
+  .ss-log-tool {
+    background: var(--ss-card, #fff);
+    border: 1px solid var(--ss-line, rgba(28, 52, 84, 0.1));
+    border-radius: var(--ss-radius, 16px);
+    box-shadow: var(--ss-shadow-sm, 0 2px 10px rgba(28, 52, 84, 0.06));
+    padding: 14px 16px 16px;
+    margin-bottom: 12px;
   }
 
-  .log-card-bar {
+  .ss-log-tool__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ss-text, #1c2430);
+    line-height: 1.25;
+  }
+
+  .ss-log-tool__hint {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ss-muted, #7a8696);
+  }
+
+  .ss-log-tool__body {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .ss-log-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .ss-log-field__label {
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--ss-muted, #7a8696);
+  }
+
+  .ss-log-select {
+    width: 100%;
+    box-sizing: border-box;
+    appearance: none;
+    background: #f5f7fa
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%237a8696' d='M1.4.6 6 5.2 10.6.6 12 2 6 8 0 2z'/%3E%3C/svg%3E")
+      no-repeat right 12px center;
+    border: 1px solid var(--ss-line, rgba(28, 52, 84, 0.1));
+    border-radius: 12px;
+    padding: 12px 36px 12px 14px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ss-text, #1c2430);
+    min-height: 48px;
+  }
+
+  .ss-log-btn {
+    display: inline-flex;
     align-items: center;
-    padding: 0.75rem 1rem;
-    background: #475a5f;
-    h3 {
-      margin: 0;
-      font-weight: 600;
-      color: #fff;
-    }
-    .actions {
-      display: flex;
-      gap: 0.5rem;
-    }
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--ss-line, rgba(28, 52, 84, 0.1));
+    background: #f5f7fa;
+    color: var(--ss-text, #1c2430);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
+
+  .ss-log-btn:active {
+    transform: scale(0.985);
+  }
+
+  .ss-log-btn--primary {
+    background: var(--ss-blue, #2f6fed);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(47, 111, 237, 0.22);
   }
 
   .table-wrapper {

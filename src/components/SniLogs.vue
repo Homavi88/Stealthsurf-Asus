@@ -1,14 +1,30 @@
 <template>
-  <div class="formfontdesc">
-    <div class="log-card">
-      <header class="log-card-bar">
-        <h3>{{ $t('com.SniLogs.title') }}</h3>
-        <div class="actions">
-          <input class="button_gen button_gen_small" type="button" v-if="!isb4sniRunning" :value="$t('labels.start')" @click.prevent="start()" />
-          <input class="button_gen button_gen_small" type="button" v-if="isb4sniRunning" :value="$t('labels.stop')" @click.prevent="stop()" />
-          <input class="button_gen button_gen_small" type="button" :value="$t('com.SniLogs.display')" @click.prevent="display()" />
-        </div>
-      </header>
+  <div class="ss-log-tool">
+    <div class="ss-log-tool__head">
+      <div class="ss-log-tool__title">{{ $t('com.SniLogs.title') }}</div>
+      <div class="ss-log-tool__hint">Перехват SNI для правил маршрутизации</div>
+    </div>
+    <div class="ss-log-tool__body ss-log-tool__body--row">
+      <button
+        v-if="!isb4sniRunning"
+        type="button"
+        class="ss-log-btn ss-log-btn--primary"
+        @click.prevent="start()"
+      >
+        {{ $t('labels.start') }}
+      </button>
+      <button
+        v-else
+        type="button"
+        class="ss-log-btn ss-log-btn--danger"
+        @click.prevent="stop()"
+      >
+        {{ $t('labels.stop') }}
+      </button>
+      <button type="button" class="ss-log-btn" @click.prevent="display()">
+        {{ $t('com.SniLogs.display') }}
+      </button>
+    </div>
 
       <modal ref="sniModal" :width="modal_width" :title="$t('com.SniLogs.title')">
         <div class="logs-shell">
@@ -276,7 +292,6 @@
           </div>
         </template>
       </modal>
-    </div>
   </div>
 </template>
 
@@ -785,32 +800,76 @@
 </script>
 
 <style scoped lang="scss">
-  .log-card {
-    background: #475a5f;
-    border-radius: 10px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.45);
-    overflow: hidden;
-    margin-bottom: 1rem;
+  .ss-log-tool {
+    background: var(--ss-card, #fff);
+    border: 1px solid var(--ss-line, rgba(28, 52, 84, 0.1));
+    border-radius: var(--ss-radius, 16px);
+    box-shadow: var(--ss-shadow-sm, 0 2px 10px rgba(28, 52, 84, 0.06));
+    padding: 14px 16px 16px;
+    margin-bottom: 12px;
   }
 
-  .log-card-bar {
+  .ss-log-tool__title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ss-text, #1c2430);
+    line-height: 1.25;
+  }
+
+  .ss-log-tool__hint {
+    margin-top: 3px;
+    font-size: 12px;
+    color: var(--ss-muted, #7a8696);
+  }
+
+  .ss-log-tool__body {
     display: flex;
-    justify-content: space-between;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .ss-log-tool__body--row {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .ss-log-tool__body--row .ss-log-btn {
+    flex: 1 1 140px;
+  }
+
+  .ss-log-btn {
+    display: inline-flex;
     align-items: center;
-    padding: 0.75rem 1rem;
-    background: #475a5f;
+    justify-content: center;
+    min-height: 48px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--ss-line, rgba(28, 52, 84, 0.1));
+    background: #f5f7fa;
+    color: var(--ss-text, #1c2430);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.15s ease;
+  }
 
-    h3 {
-      margin: 0;
-      font-weight: 600;
-      color: #fff;
-    }
+  .ss-log-btn:active {
+    transform: scale(0.985);
+  }
 
-    .actions {
-      display: flex;
-      gap: 1rem;
-      align-items: center;
-    }
+  .ss-log-btn--primary {
+    background: var(--ss-blue, #2f6fed);
+    border-color: transparent;
+    color: #fff;
+    box-shadow: 0 8px 20px rgba(47, 111, 237, 0.22);
+  }
+
+  .ss-log-btn--danger {
+    background: rgba(224, 72, 72, 0.08);
+    border-color: rgba(224, 72, 72, 0.28);
+    color: var(--ss-danger, #e04848);
   }
 
   /* ── Tab Navigation ────────────────────────────────────────── */
