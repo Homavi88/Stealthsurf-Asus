@@ -726,7 +726,7 @@
         }
         if (!options.ipsec) options.ipsec = 'off';
         if (!options.probe_url) options.probe_url = 'https://www.google.com/generate_204';
-        if (!options.probe_interval) options.probe_interval = 30;
+        if (!options.probe_interval) options.probe_interval = 60;
         if (!options.watchdog_interval) options.watchdog_interval = 2;
         if (options.watchdog_max_attempts == null) options.watchdog_max_attempts = 5;
         if (!options.ss_catalog_auto_sync) options.ss_catalog_auto_sync = 'disabled';

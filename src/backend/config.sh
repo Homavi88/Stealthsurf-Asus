@@ -124,9 +124,29 @@ EOF
           "port": 5699,
           "tag": "all-in",
           "settings": { "address": "", "network": "tcp,udp", "followRedirect": true },
-          "streamSettings": { "sockopt": { "tproxy": "tproxy" } },
+          "streamSettings": {
+            "sockopt": {
+              "tproxy": "tproxy",
+              "tcpKeepAliveIdle": 300,
+              "tcpKeepAliveInterval": 30
+            }
+          },
           "sniffing": { "enabled": true, "destOverride": ["http", "tls", "quic"] }
         }] end
+      # Vanish clients (phone Wi‑Fi drop) leave TCP open for hours without keepalive → RAM bleed.
+      # Apply defaults on existing all-in / tproxy inbounds that never set keepalive.
+      | .inbounds |= map(
+          if ((.streamSettings.sockopt.tproxy // "") == "tproxy")
+             or (.tag == "all-in") then
+            .streamSettings //= {}
+            | .streamSettings.sockopt //= {}
+            | .streamSettings.sockopt.tproxy = (.streamSettings.sockopt.tproxy // "tproxy")
+            | .streamSettings.sockopt.tcpKeepAliveIdle =
+                (.streamSettings.sockopt.tcpKeepAliveIdle // 300)
+            | .streamSettings.sockopt.tcpKeepAliveInterval =
+                (.streamSettings.sockopt.tcpKeepAliveInterval // 30)
+          else . end
+        )
       | if ([.outbounds[] | select(.tag == "direct" or .protocol == "freedom")] | length) > 0 then .
         else .outbounds = [{ "protocol": "freedom", "tag": "direct", "settings": {} }] + .outbounds end
       | if ([.outbounds[] | select(.tag == "block" or .protocol == "blackhole")] | length) > 0 then .

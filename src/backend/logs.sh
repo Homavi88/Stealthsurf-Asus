@@ -53,8 +53,11 @@ logs_ip2domain_cache() {
     return 1
   }
 
+  # Cap at 5000 IP→domain rows so the cache cannot grow forever on USB / flash.
+  # tmp first so fresh replies win; head keeps the newest entries under the cap.
   cat "$tmp" "$cache" 2>/dev/null |
-    awk '!seen[$1]++' >"${cache}.new" &&
+    awk '!seen[$1]++' |
+    head -n 5000 >"${cache}.new" &&
     mv "${cache}.new" "$cache"
 
   rm -f "$tmp"

@@ -35,7 +35,7 @@ export default function useGeneralOptions(cfg: XrayObject, ui: Ref<EngineRespons
     split_lock_domains: ui.value?.xray?.split_lock_domains ?? '',
     speedtest_interval: ui.value?.xray?.speedtest_interval ?? 'disabled',
     probe_url: ui.value?.xray?.probe_url ?? 'https://www.google.com/generate_204',
-    probe_interval: ui.value?.xray?.probe_interval ?? 30,
+    probe_interval: ui.value?.xray?.probe_interval ?? 60,
     tun_routing: ui.value?.xray?.tun_routing ?? 'full',
     watchdog: ui.value?.xray?.watchdog ?? false,
     watchdog_interval: ui.value?.xray?.watchdog_interval ?? 2,

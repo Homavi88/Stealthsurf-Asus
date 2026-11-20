@@ -8,10 +8,76 @@
 PANEL_DEFAULT_PORT=1131
 PANEL_PIDFILE=/var/run/ssurf-panel.pid
 PANEL_LOG=/tmp/ssurf/panel.log
+PANEL_API_LOG=/tmp/ssurf/panel-api.log
+PANEL_LIVE_LOCK=/tmp/ssurf/live.refresh.lock
 PANEL_HTTPD_CONF="$ADDON_JFFS_ADN_DIR/panel/httpd.conf"
 PANEL_WEB_ROOT="$ADDON_JFFS_ADN_DIR/panel"
 PANEL_CGI_DIR="$PANEL_WEB_ROOT/cgi-bin"
 PANEL_SECONDARY_TAG="stealthsurf-panel"
+
+# /tmp is tmpfs — cap panel logs so continuous httpd stderr cannot fill RAM.
+panel_soft_rotate_log() {
+    local f="$1"
+    local max_bytes="${2:-524288}"
+    local sz
+    [ -f "$f" ] || return 0
+    sz=$(wc -c <"$f" 2>/dev/null | tr -d ' ')
+    case "$sz" in '' | *[!0-9]*) return 0 ;; esac
+    if [ "$sz" -gt "$max_bytes" ]; then
+        tail -c "$((max_bytes / 2))" "$f" >"${f}.trim" 2>/dev/null &&
+            mv -f "${f}.trim" "$f" 2>/dev/null ||
+            rm -f "${f}.trim" 2>/dev/null
+    fi
+}
+
+# Background work for /cgi-bin/status — single-flight + throttled so a browser
+# left open on Home cannot pile up sh/jq/xray/curl and exhaust Merlin RAM.
+panel_live_bg_refresh() {
+    mkdir -p /tmp/ssurf 2>/dev/null || true
+    panel_soft_rotate_log "$PANEL_LOG" 524288
+    panel_soft_rotate_log "$PANEL_API_LOG" 524288
+
+    if which flock >/dev/null 2>&1; then
+        # shellcheck disable=SC3023
+        exec 9>"$PANEL_LIVE_LOCK"
+        flock -n 9 || return 0
+    else
+        local lf=/tmp/ssurf/live.refresh.pid
+        local old
+        old=$(cat "$lf" 2>/dev/null) || old=
+        if [ -n "$old" ] && kill -0 "$old" 2>/dev/null; then
+            return 0
+        fi
+        echo $$ >"$lf"
+        # shellcheck disable=SC2064
+        trap 'rm -f /tmp/ssurf/live.refresh.pid' EXIT
+    fi
+
+    panel_traffic_lifetime_tick >/dev/null 2>&1 || true
+
+    local now=0 age=999 mt=0
+    now=$(date +%s 2>/dev/null) || now=0
+    if [ -f "${XRAYUI_CONNECTION_STATUS_FILE:-}" ]; then
+        mt=$(date -r "$XRAYUI_CONNECTION_STATUS_FILE" +%s 2>/dev/null) || mt=0
+        [ "$mt" -gt 0 ] && [ "$now" -gt 0 ] && age=$((now - mt))
+    fi
+    # Connection/observatory status is expensive — refresh at most every 12s.
+    if [ "$age" -ge 12 ]; then
+        type api_get_connection_status >/dev/null 2>&1 &&
+            api_get_connection_status >/dev/null 2>&1 || true
+    fi
+
+    age=999
+    mt=0
+    local lan_out="${ADDON_SHARE_DIR}/lan_devices.json"
+    if [ -f "$lan_out" ]; then
+        mt=$(date -r "$lan_out" +%s 2>/dev/null) || mt=0
+        [ "$mt" -gt 0 ] && [ "$now" -gt 0 ] && age=$((now - mt))
+    fi
+    if [ "$age" -ge 30 ]; then
+        panel_lan_devices_publish >/dev/null 2>&1 || true
+    fi
+}
 
 panel_load_settings() {
     load_xrayui_config 2>/dev/null || true
@@ -922,15 +988,13 @@ panel_live_json() {
     esac
     echo "$by_tag_json" | jq -e 'type=="object"' >/dev/null 2>&1 || by_tag_json='{}'
 
-    # Refresh stats + lifetime asynchronously so next poll is fresher.
+    # Refresh stats / observatory / LAN list in background — single-flight (see panel_live_bg_refresh).
     if [ "$running" = true ]; then
-        (
-            panel_traffic_lifetime_tick >/dev/null 2>&1 || true
-            type api_get_connection_status >/dev/null 2>&1 && api_get_connection_status >/dev/null 2>&1 || true
-        ) &
+        (panel_live_bg_refresh >/dev/null 2>&1 || true) &
+    else
+        panel_soft_rotate_log "$PANEL_LOG" 524288
+        panel_soft_rotate_log "$PANEL_API_LOG" 524288
     fi
-    # Keep LAN device list warm for Settings → Connection (cheap; runs in background).
-    (panel_lan_devices_publish >/dev/null 2>&1 &) || true
 
     local ts out
     ts=$(date +%s 2>/dev/null) || ts=0
@@ -1092,7 +1156,8 @@ panel_api_handle() {
     (
         /jffs/scripts/ssurf service_event $rest
         panel_refresh_ext_links 2>/dev/null || true
-    ) >/tmp/ssurf/panel-api.log 2>&1 &
+    ) >"$PANEL_API_LOG" 2>&1 &
+    panel_soft_rotate_log "$PANEL_API_LOG" 524288
 
     echo '{"ok":true,"queued":true,"action":"'"$action"'"}'
 }

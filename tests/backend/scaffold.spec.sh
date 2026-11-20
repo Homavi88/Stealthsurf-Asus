@@ -25,9 +25,27 @@ jq '
       "port": 5699,
       "tag": "all-in",
       "settings": { "address": "", "network": "tcp,udp", "followRedirect": true },
-      "streamSettings": { "sockopt": { "tproxy": "tproxy" } },
+      "streamSettings": {
+        "sockopt": {
+          "tproxy": "tproxy",
+          "tcpKeepAliveIdle": 300,
+          "tcpKeepAliveInterval": 30
+        }
+      },
       "sniffing": { "enabled": true, "destOverride": ["http", "tls", "quic"] }
     }] end
+  | .inbounds |= map(
+      if ((.streamSettings.sockopt.tproxy // "") == "tproxy")
+         or (.tag == "all-in") then
+        .streamSettings //= {}
+        | .streamSettings.sockopt //= {}
+        | .streamSettings.sockopt.tproxy = (.streamSettings.sockopt.tproxy // "tproxy")
+        | .streamSettings.sockopt.tcpKeepAliveIdle =
+            (.streamSettings.sockopt.tcpKeepAliveIdle // 300)
+        | .streamSettings.sockopt.tcpKeepAliveInterval =
+            (.streamSettings.sockopt.tcpKeepAliveInterval // 30)
+      else . end
+    )
   | if ([.outbounds[] | select(.tag == "direct" or .protocol == "freedom")] | length) > 0 then .
     else .outbounds = [{ "protocol": "freedom", "tag": "direct", "settings": {} }] + .outbounds end
   | if ([.outbounds[] | select(.tag == "block" or .protocol == "blackhole")] | length) > 0 then .
@@ -35,6 +53,8 @@ jq '
 ' "$TMP/empty.json" >"$TMP/out.json"
 
 test "$(jq -r '.inbounds[0].tag' "$TMP/out.json")" = "all-in"
+test "$(jq -r '.inbounds[0].streamSettings.sockopt.tcpKeepAliveIdle' "$TMP/out.json")" = "300"
+test "$(jq -r '.inbounds[0].streamSettings.sockopt.tcpKeepAliveInterval' "$TMP/out.json")" = "30"
 test "$(jq -r '.outbounds[0].tag' "$TMP/out.json")" = "direct"
 test "$(jq -r '.outbounds[1].tag' "$TMP/out.json")" = "block"
 

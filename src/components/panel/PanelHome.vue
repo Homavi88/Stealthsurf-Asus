@@ -174,6 +174,7 @@
 <script lang="ts">
   import { computed, defineComponent, inject, onBeforeUnmount, onMounted, Ref, ref, watch } from 'vue';
   import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
+  import { createPoller, Poller } from '@/modules/Polling';
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
@@ -239,7 +240,7 @@
       const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
       let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
-      let timer: ReturnType<typeof setInterval> | null = null;
+      let livePoller: Poller | null = null;
 
       const running = computed(() => {
         if (typeof live.value.running === 'boolean') return live.value.running;
@@ -601,17 +602,18 @@
 
       onMounted(async () => {
         await loadCatalog();
-        await pollLive();
         await loadUpdateStatus();
         // Background GitHub check so the banner appears without opening Updates
         void refreshUpdateStatus();
-        timer = setInterval(() => {
-          void pollLive();
-        }, 2000);
+        // Serial poller: wait for previous /cgi-bin/status before the next tick
+        // (setInterval stacked background work and exhausted router RAM).
+        livePoller = createPoller(pollLive, 2000);
+        livePoller.start();
       });
 
       onBeforeUnmount(() => {
-        if (timer) clearInterval(timer);
+        livePoller?.stop();
+        livePoller = null;
       });
 
       watch(
