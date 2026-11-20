@@ -6,6 +6,7 @@
 
 - Mobile settings: drill-down list (menu → section) instead of horizontal pill chips
 - Home topbar shows addon version next to the brand (`v1.4.x`)
+- Panel modals (incl. «Обновление X-RAY Core») use light soft-UI instead of Merlin dark FormTable chrome
 
 ## [1.4.36] - 2026-11-20
 
