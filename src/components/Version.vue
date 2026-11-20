@@ -222,10 +222,10 @@
       padding-top: 0;
       a {
         position: static;
-        color: #3db8ff;
+        color: #2f6fed;
         font-family: 'IBM Plex Mono', ui-monospace, monospace;
         font-size: 13px;
-        font-weight: 500;
+        font-weight: 550;
         text-decoration: underline;
       }
       .button_info {
@@ -236,10 +236,10 @@
         height: 18px;
         margin-right: 6px;
         padding: 0 4px;
-        border-radius: 4px;
-        border: 1px solid rgba(61, 184, 255, 0.4);
-        background: rgba(61, 184, 255, 0.12);
-        color: #3db8ff;
+        border-radius: 6px;
+        border: 1px solid rgba(47, 111, 237, 0.28);
+        background: rgba(47, 111, 237, 0.12);
+        color: #2f6fed;
         font-size: 11px;
       }
     }
@@ -491,62 +491,62 @@
     text-decoration: underline;
   }
 
-  /* —— Panel (SurfGate :1131) —— */
+  /* —— Panel (SurfGate :1131) light soft UI —— */
   .version-modal--panel {
     gap: 12px;
 
     .version-status {
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      border-left: 3px solid #8b939e;
-      border-radius: 8px;
+      background: #f5f7fa;
+      border: 1px solid rgba(28, 52, 84, 0.1);
+      border-left: 3px solid #7a8696;
+      border-radius: 12px;
       padding: 12px 14px;
 
       &.up-to-date {
-        border-left-color: #3dd68c;
+        border-left-color: #1f9d5c;
       }
       &.has-update {
-        border-left-color: #3db8ff;
+        border-left-color: #2f6fed;
       }
     }
 
     .version-status__arrow {
-      color: #3db8ff;
+      color: #2f6fed;
       font-family: 'IBM Plex Mono', ui-monospace, monospace;
-      font-weight: 500;
+      font-weight: 550;
     }
 
     .version-pill {
-      background: rgba(0, 0, 0, 0.28);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
+      background: #fff;
+      border: 1px solid rgba(28, 52, 84, 0.12);
+      border-radius: 10px;
       font-family: 'IBM Plex Mono', ui-monospace, monospace;
-      color: #e6e8eb;
+      color: #1c2430;
 
       &--latest {
-        border-color: rgba(61, 184, 255, 0.45);
+        border-color: rgba(47, 111, 237, 0.35);
         box-shadow: none;
         .version-pill__num {
-          color: #3db8ff;
+          color: #2f6fed;
         }
       }
     }
 
     .version-status__badge {
-      border-radius: 6px;
-      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      border-radius: 10px;
+      font-family: 'Manrope', 'Segoe UI', sans-serif;
       font-size: 12px;
 
       &--ok {
-        color: #b8f0d0;
-        background: rgba(61, 214, 140, 0.12);
-        border: 1px solid rgba(61, 214, 140, 0.28);
+        color: #1f9d5c;
+        background: rgba(31, 157, 92, 0.1);
+        border: 1px solid rgba(31, 157, 92, 0.22);
       }
 
       &--update {
-        color: #cfe9ff;
-        background: rgba(61, 184, 255, 0.12);
-        border: 1px solid rgba(61, 184, 255, 0.28);
+        color: #2f6fed;
+        background: rgba(47, 111, 237, 0.1);
+        border: 1px solid rgba(47, 111, 237, 0.22);
       }
     }
 
@@ -556,44 +556,44 @@
       gap: 8px;
 
       label {
-        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-        font-size: 11px;
-        font-weight: 500;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: #8b939e;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
+        font-size: 12px;
+        font-weight: 650;
+        letter-spacing: 0;
+        text-transform: none;
+        color: #7a8696;
       }
 
       select {
         width: 100%;
-        padding: 10px 12px;
-        border-radius: 8px;
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(0, 0, 0, 0.28);
-        color: #e6e8eb;
-        font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        font-size: 13px;
+        padding: 11px 12px;
+        border-radius: 12px;
+        border: 1px solid rgba(28, 52, 84, 0.1);
+        background: #f5f7fa;
+        color: #1c2430;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
+        font-size: 14px;
       }
 
       &__warn,
       &__error {
-        color: #ff8a5c;
-        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        color: #c47a00;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
       }
     }
 
     .changelog-card {
-      background: rgba(0, 0, 0, 0.28);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      border-radius: 8px;
+      background: #f5f7fa;
+      border: 1px solid rgba(28, 52, 84, 0.1);
+      border-radius: 12px;
       max-height: 42vh;
       overflow: auto;
     }
 
     .changelog {
-      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      font-family: 'Manrope', 'Segoe UI', sans-serif;
       font-size: 13px;
-      color: #dce8f0;
+      color: #1c2430;
 
       :deep(h1),
       :deep(h2),
@@ -601,53 +601,58 @@
         display: block;
         margin: 0 0 10px;
         padding: 0;
-        font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        font-size: 12px;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #8b939e;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
+        font-size: 13px;
+        font-weight: 750;
+        letter-spacing: -0.01em;
+        text-transform: none;
+        color: #1c2430;
         background: none;
         border: none;
       }
 
       :deep(blockquote) {
-        background: rgba(61, 184, 255, 0.08);
-        border: 1px solid rgba(61, 184, 255, 0.2);
-        border-left: 3px solid #3db8ff;
-        color: #cfe9ff;
-        border-radius: 6px;
+        background: rgba(47, 111, 237, 0.06);
+        border: 1px solid rgba(47, 111, 237, 0.16);
+        border-left: 3px solid #2f6fed;
+        color: #1c2430;
+        border-radius: 10px;
 
         strong,
         em {
-          color: #eaf6ff;
+          color: #1c2430;
         }
       }
 
       :deep(code) {
         font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        color: #3db8ff;
-        background: rgba(61, 184, 255, 0.1);
-        border: 1px solid rgba(61, 184, 255, 0.2);
+        color: #2f6fed;
+        background: rgba(47, 111, 237, 0.08);
+        border: 1px solid rgba(47, 111, 237, 0.16);
         font-weight: 500;
       }
 
       :deep(a) {
-        color: #3db8ff;
+        color: #2f6fed;
+      }
+
+      :deep(ul li),
+      :deep(ol li) {
+        border-bottom-color: rgba(28, 52, 84, 0.06);
       }
     }
 
     .changelog-link {
-      color: #8b939e;
-      font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+      color: #7a8696;
+      font-family: 'Manrope', 'Segoe UI', sans-serif;
 
       :deep(a) {
-        color: #3db8ff;
+        color: #2f6fed;
       }
     }
 
     :deep(a) {
-      color: #3db8ff;
+      color: #2f6fed;
     }
   }
 </style>

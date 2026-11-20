@@ -27,6 +27,7 @@ ss_xrayui_conflict_message() { printf '%s\n' "xrayui"; }
 
 ss_official_process_running() { return 1; }
 ss_official_firewall_active() { return 1; }
+ss_official_cleanup_orphan_firewall() { :; }
 
 rm -rf "$OFFICIAL_SS_JFFS_DIR"
 ss_official_cache_invalidate
@@ -41,6 +42,16 @@ ss_official_installed && pass "installed via daemon path" || bad "installed via 
 
 ss_official_cache_invalidate
 ss_official_running && bad "installed but idle" || pass "installed but idle"
+
+# Orphan STEALTHSURF_* chains after official stop must NOT count as running
+ss_official_firewall_active() { return 0; }
+CLEANED=0
+ss_official_cleanup_orphan_firewall() { CLEANED=1; }
+ss_official_cache_invalidate
+ss_official_running && bad "orphan firewall must not block" || pass "orphan firewall ignored"
+[ "$CLEANED" = "1" ] && pass "orphan cleanup invoked" || bad "orphan cleanup invoked"
+ss_official_firewall_active() { return 1; }
+ss_official_cleanup_orphan_firewall() { :; }
 
 # Simulate running process
 ss_official_process_running() { return 0; }
@@ -74,10 +85,20 @@ else
   pass "dataplane refuse while official running"
 fi
 
+# Positive cache is revalidated against the live process (stop must clear ASAP)
 ss_official_process_running() { return 1; }
 ss_official_cache_invalidate
 ss_official_cache_store 1
-ss_official_running && pass "cache hit running" || bad "cache hit running"
+ss_official_running && bad "stale positive cache must not stick" || pass "stale positive cache cleared"
+ss_official_cache_store 1
 ss_official_running force && bad "force ignores stale cache" || pass "force ignores stale cache"
+
+# Negative cache still short-circuits
+ss_official_cache_invalidate
+ss_official_cache_store 0
+PROBE=0
+ss_official_process_running() { PROBE=1; return 0; }
+ss_official_running && bad "negative cache should win" || pass "negative cache hit"
+[ "$PROBE" = "0" ] && pass "negative cache skipped probe" || bad "negative cache skipped probe"
 
 echo "ALL PASS"

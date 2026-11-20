@@ -1,23 +1,10 @@
 <template>
-  <div class="ss-settings-page">
+  <div class="ss-settings-page" :class="{ 'is-mobile-detail': mobileDetail }">
     <header class="ss-settings-top">
-      <button type="button" class="ss-back-link" @click="$emit('back')">← На главную</button>
-      <h2 class="ss-settings-title">Настройки</h2>
+      <button v-if="mobileDetail" type="button" class="ss-back-link" @click="backToMenu">← Настройки</button>
+      <button v-else type="button" class="ss-back-link" @click="$emit('back')">← На главную</button>
+      <h2 class="ss-settings-title">{{ mobileDetail ? currentLabel : 'Настройки' }}</h2>
     </header>
-
-    <nav class="ss-mobile-nav" aria-label="Разделы настроек">
-      <button
-        v-for="item in allNav"
-        :key="'m-' + item.id"
-        type="button"
-        class="ss-mobile-nav-item"
-        :class="{ 'is-active': section === item.id }"
-        @click="setSection(item.id)"
-      >
-        <span class="ss-nav-ico">{{ item.icon }}</span>
-        {{ item.label }}
-      </button>
-    </nav>
 
     <div class="ss-settings-layout">
       <aside class="ss-settings-aside">
@@ -33,6 +20,7 @@
         </div>
 
         <div class="ss-nav-group" v-if="filteredPrimary.length">
+          <p class="ss-nav-group-label">Основное</p>
           <button
             v-for="item in filteredPrimary"
             :key="item.id"
@@ -42,11 +30,15 @@
             @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
-            {{ item.label }}
+            <span class="ss-nav-item-text">
+              <span class="ss-nav-item-label">{{ item.label }}</span>
+              <span v-if="item.hint" class="ss-nav-item-hint">{{ item.hint }}</span>
+            </span>
             <span class="ss-nav-chev">›</span>
           </button>
         </div>
         <div class="ss-nav-group" v-if="filteredEngine.length">
+          <p class="ss-nav-group-label">Движок</p>
           <button
             v-for="item in filteredEngine"
             :key="item.id"
@@ -56,11 +48,15 @@
             @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
-            {{ item.label }}
+            <span class="ss-nav-item-text">
+              <span class="ss-nav-item-label">{{ item.label }}</span>
+              <span v-if="item.hint" class="ss-nav-item-hint">{{ item.hint }}</span>
+            </span>
             <span class="ss-nav-chev">›</span>
           </button>
         </div>
         <div class="ss-nav-group" v-if="filteredMore.length">
+          <p class="ss-nav-group-label">Ещё</p>
           <button
             v-for="item in filteredMore"
             :key="item.id"
@@ -70,7 +66,10 @@
             @click="setSection(item.id)"
           >
             <span class="ss-nav-ico">{{ item.icon }}</span>
-            {{ item.label }}
+            <span class="ss-nav-item-text">
+              <span class="ss-nav-item-label">{{ item.label }}</span>
+              <span v-if="item.hint" class="ss-nav-item-hint">{{ item.hint }}</span>
+            </span>
             <span class="ss-nav-chev">›</span>
           </button>
         </div>
@@ -139,7 +138,7 @@
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, inject, onMounted, PropType, ref, Ref } from 'vue';
+  import { computed, defineComponent, inject, onBeforeUnmount, onMounted, PropType, ref, Ref } from 'vue';
   import { XrayObject } from '@/modules/XrayConfig';
   import engine, { EngineResponseConfig } from '@/modules/Engine';
   import ServiceStatus from '../ServiceStatus.vue';
@@ -159,9 +158,11 @@
 
   type SectionId = PanelSectionId;
 
-  type NavItem = { id: SectionId; label: string; icon: string };
+  type NavItem = { id: SectionId; label: string; icon: string; hint?: string };
 
   type ProfileInfo = { email?: string; balance?: string; label?: string };
+
+  const MOBILE_MQ = '(max-width: 860px)';
 
   export default defineComponent({
     name: 'PanelSettings',
@@ -190,6 +191,8 @@
       const clientsCheckEnabled = computed(() => !!uiResponse.value?.xray?.clients_check);
       const section = ref<SectionId>(props.initialSection || 'connection');
       const navQuery = ref('');
+      const mobileDetail = ref(false);
+      const isMobileViewport = ref(false);
       const profile = ref<ProfileInfo>({
         email: '',
         balance: '— ₽',
@@ -197,20 +200,20 @@
       });
 
       const navPrimary: NavItem[] = [
-        { id: 'account', label: 'Подписка', icon: '◈' },
-        { id: 'routing', label: 'Маршрутизация', icon: '⑂' },
-        { id: 'network', label: 'Сеть и службы', icon: '◎' },
-        { id: 'connection', label: 'Подключение', icon: '⏻' }
+        { id: 'account', label: 'Подписка', icon: '◈', hint: 'Ключ API и баланс' },
+        { id: 'connection', label: 'Подключение', icon: '⏻', hint: 'Автозапуск, kill-switch' },
+        { id: 'routing', label: 'Маршрутизация', icon: '⑂', hint: 'Правила и балансировщики' },
+        { id: 'network', label: 'Сеть и службы', icon: '◎', hint: 'Inbounds, DNS, reverse' }
       ];
       const navEngine: NavItem[] = [
-        { id: 'outbounds', label: 'Исходящие', icon: '⇢' },
-        { id: 'engine', label: 'Движок', icon: '◫' }
+        { id: 'outbounds', label: 'Исходящие', icon: '⇢', hint: 'Outbound-прокси' },
+        { id: 'engine', label: 'Движок', icon: '◫', hint: 'Статус Xray и сервисов' }
       ];
       const navMore: NavItem[] = [
-        { id: 'logs', label: 'Логи', icon: '▤' },
-        { id: 'clients', label: 'Клиенты', icon: '☺' },
-        { id: 'updates', label: 'Обновления', icon: '↓' },
-        { id: 'help', label: 'Справка', icon: '?' }
+        { id: 'logs', label: 'Логи', icon: '▤', hint: 'Журнал и SNI' },
+        { id: 'clients', label: 'Клиенты', icon: '☺', hint: 'Онлайн-устройства' },
+        { id: 'updates', label: 'Обновления', icon: '↓', hint: 'Версия аддона' },
+        { id: 'help', label: 'Справка', icon: '?', hint: 'Подсказки и FAQ' }
       ];
 
       const allNav = [...navPrimary, ...navEngine, ...navMore];
@@ -218,7 +221,12 @@
       const filterNav = (items: NavItem[]) => {
         const q = navQuery.value.trim().toLowerCase();
         if (!q) return items;
-        return items.filter((i) => i.label.toLowerCase().includes(q) || i.id.includes(q));
+        return items.filter(
+          (i) =>
+            i.label.toLowerCase().includes(q) ||
+            i.id.includes(q) ||
+            (i.hint || '').toLowerCase().includes(q)
+        );
       };
 
       const filteredPrimary = computed(() => filterNav(navPrimary));
@@ -228,9 +236,30 @@
       const currentLabel = computed(() => allNav.find((i) => i.id === section.value)?.label || 'Настройки');
       const needsApply = computed(() => ['routing', 'network', 'outbounds', 'engine'].includes(section.value));
 
+      let mq: MediaQueryList | null = null;
+      const syncMobile = () => {
+        isMobileViewport.value = !!mq?.matches;
+        if (!isMobileViewport.value) {
+          mobileDetail.value = false;
+        }
+      };
+
       const setSection = (id: SectionId) => {
         section.value = id;
         emit('section-change', id);
+        if (isMobileViewport.value) {
+          mobileDetail.value = true;
+          if (typeof window !== 'undefined') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        }
+      };
+
+      const backToMenu = () => {
+        mobileDetail.value = false;
+        if (typeof window !== 'undefined') {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       };
 
       const onProfile = (info: ProfileInfo) => {
@@ -272,7 +301,17 @@
       };
 
       onMounted(() => {
+        if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+          mq = window.matchMedia(MOBILE_MQ);
+          syncMobile();
+          mq.addEventListener('change', syncMobile);
+        }
         void prefetchProfile();
+      });
+
+      onBeforeUnmount(() => {
+        mq?.removeEventListener('change', syncMobile);
+        mq = null;
       });
 
       const emitTransport = (payload: unknown) => emit('show-transport', payload);
@@ -282,17 +321,15 @@
         section,
         navQuery,
         profile,
-        navPrimary,
-        navEngine,
-        navMore,
-        allNav,
         filteredPrimary,
         filteredEngine,
         filteredMore,
         currentLabel,
         needsApply,
         clientsCheckEnabled,
+        mobileDetail,
         setSection,
+        backToMenu,
         onProfile,
         emitTransport,
         emitSniffing

@@ -192,16 +192,18 @@
     opacity: 0.9;
 
     strong {
-      color: #ffcc00;
-      font-family: 'Courier New', Courier, monospace;
+      color: #2f6fed;
+      font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
   }
 
   .prerelease-tag {
-    display: inline-block;
-    margin-left: 8px;
-    color: #ff9a3c;
-    font-weight: bold;
+    display: block;
+    margin: 8px 0 0;
+    color: #c47a00;
+    font-weight: 650;
+    font-size: 12px;
+    line-height: 1.35;
   }
 
   .full-width {

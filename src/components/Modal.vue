@@ -2,7 +2,7 @@
   <Teleport to="#stealthsurf-modals">
     <div
       class="xray-modal-overlay"
-      :class="{ 'is-panel': variant === 'panel' }"
+      :class="{ 'is-panel': isPanel }"
       v-if="isVisible"
       @mousedown.self="close"
       role="dialog"
@@ -35,7 +35,7 @@
 </template>
 
 <script lang="ts">
-  import { defineComponent, ref, onBeforeUnmount } from 'vue';
+  import { computed, defineComponent, ref, onBeforeUnmount } from 'vue';
 
   export default defineComponent({
     name: 'Modal',
@@ -50,13 +50,19 @@
         default: '755'
       },
       variant: {
-        type: String as () => 'default' | 'panel',
-        default: 'default'
+        type: String as () => 'default' | 'panel' | 'auto',
+        default: 'auto'
       }
     },
     setup(props, { emit }) {
       const isVisible = ref(false);
       let onCloseCallback: () => void = () => {};
+
+      const isPanel = computed(() => {
+        if (props.variant === 'panel') return true;
+        if (props.variant === 'default') return false;
+        return Boolean((window as Window & { __SS_PANEL__?: boolean }).__SS_PANEL__);
+      });
 
       const show = (onClose?: () => void) => {
         isVisible.value = true;
@@ -85,6 +91,7 @@
 
       return {
         isVisible,
+        isPanel,
         show,
         close,
         width: props.width.endsWith('%') ? props.width : `${props.width.replace('px', '')}px`
@@ -177,52 +184,63 @@
       }
     }
 
-    /* SurfGate standalone panel — graphite glass, IBM Plex */
+    /* SurfGate standalone panel — light soft UI (matches panelTheme) */
     &.is-panel {
+      --ss-text: #1c2430;
+      --ss-muted: #7a8696;
+      --ss-line: rgba(28, 52, 84, 0.1);
+      --ss-hair: rgba(28, 52, 84, 0.06);
+      --ss-blue: #2f6fed;
+      --ss-blue-soft: rgba(47, 111, 237, 0.12);
+      --ss-danger: #e04848;
+      --ss-font: 'Manrope', 'Segoe UI', 'Helvetica Neue', sans-serif;
+      --ss-font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
       z-index: 10050;
-      padding: 24px 16px;
-      background: rgba(5, 8, 12, 0.72);
-      -webkit-backdrop-filter: blur(8px);
-      backdrop-filter: blur(8px);
+      padding: max(16px, env(safe-area-inset-top, 0px)) 16px max(16px, env(safe-area-inset-bottom, 0px));
+      background: rgba(28, 52, 84, 0.28);
+      -webkit-backdrop-filter: blur(10px);
+      backdrop-filter: blur(10px);
       align-items: flex-start;
 
       .xray-modal-content {
-        margin-top: min(8vh, 48px);
-        background: linear-gradient(180deg, #151b24 0%, #10151c 100%);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 10px;
-        box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
+        margin-top: min(6vh, 36px);
+        background: #ffffff;
+        border: 1px solid var(--ss-line);
+        border-radius: 16px;
+        box-shadow: 0 16px 48px rgba(28, 52, 84, 0.18);
         padding: 0;
-        color: #e6e8eb;
-        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        color: var(--ss-text);
+        font-family: var(--ss-font);
         width: min(520px, 100%);
         max-height: calc(100vh - 3rem);
       }
 
       .xray-modal-header {
-        padding: 16px 18px 10px;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        padding: 16px 18px 12px;
+        border-bottom: 1px solid var(--ss-hair);
+        color: var(--ss-text);
 
         h2 {
-          font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
-          font-size: 16px;
-          font-weight: 600;
-          letter-spacing: 0.01em;
-          color: #e6e8eb;
+          font-family: var(--ss-font);
+          font-size: 17px;
+          font-weight: 750;
+          letter-spacing: -0.02em;
+          color: var(--ss-text);
         }
       }
 
       .close-btn {
-        width: 32px;
-        height: 32px;
-        border-radius: 6px;
-        color: #8b939e;
+        width: 34px;
+        height: 34px;
+        border-radius: 10px;
+        color: var(--ss-muted);
         font-size: 22px;
         line-height: 1;
 
         &:hover {
-          background: rgba(255, 255, 255, 0.06);
-          color: #e6e8eb;
+          background: rgba(47, 111, 237, 0.08);
+          color: var(--ss-blue);
         }
       }
 
@@ -230,16 +248,128 @@
         margin: 0;
         padding: 14px 18px 8px;
         text-align: left;
+        color: var(--ss-text);
 
         :deep(a) {
-          color: #3db8ff;
+          color: var(--ss-blue);
+        }
+
+        :deep(.formfontdesc),
+        :deep(.formfontdesc p) {
+          color: var(--ss-muted);
+          font-family: var(--ss-font);
+          font-size: 13px;
+          line-height: 1.45;
+        }
+
+        :deep(.FormTable),
+        :deep(table.FormTable),
+        :deep(.modal-form-table) {
+          width: 100%;
+          border-collapse: collapse;
+          border-spacing: 0;
+          background: transparent;
+          border: 0;
+          margin: 10px 0 0;
+        }
+
+        :deep(.FormTable th),
+        :deep(.FormTable td),
+        :deep(.modal-form-table th),
+        :deep(.modal-form-table td) {
+          background: transparent !important;
+          color: var(--ss-text) !important;
+          border: 0 !important;
+          border-bottom: 1px solid var(--ss-hair) !important;
+          padding: 12px 0 !important;
+          vertical-align: top;
+          text-align: left;
+          font-family: var(--ss-font);
+        }
+
+        :deep(.FormTable th),
+        :deep(.modal-form-table th) {
+          width: 34%;
+          font-weight: 650;
+          font-size: 13px;
+          color: var(--ss-muted) !important;
+          padding-right: 12px !important;
+        }
+
+        :deep(.FormTable tr:last-child th),
+        :deep(.FormTable tr:last-child td),
+        :deep(.modal-form-table tr:last-child th),
+        :deep(.modal-form-table tr:last-child td) {
+          border-bottom: 0 !important;
+        }
+
+        :deep(select),
+        :deep(input[type='text']),
+        :deep(input[type='number']),
+        :deep(input[type='password']),
+        :deep(textarea),
+        :deep(.input_option),
+        :deep(.input_25_table),
+        :deep(.input_32_table) {
+          width: 100%;
+          max-width: 100%;
+          box-sizing: border-box;
+          background: #f5f7fa !important;
+          border: 1px solid var(--ss-line) !important;
+          border-radius: 12px !important;
+          color: var(--ss-text) !important;
+          font-family: var(--ss-font) !important;
+          font-size: 14px !important;
+          font-weight: 500 !important;
+          padding: 11px 12px !important;
+          outline: none;
+          box-shadow: none !important;
+        }
+
+        :deep(select:focus),
+        :deep(input:focus),
+        :deep(textarea:focus) {
+          border-color: rgba(47, 111, 237, 0.4) !important;
+          box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.16) !important;
+        }
+
+        :deep(.hint),
+        :deep(.hint-color),
+        :deep(.hint-color a) {
+          color: var(--ss-muted) !important;
+          float: none !important;
+          font-weight: 500 !important;
+          font-style: normal !important;
+        }
+
+        :deep(.current-version strong) {
+          color: var(--ss-blue) !important;
+          font-family: var(--ss-font-mono) !important;
+        }
+
+        :deep(.prerelease-tag) {
+          color: #c47a00 !important;
+          font-weight: 650 !important;
+        }
+
+        :deep(.button_gen),
+        :deep(input.button_gen),
+        :deep(button.button_gen) {
+          background: var(--ss-blue-soft) !important;
+          color: var(--ss-blue) !important;
+          border: 1px solid rgba(47, 111, 237, 0.22) !important;
+          border-radius: 10px !important;
+          font-family: var(--ss-font) !important;
+          font-weight: 650 !important;
+          box-shadow: none !important;
+          cursor: pointer;
         }
       }
 
       .xray-modal-footer {
         margin: 0;
         padding: 12px 18px 16px;
-        border-top: 1px solid rgba(255, 255, 255, 0.08);
+        border-top: 1px solid var(--ss-hair);
 
         .row-buttons {
           display: flex;
@@ -249,27 +379,90 @@
         }
 
         :deep(.button_gen),
-        :deep(input.button_gen) {
+        :deep(input.button_gen),
+        :deep(button.button_gen) {
           width: 100%;
           margin: 0 !important;
-          padding: 12px 14px !important;
-          border-radius: 8px !important;
-          border: 1px solid rgba(120, 160, 200, 0.35) !important;
-          background: transparent !important;
-          color: #dce8f0 !important;
-          font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif !important;
+          padding: 13px 14px !important;
+          border-radius: 12px !important;
+          border: 1px solid rgba(47, 111, 237, 0.22) !important;
+          background: var(--ss-blue) !important;
+          color: #fff !important;
+          font-family: var(--ss-font) !important;
           font-size: 14px !important;
-          font-weight: 500 !important;
-          box-shadow: none !important;
+          font-weight: 700 !important;
+          letter-spacing: 0 !important;
+          text-transform: none !important;
+          box-shadow: 0 10px 24px rgba(47, 111, 237, 0.22) !important;
           cursor: pointer;
         }
 
-        :deep(.button-primary),
-        :deep(input.button-primary) {
-          background: linear-gradient(180deg, rgba(61, 184, 255, 0.28), rgba(61, 184, 255, 0.16)) !important;
-          border-color: rgba(61, 184, 255, 0.45) !important;
-          color: #eaf6ff !important;
+        :deep(.button_gen:disabled),
+        :deep(input.button_gen:disabled) {
+          opacity: 0.45 !important;
+          cursor: not-allowed !important;
+          box-shadow: none !important;
         }
+      }
+    }
+  }
+
+  @media (max-width: 860px) {
+    .xray-modal-overlay.is-panel {
+      .xray-modal-content {
+        margin-top: 8px;
+        border-radius: 18px;
+        width: 100%;
+      }
+
+      .xray-modal-header {
+        padding: 14px 14px 10px;
+      }
+
+      .xray-modal-body {
+        padding: 12px 14px 6px;
+
+        :deep(.FormTable),
+        :deep(.modal-form-table),
+        :deep(.FormTable tbody),
+        :deep(.FormTable tr),
+        :deep(.modal-form-table tbody),
+        :deep(.modal-form-table tr) {
+          display: block;
+          width: 100%;
+        }
+
+        :deep(.FormTable th),
+        :deep(.FormTable td),
+        :deep(.modal-form-table th),
+        :deep(.modal-form-table td) {
+          display: block;
+          width: 100% !important;
+          padding: 6px 0 !important;
+          border-bottom: 0 !important;
+        }
+
+        :deep(.FormTable th),
+        :deep(.modal-form-table th) {
+          padding-bottom: 2px !important;
+          font-size: 12px;
+        }
+
+        :deep(.FormTable td),
+        :deep(.modal-form-table td) {
+          padding-bottom: 14px !important;
+          border-bottom: 1px solid var(--ss-hair) !important;
+        }
+
+        :deep(.FormTable tr:last-child td),
+        :deep(.modal-form-table tr:last-child td) {
+          border-bottom: 0 !important;
+          padding-bottom: 4px !important;
+        }
+      }
+
+      .xray-modal-footer {
+        padding: 12px 14px 14px;
       }
     }
   }

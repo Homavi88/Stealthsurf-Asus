@@ -225,19 +225,19 @@
     align-items: center;
     justify-content: center;
     padding: 24px 16px;
-    background: rgba(5, 8, 12, 0.72);
-    -webkit-backdrop-filter: blur(8px);
-    backdrop-filter: blur(8px);
+    background: rgba(28, 52, 84, 0.28);
+    -webkit-backdrop-filter: blur(10px);
+    backdrop-filter: blur(10px);
   }
 
   .ss-upd-modal {
     width: min(420px, 100%);
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: linear-gradient(180deg, #151b24 0%, #10151c 100%);
-    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.55);
-    color: #e6e8eb;
-    font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+    border-radius: 16px;
+    border: 1px solid rgba(28, 52, 84, 0.1);
+    background: #ffffff;
+    box-shadow: 0 16px 48px rgba(28, 52, 84, 0.18);
+    color: #1c2430;
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
     overflow: hidden;
   }
 
@@ -246,9 +246,9 @@
 
     h2 {
       margin: 0;
-      font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.01em;
+      font-size: 17px;
+      font-weight: 750;
+      letter-spacing: -0.02em;
     }
   }
 
@@ -259,11 +259,11 @@
   .ss-upd-modal__ver {
     margin: 0 0 14px;
     font-size: 13px;
-    opacity: 0.75;
+    color: #7a8696;
 
     .ss-mono {
       font-family: 'IBM Plex Mono', ui-monospace, monospace;
-      color: #3db8ff;
+      color: #2f6fed;
     }
   }
 
@@ -291,15 +291,15 @@
 
     &.is-error {
       opacity: 1;
-      color: #ff5c5c;
+      color: #e04848;
     }
 
     &.is-done .ss-upd-stage__mark {
-      color: #3dd68c;
+      color: #1f9d5c;
     }
 
     &.is-active .ss-upd-stage__label {
-      font-weight: 600;
+      font-weight: 650;
     }
   }
 
@@ -317,8 +317,8 @@
   .ss-upd-spinner {
     width: 14px;
     height: 14px;
-    border: 2px solid rgba(61, 184, 255, 0.25);
-    border-top-color: #3db8ff;
+    border: 2px solid rgba(47, 111, 237, 0.2);
+    border-top-color: #2f6fed;
     border-radius: 50%;
     animation: ss-upd-spin 0.7s linear infinite;
   }
@@ -334,32 +334,30 @@
     min-height: 2.4em;
     font-size: 12px;
     font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    opacity: 0.7;
+    color: #7a8696;
     line-height: 1.4;
     word-break: break-word;
 
     &.is-error {
-      color: #ff5c5c;
-      opacity: 1;
+      color: #e04848;
     }
 
     &.is-done {
-      color: #3dd68c;
-      opacity: 1;
+      color: #1f9d5c;
     }
   }
 
   .ss-upd-bar {
     margin-top: 12px;
-    height: 4px;
-    border-radius: 2px;
-    background: rgba(255, 255, 255, 0.08);
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(28, 52, 84, 0.08);
     overflow: hidden;
 
     &__fill {
       height: 100%;
-      border-radius: 2px;
-      background: linear-gradient(90deg, #3db8ff, #3dd68c);
+      border-radius: inherit;
+      background: linear-gradient(90deg, #4d8af5, #2f6fed);
       transition: width 0.35s ease;
     }
   }
@@ -368,7 +366,7 @@
     margin: 0 0 4px;
     font-size: 12px;
     line-height: 1.35;
-    color: #8b939e;
+    color: #7a8696;
   }
 
   .ss-upd-modal__foot {
@@ -382,25 +380,27 @@
     width: 100%;
     box-sizing: border-box;
     border: 0;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 14px 16px;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
+    font-family: 'Manrope', 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0;
     text-transform: none;
     cursor: pointer;
-    background: #3db8ff;
-    color: #061018;
+    background: #2f6fed;
+    color: #fff;
+    box-shadow: 0 10px 24px rgba(47, 111, 237, 0.22);
   }
 
   .ss-upd-reload-btn:active {
-    filter: brightness(0.95);
+    filter: brightness(0.97);
   }
 
   .ss-upd-reload-btn--muted {
-    background: rgba(255, 255, 255, 0.08);
-    color: #e6e8eb;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: #fff;
+    color: #2f6fed;
+    border: 1px solid rgba(47, 111, 237, 0.22);
+    box-shadow: none;
   }
 </style>
