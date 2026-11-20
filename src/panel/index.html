@@ -235,7 +235,11 @@
             if (boot) boot.hidden = true;
             var s = document.createElement('script');
             s.type = 'module';
-            s.src = './app.js';
+            // Cache-bust so Safari does not keep a pre-upgrade app.js after addon update.
+            var ver =
+              (data.xray && (data.xray.ui_version || (data.xray.custom_settings && data.xray.custom_settings.stealthsurf_version))) ||
+              String(Date.now());
+            s.src = './app.js?v=' + encodeURIComponent(String(ver).replace(/^v/i, ''));
             s.onerror = function () {
               fail('failed to load app.js');
             };
