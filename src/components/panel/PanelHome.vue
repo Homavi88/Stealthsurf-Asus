@@ -5,7 +5,21 @@
         <span class="ss-brand-mark" aria-hidden="true"></span>
         <div class="ss-brand-text">
           <span class="ss-brand-name">SurfGate VPN</span>
-          <span class="ss-brand-ver ss-mono" title="Версия аддона">v{{ addonVersion }}</span>
+          <div class="ss-brand-meta">
+            <span class="ss-brand-ver ss-mono" title="Версия аддона">v{{ addonVersion }}</span>
+            <button
+              v-if="updateAvailable && updateLatestClean"
+              type="button"
+              class="ss-ver-update"
+              :aria-label="`Доступна новая версия v${updateLatestClean}`"
+              :title="`Доступна v${updateLatestClean} — нажмите, чтобы установить`"
+              @click="focusUpdateBanner"
+            >
+              <span class="ss-ver-update__dot" aria-hidden="true"></span>
+              <span class="ss-ver-update__label">новая</span>
+              <span class="ss-ver-update__ver ss-mono">v{{ updateLatestClean }}</span>
+            </button>
+          </div>
         </div>
       </div>
       <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
@@ -32,11 +46,11 @@
       </div>
     </section>
 
-    <div v-if="updateAvailable" class="ss-update-banner" role="status">
+    <div v-if="updateAvailable" ref="updateBannerEl" class="ss-update-banner" role="status">
       <div class="ss-update-banner__text">
         <div class="ss-update-banner__title">Доступна новая версия</div>
         <div class="ss-update-banner__meta ss-mono">
-          v{{ updateCurrent }} → <strong>v{{ updateLatest }}</strong>
+          v{{ updateCurrent }} → <strong>v{{ updateLatestClean }}</strong>
         </div>
       </div>
       <button
@@ -226,6 +240,7 @@
       const updateStatus = ref<UpdateStatus | null>(null);
       const updateBusy = ref(false);
       const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
+      const updateBannerEl = ref<HTMLElement | null>(null);
       let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
       let livePoller: Poller | null = null;
@@ -283,6 +298,7 @@
       const clientUpdate = ref(false);
 
       const updateLatest = computed(() => clientLatest.value || updateStatus.value?.latest || '');
+      const updateLatestClean = computed(() => String(updateLatest.value || '').replace(/^v/i, ''));
       const updateCurrent = computed(
         () =>
           window.xray?.custom_settings?.stealthsurf_version ||
@@ -297,13 +313,24 @@
       // Always compare versions — stale addon-update-status can keep update_available=true
       // after install (e.g. banner shows v1.4.27 → v1.4.27).
       const updateAvailable = computed(() => {
-        const latest = String(updateLatest.value || '').replace(/^v/i, '');
+        const latest = updateLatestClean.value;
         const current = String(updateCurrent.value || '').replace(/^v/i, '');
         if (!latest || !current || current === '—') return false;
         if (clientUpdate.value && compareVersions(latest, current) === 1) return true;
         if (updateStatus.value?.update_available && compareVersions(latest, current) === 1) return true;
         return compareVersions(latest, current) === 1;
       });
+
+      const focusUpdateBanner = () => {
+        const el = updateBannerEl.value;
+        if (!el) return;
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        el.classList.remove('is-flash');
+        // restart CSS flash so the banner draws the eye after tapping the badge
+        void el.offsetWidth;
+        el.classList.add('is-flash');
+        window.setTimeout(() => el.classList.remove('is-flash'), 1200);
+      };
 
       const loadUpdateStatus = async () => {
         try {
@@ -679,10 +706,13 @@
         toggle,
         updateAvailable,
         updateLatest,
+        updateLatestClean,
         updateCurrent,
         addonVersion,
         updateBusy,
         updateProgress,
+        updateBannerEl,
+        focusUpdateBanner,
         installUpdate
       };
     }

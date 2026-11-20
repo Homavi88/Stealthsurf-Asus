@@ -345,7 +345,7 @@ CI публикует GitHub Release на тег `v*`.
 
 | | |
 | --- | --- |
-| **1.4.38** | Mobile UX: light Logs/SNI cards, conflict banner, touch server list |
+| **1.4.38** | Mobile UX: Logs/SNI cards, touch servers, topbar update badge |
 | **1.4.37** | Mobile settings drill-down + addon version on Home |
 | **1.4.36** | Light panel redesign (:1131) — soft UI, RU settings, Подписка |
 | **1.4.35** | Memory/CPU: Logs/SNI pollers, Clients access-log stop, burstObservatory fallback, geodata stream, stats throttle |
