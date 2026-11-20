@@ -111,21 +111,31 @@ api_write_config() {
   # Serialize probes when many outbounds (subscriptions / full catalog) to avoid RAM spikes.
   if [ "$tag_count" -gt 5 ]; then
     enable_concurrency=false
+    # Floor probe interval — burst/rapid probes of dead subscription nodes OOM Merlin.
+    if [ "$observatory_probe_interval" -lt 30 ]; then
+      observatory_probe_interval=30
+    fi
   fi
 
   # A later -c file replaces whole top-level keys and Xray would run observatory and
   # burstObservatory side by side, so re-emit the user's burstObservatory instead. Only the
   # connection check reads its results, so only then is every outbound added to the probes.
-  local observatory_block
-  observatory_block=$(
-    jq -r --argjson tags "$outbound_tags" --arg probe_all "$check_connection" '
-      .burstObservatory // empty
-      | objects
-      | "\"burstObservatory\": " + (. + {pingConfig: (.pingConfig | objects // {})}
-          + (if $probe_all == "true" then {subjectSelector: (((.subjectSelector // []) | map(strings)) + $tags | unique)} else {} end)
-        | tojson) + ","
-    ' "$XRAY_CONFIG_FILE" 2>/dev/null
-  )
+  # burstObservatory has no enableConcurrency — dumping every outbound into it recreates
+  # the Merlin OOM path. Prefer plain observatory (with concurrency off) when many tags.
+  local observatory_block=""
+  if [ "$tag_count" -gt 5 ] && [ "$check_connection" = "true" ]; then
+    observatory_block=""
+  else
+    observatory_block=$(
+      jq -r --argjson tags "$outbound_tags" --arg probe_all "$check_connection" '
+        .burstObservatory // empty
+        | objects
+        | "\"burstObservatory\": " + (. + {pingConfig: (.pingConfig | objects // {})}
+            + (if $probe_all == "true" then {subjectSelector: (((.subjectSelector // []) | map(strings)) + $tags | unique)} else {} end)
+          | tojson) + ","
+      ' "$XRAY_CONFIG_FILE" 2>/dev/null
+    )
+  fi
   # the block carries its own trailing comma, so no observatory leaves valid JSON
   if [ -z "$observatory_block" ] && [ "$need_observatory" = "true" ]; then
     observatory_block="\"observatory\": {

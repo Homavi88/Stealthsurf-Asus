@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.35] - 2026-11-20
+
+### Memory / CPU (follow-up after 1.4.33)
+
+- **Logs / SNI**: `createPoller` instead of stacked `setInterval` while modals are open
+- **Clients online**: respect `clients_check`; 15s poll + flock/throttle; **no longer auto-enables** Xray access log (tmpfs OOM)
+- **Home traffic**: `statsquery` at most every 10s; session counters in one jq; `by_tag` capped (top 80 on disk / 40 in status JSON)
+- **burstObservatory**: when >5 outbounds + connection check, fall back to plain observatory with concurrency off; probe floor 30s
+- **Geodata tags**: stream `v2dat` unpack to temp files instead of holding multi-MB JSON in shell vars
+- **Outbounds**: status poll 10s; catalog refresh ~60s; skip when tab hidden
+
 ## [1.4.34] - 2026-11-20
 
 ### Self-update install error

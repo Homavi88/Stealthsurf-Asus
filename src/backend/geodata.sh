@@ -120,28 +120,37 @@ geodata_unpack_tags() {
         awk 'BEGIN{printf "[";first=1}{if($0!=""){gsub(/"/,"\\\"");if(!first)printf ",";first=0;printf "\"" $0 "\""}}END{printf "]"}'
     }
 
-    geosite_json="[]"
-    geoip_json="[]"
-    custom_json="[]"
+    # Stream tag lists to temp files — do not hold geosite/geoip JSON in shell vars
+    # (community geosite alone can be multi-MB and was a Merlin OOM spike).
+    local geo_tmp custom_dat
+    mkdir -p "${ADDON_TMP_DIR:-/tmp}" 2>/dev/null || true
+    geo_tmp="${ADDON_TMP_DIR:-/tmp}/geotags.$$"
+    echo '[]' >"$geo_tmp.site"
+    echo '[]' >"$geo_tmp.ip"
+    echo '[]' >"$geo_tmp.custom"
     custom_dat="$xray_dir/${CUSTOM_GEODATA_NAME:-ssurf}"
 
     if [ -f "$xray_dir/geosite.dat" ]; then
         log_info "Unpacking geosite.dat..."
-        geosite_json=$($IONICE $NICE "$V2DAT" unpack geosite -p -t "$xray_dir/geosite.dat" | json_array)
+        $IONICE $NICE "$V2DAT" unpack geosite -p -t "$xray_dir/geosite.dat" | json_array >"$geo_tmp.site" || echo '[]' >"$geo_tmp.site"
     fi
 
     if [ -f "$xray_dir/geoip.dat" ]; then
         log_info "Unpacking geoip.dat..."
-        geoip_json=$($IONICE $NICE "$V2DAT" unpack geoip -p -t "$xray_dir/geoip.dat" | json_array)
+        $IONICE $NICE "$V2DAT" unpack geoip -p -t "$xray_dir/geoip.dat" | json_array >"$geo_tmp.ip" || echo '[]' >"$geo_tmp.ip"
     fi
 
     if [ -f "$custom_dat" ]; then
         log_info "Unpacking custom geodata $custom_dat..."
-        custom_json=$($IONICE $NICE "$V2DAT" unpack geosite -p -t "$custom_dat" | json_array)
+        $IONICE $NICE "$V2DAT" unpack geosite -p -t "$custom_dat" | json_array >"$geo_tmp.custom" || echo '[]' >"$geo_tmp.custom"
     fi
 
     # Keep key "xrayui" for EngineGeoTags.xrayui compatibility in UI, values from our dat.
-    printf '{\n  "geosite": %s,\n  "geoip": %s,\n  "xrayui": %s\n}\n' "$geosite_json" "$geoip_json" "$custom_json" >"$GEO_TAGS_FILE"
+    jq -n --slurpfile site "$geo_tmp.site" --slurpfile ip "$geo_tmp.ip" --slurpfile custom "$geo_tmp.custom" \
+        '{geosite: ($site[0] // []), geoip: ($ip[0] // []), xrayui: ($custom[0] // [])}' \
+        >"$GEO_TAGS_FILE" 2>/dev/null ||
+        printf '{\n  "geosite": [],\n  "geoip": [],\n  "xrayui": []\n}\n' >"$GEO_TAGS_FILE"
+    rm -f "$geo_tmp.site" "$geo_tmp.ip" "$geo_tmp.custom"
 }
 
 get_custom_geodata_tagfiles() {

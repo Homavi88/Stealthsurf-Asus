@@ -287,6 +287,7 @@
   import xrayConfig from '@/modules/XrayConfig';
   import { XrayRoutingRuleObject, XrayRoutingObject } from '@/modules/CommonObjects';
   import { outboundTagDisplayTitle } from '@/modules/StealthSurfCatalog';
+  import { createPoller, Poller } from '@/modules/Polling';
   import { useI18n } from 'vue-i18n';
 
   const { t } = useI18n();
@@ -327,7 +328,7 @@
   const sniModal = ref();
   const modal_width = ref('70%');
   const logsContent = ref('');
-  const refreshInterval = ref<number>();
+  let sniLogsPoller: Poller | null = null;
 
   const tabs = [
     { n: 'device', t: t('com.SniLogs.tab_by_device') },
@@ -730,15 +731,16 @@
   };
 
   const display = async () => {
-    await fetchLogs();
+    sniLogsPoller?.stop();
     sniModal.value.show(() => {
-      if (refreshInterval.value) {
-        clearInterval(refreshInterval.value);
-      }
+      sniLogsPoller?.stop();
+      sniLogsPoller = null;
       logsContent.value = '';
       closePopover();
     });
-    refreshInterval.value = window.setInterval(fetchLogs, 3000);
+    // Serial poller — setInterval stacked fetchLogs while the modal was open.
+    sniLogsPoller = createPoller(fetchLogs, 4000);
+    sniLogsPoller.start();
   };
 
   // ─── CSV Export ───────────────────────────────────────────────
@@ -776,9 +778,8 @@
   };
 
   onUnmounted(() => {
-    if (refreshInterval.value) {
-      clearInterval(refreshInterval.value);
-    }
+    sniLogsPoller?.stop();
+    sniLogsPoller = null;
     document.removeEventListener('click', handleClickOutside);
   });
 </script>

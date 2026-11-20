@@ -415,6 +415,7 @@ get_proc_uptime() {
 
 sanitize_probe_interval() {
     # Default 60s: concurrent probes of many outbounds every 30s were eating Merlin RAM.
+    # Absolute floor stays 5s for tiny configs; api_write_config raises to 30s when >5 tags.
     local v="${1:-60}"
     case "$v" in
     '' | *[!0-9]*) v=60 ;;

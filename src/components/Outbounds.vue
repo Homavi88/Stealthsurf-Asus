@@ -218,8 +218,14 @@
       const isDefaultRoute = (proxy: XrayOutboundObject<IProtocolType>) =>
         !!proxy.tag && (config.value.routing?.rules ?? []).some((r) => r.name === SS_DEFAULT_RULE && r.outboundTag === proxy.tag);
 
+      let catalogTicks = 0;
       const fetchStatus = async () => {
-        await refreshCatalog();
+        if (typeof document !== 'undefined' && document.hidden) return;
+        // Catalog changes rarely — refresh on first tick then about once a minute.
+        catalogTicks += 1;
+        if (catalogTicks === 1 || catalogTicks % 6 === 0) {
+          await refreshCatalog();
+        }
         if (!check_connection.value) {
           connectionStatus.value = {};
           clearLiveStatus();
@@ -506,7 +512,8 @@
         }
       });
 
-      const statusPoller = createPoller(fetchStatus, 5000);
+      // 10s — was 5s with catalog+metrics every tick; catalog now ~60s via catalogTicks.
+      const statusPoller = createPoller(fetchStatus, 10000);
       onMounted(() => {
         statusPoller.start();
       });

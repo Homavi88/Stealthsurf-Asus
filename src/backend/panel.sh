@@ -53,10 +53,23 @@ panel_live_bg_refresh() {
         trap 'rm -f /tmp/ssurf/live.refresh.pid' EXIT
     fi
 
-    panel_traffic_lifetime_tick >/dev/null 2>&1 || true
-
     local now=0 age=999 mt=0
     now=$(date +%s 2>/dev/null) || now=0
+
+    # statsquery + jq is expensive — at most every 10s (Home polls every 2s).
+    age=999
+    mt=0
+    local stats_json="$ADDON_SHARE_DIR/xray_stats.json"
+    if [ -f "$stats_json" ]; then
+        mt=$(date -r "$stats_json" +%s 2>/dev/null) || mt=0
+        [ "$mt" -gt 0 ] && [ "$now" -gt 0 ] && age=$((now - mt))
+    fi
+    if [ "$age" -ge 10 ]; then
+        panel_traffic_lifetime_tick >/dev/null 2>&1 || true
+    fi
+
+    age=999
+    mt=0
     if [ -f "${XRAYUI_CONNECTION_STATUS_FILE:-}" ]; then
         mt=$(date -r "$XRAYUI_CONNECTION_STATUS_FILE" +%s 2>/dev/null) || mt=0
         [ "$mt" -gt 0 ] && [ "$now" -gt 0 ] && age=$((now - mt))
@@ -801,6 +814,10 @@ panel_traffic_lifetime_tick() {
             | .direct_down = ((.direct_down // 0) + delta($tag; "down"))
           else . end
       )
+      # Cap by_tag growth on disk (subscriptions can mint hundreds of tags).
+      | .by_tag = ([.by_tag // {} | to_entries
+          | sort_by(-((.value.up // 0) + (.value.down // 0)))]
+        | .[0:80] | from_entries)
       | .updated_at = $now
     ' >"$tmp" 2>/dev/null && mv -f "$tmp" "$lifetime_file" || rm -f "$tmp"
 
@@ -954,25 +971,50 @@ panel_live_json() {
     local by_tag_json='{}'
     local lifetime_file="${TRAFFIC_LIFETIME_FILE:-$ADDON_SHARE_DIR/traffic_lifetime.json}"
 
-    # Session counters (current Xray process) from last outbound stats query.
+    # Session counters — one jq pass (was four) over the last outbound stats query.
     if [ -f "$ADDON_SHARE_DIR/xray_stats.json" ]; then
-        sess_vpn_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        sess_vpn_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        sess_direct_up=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
-        sess_direct_down=$(jq -r '[.stat[]? | select((.name // "") | startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")) | (.value // 0|tonumber)] | add // 0' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null)
+        _sess=$(jq -c '
+          def sum(pred):
+            [.stat[]? | select(pred) | (.value // 0|tonumber)] | add // 0;
+          [
+            sum((.name // "") | (startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink"))),
+            sum((.name // "") | (startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink"))),
+            sum((.name // "") | (startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink"))),
+            sum((.name // "") | (startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")))
+          ]
+        ' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null) || _sess='[0,0,0,0]'
+        sess_vpn_up=$(printf '%s' "$_sess" | jq -r '.[0] // 0')
+        sess_vpn_down=$(printf '%s' "$_sess" | jq -r '.[1] // 0')
+        sess_direct_up=$(printf '%s' "$_sess" | jq -r '.[2] // 0')
+        sess_direct_down=$(printf '%s' "$_sess" | jq -r '.[3] // 0')
+        unset _sess
     fi
     case "$sess_vpn_up" in '' | *[!0-9]*) sess_vpn_up=0 ;; esac
     case "$sess_vpn_down" in '' | *[!0-9]*) sess_vpn_down=0 ;; esac
     case "$sess_direct_up" in '' | *[!0-9]*) sess_direct_up=0 ;; esac
     case "$sess_direct_down" in '' | *[!0-9]*) sess_direct_down=0 ;; esac
 
-    # Lifetime totals (persisted) — preferred for home Σ / endpoint volume.
+    # Lifetime totals — one jq for counters + capped by_tag (top 40 by bytes).
     if [ -s "$lifetime_file" ]; then
-        vpn_up=$(jq -r '.vpn_up // 0' "$lifetime_file" 2>/dev/null)
-        vpn_down=$(jq -r '.vpn_down // 0' "$lifetime_file" 2>/dev/null)
-        direct_up=$(jq -r '.direct_up // 0' "$lifetime_file" 2>/dev/null)
-        direct_down=$(jq -r '.direct_down // 0' "$lifetime_file" 2>/dev/null)
-        by_tag_json=$(jq -c '.by_tag // {}' "$lifetime_file" 2>/dev/null) || by_tag_json='{}'
+        _life=$(jq -c '
+          {
+            vpn_up: (.vpn_up // 0),
+            vpn_down: (.vpn_down // 0),
+            direct_up: (.direct_up // 0),
+            direct_down: (.direct_down // 0),
+            by_tag: ([.by_tag // {} | to_entries
+              | sort_by(-((.value.up // 0) + (.value.down // 0)))]
+              | .[0:40] | from_entries)
+          }
+        ' "$lifetime_file" 2>/dev/null) || _life=''
+        if [ -n "$_life" ]; then
+            vpn_up=$(printf '%s' "$_life" | jq -r '.vpn_up // 0')
+            vpn_down=$(printf '%s' "$_life" | jq -r '.vpn_down // 0')
+            direct_up=$(printf '%s' "$_life" | jq -r '.direct_up // 0')
+            direct_down=$(printf '%s' "$_life" | jq -r '.direct_down // 0')
+            by_tag_json=$(printf '%s' "$_life" | jq -c '.by_tag // {}')
+        fi
+        unset _life
     else
         vpn_up=$sess_vpn_up
         vpn_down=$sess_vpn_down
@@ -986,7 +1028,7 @@ panel_live_json() {
     case "$by_tag_json" in
     '' | null) by_tag_json='{}' ;;
     esac
-    echo "$by_tag_json" | jq -e 'type=="object"' >/dev/null 2>&1 || by_tag_json='{}'
+    printf '%s' "$by_tag_json" | jq -e 'type=="object"' >/dev/null 2>&1 || by_tag_json='{}'
 
     # Refresh stats / observatory / LAN list in background — single-flight (see panel_live_bg_refresh).
     if [ "$running" = true ]; then
