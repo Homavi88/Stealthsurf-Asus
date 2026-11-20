@@ -95,7 +95,7 @@
                 <hint v-html="$t('com.GeneralOptionsModal.hint_probe_interval')"></hint>
               </th>
               <td>
-                <input v-model.number="options.probe_interval" type="number" min="5" max="3600" maxlength="4" class="input_6_table" />
+                <input v-model.number="options.probe_interval" type="number" min="30" max="3600" maxlength="4" class="input_6_table" />
               </td>
             </tr>
             <tr>

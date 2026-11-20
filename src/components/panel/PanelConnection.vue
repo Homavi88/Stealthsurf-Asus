@@ -76,7 +76,7 @@
           </label>
           <label class="ss-field">
             <span>Интервал, сек</span>
-            <input type="number" min="5" max="3600" v-model.number="options.probe_interval" />
+            <input type="number" min="30" max="3600" v-model.number="options.probe_interval" />
           </label>
         </template>
       </ss-settings-row>

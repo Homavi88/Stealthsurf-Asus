@@ -109,7 +109,8 @@ devices_vpn_active_ips() {
     [ -f "$access" ] || return 0
 
     # POSIX awk (BusyBox): extract LAN source IP + outbound tag from access lines.
-    tail -n 4000 "$access" 2>/dev/null |
+    # Cap at 1500 lines — full access log can be multi-MB on Merlin tmpfs.
+    tail -n 1500 "$access" 2>/dev/null |
         grep -v 'sys:metrics' |
         grep ' accepted ' |
         awk '
@@ -217,22 +218,30 @@ devices_vpn_refresh() {
     load_xrayui_config
     mkdir -p "$ADDON_SHARE_DIR" "$ADDON_LOGS_DIR" "$ADDON_TMP_DIR" 2>/dev/null || true
 
-    # Device discovery needs Xray access log — enable if missing.
-    if [ -f "$XRAY_CONFIG_FILE" ]; then
-        _acc=$(jq -r '.log.access // "none"' "$XRAY_CONFIG_FILE" 2>/dev/null)
-        if [ -z "$_acc" ] || [ "$_acc" = "none" ] || [ "$_acc" = "null" ]; then
-            log_info "Enabling Xray access log for VPN device tracking…"
-            mkdir -p "$ADDON_LOGS_DIR"
-            jq_update_file "$XRAY_CONFIG_FILE" \
-                --arg access "$ADDON_LOGS_DIR/xray_access.log" \
-                --arg error "$ADDON_LOGS_DIR/xray_error.log" '
-                .log = (.log // {})
-                | .log.access = $access
-                | .log.error = (if (.log.error // "none") == "none" then $error else .log.error end)
-                | .log.loglevel = (.log.loglevel // "warning")
-            ' 2>/dev/null || true
-        fi
+    # Single-flight + throttle — ClientsOnline used to fire this every 4s.
+    mkdir -p /tmp/ssurf 2>/dev/null || true
+    if which flock >/dev/null 2>&1; then
+        # shellcheck disable=SC3023
+        exec 8>/tmp/ssurf/devices_vpn.lock
+        flock -n 8 || return 0
     fi
+    local _stamp=/tmp/ssurf/devices_vpn.stamp
+    local _now=0 _prev=0 _age=999
+    _now=$(date +%s 2>/dev/null) || _now=0
+    _prev=$(cat "$_stamp" 2>/dev/null) || _prev=0
+    case "$_prev" in '' | *[!0-9]*) _prev=0 ;; esac
+    if [ "$_now" -gt 0 ] && [ "$_prev" -gt 0 ]; then
+        _age=$((_now - _prev))
+    fi
+    # Reuse cached JSON when a poll lands within 15s of the last refresh.
+    if [ "$_age" -lt 15 ] && [ -s "$DEVICES_VPN_JSON" ]; then
+        return 0
+    fi
+    [ "$_now" -gt 0 ] && echo "$_now" >"$_stamp"
+
+    # Do NOT auto-enable Xray access log here — it grows into multi-MB files on
+    # /tmp (tmpfs) and was a known Merlin OOM path. User enables it in Connection /
+    # General Options when they want LAN device tracking.
 
     devices_vpn_build_ipmap
 

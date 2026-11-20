@@ -103,6 +103,7 @@
   import { ref, computed, reactive, watch } from 'vue';
   import axios from 'axios';
   import engine, { SubmitActions } from '@/modules/Engine';
+  import { createPoller, Poller } from '@/modules/Polling';
   import { XrayLogObject } from '@/modules/CommonObjects';
   import Modal from '@main/Modal.vue';
 
@@ -110,7 +111,7 @@
 
   const follow = ref(false);
   const logsModal = ref();
-  let refreshInterval: number;
+  let logsPoller: Poller | null = null;
 
   const FILE_APP = '/ext/ssurf/ssurf_app_partial.cab';
   const FILE_ACCESS = '/ext/ssurf/xray_access_partial.cab';
@@ -259,9 +260,11 @@
   const fetchLogs = async () => {
     if (!follow.value) return;
     await engine.submit(SubmitActions.fetchXrayLogs);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
     try {
-      const response = await axios.get<string>(file.value, { responseType: 'text', headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' } });
+      const response = await axios.get<string>(file.value, {
+        responseType: 'text',
+        headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' }
+      });
       logsContent.value = response.data ?? '';
     } catch (error) {
       console.error('Error fetching logs:', error);
@@ -270,13 +273,16 @@
 
   const display = async () => {
     follow.value = true;
-    refreshInterval = window.setInterval(fetchLogs, 2000);
+    logsPoller?.stop();
+    // Serial poller: previous setInterval(2s) + inner sleep stacked CGI/jq on the router.
+    logsPoller = createPoller(fetchLogs, 3000);
     logsModal.value.show(() => {
       follow.value = false;
       logsContent.value = '';
-      clearInterval(refreshInterval);
+      logsPoller?.stop();
+      logsPoller = null;
     });
-    if (follow.value) await fetchLogs();
+    logsPoller.start();
   };
 </script>
 

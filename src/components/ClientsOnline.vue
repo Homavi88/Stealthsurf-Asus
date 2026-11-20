@@ -34,8 +34,8 @@
 </template>
 
 <script lang="ts">
-  import { defineComponent, ref, onMounted, onBeforeUnmount } from 'vue';
-  import engine, { SubmitActions } from '@/modules/Engine';
+  import { defineComponent, ref, onMounted, onBeforeUnmount, inject, Ref } from 'vue';
+  import engine, { EngineResponseConfig, SubmitActions } from '@/modules/Engine';
   import { createPoller } from '@/modules/Polling';
 
   interface Client {
@@ -51,9 +51,10 @@
     name: 'ClientsOnline',
     setup() {
       const clients = ref<Client[]>([]);
+      const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
 
-      // Always poll — transparent LAN VPN devices come from access log, not only inbound users.
-      const enable_check = () => true;
+      // Respect clients_check — previous always-on poll hammered devices_vpn_refresh + access log.
+      const enable_check = () => !!uiResponse.value?.xray?.clients_check;
 
       const fetchClients = async () => {
         try {
@@ -75,11 +76,13 @@
       const displayName = (c: Client) => c.name || c.email?.filter(Boolean).join(', ') || '—';
       const clientKey = (c: Client) => `${c.ip}|${c.mac}|${(c.email || []).join(',')}`;
 
+      // 15s serial poll — was 4s and stacked shell/jq/access-log work on Merlin.
       const clientsPoller = createPoller(async () => {
         if (!enable_check()) return;
+        if (typeof document !== 'undefined' && document.hidden) return;
         await engine.submit(SubmitActions.clientsOnline);
         await fetchClients();
-      }, 4000);
+      }, 15000);
 
       onMounted(() => {
         clientsPoller.start();

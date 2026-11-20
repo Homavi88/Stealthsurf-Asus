@@ -102,7 +102,10 @@
         </div>
 
         <div v-else-if="section === 'clients'" class="ss-panel-light">
-          <clients-online />
+          <p v-if="!clientsCheckEnabled" class="ss-empty" style="padding: 12px">
+            Включите «Клиенты онлайн» в Connection / General Options — иначе опрос устройств не запускается (экономия RAM).
+          </p>
+          <clients-online v-else />
         </div>
 
         <div v-else-if="section === 'updates'" class="ss-panel-light">
@@ -122,8 +125,9 @@
 </template>
 
 <script lang="ts">
-  import { computed, defineComponent, PropType, ref } from 'vue';
+  import { computed, defineComponent, inject, PropType, ref, Ref } from 'vue';
   import { XrayObject } from '@/modules/XrayConfig';
+  import { EngineResponseConfig } from '@/modules/Engine';
   import StealthSurfAccount from '../StealthSurfAccount.vue';
   import ServiceStatus from '../ServiceStatus.vue';
   import Routing from '../Routing.vue';
@@ -164,6 +168,8 @@
     },
     emits: ['back', 'apply', 'show-transport', 'show-sniffing', 'section-change'],
     setup(props, { emit }) {
+      const uiResponse = inject<Ref<EngineResponseConfig>>('uiResponse', ref({} as EngineResponseConfig));
+      const clientsCheckEnabled = computed(() => !!uiResponse.value?.xray?.clients_check);
       const section = ref<SectionId>(props.initialSection || 'connection');
       const navPrimary = [
         { id: 'account' as const, label: 'account', icon: 'A' },
@@ -203,6 +209,7 @@
         allNav,
         currentLabel,
         needsApply,
+        clientsCheckEnabled,
         setSection,
         emitTransport,
         emitSniffing
