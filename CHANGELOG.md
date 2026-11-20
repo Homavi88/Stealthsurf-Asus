@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.36] - 2026-11-20
 
 ### Panel UI redesign (:1131)
 
