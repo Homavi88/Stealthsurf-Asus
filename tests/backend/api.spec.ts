@@ -163,12 +163,30 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
     expect(r.events).toContain('jq_update_file');
   });
 
-  it('probes every outbound through the burstObservatory instead of adding an observatory', () => {
+  it('probes proxy outbounds through the burstObservatory instead of adding an observatory', () => {
     const burstObservatory = { subjectSelector: ['p-'], pingConfig: { destination: 'https://probe.example/204', interval: '30s', sampling: 3 } };
-    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct' }], burstObservatory };
+    // freedom/direct is skipped — probing it wastes RAM and is not useful for status badges
+    const config = { outbounds: [{ tag: 'p-a' }, { tag: 'direct', protocol: 'freedom' }], burstObservatory };
     const r = run(shell, { steps: ['apply'], env: { RS_CHECK_CONNECTION: 'true' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
     expect(r.apiConfig).not.toHaveProperty('observatory');
-    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, burstObservatory: { subjectSelector: ['direct', 'p-', 'p-a'], pingConfig: burstObservatory.pingConfig } });
+    expect(r.apiConfig).toMatchObject({ api: { tag: 'sys:api' }, burstObservatory: { subjectSelector: ['p-', 'p-a'], pingConfig: burstObservatory.pingConfig } });
+  });
+
+  it('disables concurrent observatory probes when many outbounds are selected', () => {
+    const outbounds = Array.from({ length: 8 }, (_, i) => ({ tag: `p-${i}`, protocol: 'vless' }));
+    const config = { outbounds };
+    const r = run(shell, {
+      steps: ['apply'],
+      env: { RS_CHECK_CONNECTION: 'true', RS_PROBE_INTERVAL: '60' },
+      files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) }
+    });
+    expect(r.apiConfig?.observatory).toEqual(
+      expect.objectContaining({
+        subjectSelector: outbounds.map((o) => o.tag),
+        enableConcurrency: false,
+        probeInterval: '60s'
+      })
+    );
   });
 
   it('keeps the burstObservatory selectors as written when only the clients check is on', () => {

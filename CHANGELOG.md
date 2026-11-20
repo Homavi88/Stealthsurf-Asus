@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.33] - 2026-11-20
+
+### Memory / RAM (router OOM)
+
+- **Observatory**: не зондирует `freedom` / `dns` / `sys:*`; при >5 outbound отключает `enableConcurrency` (параллельные пробы мёртвых нод съедали RAM)
+- Интервал пробы по умолчанию **60s** (было 30)
+- **Panel Home**: serial `createPoller` вместо `setInterval`; backend `/cgi-bin/status` — single-flight + throttle stats/observatory/LAN
+- **TCP keepalive** 300/30 на `all-in` / tproxy inbound (в т.ч. уже существующие конфиги) — закрывает «зависшие» TCP от телефонов
+- Soft-rotate `/tmp/ssurf/*.log` (tmpfs); шире cleanup leftover в `/tmp`; logrotate всегда крутит app/history логи; cap ip2domain cache 5k
+
 ## [1.4.32] - 2026-11-19
 
 ### LAN access while VPN is on

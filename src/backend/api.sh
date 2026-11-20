@@ -81,13 +81,21 @@ api_write_config() {
   # StatsService, so without the connection check only the outbounds balancers need are probed.
   # whether an observatory is needed, not whether there is anything to probe: a leastPing
   # balancer stops Xray from starting without one, even with an empty selector list
-  local outbound_tags='[]' need_observatory=false
+  local outbound_tags='[]' need_observatory=false enable_concurrency=true
   if [ "$check_connection" = "true" ]; then
     need_observatory=true
+    # Skip freedom/dns/sys:* — probing them wastes RAM and does not help status badges.
+    # Concurrent probes of many dead subscription outbounds are a known OOM path on Merlin.
     outbound_tags=$(
       jq -c '
         [ .outbounds[]
-        | select(.tag and .protocol != "blackhole")
+        | select(
+            (.tag | type == "string") and (.tag | length) > 0
+            and (.protocol != "blackhole")
+            and (.protocol != "freedom")
+            and (.protocol != "dns")
+            and ((.tag | startswith("sys:")) | not)
+          )
         | .tag ]
         | unique
       ' "$XRAY_CONFIG_FILE"
@@ -97,6 +105,13 @@ api_write_config() {
     outbound_tags=$(api_balancer_selectors)
   fi
   [ -n "$outbound_tags" ] || outbound_tags='[]'
+  local tag_count
+  tag_count=$(printf '%s' "$outbound_tags" | jq 'length' 2>/dev/null) || tag_count=0
+  case "$tag_count" in '' | *[!0-9]*) tag_count=0 ;; esac
+  # Serialize probes when many outbounds (subscriptions / full catalog) to avoid RAM spikes.
+  if [ "$tag_count" -gt 5 ]; then
+    enable_concurrency=false
+  fi
 
   # A later -c file replaces whole top-level keys and Xray would run observatory and
   # burstObservatory side by side, so re-emit the user's burstObservatory instead. Only the
@@ -117,7 +132,7 @@ api_write_config() {
     \"subjectSelector\": $outbound_tags,
     \"probeUrl\": $observatory_probe_url,
     \"probeInterval\": \"${observatory_probe_interval}s\",
-    \"enableConcurrency\": true
+    \"enableConcurrency\": $enable_concurrency
   },"
   fi
 
@@ -294,13 +309,20 @@ api_write_observatory_config() {
   observatory_probe_url=$(printf '%s' "${probe_url:-https://www.google.com/generate_204}" | jq -Rs '.')
   observatory_probe_interval=$(sanitize_probe_interval "$probe_interval")
 
+  local tag_count enable_concurrency=true
+  tag_count=$(printf '%s' "$selectors" | jq 'length' 2>/dev/null) || tag_count=0
+  case "$tag_count" in '' | *[!0-9]*) tag_count=0 ;; esac
+  if [ "$tag_count" -gt 5 ]; then
+    enable_concurrency=false
+  fi
+
   cat >"$xray_api_config" <<EOF
 {
   "observatory": {
     "subjectSelector": $selectors,
     "probeUrl": $observatory_probe_url,
     "probeInterval": "${observatory_probe_interval}s",
-    "enableConcurrency": true
+    "enableConcurrency": $enable_concurrency
   }
 }
 EOF

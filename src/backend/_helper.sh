@@ -414,9 +414,10 @@ get_proc_uptime() {
 }
 
 sanitize_probe_interval() {
-    local v="${1:-30}"
+    # Default 60s: concurrent probes of many outbounds every 30s were eating Merlin RAM.
+    local v="${1:-60}"
     case "$v" in
-    '' | *[!0-9]*) v=30 ;;
+    '' | *[!0-9]*) v=60 ;;
     esac
     while [ "${#v}" -gt 1 ] && [ "${v#0}" != "$v" ]; do v="${v#0}"; done
     if [ "$v" -lt 5 ]; then
@@ -970,14 +971,42 @@ get_or_create_hwid() {
 }
 
 cleanup_stale_asdfiles() {
-    # Purge only StealthSurf staging / ASD leftovers — never stock xrayui_* backups
+    # Purge only StealthSurf staging / ASD leftovers — never stock xrayui_* backups.
+    # /tmp is tmpfs on Merlin: leftover bodies from crashed curls eat RAM.
     local asdbk="/jffs/.asdbk"
+    local f age now
 
     rm -f /tmp/stealthsurf_*.tmp.* 2>/dev/null
     rm -f /tmp/stealthsurf_dnsmasq_direct.tmp.* 2>/dev/null
     rm -f /tmp/stealthsurf_geoip4.* /tmp/stealthsurf_geoip6.* 2>/dev/null
     rm -f /tmp/stealthsurf_config.* /tmp/stealthsurf-dnsmasq-servers.* 2>/dev/null
     rm -f /tmp/stealthsurf_script.* /tmp/stealthsurf_payload* 2>/dev/null
+    # Broader leftovers from subscriptions / failover / diag / tlsping / staging
+    rm -f /tmp/stealthsurf_surl.* /tmp/stealthsurf_surl_dec.* /tmp/stealthsurf_pick.* 2>/dev/null
+    rm -f /tmp/stealthsurf_proto_* /tmp/stealthsurf_fo_test.* /tmp/stealthsurf-tlsping.* 2>/dev/null
+    rm -f /tmp/stealthsurf_diag_* /tmp/stealthsurf-tun-* /tmp/xray_api_ado.*.json 2>/dev/null
+    rm -f /tmp/xray-response.*.tmp /tmp/xray-config-clean.json /tmp/custom_settings.* 2>/dev/null
+
+    # Age-based purge of orphaned staging dirs and panel err dumps (keep live locks/logs)
+    now=$(date +%s 2>/dev/null) || now=0
+    if [ -d /tmp/stealthsurf-staging ] && [ "$now" -gt 0 ]; then
+        for f in /tmp/stealthsurf-staging/*; do
+            [ -e "$f" ] || continue
+            age=$(date -r "$f" +%s 2>/dev/null) || age=0
+            if [ "$age" -gt 0 ] && [ $((now - age)) -gt 120 ]; then
+                rm -rf "$f" 2>/dev/null || true
+            fi
+        done
+    fi
+    if [ -d /tmp/ssurf ]; then
+        for f in /tmp/ssurf/*.err /tmp/ssurf/*.tmp; do
+            [ -e "$f" ] || continue
+            age=$(date -r "$f" +%s 2>/dev/null) || age=0
+            if [ "$age" -gt 0 ] && [ $((now - age)) -gt 300 ]; then
+                rm -f "$f" 2>/dev/null || true
+            fi
+        done
+    fi
 
     if [ -d "$asdbk" ]; then
         rm -f "$asdbk"/ssurf_*_bk "$asdbk"/*ssurf*.tmp.*_bk 2>/dev/null

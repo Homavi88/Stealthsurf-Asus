@@ -62,7 +62,7 @@ apply_general_options() {
         "subscription_auto_fallback=" + ((.subscription_auto_fallback // "false") | tostring | @sh) + "\n" +
         "subscription_fallback_interval=" + ((.subscription_fallback_interval // "5") | tostring | @sh) + "\n" +
         "probe_url=" + ((.probe_url // "https://www.google.com/generate_204") | tostring | @sh) + "\n" +
-        "probe_interval=" + ((.probe_interval // 30) | tostring | @sh) + "\n" +
+        "probe_interval=" + ((.probe_interval // 60) | tostring | @sh) + "\n" +
         "tun_routing=" + ((.tun_routing // "full") | tostring | @sh) + "\n" +
         "watchdog=" + ((.watchdog // "false") | tostring | @sh) + "\n" +
         "watchdog_interval=" + ((.watchdog_interval // 2) | tostring | @sh) + "\n" +

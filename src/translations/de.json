@@ -70,7 +70,7 @@
       "label_probe_url": "Observatory-Prüf-URL",
       "hint_probe_url": "Die URL, die das Xray Observatory zur Prüfung der Erreichbarkeit der ausgehenden Verbindungen verwendet. Jede über den Outbound empfangene HTTP-Antwort gilt als erfolgreiche Prüfung, daher wird eine https://-URL empfohlen.",
       "label_probe_interval": "Observatory-Prüfintervall (Sekunden)",
-      "hint_probe_interval": "Wie oft das Xray Observatory jede ausgehende Verbindung prüft. Jede Prüfung öffnet eine Verbindung über alle Outbounds; kurze Intervalle in Kombination mit vielen Outbounds (z. B. aus Abonnements) erhöhen die CPU- und Speicherauslastung des Routers. Standard: 30 Sekunden.",
+      "hint_probe_interval": "Wie oft das Xray Observatory jede ausgehende Verbindung prüft. Jede Prüfung öffnet eine Verbindung über alle Outbounds; kurze Intervalle in Kombination mit vielen Outbounds (z. B. aus Abonnements) erhöhen die CPU- und Speicherauslastung des Routers. Standard: 60 Sekunden; bei vielen Outbounds laufen die Probes nacheinander.",
       "label_gh_proxy": "GitHub-Proxy verwenden",
       "hint_gh_proxy": "Ein GitHub-Proxy zum Herunterladen von Dateien von GitHub (Xray-Updates, Geodaten-Dateien usw.), wenn GitHub in der Region blockiert ist.",
       "geodad_header": "GeoIP/GeoSite Metadaten",

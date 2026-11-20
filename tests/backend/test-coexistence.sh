@@ -134,8 +134,8 @@ grep -q 'message("SSURF")' "$logs" && pass "scribe filters SSURF" || bad "scribe
 
 # --- ASD cleanup scoped ---
 helper="$ROOT/src/backend/_helper.sh"
-grep -A20 '^cleanup_stale_asdfiles' "$helper" | grep -q 'ssurf_\*_bk\|stealthsurf_\*_bk' && pass "asd cleans ssurf/legacy only" || bad "asd cleans ssurf/legacy only"
-grep -A20 '^cleanup_stale_asdfiles' "$helper" | grep -q 'xrayui_\*_bk' && bad "asd still cleans xrayui" || pass "asd does not clean xrayui"
+grep -A60 '^cleanup_stale_asdfiles' "$helper" | grep -q 'ssurf_\*_bk\|stealthsurf_\*_bk' && pass "asd cleans ssurf/legacy only" || bad "asd cleans ssurf/legacy only"
+grep -A60 '^cleanup_stale_asdfiles' "$helper" | grep -q 'xrayui_\*_bk' && bad "asd still cleans xrayui" || pass "asd does not clean xrayui"
 
 # --- kill helpers scoped ---
 grep -q 'ss_kill_by_cmdline_path' "$helper" && pass "path kill helper exists" || bad "path kill helper exists"
