@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.34] - 2026-11-20
+
+### Self-update install error
+
+- Panel Home update modal no longer shows a false **«Error while checking loading progress»** when install restarts `panel-httpd`
+- Progress poll retries through ~2 min of panel downtime; install signals **100%** before `panel_stop`
+- Background `service_event` jobs ignore HUP so a panel restart cannot kill an in-flight update
+
 ## [1.4.33] - 2026-11-20
 
 ### Memory / RAM (router OOM)

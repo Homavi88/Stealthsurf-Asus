@@ -308,6 +308,16 @@ EOF
     panel_prepare_webroot 2>/dev/null || true
     # Prefer bundled panel-httpd from the package (works even when opkg feeds are down).
     panel_ensure_httpd 2>/dev/null || true
+
+    local _panel_url
+    _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
+
+    # Tell the UI we're done BEFORE restarting httpd. Self-update polls
+    # /ext/ssurf/xray-ui-response through the panel; panel_stop would otherwise
+    # make those polls fail and the update modal show a false error.
+    update_loading_progress "Installation completed. Panel: $_panel_url" 100
+    sleep 2
+
     # Always restart so an upgraded panel-httpd replaces the stale process (avoids bootstrap HTTP 500).
     panel_stop 2>/dev/null || true
     if ! panel_start; then
@@ -317,16 +327,12 @@ EOF
     else
         install_ui_status ok "panel httpd"
     fi
-    local _panel_url
-    _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
 
     install_ui_end "Installed $(show_version) → $_panel_url"
     log_ok "Installed $(show_version) (files in $ADDON_JFFS_ADN_DIR, panel :1131)"
     log_box "Installation completed. Open panel: $_panel_url"
     log_info "Merlin WebUI: VPN → $ADDON_TITLE  ·  CLI: surfgate panel status"
     log_info "Official StealthSurf path /jffs/addons/stealthsurf is never modified by SurfGate."
-
-    update_loading_progress "Installation completed. Panel: $_panel_url" 100
 }
 
 uninstall() {

@@ -908,9 +908,17 @@ export class Engine {
     onProgress?: (progress: EngineLoadingProgress) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
+      // Self-update / install restarts panel-httpd; tolerate downtime so the UI
+      // does not report a false failure while the backend finishes.
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 120; // ~2 minutes at 1s
+      let inFlight = false;
       const checkProgressInterval = setInterval(async () => {
+        if (inFlight) return;
+        inFlight = true;
         try {
           const response = await this.getXrayResponse({ light: true });
+          consecutiveErrors = 0;
           if (response.loading) {
             loadingProgress = response.loading;
             window.updateLoadingProgress(loadingProgress);
@@ -926,10 +934,15 @@ export class Engine {
               }, 1000);
             }
           }
-        } catch (error) {
-          clearInterval(checkProgressInterval);
-          window.hideLoading();
-          reject(new Error('Error while checking loading progress'));
+        } catch {
+          consecutiveErrors += 1;
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            clearInterval(checkProgressInterval);
+            window.hideLoading();
+            reject(new Error('Error while checking loading progress'));
+          }
+        } finally {
+          inFlight = false;
         }
       }, 1000);
     });
