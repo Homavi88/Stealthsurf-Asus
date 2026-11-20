@@ -8,6 +8,11 @@
 - Home topbar shows addon version next to the brand (`v1.4.x`)
 - Panel modals (incl. «Обновление X-RAY Core») use light soft-UI instead of Merlin dark FormTable chrome
 
+### Official StealthSurf conflict
+
+- Detect conflict only when `stealthsurf-routerd` is actually running (not by leftover `STEALTHSURF_*` iptables)
+- After official stop, clear orphan firewall chains so SurfGate can start without uninstalling the official package
+
 ## [1.4.36] - 2026-11-20
 
 ### Panel UI redesign (:1131)

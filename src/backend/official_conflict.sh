@@ -2,6 +2,11 @@
 # Detect official StealthSurf VPN (stealthsurf-routerd) dataplane conflict.
 # Paths/settings are isolated under /jffs/addons/ssurf, but two transparent
 # proxies on one LAN break routing — refuse SurfGate start while official runs.
+#
+# Important: "installed but stopped" must NOT count as running. Official stop
+# often leaves STEALTHSURF_* iptables chains behind; those orphans used to keep
+# SurfGate blocked until the official package was deleted. Detection is process-
+# based; orphan chains are cleaned when the daemon is confirmed down.
 
 SS_OFFICIAL_CACHE="${SS_OFFICIAL_CACHE:-/tmp/stealthsurf.official.cache}"
 SS_OFFICIAL_CACHE_TTL="${SS_OFFICIAL_CACHE_TTL:-45}"
@@ -41,6 +46,42 @@ ss_official_firewall_active() {
     return 1
 }
 
+# Strip leftover official jumps/chains after stealthsurf-routerd has stopped.
+# Safe only when the process is confirmed down — never touch while it is live.
+ss_official_cleanup_orphan_firewall() {
+    local ipt tbl ref ch line guard
+
+    ss_official_process_running && return 0
+    ss_official_firewall_active || return 0
+    command -v iptables >/dev/null 2>&1 || return 0
+
+    if type log_info >/dev/null 2>&1; then
+        log_info "Official StealthSurf is stopped — cleaning leftover STEALTHSURF_* firewall chains"
+    fi
+
+    for ipt in iptables ip6tables; do
+        command -v "$ipt" >/dev/null 2>&1 || continue
+        for tbl in filter mangle nat raw; do
+            for ref in INPUT FORWARD OUTPUT PREROUTING POSTROUTING; do
+                guard=0
+                while [ "$guard" -lt 64 ]; do
+                    line=$($ipt -w 1 -t "$tbl" -nL "$ref" --line-numbers 2>/dev/null | awk '/STEALTHSURF/ {print $1; exit}')
+                    [ -n "$line" ] || break
+                    $ipt -w 1 -t "$tbl" -D "$ref" "$line" 2>/dev/null || break
+                    guard=$((guard + 1))
+                done
+            done
+            for ch in STEALTHSURF STEALTHSURF_FWD STEALTHSURF_GRD STEALTHSURF_DNS_LOCK \
+                STEALTHSURF_DNS_OWNERPROBE STEALTHSURF_DIVERT; do
+                $ipt -w 1 -t "$tbl" -F "$ch" 2>/dev/null || true
+                $ipt -w 1 -t "$tbl" -X "$ch" 2>/dev/null || true
+            done
+        done
+    done
+
+    return 0
+}
+
 ss_official_cache_invalidate() {
     rm -f "$SS_OFFICIAL_CACHE" 2>/dev/null || true
 }
@@ -58,18 +99,26 @@ ss_official_running() {
         if [ -n "$ts" ] && [ -n "$status" ] && [ "$now" -ge "$ts" ] 2>/dev/null; then
             age=$((now - ts))
             if [ "$age" -lt "$SS_OFFICIAL_CACHE_TTL" ] 2>/dev/null; then
-                [ "$status" = "1" ]
-                return $?
+                if [ "$status" = "0" ]; then
+                    return 1
+                fi
+                # Positive cache can go stale the moment the user stops official —
+                # re-check the live process instead of trusting the cached "1".
+                if ss_official_process_running; then
+                    return 0
+                fi
+                # Fall through and recompute (also cleans orphan chains).
             fi
         fi
     fi
 
+    # Only a live stealthsurf-routerd means conflict. Leftover STEALTHSURF_*
+    # chains after stop must not keep SurfGate blocked.
     if ss_official_process_running; then
         running=1
-    elif ss_official_firewall_active && ss_official_installed; then
-        running=1
-    elif [ "$force" = "force" ] && ss_official_firewall_active; then
-        running=1
+    else
+        running=0
+        ss_official_cleanup_orphan_firewall
     fi
 
     ss_official_cache_store "$running"
@@ -110,6 +159,8 @@ ss_refuse_if_official() {
         fi
         return 1
     fi
+    # Ensure orphan official chains are gone before SurfGate brings up SSURF_*.
+    ss_official_cleanup_orphan_firewall
     return 0
 }
 
