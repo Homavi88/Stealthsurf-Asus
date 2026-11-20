@@ -3,7 +3,10 @@
     <header class="ss-topbar">
       <div class="ss-brand">
         <span class="ss-brand-mark" aria-hidden="true"></span>
-        <span class="ss-brand-name">SurfGate VPN</span>
+        <div class="ss-brand-text">
+          <span class="ss-brand-name">SurfGate VPN</span>
+          <span class="ss-brand-ver ss-mono" title="Версия аддона">v{{ addonVersion }}</span>
+        </div>
       </div>
       <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -281,6 +284,10 @@
           updateStatus.value?.current ||
           '—'
       );
+      const addonVersion = computed(() => {
+        const v = String(updateCurrent.value || '').replace(/^v/i, '');
+        return v || '—';
+      });
       // Always compare versions — stale addon-update-status can keep update_available=true
       // after install (e.g. banner shows v1.4.27 → v1.4.27).
       const updateAvailable = computed(() => {
@@ -667,6 +674,7 @@
         updateAvailable,
         updateLatest,
         updateCurrent,
+        addonVersion,
         updateBusy,
         updateProgress,
         installUpdate

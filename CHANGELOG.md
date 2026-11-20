@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.37] - 2026-11-20
+
+### Panel mobile settings + version
+
+- Mobile settings: drill-down list (menu → section) instead of horizontal pill chips
+- Home topbar shows addon version next to the brand (`v1.4.x`)
+
 ## [1.4.36] - 2026-11-20
 
 ### Panel UI redesign (:1131)
