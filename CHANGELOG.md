@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.39] - 2026-11-20
+
+### Safari / panel cache
+
+- Panel httpd: `Cache-Control: no-store` for HTML/JS/CSS so iPhone Safari does not keep a pre-upgrade UI
+- Load `app.js?v=<version>` (panel bootstrap + Merlin ASP) after addon updates
+
+### Note
+
+- Mobile Logs/Home redesign from **1.4.38** requires installing this build on the router; screenshots of the new Logs cards were style previews until the package is updated
+
 ## [1.4.38] - 2026-11-20
 
 ### Mobile UX

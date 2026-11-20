@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	version     = "1.4.17"
+	version     = "1.4.39"
 	defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 
@@ -98,6 +98,9 @@ func main() {
 			writeJSON(w, `{"ok":false,"error":"not found"}`)
 			return
 		}
+		// Safari/iOS aggressively caches panel SPA assets; without this, users
+		// keep seeing the pre-upgrade UI after installing a new addon version.
+		setNoStoreStatic(w, r.URL.Path)
 		fileServer.ServeHTTP(w, r)
 	}))
 
@@ -301,6 +304,21 @@ func writeJSON(w http.ResponseWriter, body string) {
 	_, _ = io.WriteString(w, body)
 	if !strings.HasSuffix(body, "\n") {
 		_, _ = io.WriteString(w, "\n")
+	}
+}
+
+// setNoStoreStatic disables browser caching for SPA entry points and JS/CSS.
+// HTML/JS must not be sticky across addon upgrades (iPhone Safari keeps old app.js).
+func setNoStoreStatic(w http.ResponseWriter, urlPath string) {
+	ext := strings.ToLower(path.Ext(urlPath))
+	switch ext {
+	case ".html", ".js", ".mjs", ".css", ".map", "":
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+	}
+	if urlPath == "/" || strings.HasSuffix(urlPath, "/") {
+		w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
 	}
 }
 

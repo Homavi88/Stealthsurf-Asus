@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-XRAYUI_VERSION=${1:-"1.4.38"}
+XRAYUI_VERSION=${1:-"1.4.39"}
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT"
 
@@ -9,6 +9,21 @@ NODE_ENV=production npx vite build
 
 echo "Updating XRAYUI_VERSION to $XRAYUI_VERSION in /dist/stealthsurf"
 sed -i "s/^XRAYUI_VERSION=.*/XRAYUI_VERSION=\"$XRAYUI_VERSION\"/" dist/stealthsurf
+
+# Cache-bust Merlin ASP app.js URL so Safari does not keep a stale SPA after upgrade.
+if [ -f dist/index.asp ]; then
+  sed -i "s/__SS_UI_VERSION__/${XRAYUI_VERSION}/g" dist/index.asp
+fi
+if [ -f dist/app.html ]; then
+  sed -i "s/__SS_UI_VERSION__/${XRAYUI_VERSION}/g" dist/app.html
+fi
+# Standalone panel HTML (also rewritten at runtime via bootstrap ?v=).
+if [ -f dist/panel/index.html ]; then
+  sed -i "s/__SS_UI_VERSION__/${XRAYUI_VERSION}/g" dist/panel/index.html
+fi
+if [ -f dist/index.panel.html ]; then
+  sed -i "s/__SS_UI_VERSION__/${XRAYUI_VERSION}/g" dist/index.panel.html
+fi
 
 echo "Building bundled panel-httpd (static, no opkg needed on router)..."
 mkdir -p dist/bin
