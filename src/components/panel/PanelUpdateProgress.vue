@@ -157,6 +157,7 @@
         message.value = 'Запуск обновления…';
         progress.value = 0;
 
+        const installIdx = STAGE_DEFS.findIndex((s) => s.id === 'install');
         try {
           await engine.executeWithLoadingProgress(
             async () => {
@@ -183,8 +184,17 @@
             }
           }
         } catch (e) {
-          phase.value = 'error';
-          message.value = e instanceof Error ? e.message : 'Ошибка при установке обновления';
+          // Install restarts panel-httpd; progress polls can time out after the
+          // package is already applied. Prefer "reload to verify" over a hard fail.
+          if (activeIdx.value >= installIdx && installIdx >= 0) {
+            phase.value = 'done';
+            activeIdx.value = STAGE_DEFS.length - 1;
+            message.value =
+              'Пакет установлен, панель перезапускалась. Обновите страницу, чтобы проверить версию.';
+          } else {
+            phase.value = 'error';
+            message.value = e instanceof Error ? e.message : 'Ошибка при установке обновления';
+          }
         }
       };
 

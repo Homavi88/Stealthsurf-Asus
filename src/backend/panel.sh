@@ -1152,8 +1152,10 @@ panel_api_handle() {
     # Map stealthsurf_configuration_apply → service_event configuration apply
     local rest
     rest=$(printf '%s' "$action" | cut -d'_' -f2- | tr '_' ' ')
-    # Run in background but after settings are fully flushed to custom_settings.txt
+    # Detach from panel-httpd: install/update restarts the panel mid-job; without
+    # ignoring HUP the background service_event can die with the httpd parent.
     (
+        trap '' HUP
         /jffs/scripts/ssurf service_event $rest
         panel_refresh_ext_links 2>/dev/null || true
     ) >"$PANEL_API_LOG" 2>&1 &
