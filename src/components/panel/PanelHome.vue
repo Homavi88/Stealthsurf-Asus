@@ -1,10 +1,11 @@
 <template>
   <div>
     <header class="ss-topbar">
-      <div class="ss-brand" aria-hidden="true">
-        <span class="ss-brand-mark"></span>
+      <div class="ss-brand">
+        <span class="ss-brand-mark" aria-hidden="true"></span>
+        <span class="ss-brand-name">SurfGate VPN</span>
       </div>
-      <button type="button" class="ss-icon-btn" title="settings" aria-label="settings" @click="$emit('open-settings')">
+      <button type="button" class="ss-icon-btn" title="Настройки" aria-label="Настройки" @click="$emit('open-settings')">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="12" r="3" />
           <path
@@ -19,13 +20,12 @@
         <span class="ss-hero-hud-ring"></span>
         <span class="ss-hero-hud-core"></span>
       </div>
-      <h1 class="ss-brand-hero">SurfGate</h1>
-      <p class="ss-brand-hero-sub">merlin · panel :1131 · xray</p>
       <p class="ss-status-title" :class="{ 'is-off': !running }">{{ statusLabel }}</p>
       <div class="ss-ip-pill" v-if="displayIp || displayVpnServer">
-        <span class="ss-mono" v-if="displayIp">wan {{ displayIp }}</span>
+        <span v-if="selectedFlag">{{ selectedFlag }}</span>
+        <span class="ss-mono" v-if="displayIp">{{ displayIp }}</span>
         <span class="ss-mono ss-ip-sep" v-if="displayIp && displayVpnServer">·</span>
-        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer" title="Адрес VPN-сервера из конфига (не exit IP как на 2ip.ru)">server {{ displayVpnServer }}</span>
+        <span class="ss-mono ss-ip-vpn" v-if="displayVpnServer" title="Адрес VPN-сервера из конфига">{{ displayVpnServer }}</span>
       </div>
     </section>
 
@@ -46,73 +46,77 @@
       </button>
     </div>
 
-    <table class="ss-data-table ss-metrics-table ss-mono" aria-label="system metrics">
-      <thead>
-        <tr>
-          <th>cpu</th>
-          <th>mem</th>
-          <th>rss</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>{{ live.cpu_pct }}%</strong></td>
-          <td><strong>{{ memLabel }}</strong></td>
-          <td><strong>{{ live.app_rss_mb }} MB</strong></td>
-        </tr>
-      </tbody>
-    </table>
+    <p class="ss-metrics-line" aria-label="системные метрики">
+      <span>ЦП <strong>{{ live.cpu_pct }}%</strong></span>
+      <span class="ss-metrics-sep">·</span>
+      <span>ОЗУ <strong>{{ memLabel }}</strong></span>
+      <span class="ss-metrics-sep">·</span>
+      <span>SurfGate <strong>{{ live.app_rss_mb }} МБ</strong></span>
+    </p>
 
     <div class="ss-card ss-card-flush">
-      <p class="ss-card-title">throughput · накоплено</p>
-      <table class="ss-data-table ss-mono" aria-label="throughput">
-        <thead>
-          <tr>
-            <th></th>
-            <th>rx</th>
-            <th>tx</th>
-            <th>Σ</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <th scope="row">vpn</th>
-            <td>{{ fmtRate(rates.vpnDown) }}</td>
-            <td>{{ fmtRate(rates.vpnUp) }}</td>
-            <td>{{ fmtBytes(vol.vpn) }}</td>
-          </tr>
-          <tr>
-            <th scope="row">direct</th>
-            <td>{{ fmtRate(rates.directDown) }}</td>
-            <td>{{ fmtRate(rates.directUp) }}</td>
-            <td>{{ fmtBytes(vol.direct) }}</td>
-          </tr>
-          <tr class="ss-total-row">
-            <th scope="row">всего</th>
-            <td colspan="2" class="ss-muted">все подключения</td>
-            <td>{{ fmtBytes(vol.vpn + vol.direct) }}</td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="ss-home-card">
+        <div class="ss-home-card__icon" aria-hidden="true">⇅</div>
+        <div class="ss-home-card__body">
+          <div class="ss-home-card__title">Скорость</div>
+          <div class="ss-speed-grid">
+            <div class="ss-speed-col">
+              <div class="ss-speed-col__label">VPN</div>
+              <div class="ss-speed-col__val"><span>↓</span>{{ fmtRate(rates.vpnDown) }}</div>
+              <div class="ss-speed-col__val"><span>↑</span>{{ fmtRate(rates.vpnUp) }}</div>
+            </div>
+            <div class="ss-speed-col">
+              <div class="ss-speed-col__label">Напрямую</div>
+              <div class="ss-speed-col__val"><span>↓</span>{{ fmtRate(rates.directDown) }}</div>
+              <div class="ss-speed-col__val"><span>↑</span>{{ fmtRate(rates.directUp) }}</div>
+            </div>
+          </div>
+          <div class="ss-home-card__sub" style="margin-top: 8px">
+            Накоплено: VPN {{ fmtBytes(vol.vpn) }} · напрямую {{ fmtBytes(vol.direct) }}
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ss-card ss-card-flush">
+      <div class="ss-home-card">
+        <div class="ss-home-card__icon" aria-hidden="true">{{ selectedFlag || '🛰️' }}</div>
+        <div class="ss-home-card__body">
+          <div class="ss-home-card__title">{{ activeTitle }}</div>
+          <div class="ss-home-card__sub">{{ selectedMeta }}</div>
+          <div class="ss-home-card__meta" :class="{ 'is-off': !running || selectedOffline }">
+            {{ selectedOnlineLabel }}
+          </div>
+        </div>
+        <div class="ss-home-card__aside">
+          <span v-if="selectedProto" class="ss-mono">{{ selectedProto }}</span>
+        </div>
+      </div>
+      <div style="padding: 0 14px 14px">
+        <button
+          type="button"
+          class="ss-primary-btn"
+          :class="running ? 'stop' : 'start'"
+          :disabled="busy || (!running && (conflict || selectedId == null))"
+          @click="toggle"
+        >
+          {{ busy ? '…' : running ? 'Отключить' : 'Подключить' }}
+        </button>
+        <p v-if="conflict" class="ss-home-error">{{ conflictHint }}</p>
+        <p v-else-if="lastError" class="ss-home-error">{{ lastError }}</p>
+        <p v-else-if="!running && startFailedHint" class="ss-home-error">{{ startFailedHint }}</p>
+        <p v-else class="ss-home-card__sub" style="margin-top: 10px">{{ homeActionHint }}</p>
+      </div>
     </div>
 
     <div class="ss-card ss-card-flush">
       <div class="ss-card-head">
-        <p class="ss-card-title" style="margin: 0">endpoints</p>
-        <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px; box-shadow: none" title="refresh" @click="refreshCatalog">
+        <p class="ss-card-title" style="margin: 0">Серверы</p>
+        <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px" title="Обновить" @click="refreshCatalog">
           ↻
         </button>
       </div>
-      <table class="ss-data-table ss-endpoints-table" aria-label="endpoints">
-        <thead>
-          <tr>
-            <th></th>
-            <th>endpoint</th>
-            <th>proto</th>
-            <th>status</th>
-            <th class="ss-num">volume</th>
-          </tr>
-        </thead>
+      <table class="ss-data-table ss-endpoints-table" aria-label="серверы">
         <tbody>
           <tr
             v-for="c in locations"
@@ -124,47 +128,22 @@
             <td class="ss-flag-cell">{{ flagFor(c) }}</td>
             <td>
               <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
-              <div class="ss-cell-sub ss-mono">{{ c._ss_location_title || c.location || '—' }}</div>
-              <div v-if="running && isActiveRoute(c)" class="ss-cell-tag">active</div>
+              <div class="ss-cell-sub">{{ c._ss_location_title || c.protocol || '—' }}</div>
+              <div v-if="running && isActiveRoute(c)" class="ss-cell-tag">активен</div>
               <div v-else-if="!running && isActiveRoute(c)" class="ss-cell-tag is-muted">в конфиге</div>
-              <div v-else-if="isImported(c)" class="ss-cell-tag is-muted">imported</div>
+              <div v-else-if="isImported(c)" class="ss-cell-tag is-muted">импортирован</div>
             </td>
             <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
-            <td class="ss-mono" :class="c.is_online === false ? 'is-off' : 'is-on'">
-              {{ c.is_online === false ? 'node off' : 'node ok' }}
+            <td :class="c.is_online === false ? 'is-off' : 'is-on'">
+              {{ c.is_online === false ? 'офлайн' : 'онлайн' }}
             </td>
             <td class="ss-num ss-mono">{{ fmtBytes(volumeFor(c)) }}</td>
           </tr>
           <tr v-if="!locations.length">
-            <td colspan="5" class="ss-empty">нет конфигов — настройки → аккаунт → API-ключ и sync</td>
+            <td colspan="5" class="ss-empty">Нет конфигов — Настройки → Подписка → API-ключ и синхронизация</td>
           </tr>
         </tbody>
       </table>
-    </div>
-
-    <div class="ss-card">
-      <div class="ss-loc-meta" style="margin-bottom: 12px">
-        <div class="name">{{ activeTitle }}</div>
-        <div class="sub ss-mono">{{ homeActionHint }}</div>
-      </div>
-      <button
-        type="button"
-        class="ss-primary-btn"
-        :class="running ? 'stop' : 'start'"
-        :disabled="busy || (!running && (conflict || selectedId == null))"
-        @click="toggle"
-      >
-        {{ busy ? '…' : running ? 'stop' : 'start' }}
-      </button>
-      <p v-if="conflict" class="ss-mono" style="color: var(--ss-danger); font-size: 12px; margin: 10px 0 0">
-        {{ conflictHint }}
-      </p>
-      <p v-else-if="lastError" class="ss-mono ss-home-error">
-        {{ lastError }}
-      </p>
-      <p v-else-if="!running && startFailedHint" class="ss-mono ss-home-error">
-        {{ startFailedHint }}
-      </p>
     </div>
 
     <panel-update-progress ref="updateProgress" />
@@ -260,24 +239,24 @@
       );
       const conflictHint = computed(() => {
         if (live.value.official || uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
-          return 'conflict: official StealthSurf is running — stop it first';
+          return 'Конфликт: официальный StealthSurf запущен — сначала остановите его';
         }
-        return 'conflict: stock xrayui is running — stop it first';
+        return 'Конфликт: XrayUI запущен — сначала остановите его';
       });
       const statusLabel = computed(() => {
-        if (live.value.official && !running.value) return 'status: offline · official StealthSurf active';
-        if (running.value) return 'status: online';
+        if (live.value.official && !running.value) return 'Отключено · official StealthSurf';
+        if (running.value) return 'Подключено';
         if (live.value.desired && !running.value) {
-          return 'status: offline · Xray не запущен — нажмите START';
+          return 'Отключено · нажмите «Подключить»';
         }
-        return 'status: offline';
+        return 'Отключено';
       });
 
       const homeActionHint = computed(() => {
-        if (running.value) return 'VPN работает · stop остановит';
-        if (conflict.value) return 'конфликт с другим VPN — остановите его сначала';
-        if (selectedId.value == null) return 'выберите endpoint · start импортирует и запустит';
-        return 'VPN выключен · start запустит выбранный endpoint';
+        if (running.value) return 'VPN работает — «Отключить» остановит сервис';
+        if (conflict.value) return 'Конфликт с другим VPN — остановите его сначала';
+        if (selectedId.value == null) return 'Выберите сервер — «Подключить» импортирует и запустит';
+        return 'VPN выключен — «Подключить» запустит выбранный сервер';
       });
 
       const startFailedHint = computed(() => {
@@ -388,10 +367,40 @@
         return Boolean(activeOutboundTag.value) && (activeOutboundTag.value === tag || activeOutboundTag.value === `ss-${c.id}`);
       };
 
+      const selectedConfig = computed(() => locations.value.find((c) => c.id === selectedId.value) || null);
+
       const activeTitle = computed(() => {
-        const cur = locations.value.find((c) => c.id === selectedId.value);
-        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'endpoint не выбран');
+        const cur = selectedConfig.value;
+        return cur?.title || (selectedId.value != null ? `ss-${selectedId.value}` : 'Сервер не выбран');
       });
+
+      const selectedFlag = computed(() => (selectedConfig.value ? flagFor(selectedConfig.value) : ''));
+      const selectedProto = computed(() => {
+        const p = selectedConfig.value?.protocol;
+        return p ? String(p).toUpperCase() : '';
+      });
+      const selectedOffline = computed(() => selectedConfig.value?.is_online === false);
+      const selectedOnlineLabel = computed(() => {
+        if (!selectedConfig.value) return 'выберите сервер из списка';
+        if (selectedOffline.value) return 'сервер офлайн';
+        return 'сервер онлайн';
+      });
+      const selectedMeta = computed(() => {
+        const c = selectedConfig.value;
+        if (!c) return homeActionHint.value;
+        const loc = c._ss_location_title || '';
+        const exp = c.expires_at ? formatExpiresShort(c.expires_at) : '';
+        return [loc, exp].filter(Boolean).join(' · ') || homeActionHint.value;
+      });
+
+      const formatExpiresShort = (ts: number) => {
+        if (!ts) return '';
+        try {
+          return `до ${new Date(ts * 1000).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        } catch {
+          return '';
+        }
+      };
 
       const fmtBytes = (n: number) => {
         if (!n || n < 0) return '0 Б';
@@ -643,6 +652,11 @@
         displayVpnServer,
         memLabel,
         activeTitle,
+        selectedFlag,
+        selectedProto,
+        selectedOffline,
+        selectedOnlineLabel,
+        selectedMeta,
         isImported,
         fmtBytes,
         fmtRate,

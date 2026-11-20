@@ -6,12 +6,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Cache-Control" content="no-cache" />
-    <meta name="theme-color" content="#0b0f14" />
+    <meta name="theme-color" content="#eef3f8" />
     <title>SurfGate</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&display=swap"
       rel="stylesheet"
     />
     <style>
@@ -19,9 +19,9 @@
       body {
         margin: 0;
         min-height: 100%;
-        background: #0b0f14;
-        color: #e6e8eb;
-        font-family: 'IBM Plex Sans', 'Segoe UI', 'Helvetica Neue', sans-serif;
+        background: #eef3f8;
+        color: #1c2430;
+        font-family: 'Manrope', 'Segoe UI', 'Helvetica Neue', sans-serif;
       }
       #ss-panel-boot {
         max-width: 28rem;
@@ -31,24 +31,23 @@
         opacity: 0.95;
       }
       #ss-panel-boot .brand {
-        font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        font-size: 1.15rem;
-        font-weight: 600;
-        letter-spacing: 0.04em;
-        text-transform: uppercase;
-        color: #3db8ff;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
+        font-size: 1.2rem;
+        font-weight: 750;
+        letter-spacing: -0.02em;
+        color: #2f6fed;
       }
       #ss-panel-boot .hint {
         margin-top: 0.55rem;
-        font-family: 'IBM Plex Mono', ui-monospace, monospace;
-        font-size: 0.8rem;
-        color: #8b939e;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
+        font-size: 0.9rem;
+        color: #7a8696;
       }
       #ss-panel-boot[hidden] {
         display: none;
       }
       #ss-panel-boot .err {
-        color: #ff5c5c;
+        color: #e04848;
         margin-top: 1rem;
         white-space: pre-wrap;
         font-family: 'IBM Plex Mono', ui-monospace, monospace;
@@ -63,11 +62,11 @@
         justify-content: center;
         padding: max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom));
         box-sizing: border-box;
-        background: rgba(5, 8, 12, 0.78);
+        background: rgba(28, 52, 84, 0.35);
         -webkit-backdrop-filter: blur(10px);
         backdrop-filter: blur(10px);
-        color: #e6e8eb;
-        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        color: #1c2430;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
         text-align: center;
         pointer-events: none;
       }
@@ -80,19 +79,19 @@
         width: min(360px, 100%);
         margin: 0 auto;
         padding: 20px 18px 16px;
-        border-radius: 12px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        background: linear-gradient(180deg, #1a222e 0%, #121820 100%);
-        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.55);
+        border-radius: 16px;
+        border: 1px solid rgba(28, 52, 84, 0.1);
+        background: #ffffff;
+        box-shadow: 0 16px 40px rgba(28, 52, 84, 0.16);
         text-align: left;
       }
       #Loading #proceeding_main_txt,
       #Loading .ss-load-msg {
-        font-family: 'IBM Plex Sans', 'Segoe UI', sans-serif;
+        font-family: 'Manrope', 'Segoe UI', sans-serif;
         font-size: 0.95rem;
-        font-weight: 600;
+        font-weight: 650;
         line-height: 1.35;
-        color: #e6e8eb;
+        color: #1c2430;
         word-break: break-word;
       }
       #Loading #proceeding_txt,
@@ -100,21 +99,21 @@
         margin-top: 10px;
         font-family: 'IBM Plex Mono', ui-monospace, monospace;
         font-size: 0.85rem;
-        color: #3db8ff;
+        color: #2f6fed;
         letter-spacing: 0.02em;
       }
       #Loading .ss-load-bar {
         margin-top: 14px;
         height: 6px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(28, 52, 84, 0.08);
         overflow: hidden;
       }
       #Loading .ss-load-bar__fill {
         height: 100%;
         width: 0%;
         border-radius: inherit;
-        background: linear-gradient(90deg, #2a9fd8, #3db8ff);
+        background: linear-gradient(90deg, #4d8af5, #2f6fed);
         transition: width 0.25s ease;
       }
       @media (max-width: 640px) {
@@ -131,7 +130,7 @@
   <body class="ss-standalone-panel">
     <div id="ss-panel-boot">
       <div class="brand">SurfGate</div>
-      <div class="hint">loading panel…</div>
+      <div class="hint">загрузка панели…</div>
       <div id="ss-panel-boot-err" class="err" hidden></div>
     </div>
 
