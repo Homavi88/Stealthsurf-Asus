@@ -348,6 +348,8 @@ export enum SubmitActions {
   enableLogs = 'stealthsurf_configuration_logs',
   performUpdate = 'stealthsurf_update',
   addonUpdateCheck = 'stealthsurf_addonupdatecheck',
+  /** Clear shared xray-ui-response.loading (avoids stale check errors during Install). */
+  cleanLoadingProgress = 'stealthsurf_cleanloadingprogress',
   preflight = 'stealthsurf_preflight',
   speedTest = 'stealthsurf_speedtest',
   dnsTest = 'stealthsurf_dnstest',

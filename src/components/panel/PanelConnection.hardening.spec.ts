@@ -17,4 +17,8 @@ describe('VPN hardening wiring', () => {
   it('keeps performUpdate for Settings → Updates install button', () => {
     expect(SubmitActions.performUpdate).toBe('stealthsurf_update');
   });
+
+  it('exposes cleanLoadingProgress to clear stale check progress before Install', () => {
+    expect(SubmitActions.cleanLoadingProgress).toBe('stealthsurf_cleanloadingprogress');
+  });
 });

@@ -77,7 +77,18 @@
   function matchStage(message: string): StageId | 'error' | null {
     const msg = (message || '').trim();
     if (!msg) return null;
-    if (/^error:/i.test(msg) || /failed|ошибк/i.test(msg)) return 'error';
+    // Ignore leftover / concurrent GitHub *check* progress (not the install itself).
+    if (/update check/i.test(msg) || /github check/i.test(msg)) return null;
+    // Only hard install failures — bare "failed" matched check errors and aborted at Подготовка.
+    if (
+      /^error:/i.test(msg) ||
+      /finished with errors/i.test(msg) ||
+      /failed to download/i.test(msg) ||
+      /could not read the requested version/i.test(msg) ||
+      /ошибк/i.test(msg)
+    ) {
+      return 'error';
+    }
     for (let i = STAGE_DEFS.length - 1; i >= 0; i--) {
       if (STAGE_DEFS[i].match.test(msg)) return STAGE_DEFS[i].id;
     }
@@ -159,6 +170,14 @@
 
         const installIdx = STAGE_DEFS.findIndex((s) => s.id === 'install');
         try {
+          // Drop stale check/install progress so a previous GitHub check cannot
+          // flash «failed» into this modal before performUpdate starts.
+          try {
+            await engine.submit(SubmitActions.cleanLoadingProgress, null, 0);
+          } catch {
+            /* optional */
+          }
+
           await engine.executeWithLoadingProgress(
             async () => {
               await engine.submit(
