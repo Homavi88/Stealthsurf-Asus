@@ -95,7 +95,8 @@
           <span v-if="selectedProto" class="ss-mono">{{ selectedProto }}</span>
         </div>
       </div>
-      <div style="padding: 0 14px 14px">
+      <div class="ss-connect-block">
+        <div v-if="conflict" class="ss-alert ss-alert--warn" role="alert">{{ conflictHint }}</div>
         <button
           type="button"
           class="ss-primary-btn"
@@ -105,48 +106,53 @@
         >
           {{ busy ? '…' : running ? 'Отключить' : 'Подключить' }}
         </button>
-        <p v-if="conflict" class="ss-home-error">{{ conflictHint }}</p>
-        <p v-else-if="lastError" class="ss-home-error">{{ lastError }}</p>
-        <p v-else-if="!running && startFailedHint" class="ss-home-error">{{ startFailedHint }}</p>
-        <p v-else class="ss-home-card__sub" style="margin-top: 10px">{{ homeActionHint }}</p>
+        <p v-if="!conflict && lastError" class="ss-home-error">{{ lastError }}</p>
+        <p v-else-if="!conflict && !running && startFailedHint" class="ss-home-error">{{ startFailedHint }}</p>
+        <p v-else-if="!conflict" class="ss-home-card__sub ss-connect-hint">{{ homeActionHint }}</p>
       </div>
     </div>
 
     <div class="ss-card ss-card-flush">
       <div class="ss-card-head">
         <p class="ss-card-title" style="margin: 0">Серверы</p>
-        <button type="button" class="ss-icon-btn" style="width: 34px; height: 34px" title="Обновить" @click="refreshCatalog">
+        <button type="button" class="ss-icon-btn ss-refresh-btn" title="Обновить" aria-label="Обновить серверы" @click="refreshCatalog">
           ↻
         </button>
       </div>
-      <table class="ss-data-table ss-endpoints-table" aria-label="серверы">
-        <tbody>
-          <tr
-            v-for="c in locations"
-            :key="String(c.id)"
-            class="ss-row-click"
-            :class="{ 'is-active': selectedId === c.id }"
-            @click="selectEndpoint(c)"
-          >
-            <td class="ss-flag-cell">{{ flagFor(c) }}</td>
-            <td>
-              <div class="ss-cell-title">{{ c.title || `ss-${c.id}` }}</div>
-              <div class="ss-cell-sub">{{ c._ss_location_title || c.protocol || '—' }}</div>
-              <div v-if="running && isActiveRoute(c)" class="ss-cell-tag">активен</div>
-              <div v-else-if="!running && isActiveRoute(c)" class="ss-cell-tag is-muted">в конфиге</div>
-              <div v-else-if="isImported(c)" class="ss-cell-tag is-muted">импортирован</div>
-            </td>
-            <td class="ss-mono">{{ c.protocol || 'vless' }}</td>
-            <td :class="c.is_online === false ? 'is-off' : 'is-on'">
+      <ul class="ss-server-list" aria-label="серверы">
+        <li
+          v-for="c in locations"
+          :key="String(c.id)"
+          class="ss-server-item"
+          :class="{ 'is-active': selectedId === c.id }"
+          role="button"
+          tabindex="0"
+          @click="selectEndpoint(c)"
+          @keydown.enter.prevent="selectEndpoint(c)"
+        >
+          <span class="ss-server-flag" aria-hidden="true">{{ flagFor(c) }}</span>
+          <div class="ss-server-body">
+            <div class="ss-server-title">{{ c.title || `ss-${c.id}` }}</div>
+            <div class="ss-server-sub">
+              {{ c._ss_location_title || c.protocol || '—' }}
+              <span v-if="c.protocol" class="ss-server-proto">· {{ String(c.protocol).toUpperCase() }}</span>
+            </div>
+            <div v-if="running && isActiveRoute(c)" class="ss-cell-tag">активен</div>
+            <div v-else-if="!running && isActiveRoute(c)" class="ss-cell-tag is-muted">в конфиге</div>
+            <div v-else-if="isImported(c)" class="ss-cell-tag is-muted">импортирован</div>
+          </div>
+          <div class="ss-server-aside">
+            <span :class="c.is_online === false ? 'is-off' : 'is-on'">
               {{ c.is_online === false ? 'офлайн' : 'онлайн' }}
-            </td>
-            <td class="ss-num ss-mono">{{ fmtBytes(volumeFor(c)) }}</td>
-          </tr>
-          <tr v-if="!locations.length">
-            <td colspan="5" class="ss-empty">Нет конфигов — Настройки → Подписка → API-ключ и синхронизация</td>
-          </tr>
-        </tbody>
-      </table>
+            </span>
+            <span class="ss-mono ss-server-vol">{{ fmtBytes(volumeFor(c)) }}</span>
+          </div>
+          <span class="ss-server-chev" aria-hidden="true">›</span>
+        </li>
+        <li v-if="!locations.length" class="ss-server-empty">
+          Нет конфигов — Настройки → Подписка → API-ключ и синхронизация
+        </li>
+      </ul>
     </div>
 
     <panel-update-progress ref="updateProgress" />
