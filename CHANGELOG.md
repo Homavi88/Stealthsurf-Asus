@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.38] - 2026-11-20
+
+### Mobile UX
+
+- Logs / SNI: light panel cards with large touch buttons (replaces Merlin dark toolbars)
+- Home: conflict alert banner; thumb-friendly server list instead of cramped table
+- Larger Connect / Back targets on narrow viewports
+
 ## [1.4.37] - 2026-11-20
 
 ### Panel mobile settings + version
