@@ -373,6 +373,8 @@
         updateBusy.value = true;
         savePanelNav({ view: 'home' });
         try {
+          // Prefer client-detected latest (browser mirrors) — install does not need
+          // a successful router-side GitHub *check* first.
           await updateProgress.value?.run(version);
           await loadUpdateStatus();
           await checkClientUpdate();

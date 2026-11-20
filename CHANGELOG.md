@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.40] - 2026-11-20
+
+### Fix: false «Ошибка обновления» on Install
+
+- Background GitHub *check* no longer writes shared loading progress (it raced Install and showed «GitHub update check failed» at Подготовка)
+- Install modal clears stale progress and ignores check-related messages
+- Settings → Updates «Проверить» polls `addon-update-status.json` instead of loading progress
+
 ## [1.4.39] - 2026-11-20
 
 ### Safari / panel cache

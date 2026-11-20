@@ -202,10 +202,16 @@
         savePanelNav({ view: 'settings', section: 'updates' });
         try {
           await checkClient();
-          await engine.executeWithLoadingProgress(async () => {
-            await engine.submit(SubmitActions.addonUpdateCheck);
-          }, false);
-          await loadStatus();
+          const prevChecked = status.value?.checked_at || '';
+          await engine.submit(SubmitActions.addonUpdateCheck, null, 500);
+          // Check no longer writes shared loading progress (raced with Install).
+          // Poll status JSON until checked_at moves or timeout.
+          for (let i = 0; i < 45; i++) {
+            await engine.delay(1000);
+            await loadStatus();
+            const next = status.value?.checked_at || '';
+            if (next && next !== prevChecked) break;
+          }
           await checkClient();
         } finally {
           busy.value = false;

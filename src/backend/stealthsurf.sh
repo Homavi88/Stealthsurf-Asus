@@ -173,13 +173,11 @@ service_event)
         exit 0
         ;;
     addonupdatecheck | checkupdate)
-        if addon_update_check_run; then
-            initial_response
-            update_loading_progress "GitHub update check finished." 100
-        else
-            initial_response
-            update_loading_progress "GitHub update check failed — see app log." 100
-        fi
+        # Status JSON only — never touch shared loading progress. A background
+        # check finishing with "…failed…" was racing Install and showing a false
+        # «Ошибка обновления» at Подготовка (iPhone / panel :1131).
+        addon_update_check_run || true
+        initial_response
         exit 0
         ;;
     wan)
