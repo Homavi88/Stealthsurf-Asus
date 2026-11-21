@@ -141,6 +141,7 @@ export function defaultState() {
       autoSetupToggle: false,
       exitIp: "",
       exitCountry: "",
+      pausedBySchedule: false,
     },
     subscriptions: [
       { id: "main", name: "Основная", url: "", builtin: true, nodes: demoNodes() },
@@ -378,13 +379,22 @@ export function appendLog(state, level, msg) {
   if (state.logs.length > 400) state.logs.length = 400;
 }
 
-export function setPath(obj, path, value) {
+const BANNED_KEYS = new Set(["__proto__", "prototype", "constructor"]);
+
+function pathParts(path) {
   const parts = String(path).split(".").filter(Boolean);
+  if (parts.some((key) => BANNED_KEYS.has(key))) throw new Error("Недопустимый путь");
+  return parts;
+}
+
+export function setPath(obj, path, value) {
+  const parts = pathParts(path);
   if (!parts.length) throw new Error("Пустой путь");
   let cur = obj;
   for (let i = 0; i < parts.length - 1; i++) {
     const key = parts[i];
-    if (!cur[key] || typeof cur[key] !== "object") cur[key] = {};
+    const next = cur[key];
+    if (!next || typeof next !== "object") cur[key] = {};
     cur = cur[key];
   }
   cur[parts.at(-1)] = value;
@@ -407,7 +417,9 @@ const PATCH_ROOTS = new Set([
 ]);
 
 export function assertPatch(path) {
-  const root = String(path).split(".")[0];
+  const parts = pathParts(path);
+  if (parts.length < 2) throw new Error("Нужно конкретное поле");
+  const root = parts[0];
   if (!PATCH_ROOTS.has(root)) throw new Error("Это поле нельзя менять напрямую");
   if (path === "vpn.connected" || path.startsWith("account.balance")) {
     throw new Error("Это поле меняется отдельной командой");

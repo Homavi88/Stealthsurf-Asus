@@ -22,7 +22,7 @@ import {
   DATA,
 } from "./state.mjs";
 import { evaluate } from "./policy.mjs";
-import { parseShareLink, parseSubscriptionBody, parseWireGuardIni } from "./subscription.mjs";
+import { nodeIdentity, parseShareLink, parseSubscriptionBody, parseWireGuardIni } from "./subscription.mjs";
 import {
   GEO_DIR,
   coreStatus,
@@ -224,13 +224,8 @@ export function createRuntime() {
     if (!state.router.scheduleEnabled) return;
     const hour = new Date().getHours();
     const allowed = state.router.scheduleHours[hour] !== false;
-    if (!allowed && state.vpn.connected) {
-      ctx.hooks.log("info", "Расписание выключило VPN");
-      return disconnect({ reason: "расписание" });
-    }
-    if (allowed && !state.vpn.connected && state.wasConnected) {
-      return connect({ reason: "расписание" });
-    }
+    if (!allowed && state.vpn.connected) return disconnect({ scheduled: true });
+    if (allowed && !state.vpn.connected && (state.wasConnected || state.vpn.pausedBySchedule)) return connect();
   }
 
   async function healthCheck() {
@@ -275,6 +270,18 @@ export function createRuntime() {
   async function connect() {
     const { node } = findNode(state);
     if (!node) throw new Error("Конфиг не выбран");
+    const wanted = pickEngine(state.engine.preference, node.protocol);
+    if (node.protocol !== "direct" && !node.alpha && !engineSupports(wanted, node.protocol)) {
+      await stopEngine();
+      await stopEdge();
+      live.tunnel = "off";
+      state.vpn.connected = false;
+      state.vpn.directMode = false;
+      live.engineMessage = `${ENGINES[wanted].title} не умеет протокол ${node.protocol}`;
+      saveState(state, true);
+      broadcast({ type: "snapshot", state: snapshot() });
+      throw new Error(live.engineMessage);
+    }
     await stopEdge();
     state.vpn.directMode = node.protocol === "direct";
     state.vpn.selectedId = node.id;
@@ -319,6 +326,7 @@ export function createRuntime() {
     });
     state.vpn.connected = node.protocol !== "direct";
     state.vpn.directMode = node.protocol === "direct";
+    state.vpn.pausedBySchedule = false;
     state.vpn.since = Date.now();
     state.wasConnected = node.protocol !== "direct";
     live.session = emptyBytes();
@@ -330,7 +338,7 @@ export function createRuntime() {
     return { ok: true, tunnel: live.tunnel, engine: engineId, message: live.engineMessage };
   }
 
-  async function disconnect({ silent = false } = {}) {
+  async function disconnect({ silent = false, scheduled = false } = {}) {
     await stopEngine();
     await stopEdge();
     live.tunnel = "off";
@@ -338,8 +346,12 @@ export function createRuntime() {
     state.vpn.connected = false;
     state.vpn.directMode = false;
     state.vpn.since = null;
-    if (!silent) {
+    if (scheduled) {
+      state.vpn.pausedBySchedule = true;
+      ctx.hooks.log("info", "Расписание выключило VPN");
+    } else if (!silent) {
       state.wasConnected = false;
+      state.vpn.pausedBySchedule = false;
       ctx.hooks.log("info", "VPN отключён");
     }
     saveState(state, true);
@@ -694,6 +706,16 @@ export function createRuntime() {
     if (!response.ok) throw new Error(`Подписка ответила ${response.status}`);
     const nodes = parseSubscriptionBody(await response.text());
     if (!nodes.length) throw new Error("В подписке не нашлось конфигов");
+    const previous = new Map((sub.nodes || []).filter((item) => item.protocol !== "direct").map((item) => [nodeIdentity(item), item.id]));
+    for (const node of nodes) {
+      const prev = previous.get(nodeIdentity(node));
+      if (prev) node.id = prev;
+    }
+    const alive = new Set(nodes.map((node) => node.id));
+    if (state.vpn.selectedId && !alive.has(state.vpn.selectedId) && state.vpn.selectedId !== "direct") {
+      const same = nodes.find((node) => node.id === state.vpn.selectedId);
+      if (!same) ctx.hooks.log("info", "Выбранный конфиг пропал из подписки");
+    }
     sub.nodes = [...nodes, directNode()];
     sub.updatedAt = Date.now();
     ctx.hooks.log("info", `Подписка «${sub.name}»: ${nodes.length} конфигов`);

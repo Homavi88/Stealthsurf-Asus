@@ -3,27 +3,46 @@ import { evaluate } from "./policy.mjs";
 import { ENGINE_PORT, engineRunning } from "./engines.mjs";
 import { isIpv4 } from "./catalog.mjs";
 
-function findPort(host, port) {
+function listen(server, port, host) {
   return new Promise((resolve, reject) => {
-    const server = net.createServer();
-    server.once("error", () => {
-      if (port > 21000) reject(new Error("нет свободного порта прокси"));
-      else resolve(findPort(host, port + 1));
-    });
-    server.listen(port, host, () => {
-      server.close(() => resolve(port));
-    });
+    const onError = (error) => {
+      server.off("listening", onListening);
+      reject(error);
+    };
+    const onListening = () => {
+      server.off("error", onError);
+      resolve(port);
+    };
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, host);
   });
+}
+
+async function listenFree(server, host, port, avoid = new Set()) {
+  for (let candidate = port; candidate <= port + 40; candidate += 1) {
+    if (avoid.has(candidate)) continue;
+    try {
+      return await listen(server, candidate, host);
+    } catch (error) {
+      if (error.code !== "EADDRINUSE") throw error;
+    }
+  }
+  throw new Error("нет свободного порта прокси");
 }
 
 export async function startEdge(ctx) {
   const host = ctx.state.connection.shareLan ? "0.0.0.0" : "127.0.0.1";
-  const socksPort = await findPort(host, Number(ctx.state.engine.socksPort || 20808));
-  const httpPort = await findPort(host, Number(ctx.state.engine.httpPort || 20809));
   const socks = net.createServer((socket) => handleSocks(socket, ctx));
   const http = net.createServer((socket) => handleHttp(socket, ctx));
-  await listen(socks, socksPort, host);
-  await listen(http, httpPort, host);
+  const socksPort = await listenFree(socks, host, Number(ctx.state.engine.socksPort || 20808));
+  let httpPort;
+  try {
+    httpPort = await listenFree(http, host, Number(ctx.state.engine.httpPort || 20809), new Set([socksPort]));
+  } catch (error) {
+    socks.close();
+    throw error;
+  }
   socks.on("error", (error) => ctx.hooks.log("error", `SOCKS: ${error.message}`));
   http.on("error", (error) => ctx.hooks.log("error", `HTTP-прокси: ${error.message}`));
   return {
@@ -41,14 +60,13 @@ export async function startEdge(ctx) {
   };
 }
 
-function listen(server, port, host) {
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, () => resolve());
-  });
+function arm(socket) {
+  socket.on("error", () => socket.destroy());
+  return socket;
 }
 
 function handleSocks(socket, ctx) {
+  arm(socket);
   socket.once("data", (hello) => {
     if (hello[0] !== 5) { socket.destroy(); return; }
     socket.write(Buffer.from([5, 0]));
@@ -132,6 +150,7 @@ function reply(socket, code) {
 }
 
 function handleHttp(socket, ctx) {
+  arm(socket);
   let buffer = Buffer.alloc(0);
   const onData = (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -168,29 +187,35 @@ function handleHttp(socket, ctx) {
         socket.end(`HTTP/1.1 403 ${decision.reason}\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n${decision.reason}`);
         return;
       }
+      const length = Number(/content-length:\s*(\d+)/i.exec(head)?.[1] || 0);
+      const body = rest.subarray(0, length);
       upstream.write(`${method} ${url.pathname}${url.search} HTTP/1.1\r\n${headers}\r\n\r\n`);
-      if (rest.length) upstream.write(rest);
-      pump(socket, upstream, ctx, decision);
+      if (body.length) upstream.write(body);
+      pumpDown(socket, upstream, ctx, decision);
     });
   };
   socket.on("data", onData);
 }
 
 function rewriteHeaders(head, url) {
-  const lines = head.split("\r\n").slice(1).filter((line) => !/^proxy-connection:/i.test(line));
+  const lines = head.split("\r\n").slice(1).filter((line) => !/^proxy-connection:/i.test(line) && !/^connection:/i.test(line));
   let hasHost = false;
   const next = lines.map((line) => {
     if (/^host:/i.test(line)) { hasHost = true; return `Host: ${url.host}`; }
     return line;
   });
   if (!hasHost) next.unshift(`Host: ${url.host}`);
+  next.push("Connection: close");
   return next.join("\r\n");
 }
 
+export function dialTarget(ctx, host) {
+  return ctx.live?.fakeToHost?.get(host) || host;
+}
+
 function decide(ctx, req) {
-  const mapped = ctx.live.fakeToHost?.get(req.host);
-  const host = mapped || req.host;
-  return evaluate(ctx.state, { ...req, host });
+  const host = dialTarget(ctx, req.host);
+  return { ...evaluate(ctx.state, { ...req, host }), dialHost: host };
 }
 
 function openPath(ctx, socket, req, done) {
@@ -200,15 +225,16 @@ function openPath(ctx, socket, req, done) {
     done(null, { action: "block", reason: error.message });
     return;
   }
-  ctx.hooks.flow?.({ ...decision, host: req.host, port: req.port, network: req.network, clientIp: req.clientIp });
+  const host = decision.dialHost || dialTarget(ctx, req.host);
+  ctx.hooks.flow?.({ ...decision, host, port: req.port, network: req.network, clientIp: req.clientIp });
   if (decision.action === "block") {
     done(null, decision);
     return;
   }
   const viaEngine = decision.action === "proxy" && ctx.live.tunnel === "engine" && engineRunning();
   const connector = viaEngine
-    ? chainSocks(req.host, req.port)
-    : directConnect(req.host, req.port);
+    ? chainSocks(host, req.port)
+    : directConnect(host, req.port);
   connector.then((upstream) => {
     upstream.on("error", () => socket.destroy());
     done(upstream, { ...decision, viaEngine });
@@ -285,6 +311,21 @@ function socksRequest(host, port) {
   const p = Buffer.alloc(2);
   p.writeUInt16BE(port);
   return Buffer.concat([Buffer.from([5, 1, 0]), addr, p]);
+}
+
+function pumpDown(client, upstream, ctx, decision) {
+  const lane = decision.action === "proxy" ? "vpn" : "direct";
+  upstream.on("data", (chunk) => {
+    ctx.hooks.bytes?.(lane, "down", chunk.length, decision);
+    if (!client.write(chunk)) upstream.pause();
+  });
+  client.on("drain", () => upstream.resume());
+  client.on("data", () => {});
+  const close = () => { client.destroy(); upstream.destroy(); };
+  client.on("close", () => upstream.destroy());
+  upstream.on("close", () => client.end());
+  client.on("error", close);
+  upstream.on("error", close);
 }
 
 function pump(client, upstream, ctx, decision) {

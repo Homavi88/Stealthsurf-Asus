@@ -157,7 +157,7 @@ function xrayOutbound(node, state) {
       settings: { servers: [{ address: node.host, port: Number(node.port) }] },
     };
   }
-  return { tag: "proxy", protocol: "freedom", settings: {} };
+  return { tag: "proxy", protocol: "blackhole", settings: {} };
 }
 
 function warpOutbound(state) {
@@ -242,30 +242,36 @@ export function buildXray(state, node, { tunnelOnly = false } = {}) {
   return config;
 }
 
-function singOutbound(node, state) {
-  if (!node || node.alpha || node.protocol === "direct") return { type: "direct", tag: "proxy" };
+function singPlan(node) {
+  if (!node || node.alpha || node.protocol === "direct") return { outbound: { type: "direct", tag: "proxy" } };
   const base = { tag: "proxy", server: node.host, server_port: Number(node.port) };
   if (node.protocol === "vless") {
-    return { ...base, type: "vless", uuid: node.uuid || "", flow: node.flow || undefined, tls: tlsBlock(node), transport: transportBlock(node) };
+    return { outbound: { ...base, type: "vless", uuid: node.uuid || "", flow: node.flow || undefined, tls: tlsBlock(node), transport: transportBlock(node) } };
   }
-  if (node.protocol === "trojan") return { ...base, type: "trojan", password: node.password || "", tls: tlsBlock(node) };
-  if (node.protocol === "vmess") return { ...base, type: "vmess", uuid: node.uuid || "", security: "auto", alter_id: node.alterId || 0, tls: tlsBlock(node), transport: transportBlock(node) };
-  if (node.protocol === "shadowsocks") return { ...base, type: "shadowsocks", method: node.method || "aes-128-gcm", password: node.password || "" };
-  if (node.protocol === "hysteria2") return { ...base, type: "hysteria2", password: node.password || "", tls: { enabled: true, server_name: node.sni || node.host, insecure: Boolean(node.insecure) } };
-  if (node.protocol === "tuic") return { ...base, type: "tuic", uuid: node.uuid || "", password: node.password || "", congestion_control: node.congestion || "bbr", tls: { enabled: true, server_name: node.sni || node.host } };
-  if (node.protocol === "wireguard" || node.protocol === "amneziawg") {
+  if (node.protocol === "trojan") return { outbound: { ...base, type: "trojan", password: node.password || "", tls: tlsBlock(node) } };
+  if (node.protocol === "vmess") return { outbound: { ...base, type: "vmess", uuid: node.uuid || "", security: "auto", alter_id: node.alterId || 0, tls: tlsBlock(node), transport: transportBlock(node) } };
+  if (node.protocol === "shadowsocks") return { outbound: { ...base, type: "shadowsocks", method: node.method || "aes-128-gcm", password: node.password || "" } };
+  if (node.protocol === "hysteria2") return { outbound: { ...base, type: "hysteria2", password: node.password || "", tls: { enabled: true, server_name: node.sni || node.host, insecure: Boolean(node.insecure) } } };
+  if (node.protocol === "tuic") return { outbound: { ...base, type: "tuic", uuid: node.uuid || "", password: node.password || "", congestion_control: node.congestion || "bbr", tls: { enabled: true, server_name: node.sni || node.host } } };
+  if (node.protocol === "wireguard") {
     return {
-      type: "wireguard",
-      tag: "proxy",
-      server: node.host,
-      server_port: Number(node.port),
-      private_key: node.privateKey || "",
-      peer_public_key: node.peerKey || "",
-      local_address: [node.address || "10.0.0.2/32"],
-      mtu: node.mtu || 1280,
+      endpoint: {
+        type: "wireguard",
+        tag: "proxy",
+        system: false,
+        mtu: node.mtu || 1280,
+        address: [node.address || "10.0.0.2/32"],
+        private_key: node.privateKey || "",
+        peers: [{
+          address: node.host,
+          port: Number(node.port),
+          public_key: node.peerKey || "",
+          allowed_ips: ["0.0.0.0/0", "::/0"],
+        }],
+      },
     };
   }
-  return { type: "direct", tag: "proxy" };
+  return { reject: true };
 }
 
 function tlsBlock(node) {
@@ -288,9 +294,10 @@ function transportBlock(node) {
 }
 
 function singRule(rule) {
-  const outbound = xrayAction(rule.action);
   const match = rule.match || {};
-  const out = { outbound };
+  const out = rule.action === "block"
+    ? { action: "reject" }
+    : { action: "route", outbound: xrayAction(rule.action) };
   if (match.suffixes?.length) out.domain_suffix = match.suffixes;
   if (match.ru) out.domain_suffix = ["ru", "su", "xn--p1ai"];
   if (match.cidrs?.length) out.ip_cidr = match.cidrs;
@@ -305,13 +312,17 @@ function singRule(rule) {
 export function buildSingBox(state, node, { tunnelOnly = false } = {}) {
   const listen = state.connection.shareLan ? "0.0.0.0" : "127.0.0.1";
   const port = tunnelOnly ? ENGINE_PORT : Number(state.engine.socksPort || 20808);
-  const rules = tunnelOnly ? [] : ruleList(state).map(singRule).filter(Boolean);
+  const plan = singPlan(node);
+  const rules = tunnelOnly || plan.reject ? [] : ruleList(state).map(singRule).filter(Boolean);
+  if (plan.reject) rules.push({ action: "reject" });
   const dns = dnsServers(state);
   const dnsServersList = [{ type: "udp", tag: "remote", server: dns.primary[0] }];
   if (state.engine.fakeIp && !tunnelOnly) {
     dnsServersList.unshift({ type: "fakeip", tag: "fakeip", inet4_range: "198.18.0.0/15" });
   }
-  return {
+  const outbounds = [{ type: "direct", tag: "direct" }];
+  if (plan.outbound) outbounds.unshift(plan.outbound);
+  const config = {
     log: { level: state.diagnostics.logLevel === "debug" ? "debug" : "warn" },
     dns: {
       servers: dnsServersList,
@@ -319,9 +330,11 @@ export function buildSingBox(state, node, { tunnelOnly = false } = {}) {
       final: "remote",
     },
     inbounds: [{ type: tunnelOnly ? "socks" : "mixed", tag: "in", listen, listen_port: port }],
-    outbounds: [singOutbound(node, state), { type: "direct", tag: "direct" }, { type: "block", tag: "block" }],
-    route: { rules, final: tunnelOnly ? "proxy" : "proxy", auto_detect_interface: true },
+    outbounds,
+    route: { rules, final: plan.endpoint || plan.outbound ? "proxy" : "direct", auto_detect_interface: true },
   };
+  if (plan.endpoint) config.endpoints = [plan.endpoint];
+  return config;
 }
 
 function yamlQuote(value) {
@@ -377,7 +390,7 @@ export function buildMihomo(state, node, { tunnelOnly = false } = {}) {
     `allow-lan: ${state.connection.shareLan ? "true" : "false"}`,
     `mode: rule`,
     `ipv6: ${state.connection.ipv4Only || state.router.ipv6 === "block" ? "false" : "true"}`,
-    `bind-address: ${state.connection.shareLan ? "*" : "127.0.0.1"}`,
+    `bind-address: ${state.connection.shareLan ? "'*'" : "127.0.0.1"}`,
     state.engine.fakeIp && !tunnelOnly ? "fake-ip-range: 198.18.0.0/15" : "",
     "dns:",
     `  enable: true`,
@@ -458,7 +471,7 @@ export async function stopEngine() {
   const child = engineChild;
   engineChild = null;
   if (!child || child.exitCode !== null) return;
-  child.kill("SIGTERM");
+  try { child.kill("SIGTERM"); } catch { return; }
   await new Promise((resolve) => {
     const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 1500);
     child.once("exit", () => { clearTimeout(timer); resolve(); });
@@ -486,6 +499,10 @@ export function startEngine(id, configPath, onLog) {
   };
   child.stdout.on("data", take);
   child.stderr.on("data", take);
+  child.on("error", (error) => {
+    if (engineChild === child) engineChild = null;
+    onLog?.(`ядро ${id} не запустилось: ${error.message}`);
+  });
   child.on("exit", (code) => {
     if (engineChild === child) engineChild = null;
     onLog?.(`ядро ${id} завершилось с кодом ${code}`);
@@ -536,6 +553,10 @@ function runCapture(bin, args, timeoutMs = 5000) {
     }, timeoutMs);
     child.stdout.on("data", (b) => { output += b.toString("utf8"); });
     child.stderr.on("data", (b) => { output += b.toString("utf8"); });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      resolve({ code: -1, output: error.message });
+    });
     child.on("exit", (code) => {
       clearTimeout(timer);
       resolve({ code: code ?? -1, output });

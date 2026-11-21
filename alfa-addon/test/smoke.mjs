@@ -1,10 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { evaluate } from "../lib/policy.mjs";
-import { defaultState } from "../lib/state.mjs";
-import { writeConfigs, buildXray, buildSingBox, buildMihomo } from "../lib/engines.mjs";
+import { assertPatch, defaultState, setPath } from "../lib/state.mjs";
+import { buildMihomo, buildSingBox, buildXray, corePath, writeConfigs } from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
+import { dialTarget, startEdge } from "../lib/proxy.mjs";
 
 test("policy sends telegram direct, ads blocked, exceptions direct", () => {
   const state = defaultState();
@@ -42,6 +48,62 @@ test("subscription links and all four engine configs build", () => {
   assert.equal(written.choice.id, "sing-box");
   const mihomo = writeConfigs({ ...state, engine: { ...state.engine, preference: "auto" } }, { ...node, protocol: "amneziawg", privateKey: "a", peerKey: "b", host: "1.2.3.4", port: 51820 });
   assert.equal(mihomo.choice.id, "mihomo");
+  const again = parseShareLink("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=tls&type=ws&path=%2Fv#NL");
+  assert.equal(again.id, node.id);
+  const foreign = { ...node, protocol: "hysteria2", alpha: false };
+  assert.equal(buildXray(state, foreign).outbounds[0].protocol, "blackhole");
+  const wg = buildSingBox(state, { ...node, protocol: "wireguard", privateKey: "a", peerKey: "b", host: "1.2.3.4", port: 51820 });
+  assert.equal(wg.endpoints[0].type, "wireguard");
+  assert.equal(wg.outbounds.some((item) => item.type === "block"), false);
+  assert.equal(buildSingBox(state, node).outbounds.some((item) => item.type === "block"), false);
+  const shared = buildMihomo({ ...state, connection: { ...state.connection, shareLan: true } }, node);
+  assert.match(shared, /bind-address: '\*'/);
+  assert.throws(() => assertPatch("vpn"), /конкретное поле/);
+  assert.throws(() => setPath({}, "router.__proto__.polluted", 1), /Недопустимый путь/);
+  const ctx = { live: { fakeToHost: new Map([["198.18.0.8", "example.com"]]) } };
+  assert.equal(dialTarget(ctx, "198.18.0.8"), "example.com");
+});
+
+test("edge keeps socks and http on different ports", async () => {
+  const hold = net.createServer();
+  await new Promise((resolve) => hold.listen(20808, "127.0.0.1", resolve));
+  const state = defaultState();
+  state.engine.socksPort = 20808;
+  state.engine.httpPort = 20809;
+  const edge = await startEdge({ state, live: { tunnel: "off", fakeToHost: new Map() }, hooks: {} });
+  try {
+    assert.notEqual(edge.socksPort, edge.httpPort);
+    assert.notEqual(edge.socksPort, 20808);
+  } finally {
+    edge.stop();
+    await new Promise((resolve) => hold.close(resolve));
+  }
+});
+
+test("installed cores accept the 1.14 configs", () => {
+  const state = defaultState();
+  state.vpn.connected = true;
+  const node = parseShareLink("vless://11111111-1111-1111-1111-111111111111@example.com:443?security=tls&type=ws#NL");
+  const dir = mkdtempSync(join(tmpdir(), "alfa-"));
+  const singBin = corePath("sing-box");
+  if (singBin && existsSync(singBin)) {
+    const file = join(dir, "sing.json");
+    const wg = buildSingBox(state, { ...node, protocol: "wireguard", privateKey: "YIZq1Z3aW0f2m5q0n1p2r3s4t5u6v7w8x9y0z1A2B3C=", peerKey: "YIZq1Z3aW0f2m5q0n1p2r3s4t5u6v7w8x9y0z1A2B3D=", host: "1.2.3.4", port: 51820 });
+    writeFileSync(file, JSON.stringify(wg));
+    const checked = spawnSync(singBin, ["check", "-c", file], { encoding: "utf8" });
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+    const plain = join(dir, "sing-vless.json");
+    writeFileSync(plain, JSON.stringify(buildSingBox(state, node)));
+    const plainCheck = spawnSync(singBin, ["check", "-c", plain], { encoding: "utf8" });
+    assert.equal(plainCheck.status, 0, plainCheck.stderr || plainCheck.stdout);
+  }
+  const mihomoBin = corePath("mihomo");
+  if (mihomoBin && existsSync(mihomoBin)) {
+    const file = join(dir, "mihomo.yaml");
+    writeFileSync(file, buildMihomo({ ...state, connection: { ...state.connection, shareLan: true } }, node));
+    const checked = spawnSync(mihomoBin, ["-t", "-f", file], { encoding: "utf8" });
+    assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  }
 });
 
 test("panel login, connect, proxy and explain", async () => {

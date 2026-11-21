@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 
 function safeName(value, fallback) {
   const text = decodeURIComponentSafe(value || "").trim();
@@ -20,15 +20,20 @@ function parseQuery(search) {
   return out;
 }
 
+export function nodeIdentity(node) {
+  return [node.protocol || "", node.host || "", node.port || "", node.name || ""].join("|");
+}
+
 function nodeBase(partial) {
+  const id = createHash("sha1").update(nodeIdentity(partial)).digest("hex").slice(0, 12);
   return {
-    id: randomUUID().slice(0, 8),
     country: "",
     flag: "",
     until: "",
     online: true,
     alpha: false,
     ...partial,
+    id: partial.id || id,
   };
 }
 
@@ -239,8 +244,7 @@ export function parseWireGuardIni(text) {
   if (!host || !get("Peer", "PublicKey") || !get("Interface", "PrivateKey")) {
     throw new Error("В профиле нужны PrivateKey, PublicKey и Endpoint");
   }
-  return {
-    id: randomUUID().slice(0, 8),
+  return nodeBase({
     name: "WARP",
     protocol: "wireguard",
     host,
@@ -250,5 +254,5 @@ export function parseWireGuardIni(text) {
     address: get("Interface", "Address") || "172.16.0.2/32",
     mtu: Number(get("Interface", "MTU") || 1280),
     reserved: "",
-  };
+  });
 }
