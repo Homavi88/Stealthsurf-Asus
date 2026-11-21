@@ -66,10 +66,10 @@ ss_official_process_running() {
         case "$cmd" in
         *stealthsurf-routerd*) return 0 ;;
         esac
-        # Some builds launch via a short name / symlink basename only.
+        # TASK_COMM_LEN is 15 on Linux — "stealthsurf-routerd" truncates to "stealthsurf-rou".
         if [ -r "$p/comm" ]; then
             case "$(cat "$p/comm" 2>/dev/null)" in
-            stealthsurf-routerd | stealthsurf-route) return 0 ;;
+            stealthsurf-rou) return 0 ;;
             esac
         fi
     done
@@ -82,12 +82,22 @@ ss_official_process_running() {
 }
 
 # Official panel listens on :8800 — strong secondary signal when process name is odd.
+# Only TCP_LISTEN (0A). TIME_WAIT/FIN_WAIT after stop must NOT count as running.
 ss_official_port_listening() {
-    local p
-    # /proc/net/tcp: port 8800 = 0x2260
+    # /proc/net/tcp: local port 8800 = 0x2260, state 0A = LISTEN
     if [ -r /proc/net/tcp ]; then
-        awk 'NR>1 { split($2,a,":"); if (toupper(a[2])=="2260") found=1 }
+        awk 'NR>1 {
+               split($2,a,":")
+               if (toupper(a[2])=="2260" && toupper($4)=="0A") { found=1; exit }
+             }
              END { exit(found?0:1) }' /proc/net/tcp 2>/dev/null && return 0
+    fi
+    if [ -r /proc/net/tcp6 ]; then
+        awk 'NR>1 {
+               split($2,a,":")
+               if (toupper(a[2])=="2260" && toupper($4)=="0A") { found=1; exit }
+             }
+             END { exit(found?0:1) }' /proc/net/tcp6 2>/dev/null && return 0
     fi
     if command -v netstat >/dev/null 2>&1; then
         netstat -lnt 2>/dev/null | grep -qE '[:.]8800[[:space:]]' && return 0
@@ -95,7 +105,6 @@ ss_official_port_listening() {
     if command -v ss >/dev/null 2>&1; then
         ss -lnt 2>/dev/null | grep -qE '[:.]8800[[:space:]]' && return 0
     fi
-    # Last resort: anything holding 8800 in /proc (cheap fd scan is too heavy — skip).
     return 1
 }
 
@@ -187,22 +196,24 @@ ss_official_reap_orphan() {
 # Force-stop official routerd (files may still exist). Used by CLI / panel clear button.
 ss_official_force_stop() {
     ss_official_cache_invalidate
-    if ! ss_official_process_running && ! ss_official_firewall_active && ! ss_official_port_listening; then
+    if ! ss_official_live_signal && ! ss_official_firewall_active; then
         if type log_ok >/dev/null 2>&1; then
             log_ok "Official StealthSurf is not running"
         fi
         return 0
     fi
     ss_official_kill_process || true
-    # Force path: user asked to clear — scrub chains even if package remains.
-    ss_official_cleanup_orphan_firewall force
     ss_official_cache_invalidate
-    if ss_official_process_running; then
+    # Still live (process or :8800 LISTEN) — do not scrub firewall or claim success.
+    if ss_official_live_signal; then
         if type log_error >/dev/null 2>&1; then
-            log_error "Could not stop stealthsurf-routerd — check: ps w | grep stealthsurf-routerd"
+            log_error "Could not stop official StealthSurf (process or :8800 still up) — check: ps w | grep stealthsurf-routerd; netstat -lnt | grep 8800"
         fi
         return 1
     fi
+    # Force path: user asked to clear — scrub chains even if package remains.
+    ss_official_cleanup_orphan_firewall force
+    ss_official_cache_invalidate
     if type log_ok >/dev/null 2>&1; then
         log_ok "Official stealthsurf-routerd stopped; SurfGate can start"
     fi
@@ -225,7 +236,8 @@ ss_official_firewall_active() {
 ss_official_cleanup_orphan_firewall() {
     local ipt tbl ref ch line guard mode="${1:-}"
 
-    ss_official_process_running && return 0
+    # Never flush while process or :8800 LISTEN is still up.
+    ss_official_live_signal && return 0
     ss_official_firewall_active || return 0
     command -v iptables >/dev/null 2>&1 || return 0
 

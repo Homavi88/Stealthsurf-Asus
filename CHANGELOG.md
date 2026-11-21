@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.45] - 2026-11-21
+
+### Fix: official detect follow-up (Bugbot)
+
+- `:8800` check requires **TCP_LISTEN** only (ignore TIME_WAIT after stop)
+- `/proc/comm` match uses truncated `stealthsurf-rou` (15-char Linux limit)
+- `clear-official` / force-stop fails if `:8800` still listens — does not flush firewall or claim success
+
+
 ## [1.4.44] - 2026-11-21
 
 ### Fix: official StealthSurf detection / no more accidental cleanup
