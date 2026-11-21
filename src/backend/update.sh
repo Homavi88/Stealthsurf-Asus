@@ -64,6 +64,7 @@ addon_update_status_write() {
 # Stale stealthsurf_version (e.g. after install when the UI preferred the cache) kept
 # showing «update available» even after a successful upgrade + page reload.
 sync_stealthsurf_version_setting() {
+    # Never call from panel bootstrap CGI — keep that path read-only / stdout-clean.
     local want="${1:-$XRAYUI_VERSION}"
     want=${want#v}
     [ -n "$want" ] || return 0
@@ -73,6 +74,7 @@ sync_stealthsurf_version_setting() {
     if [ "$have" != "$want" ]; then
         am_settings_set stealthsurf_version "$want" 2>/dev/null || true
     fi
+    return 0
 }
 
 # Query GitHub releases/latest for Homavi88/Stealthsurf-Asus; optionally auto-install.
@@ -264,8 +266,14 @@ update() {
         [ "$specific_version" != "latest" ] && installed_ver="$specific_version"
     fi
     [ -n "$installed_ver" ] || installed_ver="$XRAYUI_VERSION"
-    sync_stealthsurf_version_setting "$installed_ver"
-    addon_update_status_write "$installed_ver" "$installed_ver" false "Updated to v$installed_ver"
+    sync_stealthsurf_version_setting "$installed_ver" >/dev/null 2>&1 || true
+    addon_update_status_write "$installed_ver" "$installed_ver" false "Updated to v$installed_ver" >/dev/null 2>&1 || true
+
+    # Insurance: install already restarts panel, but a mid-upgrade httpd race left
+    # some routers with :1131 down after 1.4.46 — force one more clean start.
+    if type panel_restart >/dev/null 2>&1; then
+        panel_restart >/dev/null 2>&1 || panel_start >/dev/null 2>&1 || true
+    fi
 
     log_ok "Update process completed!"
 }
