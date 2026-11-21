@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	version     = "1.4.40"
+	version     = "1.4.41"
 	defaultPATH = "/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
 )
 

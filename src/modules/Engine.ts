@@ -340,6 +340,8 @@ export enum SubmitActions {
   serverStart = 'stealthsurf_serverstatus_start',
   serverRestart = 'stealthsurf_serverstatus_restart',
   serverStop = 'stealthsurf_serverstatus_stop',
+  /** Stop leftover official stealthsurf-routerd (files deleted or force-clear). */
+  officialClear = 'stealthsurf_official_clear',
   serverTestConfig = 'stealthsurf_testconfig',
   regenerateRealityKeys = 'stealthsurf_regenerate_realitykeys',
   regenerateWireguardKeys = 'stealthsurf_regenerate_wgkeys',

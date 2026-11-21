@@ -871,6 +871,20 @@ fixme() {
 
     cleanup_stale_asdfiles
 
+    # Leftover stealthsurf-routerd after deleting official package blocks SurfGate start.
+    if type ss_official_reap_orphan >/dev/null 2>&1; then
+        if ss_official_process_running 2>/dev/null; then
+            if ss_official_daemon_on_disk 2>/dev/null; then
+                log_warn "Official stealthsurf-routerd is running. Stop it with: surfgate clear-official"
+            else
+                log_info "Reaping orphan stealthsurf-routerd (official files already deleted)..."
+                ss_official_reap_orphan 2>/dev/null || true
+            fi
+        else
+            ss_official_cleanup_orphan_firewall 2>/dev/null || true
+        fi
+    fi
+
     log_ok "Done with fixme function."
 }
 

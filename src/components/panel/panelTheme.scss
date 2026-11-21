@@ -1638,6 +1638,27 @@
   font-weight: 600;
 }
 
+.ss-alert .ss-conflict-clear,
+.ss-secondary-btn.ss-conflict-clear {
+  display: block;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(210, 150, 20, 0.45);
+  background: rgba(255, 255, 255, 0.72);
+  color: #7a5200;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ss-alert .ss-conflict-clear:disabled,
+.ss-secondary-btn.ss-conflict-clear:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .ss-conn-footer,
 .ss-apply-wrap {
   margin-top: 16px;

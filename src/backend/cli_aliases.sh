@@ -67,6 +67,7 @@ $ADDON_TITLE $XRAYUI_VERSION — CLI
   bak …          backup         d|dg           diagnostics
   upd [ver]      update         uf             update latest
   v|ver          version        fix|doctor     fixme
+  co|clear-official  stop leftover stealthsurf-routerd (после удаления official)
   un --yes       uninstall
   dv|devices     VPN device log (IP / MAC / name)
   pf|preflight   NTP/WAN/TPROXY/Xray checks
@@ -404,6 +405,10 @@ ss_cli_dispatch() {
     fix | doctor | fixme | heal | repair)
         fixme
         ss_cli_ensure_bin_links
+        return $?
+        ;;
+    co | clear-official | stop-official | kill-official)
+        ss_official_force_stop
         return $?
         ;;
     un)

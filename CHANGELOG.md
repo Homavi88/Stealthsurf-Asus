@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.41] - 2026-11-21
+
+### Fix: official StealthSurf leftover after uninstall
+
+- Deleting official files no longer leaves SurfGate blocked when `stealthsurf-routerd` is still in RAM — orphan process is reaped automatically
+- New CLI: `surfgate clear-official` (alias `co`) force-stops leftover routerd + cleans `STEALTHSURF_*` firewall
+- Home conflict banner: button «Остановить leftover StealthSurf» + clearer hint (`surfgate clear-official`)
+- `surfgate fix` also reaps orphans / points to `clear-official` when the package is still installed
+
 ## [1.4.40] - 2026-11-20
 
 ### Fix: false «Ошибка обновления» on Install

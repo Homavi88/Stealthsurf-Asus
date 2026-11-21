@@ -46,7 +46,7 @@
       "xrayui_conflict_message": "XrayUI 正在运行。请先停止 XrayUI（VPN → XrayUI → Stop），再启动 SurfGate。两个插件不能同时启用透明代理，否则会破坏局域网上网。",
       "official_conflict_title": "与官方 StealthSurf 冲突",
       "official_conflict_pill": "StealthSurf 冲突",
-      "official_conflict_message": "官方 StealthSurf（stealthsurf-routerd）正在运行。请先在 StealthSurf 应用中停止 VPN，再启动 SurfGate。两者不能同时启用透明代理，否则会破坏局域网上网。"
+      "official_conflict_message": "官方 StealthSurf（stealthsurf-routerd）仍在运行——文件可能已删除但进程仍在。请在面板中停止，或 SSH 执行：surfgate clear-official。两者不能同时启用透明代理，否则会破坏局域网上网。"
     },
     "ServerStatus": {
       "configuration": "配置",

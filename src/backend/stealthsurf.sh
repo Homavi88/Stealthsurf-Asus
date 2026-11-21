@@ -152,6 +152,24 @@ service_event)
     cleanloadingprogress)
         remove_loading_progress
         ;;
+    official)
+        case "$3" in
+        clear | stop | kill)
+            update_loading_progress "Stopping leftover official StealthSurf..." 0
+            if ss_official_force_stop; then
+                initial_response
+                update_loading_progress "Official stealthsurf-routerd stopped. Можно подключать SurfGate." 100
+            else
+                initial_response
+                update_loading_progress "Error: не удалось остановить stealthsurf-routerd. По SSH: surfgate clear-official" 100
+            fi
+            ;;
+        *)
+            exit 1
+            ;;
+        esac
+        exit 0
+        ;;
     testconfig)
         test_xray_config true
         ;;

@@ -110,7 +110,18 @@
         </div>
       </div>
       <div class="ss-connect-block">
-        <div v-if="conflict" class="ss-alert ss-alert--warn" role="alert">{{ conflictHint }}</div>
+        <div v-if="conflict" class="ss-alert ss-alert--warn" role="alert">
+          <div>{{ conflictHint }}</div>
+          <button
+            v-if="officialConflict"
+            type="button"
+            class="ss-secondary-btn ss-conflict-clear"
+            :disabled="busy"
+            @click="clearOfficial"
+          >
+            {{ busy ? '…' : 'Остановить leftover StealthSurf' }}
+          </button>
+        </div>
         <button
           type="button"
           class="ss-primary-btn"
@@ -120,7 +131,7 @@
         >
           {{ busy ? '…' : running ? 'Отключить' : 'Подключить' }}
         </button>
-        <p v-if="!conflict && lastError" class="ss-home-error">{{ lastError }}</p>
+        <p v-if="lastError" class="ss-home-error">{{ lastError }}</p>
         <p v-else-if="!conflict && !running && startFailedHint" class="ss-home-error">{{ startFailedHint }}</p>
         <p v-else-if="!conflict" class="ss-home-card__sub ss-connect-hint">{{ homeActionHint }}</p>
       </div>
@@ -251,19 +262,23 @@
         return Boolean(window.xray?.server?.isRunning);
       });
 
-      const conflict = computed(
+      const officialConflict = computed(
         () =>
           live.value.official === true ||
-          uiResponse.value?.conflict === 'xrayui' ||
           uiResponse.value?.conflict === 'official' ||
-          uiResponse.value?.xrayui?.running === true ||
-          uiResponse.value?.xray?.xrayui?.running === true ||
           uiResponse.value?.official?.running === true ||
           uiResponse.value?.xray?.official?.running === true
       );
+      const conflict = computed(
+        () =>
+          officialConflict.value ||
+          uiResponse.value?.conflict === 'xrayui' ||
+          uiResponse.value?.xrayui?.running === true ||
+          uiResponse.value?.xray?.xrayui?.running === true
+      );
       const conflictHint = computed(() => {
-        if (live.value.official || uiResponse.value?.conflict === 'official' || uiResponse.value?.official?.running) {
-          return 'Конфликт: официальный StealthSurf запущен — сначала остановите его';
+        if (officialConflict.value) {
+          return 'Конфликт: процесс stealthsurf-routerd ещё работает (файлы могли уже удалить). Нажмите кнопку ниже или по SSH: surfgate clear-official';
         }
         return 'Конфликт: XrayUI запущен — сначала остановите его';
       });
@@ -606,6 +621,28 @@
         }
       };
 
+      const clearOfficial = async () => {
+        lastError.value = '';
+        busy.value = true;
+        try {
+          await engine.executeWithLoadingProgress(async () => {
+            await engine.submit(SubmitActions.officialClear);
+          }, false);
+          for (let i = 0; i < 5; i++) {
+            await pollLive();
+            if (!officialConflict.value) break;
+            await new Promise((r) => setTimeout(r, 600));
+          }
+          if (officialConflict.value) {
+            lastError.value = 'не удалось остановить stealthsurf-routerd — по SSH: surfgate clear-official';
+          }
+        } catch (e) {
+          lastError.value = e instanceof Error ? e.message : 'не удалось остановить official StealthSurf';
+        } finally {
+          busy.value = false;
+        }
+      };
+
       const toggle = async () => {
         if (conflict.value && !running.value) return;
         lastError.value = '';
@@ -685,10 +722,12 @@
         running,
         statusLabel,
         conflict,
+        officialConflict,
         conflictHint,
         homeActionHint,
         startFailedHint,
         selectEndpoint,
+        clearOfficial,
         isActiveRoute,
         displayIp,
         displayVpnServer,

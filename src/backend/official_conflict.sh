@@ -10,12 +10,27 @@
 
 SS_OFFICIAL_CACHE="${SS_OFFICIAL_CACHE:-/tmp/stealthsurf.official.cache}"
 SS_OFFICIAL_CACHE_TTL="${SS_OFFICIAL_CACHE_TTL:-45}"
-SS_OFFICIAL_MSG_RU="Конфликт с официальным StealthSurf — сейчас работает stealthsurf-routerd. Остановите VPN в приложении StealthSurf (или службу на роутере), затем запускайте SurfGate. Одновременно оба нельзя: два transparent-proxy ломают интернет в LAN."
+SS_OFFICIAL_MSG_RU="Конфликт с официальным StealthSurf — сейчас работает stealthsurf-routerd (файлы могли уже удалить, процесс остался). Остановите: surfgate clear-official — или кнопка в панели. Одновременно оба нельзя: два transparent-proxy ломают интернет в LAN."
+
+ss_official_daemon_path() {
+    if [ -n "${OFFICIAL_SS_DAEMON:-}" ]; then
+        printf '%s\n' "$OFFICIAL_SS_DAEMON"
+        return 0
+    fi
+    printf '%s\n' "/jffs/addons/stealthsurf/sbin/stealthsurf-routerd"
+}
+
+# True only when the official binary is still on disk (empty leftover dirs do not count).
+ss_official_daemon_on_disk() {
+    local bin
+    bin=$(ss_official_daemon_path)
+    [ -x "$bin" ] && return 0
+    [ -x /jffs/addons/stealthsurf/sbin/stealthsurf-routerd ] && return 0
+    return 1
+}
 
 ss_official_installed() {
-    [ -n "${OFFICIAL_SS_DAEMON:-}" ] && [ -x "$OFFICIAL_SS_DAEMON" ] && return 0
-    [ -n "${OFFICIAL_SS_JFFS_DIR:-}" ] && [ -d "$OFFICIAL_SS_JFFS_DIR/sbin" ] && return 0
-    [ -d /jffs/addons/stealthsurf/sbin ] && return 0
+    ss_official_daemon_on_disk && return 0
     return 1
 }
 
@@ -35,6 +50,103 @@ ss_official_process_running() {
         esac
     done
     return 1
+}
+
+# Collect PIDs of stealthsurf-routerd (space-separated). Empty = none.
+ss_official_pids() {
+    local p cmd pid out=""
+    for p in /proc/[0-9]*; do
+        [ -r "$p/cmdline" ] || continue
+        cmd=$(tr '\0' ' ' <"$p/cmdline" 2>/dev/null)
+        case "$cmd" in
+        *stealthsurf-routerd*)
+            pid=${p##*/}
+            case "$pid" in
+            '' | *[!0-9]* | "$$") continue ;;
+            esac
+            out="$out $pid"
+            ;;
+        esac
+    done
+    printf '%s' "${out# }"
+}
+
+ss_official_kill_process() {
+    local pid i pids
+    pids=$(ss_official_pids)
+    [ -n "$pids" ] || return 0
+
+    if type log_info >/dev/null 2>&1; then
+        log_info "Stopping leftover stealthsurf-routerd (pids:$pids)"
+    fi
+
+    for pid in $pids; do
+        kill "$pid" 2>/dev/null || true
+    done
+    i=0
+    while [ "$i" -lt 8 ]; do
+        ss_official_process_running || return 0
+        sleep 1
+        i=$((i + 1))
+    done
+
+    pids=$(ss_official_pids)
+    for pid in $pids; do
+        kill -9 "$pid" 2>/dev/null || true
+    done
+    i=0
+    while [ "$i" -lt 5 ]; do
+        ss_official_process_running || return 0
+        sleep 1
+        i=$((i + 1))
+    done
+    ss_official_process_running && return 1
+    return 0
+}
+
+# Package deleted (binary gone) but daemon still in RAM — clear so SurfGate can start.
+# Returns 0 if no process remains (cleared or was already down); 1 if still running.
+ss_official_reap_orphan() {
+    ss_official_process_running || {
+        ss_official_cleanup_orphan_firewall
+        return 0
+    }
+    if ss_official_daemon_on_disk; then
+        # Real install still present — do not kill; SurfGate must refuse.
+        return 1
+    fi
+    if type log_warn >/dev/null 2>&1; then
+        log_warn "Official StealthSurf files are gone but stealthsurf-routerd is still running — stopping orphan process"
+    fi
+    ss_official_kill_process || true
+    ss_official_cleanup_orphan_firewall
+    ss_official_cache_invalidate
+    ss_official_process_running && return 1
+    return 0
+}
+
+# Force-stop official routerd (files may still exist). Used by CLI / panel clear button.
+ss_official_force_stop() {
+    ss_official_cache_invalidate
+    if ! ss_official_process_running && ! ss_official_firewall_active; then
+        if type log_ok >/dev/null 2>&1; then
+            log_ok "Official StealthSurf is not running"
+        fi
+        return 0
+    fi
+    ss_official_kill_process || true
+    ss_official_cleanup_orphan_firewall
+    ss_official_cache_invalidate
+    if ss_official_process_running; then
+        if type log_error >/dev/null 2>&1; then
+            log_error "Could not stop stealthsurf-routerd — check: ps w | grep stealthsurf-routerd"
+        fi
+        return 1
+    fi
+    if type log_ok >/dev/null 2>&1; then
+        log_ok "Official stealthsurf-routerd stopped; SurfGate can start"
+    fi
+    return 0
 }
 
 ss_official_firewall_active() {
@@ -113,9 +225,15 @@ ss_official_running() {
     fi
 
     # Only a live stealthsurf-routerd means conflict. Leftover STEALTHSURF_*
-    # chains after stop must not keep SurfGate blocked.
+    # chains after stop must not keep SurfGate blocked. If the user deleted the
+    # official package but left the daemon in RAM, reap that orphan instead of
+    # blocking SurfGate forever.
     if ss_official_process_running; then
-        running=1
+        if ss_official_reap_orphan; then
+            running=0
+        else
+            running=1
+        fi
     else
         running=0
         ss_official_cleanup_orphan_firewall
