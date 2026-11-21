@@ -78,6 +78,33 @@ repair_xray_config_if_corrupt() {
     return 1
 }
 
+# Keep dns.queryStrategy in sync with ipv6_mode so AAAA does not stall when IPv6
+# is cut, and so switching back to proxy restores dual-stack DNS.
+# block/ignore → UseIPv4 (overrides empty / UseIP / UseIPv6 / prior UseIPv4).
+# proxy → clear UseIPv4 only (leaves an explicit UseIPv6 alone).
+ss_sync_ipv6_dns_strategy() {
+    [ -f "$XRAY_CONFIG_FILE" ] || return 0
+    load_xrayui_config 2>/dev/null || true
+    local mode="${1:-${ipv6_mode:-proxy}}"
+    case "$mode" in
+    proxy | block | ignore) ;;
+    *) mode="proxy" ;;
+    esac
+    jq --arg ipv6_mode "$mode" '
+      .dns //= {}
+      | if $ipv6_mode == "block" or $ipv6_mode == "ignore" then
+          if ((.dns.queryStrategy // "") | length) == 0
+             or .dns.queryStrategy == "UseIP"
+             or .dns.queryStrategy == "UseIPv6"
+             or .dns.queryStrategy == "UseIPv4" then
+            .dns.queryStrategy = "UseIPv4"
+          else . end
+        else
+          if .dns.queryStrategy == "UseIPv4" then del(.dns.queryStrategy) else . end
+        end
+    ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+}
+
 # XrayUI-shaped scaffold: dokodemo all-in + direct (first) + block.
 # Used for fresh configs and to repair empty/corrupt profiles so Start/Stop control real traffic.
 ensure_xray_scaffold() {
@@ -106,9 +133,7 @@ EOF
     # Xray ≥26.9 dropped top-level "legacy reverse" (bridges/portals). SurfGate is a
     # client transparent proxy — strip it so start/test no longer fail with:
     #   "legacy reverse" has been removed and migrated to "VLESS Reverse Proxy"
-    # Prefer IPv4 DNS when IPv6 is blocked/ignored — AAAA then hangs until timeout
-    # ("site opens, then keeps loading"). Leave an explicit user queryStrategy alone.
-    jq --arg ipv6_mode "${ipv6_mode:-proxy}" '
+    jq '
       del(.reverse)
       | .log = (.log // {})
       | .log.loglevel = (.log.loglevel // "warning")
@@ -119,10 +144,6 @@ EOF
       | .routing.rules = (.routing.rules // [])
       | .dns = (.dns // {})
       | .dns.servers = (.dns.servers // ["localhost"])
-      | if (.dns.queryStrategy | type == "string") and (.dns.queryStrategy | length) > 0 then .
-        elif $ipv6_mode == "block" or $ipv6_mode == "ignore" then
-          .dns.queryStrategy = "UseIPv4"
-        else . end
       | if ([.inbounds[] | select(.tag == "all-in")] | length) > 0 then .
         else .inbounds += [{
           "protocol": "dokodemo-door",
@@ -158,6 +179,8 @@ EOF
       | if ([.outbounds[] | select(.tag == "block" or .protocol == "blackhole")] | length) > 0 then .
         else .outbounds += [{ "protocol": "blackhole", "tag": "block", "settings": {} }] end
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+
+    ss_sync_ipv6_dns_strategy "${ipv6_mode:-proxy}" || true
 
     # Fresh installs: send all LAN traffic into Xray (ipsec=off).
     # Catch-all routing rules need this — ipsec=redirect only proxies PROXY-ipset destinations.

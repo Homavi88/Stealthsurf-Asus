@@ -677,8 +677,7 @@ ss_api_ensure_dns_leak() {
     [ -n "$proxy_tag" ] || return 0
     [ -f "$XRAY_CONFIG_FILE" ] || return 0
     load_xrayui_config 2>/dev/null || true
-    # When IPv6 is blocked/ignored, prefer A-only answers so pages do not stall on AAAA.
-    jq --arg tag "$proxy_tag" --arg ipv6_mode "${ipv6_mode:-proxy}" '
+    jq --arg tag "$proxy_tag" '
       .dns //= {}
       | .dns.tag = (.dns.tag // "dnsQuery")
       | .dns.servers = (
@@ -687,12 +686,6 @@ ss_api_ensure_dns_leak() {
             elif (($s | map(if type == "string" then . else (.address // "") end) | unique) == ["localhost"]) then ["1.1.1.1"] + $s
             else $s end
         )
-      | if ($ipv6_mode == "block" or $ipv6_mode == "ignore")
-           and (((.dns.queryStrategy // "") | length) == 0
-                or .dns.queryStrategy == "UseIP"
-                or .dns.queryStrategy == "UseIPv6") then
-          .dns.queryStrategy = "UseIPv4"
-        else . end
       | if ([.inbounds[]? | select(.tag == "sys:dns-in")] | length) > 0 then .
         else .inbounds += [{
           "protocol": "dokodemo-door",
@@ -718,6 +711,10 @@ ss_api_ensure_dns_leak() {
           + .routing.rules
         )
     ' "$XRAY_CONFIG_FILE" >"$XRAY_CONFIG_FILE.tmp" && mv -f "$XRAY_CONFIG_FILE.tmp" "$XRAY_CONFIG_FILE"
+    # Keep AAAA stall fix / dual-stack restore in sync with ipv6_mode (bidirectional).
+    if type ss_sync_ipv6_dns_strategy >/dev/null 2>&1; then
+        ss_sync_ipv6_dns_strategy "${ipv6_mode:-proxy}" || true
+    fi
 }
 
 ss_api_enable_connection_check() {

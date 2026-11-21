@@ -177,6 +177,11 @@ apply_general_options() {
     *) ipv6_mode="proxy" ;;
     esac
     update_xrayui_config "ipv6_mode" "$ipv6_mode"
+    # Sync DNS queryStrategy with the new mode (UseIPv4 ↔ dual-stack). Needs Restart
+    # to take effect in a running Xray; profile is updated immediately for next start.
+    if type ss_sync_ipv6_dns_strategy >/dev/null 2>&1; then
+        ss_sync_ipv6_dns_strategy "$ipv6_mode" || true
+    fi
     case "$guest_vpn_mode" in
     follow | vpn | direct) ;;
     *) guest_vpn_mode="follow" ;;
