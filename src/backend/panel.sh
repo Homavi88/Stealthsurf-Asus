@@ -57,12 +57,15 @@ panel_live_bg_refresh() {
     now=$(date +%s 2>/dev/null) || now=0
 
     # statsquery + jq is expensive — at most every 10s (Home polls every 2s).
+    # Refresh immediately when the stats file is missing/empty so Home is not stuck at 0 Б.
     age=999
     mt=0
     local stats_json="$ADDON_SHARE_DIR/xray_stats.json"
-    if [ -f "$stats_json" ]; then
+    if [ -s "$stats_json" ]; then
         mt=$(date -r "$stats_json" +%s 2>/dev/null) || mt=0
         [ "$mt" -gt 0 ] && [ "$now" -gt 0 ] && age=$((now - mt))
+    else
+        age=999
     fi
     if [ "$age" -ge 10 ]; then
         panel_traffic_lifetime_tick >/dev/null 2>&1 || true
@@ -751,12 +754,30 @@ panel_bootstrap_json() {
 
 # Query outbound traffic counters (no -reset) → $ADDON_SHARE_DIR/xray_stats.json
 panel_outbound_stats_query() {
-    local api_addr stats_json
+    local api_addr stats_json tmp
     stats_json="$ADDON_SHARE_DIR/xray_stats.json"
     mkdir -p "$ADDON_SHARE_DIR" 2>/dev/null || true
     api_addr=$(api_get_listen_address 2>/dev/null) || return 1
     [ -n "$(get_xray_daemon_pid 2>/dev/null)" ] || return 1
-    xray api statsquery -s "$api_addr" -pattern 'outbound>>>' >"$stats_json" 2>/dev/null || return 1
+    tmp="${stats_json}.$$"
+    # Bound gRPC so a stuck StatsService cannot hold the live.refresh lock forever.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 5 xray api statsquery -s "$api_addr" -pattern 'outbound>>>' >"$tmp" 2>/dev/null || {
+            rm -f "$tmp"
+            return 1
+        }
+    else
+        xray api statsquery -s "$api_addr" -pattern 'outbound>>>' >"$tmp" 2>/dev/null || {
+            rm -f "$tmp"
+            return 1
+        }
+    fi
+    # Reject empty/non-JSON so we do not wipe a good previous snapshot.
+    if ! jq -e '.stat' "$tmp" >/dev/null 2>&1; then
+        rm -f "$tmp"
+        return 1
+    fi
+    mv -f "$tmp" "$stats_json"
     return 0
 }
 
@@ -801,18 +822,23 @@ panel_traffic_lifetime_tick() {
           (($cur[$tag][$field] // 0) | tonumber) as $c
           | (($S[$tag][$field] // 0) | tonumber) as $p
           | if $c >= $p then ($c - $p) else $c end;
+      # VPN = proxy outbounds (ss-* and anything else that is not direct/block/sys/dns).
+      def is_direct: . == "direct" or . == "freedom";
+      def is_skip: is_direct or . == "block" or . == "blackhole"
+        or startswith("sys:") or . == "dnsQuery" or startswith("dns");
       reduce ($cur | keys[]) as $tag (
         $L;
         .by_tag[$tag] = ((.by_tag[$tag] // {up:0, down:0})
           | .up = ((.up // 0) + delta($tag; "up"))
           | .down = ((.down // 0) + delta($tag; "down")))
-        | if ($tag | startswith("ss-")) then
-            .vpn_up = ((.vpn_up // 0) + delta($tag; "up"))
-            | .vpn_down = ((.vpn_down // 0) + delta($tag; "down"))
-          elif $tag == "direct" then
+        | if ($tag | is_direct) then
             .direct_up = ((.direct_up // 0) + delta($tag; "up"))
             | .direct_down = ((.direct_down // 0) + delta($tag; "down"))
-          else . end
+          elif ($tag | is_skip) then .
+          else
+            .vpn_up = ((.vpn_up // 0) + delta($tag; "up"))
+            | .vpn_down = ((.vpn_down // 0) + delta($tag; "down"))
+          end
       )
       # Cap by_tag growth on disk (subscriptions can mint hundreds of tags).
       | .by_tag = ([.by_tag // {} | to_entries
@@ -971,16 +997,24 @@ panel_live_json() {
     local by_tag_json='{}'
     local lifetime_file="${TRAFFIC_LIFETIME_FILE:-$ADDON_SHARE_DIR/traffic_lifetime.json}"
 
-    # Session counters — one jq pass (was four) over the last outbound stats query.
+    # Session counters — one jq pass over the last outbound stats query.
+    # VPN = every outbound except direct/freedom/block/sys/dns (not only ss-*).
     if [ -f "$ADDON_SHARE_DIR/xray_stats.json" ]; then
         _sess=$(jq -c '
+          def tag: (.name // "") | split(">>>")[1] // "";
+          def is_up: (.name // "") | endswith(">>>traffic>>>uplink");
+          def is_down: (.name // "") | endswith(">>>traffic>>>downlink");
+          def is_outbound: (.name // "") | startswith("outbound>>>");
+          def is_direct_tag: . == "direct" or . == "freedom";
+          def is_skip_tag: is_direct_tag or . == "block" or . == "blackhole"
+            or startswith("sys:") or . == "dnsQuery" or startswith("dns");
           def sum(pred):
-            [.stat[]? | select(pred) | (.value // 0|tonumber)] | add // 0;
+            [.stat[]? | select(is_outbound and pred) | (.value // 0|tonumber)] | add // 0;
           [
-            sum((.name // "") | (startswith("outbound>>>ss-") and endswith(">>>traffic>>>uplink"))),
-            sum((.name // "") | (startswith("outbound>>>ss-") and endswith(">>>traffic>>>downlink"))),
-            sum((.name // "") | (startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>uplink"))),
-            sum((.name // "") | (startswith("outbound>>>direct>>>") and endswith(">>>traffic>>>downlink")))
+            sum(is_up and ((tag | is_skip_tag) | not)),
+            sum(is_down and ((tag | is_skip_tag) | not)),
+            sum(is_up and (tag | is_direct_tag)),
+            sum(is_down and (tag | is_direct_tag))
           ]
         ' "$ADDON_SHARE_DIR/xray_stats.json" 2>/dev/null) || _sess='[0,0,0,0]'
         sess_vpn_up=$(printf '%s' "$_sess" | jq -r '.[0] // 0')
