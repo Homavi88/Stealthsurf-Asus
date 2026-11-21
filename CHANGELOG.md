@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.43] - 2026-11-21
+
+### Fix: IPv6 DNS strategy stuck on UseIPv4
+
+- `ss_sync_ipv6_dns_strategy`: **block/ignore → UseIPv4**, **proxy → clear UseIPv4** (restore dual-stack)
+- Runs from scaffold, DNS leak wiring, and Connection Save — switching IPv6 mode back to proxy no longer leaves A-only DNS stuck
+
 ## [1.4.42] - 2026-11-21
 
 ### Fix: Home traffic/speed stuck at 0 Б
