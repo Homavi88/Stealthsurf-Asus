@@ -191,7 +191,7 @@
   import { catalogTag, parseCatalogPayload, SsCatalogConfig } from '@/modules/StealthSurfCatalog';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
-  import { checkSurfGateUpdate, compareVersions } from '@/modules/SurfGateUpdate';
+  import { checkSurfGateUpdate, compareVersions, installedVersion, syncDisplayedVersion } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     current?: string;
@@ -314,13 +314,11 @@
 
       const updateLatest = computed(() => clientLatest.value || updateStatus.value?.latest || '');
       const updateLatestClean = computed(() => String(updateLatest.value || '').replace(/^v/i, ''));
-      const updateCurrent = computed(
-        () =>
-          window.xray?.custom_settings?.stealthsurf_version ||
-          uiResponse.value?.xray?.ui_version ||
-          updateStatus.value?.current ||
-          '—'
-      );
+      const updateCurrent = computed(() => {
+        const live = installedVersion(uiResponse.value?.xray?.ui_version);
+        const fromStatus = String(updateStatus.value?.current || '').replace(/^v/i, '');
+        return live || fromStatus || '—';
+      });
       const addonVersion = computed(() => {
         const v = String(updateCurrent.value || '').replace(/^v/i, '');
         return v || '—';
@@ -358,8 +356,9 @@
 
       const checkClientUpdate = async () => {
         try {
+          syncDisplayedVersion(uiResponse.value?.xray?.ui_version);
           const info = await checkSurfGateUpdate(
-            uiResponse.value?.xray?.ui_version,
+            uiResponse.value?.xray?.ui_version || installedVersion(),
             uiResponse.value?.xray?.github_proxy
           );
           clientLatest.value = info.latest;
@@ -382,15 +381,15 @@
       };
 
       const installUpdate = async () => {
-        const version = updateLatest.value;
+        const version = updateLatestClean.value;
         if (!version || updateBusy.value) return;
         if (!window.confirm(`Установить SurfGate v${version} с GitHub?`)) return;
         updateBusy.value = true;
         savePanelNav({ view: 'home' });
         try {
-          // Prefer client-detected latest (browser mirrors) — install does not need
-          // a successful router-side GitHub *check* first.
-          await updateProgress.value?.run(version);
+          // Install GitHub «latest» so a mid-session newer release is not skipped
+          // when the banner still shows an older tag from the last client check.
+          await updateProgress.value?.run('latest');
           await loadUpdateStatus();
           await checkClientUpdate();
         } finally {

@@ -125,7 +125,12 @@ EOF
     install_ui_step "WebUI mount"
     remount_ui "skipwait"
 
-    am_settings_set stealthsurf_version $XRAYUI_VERSION
+    # Quoted — and re-applied at end of install so a mid-install panel restart
+    # cannot leave stealthsurf_version stuck on the previous release.
+    am_settings_set stealthsurf_version "$XRAYUI_VERSION"
+    if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
+        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
+    fi
 
     stealthsurf_startup=$(am_settings_get stealthsurf_startup)
     if [ -z "$stealthsurf_startup" ]; then
@@ -311,6 +316,15 @@ EOF
 
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
+
+    # Final version stamp before httpd restart — heals stale custom_settings after upgrade.
+    am_settings_set stealthsurf_version "$XRAYUI_VERSION"
+    if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
+        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
+    fi
+    if type addon_update_status_write >/dev/null 2>&1; then
+        addon_update_status_write "$XRAYUI_VERSION" "$XRAYUI_VERSION" false "Installed v$XRAYUI_VERSION"
+    fi
 
     # Tell the UI we're done BEFORE restarting httpd. Self-update polls
     # /ext/ssurf/xray-ui-response through the panel; panel_stop would otherwise

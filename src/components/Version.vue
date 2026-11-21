@@ -63,6 +63,7 @@
   import vClean from 'version-clean';
   import vCompare from 'version-compare';
   import engine, { SubmitActions, EngineResponseConfig } from '@/modules/Engine';
+  import { installedVersion, syncDisplayedVersion } from '@/modules/SurfGateUpdate';
   import markdownit from 'markdown-it';
   import { useI18n } from 'vue-i18n';
 
@@ -88,7 +89,15 @@
       const ui = inject<Ref<EngineResponseConfig>>('uiResponse');
       const withPatch = (version?: string) => (version && version.split('.').length === 2 ? `${version}.0` : (version ?? ''));
 
-      const current_version = computed(() => withPatch(window.xray.custom_settings.stealthsurf_version || ui?.value?.xray?.ui_version));
+      const current_version = computed(() => withPatch(installedVersion(ui?.value?.xray?.ui_version)));
+
+      watch(
+        () => ui?.value?.xray?.ui_version,
+        (v) => {
+          syncDisplayedVersion(v);
+        },
+        { immediate: true }
+      );
       const latest_version = ref<string>();
       const updateModal = ref();
       const hasUpdate = ref(false);

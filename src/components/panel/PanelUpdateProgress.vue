@@ -157,7 +157,15 @@
       const reloadPanel = () => {
         savePanelNav({ view: 'settings', section: 'updates' });
         engine.unloadConfirmed = true;
-        window.location.reload();
+        // Hard navigation with cache-buster — Safari bfcache / sticky app.js?v=old
+        // otherwise kept showing the pre-update «need update» banner after Install.
+        try {
+          const u = new URL(window.location.href);
+          u.searchParams.set('_sg', String(Date.now()));
+          window.location.replace(u.toString());
+        } catch {
+          window.location.reload();
+        }
       };
 
       const run = async (targetVersion?: string) => {
@@ -204,12 +212,13 @@
           }
         } catch (e) {
           // Install restarts panel-httpd; progress polls can time out after the
-          // package is already applied. Prefer "reload to verify" over a hard fail.
+          // package is already applied. Prefer "reload to verify" over a hard fail
+          // only once we reached the install stage — earlier disconnects are real errors.
           if (activeIdx.value >= installIdx && installIdx >= 0) {
             phase.value = 'done';
             activeIdx.value = STAGE_DEFS.length - 1;
             message.value =
-              'Пакет установлен, панель перезапускалась. Обновите страницу, чтобы проверить версию.';
+              'Пакет установлен, панель перезапускалась. Нажмите «Обновить страницу» — баннер исчезнет, если версия применилась.';
           } else {
             phase.value = 'error';
             message.value = e instanceof Error ? e.message : 'Ошибка при установке обновления';
