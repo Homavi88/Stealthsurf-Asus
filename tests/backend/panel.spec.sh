@@ -19,6 +19,8 @@ grep -q 'panel_start()' "$BIN"
 grep -q 'panel_bootstrap_json' "$BIN"
 grep -q 'sync_stealthsurf_version_setting' "$BIN"
 grep -q -- '--arg ui_version' "$BIN"
+# 1.4.47: bootstrap must not write am_settings (CGI hang / panel won't open)
+! grep -n 'panel_bootstrap_json' -A80 "$BIN" | grep -q 'am_settings_set stealthsurf_version'
 grep -q 'panel_api_handle' "$BIN"
 grep -q 'panel_ensure_secondary_ip' "$BIN"
 grep -q 'ADDON_PKG_NAME="ssurf"' "$BIN"

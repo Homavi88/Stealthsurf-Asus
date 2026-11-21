@@ -250,7 +250,7 @@
       const byTag = ref<TrafficByTag>({});
       const updateStatus = ref<UpdateStatus | null>(null);
       const updateBusy = ref(false);
-      const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
+      const updateProgress = ref<{ run: (version?: string, displayVersion?: string) => Promise<void> } | null>(null);
       const updateBannerEl = ref<HTMLElement | null>(null);
       let prevSession: LiveTraffic['session'] | null = null;
       let prevTs = 0;
@@ -387,9 +387,8 @@
         updateBusy.value = true;
         savePanelNav({ view: 'home' });
         try {
-          // Install GitHub «latest» so a mid-session newer release is not skipped
-          // when the banner still shows an older tag from the last client check.
-          await updateProgress.value?.run('latest');
+          // Install GitHub «latest»; pass display version so the modal is not «vlatest».
+          await updateProgress.value?.run('latest', version);
           await loadUpdateStatus();
           await checkClientUpdate();
         } finally {

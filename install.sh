@@ -1,5 +1,5 @@
 #!/bin/sh
-# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.46+ installer for Asuswrt-Merlin (Entware required).
+# SurfGate (Homavi88/Stealthsurf-Asus) 1.4.47+ installer for Asuswrt-Merlin (Entware required).
 #
 # Package lives in /jffs/addons/ssurf — NEVER /jffs/addons/stealthsurf.
 # The latter belongs to the official StealthSurf VPN daemon (stealthsurf-routerd
@@ -86,10 +86,10 @@ ui_bar() {
 ui_banner() {
   if [ "$UI_COLOR" -eq 1 ]; then
     printf '\n%b┌─ %sSurfGate bootstrap%s ─────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
-    printf '%b│%b 1.4.46+ · panel :1131 · path /jffs/addons/ssurf%b│%b\n' "$CCYAN" "$CDIM" "$CCYAN" "$C0"
+    printf '%b│%b 1.4.47+ · panel :1131 · path /jffs/addons/ssurf%b│%b\n' "$CCYAN" "$CDIM" "$CCYAN" "$C0"
     printf '%b└──────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
   else
-    echo "==> SurfGate installer (1.4.46+ — panel :1131, path /jffs/addons/ssurf, script /jffs/scripts/ssurf)"
+    echo "==> SurfGate installer (1.4.47+ — panel :1131, path /jffs/addons/ssurf, script /jffs/scripts/ssurf)"
   fi
 }
 

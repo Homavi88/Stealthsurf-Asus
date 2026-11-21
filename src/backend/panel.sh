@@ -682,13 +682,23 @@ panel_bootstrap_json() {
 
     local custom_settings="{}"
     if [ -f /jffs/addons/custom_settings.txt ]; then
+        # Merlin helper.sh uses "key value" (space); some paths also write key=value.
+        # Never write am_settings from bootstrap — CGI stdout must stay pure JSON.
         custom_settings=$(
-            awk -F= '
+            awk '
               BEGIN { printf "{" }
               /^stealthsurf_/ {
-                key=$1
-                val=substr($0, index($0,"=")+1)
-                gsub(/\\/,"\\\\",val); gsub(/"/,"\\\"",val); gsub(/\r/,"",val)
+                line=$0
+                gsub(/\r/, "", line)
+                # Prefer Merlin "key value"; only treat as key=value when no space before "=".
+                if (match(line, /^[A-Za-z0-9_]+=/)) {
+                  key=substr(line, 1, RLENGTH-1)
+                  val=substr(line, RLENGTH+1)
+                } else if (match(line, / /)) {
+                  key=substr(line, 1, RSTART-1)
+                  val=substr(line, RSTART+1)
+                } else next
+                gsub(/\\/, "\\\\", val); gsub(/"/, "\\\"", val)
                 if (n++) printf ","
                 printf "\"%s\":\"%s\"", key, val
               }
@@ -701,18 +711,13 @@ panel_bootstrap_json() {
     fi
     # Prefer live NVRAM for boot-autostart so the UI matches what startup() will do.
     # Empty/invalid → enabled (same default as install).
+    # Read-only: do not am_settings_set here (JFFS write during CGI hung/broke panel open in 1.4.46).
     local ss_startup
     ss_startup=$(am_settings_get stealthsurf_startup 2>/dev/null || true)
     case "$ss_startup" in
     y | n) ;;
     *) ss_startup="y" ;;
     esac
-    # Heal stale stealthsurf_version so Safari/Merlin reload cannot keep a pre-update banner.
-    if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
-        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
-    else
-        am_settings_set stealthsurf_version "$XRAYUI_VERSION" 2>/dev/null || true
-    fi
     custom_settings=$(printf '%s' "$custom_settings" | jq -c \
         --arg v "$ss_startup" \
         --arg ver "$XRAYUI_VERSION" \

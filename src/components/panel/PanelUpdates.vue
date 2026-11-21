@@ -110,7 +110,7 @@
       const clientLatest = ref('');
       const clientUpdate = ref(false);
       const checkInterval = ref('24h');
-      const updateProgress = ref<{ run: (version?: string) => Promise<void> } | null>(null);
+      const updateProgress = ref<{ run: (version?: string, displayVersion?: string) => Promise<void> } | null>(null);
 
       const repo = computed(() => status.value?.repo || 'Homavi88/Stealthsurf-Asus');
       const repoUrl = computed(() => `https://github.com/${repo.value}/releases`);
@@ -226,8 +226,7 @@
         busy.value = true;
         savePanelNav({ view: 'settings', section: 'updates' });
         try {
-          // Banner install always pulls GitHub latest (not a pinned stale tag).
-          await updateProgress.value?.run('latest');
+          await updateProgress.value?.run('latest', version);
           await loadStatus();
           await checkClient();
         } finally {

@@ -317,13 +317,10 @@ EOF
     local _panel_url
     _panel_url=$(panel_url 2>/dev/null || echo "http://$(nvram get lan_ipaddr 2>/dev/null):1131/")
 
-    # Final version stamp before httpd restart — heals stale custom_settings after upgrade.
-    am_settings_set stealthsurf_version "$XRAYUI_VERSION"
+    # Version stamp before httpd restart — heals stale custom_settings after upgrade.
+    am_settings_set stealthsurf_version "$XRAYUI_VERSION" 2>/dev/null || true
     if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
-        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
-    fi
-    if type addon_update_status_write >/dev/null 2>&1; then
-        addon_update_status_write "$XRAYUI_VERSION" "$XRAYUI_VERSION" false "Installed v$XRAYUI_VERSION"
+        sync_stealthsurf_version_setting "$XRAYUI_VERSION" >/dev/null 2>&1 || true
     fi
 
     # Tell the UI we're done BEFORE restarting httpd. Self-update polls
@@ -340,6 +337,11 @@ EOF
         log_warn "Fix: surfgate panel restart   (1.4.11+ ships bin/panel-httpd; or install lighttpd via opkg)"
     else
         install_ui_status ok "panel httpd"
+    fi
+
+    # Status JSON after panel is up — must not delay or block httpd restart.
+    if type addon_update_status_write >/dev/null 2>&1; then
+        addon_update_status_write "$XRAYUI_VERSION" "$XRAYUI_VERSION" false "Installed v$XRAYUI_VERSION" >/dev/null 2>&1 || true
     fi
 
     install_ui_end "Installed $(show_version) → $_panel_url"

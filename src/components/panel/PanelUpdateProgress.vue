@@ -155,22 +155,33 @@
       };
 
       const reloadPanel = () => {
-        savePanelNav({ view: 'settings', section: 'updates' });
+        savePanelNav({ view: 'home' });
         engine.unloadConfirmed = true;
-        // Hard navigation with cache-buster — Safari bfcache / sticky app.js?v=old
-        // otherwise kept showing the pre-update «need update» banner after Install.
+        // Prefer a clean panel root reload (avoids sticky query junk / broken deep links).
         try {
+          const meta = (window as Window & { __SS_PANEL_META__?: { url?: string } }).__SS_PANEL_META__;
+          if (meta?.url) {
+            const u = new URL(meta.url);
+            u.searchParams.set('_sg', String(Date.now()));
+            window.location.replace(u.toString());
+            return;
+          }
           const u = new URL(window.location.href);
+          u.search = '';
+          u.hash = '';
           u.searchParams.set('_sg', String(Date.now()));
-          window.location.replace(u.toString());
+          window.location.replace(u.origin + u.pathname + '?' + u.searchParams.toString());
         } catch {
           window.location.reload();
         }
       };
 
-      const run = async (targetVersion?: string) => {
+      const run = async (targetVersion?: string, displayVersion?: string) => {
         open.value = true;
-        version.value = (targetVersion || '').replace(/^v/i, '');
+        const raw = (targetVersion || '').replace(/^v/i, '');
+        // Backend may get «latest»; show the human version from the banner when provided.
+        const shown = (displayVersion || '').replace(/^v/i, '');
+        version.value = shown || (raw && raw !== 'latest' ? raw : '');
         phase.value = 'running';
         activeIdx.value = 0;
         message.value = 'Запуск обновления…';
@@ -190,7 +201,7 @@
             async () => {
               await engine.submit(
                 SubmitActions.performUpdate,
-                version.value ? { version: version.value } : undefined
+                raw && raw !== 'latest' ? { version: raw } : raw === 'latest' ? { version: 'latest' } : undefined
               );
             },
             false,

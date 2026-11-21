@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.47] - 2026-11-21
+
+### Hotfix: panel / addon would not open after 1.4.46 update
+
+- **Bootstrap is read-only again** — no `am_settings_set` during `/cgi-bin/bootstrap` (JFFS write on every open could hang CGI / break the SPA)
+- Parse Merlin `custom_settings.txt` as `key value` (helper.sh format), not only `key=value`
+- After package `update()`, force `panel_restart` so `:1131` comes back if httpd died mid-upgrade
+- Install writes update-status JSON **after** panel start; Install modal shows real version (not `vlatest`)
+- Recovery without UI: `surfgate panel restart` or `/jffs/scripts/ssurf panel restart`
+
 ## [1.4.46] - 2026-11-21
 
 ### Fix: update banner stuck after Install + reload
