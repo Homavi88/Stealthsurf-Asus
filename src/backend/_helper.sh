@@ -872,15 +872,16 @@ fixme() {
     cleanup_stale_asdfiles
 
     # Leftover stealthsurf-routerd after deleting official package blocks SurfGate start.
+    # Never flush STEALTHSURF_* while the official package is still installed.
     if type ss_official_reap_orphan >/dev/null 2>&1; then
-        if ss_official_process_running 2>/dev/null; then
+        if ss_official_process_running 2>/dev/null || ss_official_port_listening 2>/dev/null; then
             if ss_official_daemon_on_disk 2>/dev/null; then
                 log_warn "Official stealthsurf-routerd is running. Stop it with: surfgate clear-official"
             else
                 log_info "Reaping orphan stealthsurf-routerd (official files already deleted)..."
                 ss_official_reap_orphan 2>/dev/null || true
             fi
-        else
+        elif ! ss_official_daemon_on_disk 2>/dev/null; then
             ss_official_cleanup_orphan_firewall 2>/dev/null || true
         fi
     fi
@@ -1122,20 +1123,25 @@ migrate_homavi88_runtime_to_ssurf() {
     if [ -d /tmp/stealthsurf ] && [ ! -e /tmp/ssurf/panel.log ]; then
         cp -a /tmp/stealthsurf/. /tmp/ssurf/ 2>/dev/null || true
     fi
-    # Flush legacy Homavi88 firewall chain names once (STEALTHSURF_* → SSURF_*)
+    # Flush legacy Homavi88 STEALTHSURF_* only when official StealthSurf is NOT installed.
+    # Official uses the same chain/ipset names — wiping them makes the official app glitch.
     if type iptables >/dev/null 2>&1; then
-        for ch in STEALTHSURF STEALTHSURF_DNS_LOCK STEALTHSURF_DNS_OWNERPROBE STEALTHSURF_DIVERT; do
-            for tbl in filter mangle nat; do
-                iptables -w -t "$tbl" -F "$ch" 2>/dev/null || true
-                iptables -w -t "$tbl" -X "$ch" 2>/dev/null || true
-                ip6tables -w -t "$tbl" -F "$ch" 2>/dev/null || true
-                ip6tables -w -t "$tbl" -X "$ch" 2>/dev/null || true
+        if type ss_official_daemon_on_disk >/dev/null 2>&1 && ss_official_daemon_on_disk 2>/dev/null; then
+            log_info "Official StealthSurf installed — skipping legacy STEALTHSURF_* firewall flush"
+        else
+            for ch in STEALTHSURF STEALTHSURF_DNS_LOCK STEALTHSURF_DNS_OWNERPROBE STEALTHSURF_DIVERT; do
+                for tbl in filter mangle nat; do
+                    iptables -w -t "$tbl" -F "$ch" 2>/dev/null || true
+                    iptables -w -t "$tbl" -X "$ch" 2>/dev/null || true
+                    ip6tables -w -t "$tbl" -F "$ch" 2>/dev/null || true
+                    ip6tables -w -t "$tbl" -X "$ch" 2>/dev/null || true
+                done
             done
-        done
-        for s in STEALTHSURF_BYPASS4 STEALTHSURF_BYPASS6 STEALTHSURF_PROXY4 STEALTHSURF_PROXY6 \
-            STEALTHSURF_BYPASS4_NET STEALTHSURF_BYPASS6_NET STEALTHSURF_PROXY4_NET STEALTHSURF_PROXY6_NET; do
-            ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null || true
-        done
+            for s in STEALTHSURF_BYPASS4 STEALTHSURF_BYPASS6 STEALTHSURF_PROXY4 STEALTHSURF_PROXY6 \
+                STEALTHSURF_BYPASS4_NET STEALTHSURF_BYPASS6_NET STEALTHSURF_PROXY4_NET STEALTHSURF_PROXY6_NET; do
+                ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null || true
+            done
+        fi
     fi
 }
 

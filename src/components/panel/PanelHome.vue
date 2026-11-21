@@ -278,7 +278,7 @@
       );
       const conflictHint = computed(() => {
         if (officialConflict.value) {
-          return 'Конфликт: процесс stealthsurf-routerd ещё работает (файлы могли уже удалить). Нажмите кнопку ниже или по SSH: surfgate clear-official';
+          return 'Конфликт: официальный StealthSurf запущен (stealthsurf-routerd / :8800). Остановите его в панели official или: surfgate clear-official';
         }
         return 'Конфликт: XrayUI запущен — сначала остановите его';
       });
