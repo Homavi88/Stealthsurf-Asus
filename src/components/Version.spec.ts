@@ -54,9 +54,9 @@ describe('Version.vue', () => {
     expect(label(wrapper)).toBe('! SurfGate v0.70.0');
   });
 
-  it('adds the patch number to a two-part stored version', async () => {
+  it('adds the patch number to a two-part stored version when ui_version is absent', async () => {
     const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70' });
-    await respond('9.9.9');
+    await respond('');
     expect(label(wrapper)).toBe('! SurfGate v0.70.0');
   });
 
@@ -70,9 +70,16 @@ describe('Version.vue', () => {
     expect(notes.text()).toContain('<img src=x onerror="window.pwned=1">');
   });
 
-  it('prefers the stored version', async () => {
+  it('prefers the live script version over a stale stored cache', async () => {
     const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70.1' });
     await respond('9.9.9');
-    expect(label(wrapper)).toBe('SurfGate v0.70.1');
+    // Live ui_version wins; no «!» because mock latest (0.70.1) is older than 9.9.9
+    expect(label(wrapper)).toBe('SurfGate v9.9.9');
+  });
+
+  it('keeps the stored version when it is newer than a lagging ui_version', async () => {
+    const { wrapper, respond } = mountWith({ stealthsurf_version: '0.70.2' });
+    await respond('0.70.1');
+    expect(label(wrapper)).toBe('SurfGate v0.70.2');
   });
 });

@@ -707,8 +707,17 @@ panel_bootstrap_json() {
     y | n) ;;
     *) ss_startup="y" ;;
     esac
-    custom_settings=$(printf '%s' "$custom_settings" | jq -c --arg v "$ss_startup" '.stealthsurf_startup = $v' 2>/dev/null) ||
-        custom_settings=$(printf '{"stealthsurf_startup":"%s"}' "$ss_startup")
+    # Heal stale stealthsurf_version so Safari/Merlin reload cannot keep a pre-update banner.
+    if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
+        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
+    else
+        am_settings_set stealthsurf_version "$XRAYUI_VERSION" 2>/dev/null || true
+    fi
+    custom_settings=$(printf '%s' "$custom_settings" | jq -c \
+        --arg v "$ss_startup" \
+        --arg ver "$XRAYUI_VERSION" \
+        '.stealthsurf_startup = $v | .stealthsurf_version = $ver' 2>/dev/null) ||
+        custom_settings=$(printf '{"stealthsurf_startup":"%s","stealthsurf_version":"%s"}' "$ss_startup" "$XRAYUI_VERSION")
 
     # Devices: best-effort empty objects (full client DB stays on Merlin ASP path)
     jq -nc \
@@ -726,12 +735,14 @@ panel_bootstrap_json() {
         --argjson isRunning "$xray_running" \
         --argjson b4sni_isRunning "$b4sni_running" \
         --argjson cpu "$cpu" \
+        --arg ui_version "$XRAYUI_VERSION" \
         --argjson custom_settings "$custom_settings" \
         '{
           ok: true,
           standalone: true,
           panel: { url: ("http://" + $panel_ip + ":" + ($panel_port|tostring) + "/"), ip: $panel_ip, port: $panel_port },
           xray: {
+            ui_version: $ui_version,
             router: {
               name: $name,
               firmware: $firmware,

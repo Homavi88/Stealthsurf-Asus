@@ -5,6 +5,11 @@ initial_response() {
     load_xrayui_config
     log_debug "Initial response started."
 
+    # Heal stale Merlin custom_settings so ASP / panel reload shows the live script version.
+    if type sync_stealthsurf_version_setting >/dev/null 2>&1; then
+        sync_stealthsurf_version_setting "$XRAYUI_VERSION"
+    fi
+
     # Ensure the response file exists and contains valid JSON
     load_ui_response
 

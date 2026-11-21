@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.4.46] - 2026-11-21
+
+### Fix: update banner stuck after Install + reload
+
+- Prefer live script `ui_version` over stale `custom_settings.stealthsurf_version` for «current»
+- Bootstrap / response / install sync `stealthsurf_version` to `XRAYUI_VERSION`
+- Manual update clears `addon-update-status.json` (`update_available: false`) after success
+- Banner Install pulls GitHub `latest` (not a pinned mid-session tag)
+- Hard reload with cache-buster after Install; bootstrap exposes `ui_version` for app.js busting
+
 ## [1.4.45] - 2026-11-21
 
 ### Fix: official detect follow-up (Bugbot)

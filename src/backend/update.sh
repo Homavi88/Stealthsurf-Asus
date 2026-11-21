@@ -60,6 +60,21 @@ addon_update_status_write() {
     fi
 }
 
+# Keep Merlin custom_settings / NVRAM in lockstep with the running script version.
+# Stale stealthsurf_version (e.g. after install when the UI preferred the cache) kept
+# showing «update available» even after a successful upgrade + page reload.
+sync_stealthsurf_version_setting() {
+    local want="${1:-$XRAYUI_VERSION}"
+    want=${want#v}
+    [ -n "$want" ] || return 0
+    local have=""
+    have=$(am_settings_get stealthsurf_version 2>/dev/null || true)
+    have=${have#v}
+    if [ "$have" != "$want" ]; then
+        am_settings_set stealthsurf_version "$want" 2>/dev/null || true
+    fi
+}
+
 # Query GitHub releases/latest for Homavi88/Stealthsurf-Asus; optionally auto-install.
 addon_update_check_run() {
     load_xrayui_config
@@ -240,6 +255,17 @@ update() {
         log_error "Installation finished with errors. The details are above."
         return 1
     fi
+
+    # Parent shell still holds the pre-update XRAYUI_VERSION — read the new script.
+    # Clearing addon-update-status prevents a stale «current: 1.4.x» banner after reload.
+    local installed_ver=""
+    installed_ver=$(sed -n 's/^XRAYUI_VERSION="\([^"]*\)".*/\1/p' "$ADDON_SCRIPT" 2>/dev/null | head -n1)
+    if [ -z "$installed_ver" ] || [ "$installed_ver" = "latest" ]; then
+        [ "$specific_version" != "latest" ] && installed_ver="$specific_version"
+    fi
+    [ -n "$installed_ver" ] || installed_ver="$XRAYUI_VERSION"
+    sync_stealthsurf_version_setting "$installed_ver"
+    addon_update_status_write "$installed_ver" "$installed_ver" false "Updated to v$installed_ver"
 
     log_ok "Update process completed!"
 }

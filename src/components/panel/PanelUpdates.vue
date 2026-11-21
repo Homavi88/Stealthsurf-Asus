@@ -85,7 +85,7 @@
   import Version from '../Version.vue';
   import PanelUpdateProgress from './PanelUpdateProgress.vue';
   import { savePanelNav } from './panelNav';
-  import { checkSurfGateUpdate, compareVersions } from '@/modules/SurfGateUpdate';
+  import { checkSurfGateUpdate, compareVersions, installedVersion, syncDisplayedVersion } from '@/modules/SurfGateUpdate';
 
   interface UpdateStatus {
     repo?: string;
@@ -114,13 +114,11 @@
 
       const repo = computed(() => status.value?.repo || 'Homavi88/Stealthsurf-Asus');
       const repoUrl = computed(() => `https://github.com/${repo.value}/releases`);
-      const current = computed(
-        () =>
-          window.xray?.custom_settings?.stealthsurf_version ||
-          uiResponse?.value?.xray?.ui_version ||
-          status.value?.current ||
-          '—'
-      );
+      const current = computed(() => {
+        const live = installedVersion(uiResponse?.value?.xray?.ui_version);
+        const fromStatus = String(status.value?.current || '').replace(/^v/i, '');
+        return live || fromStatus || '—';
+      });
       const displayLatest = computed(() => clientLatest.value || status.value?.latest || '');
       const updateAvailable = computed(() => {
         const latest = String(displayLatest.value || '').replace(/^v/i, '');
@@ -183,8 +181,9 @@
 
       const checkClient = async () => {
         try {
+          syncDisplayedVersion(uiResponse?.value?.xray?.ui_version);
           const info = await checkSurfGateUpdate(
-            uiResponse?.value?.xray?.ui_version,
+            uiResponse?.value?.xray?.ui_version || installedVersion(),
             uiResponse?.value?.xray?.github_proxy
           );
           clientLatest.value = info.latest;
@@ -219,7 +218,7 @@
       };
 
       const installNow = async () => {
-        const version = displayLatest.value;
+        const version = String(displayLatest.value || '').replace(/^v/i, '');
         if (!version) return;
         if (!window.confirm(`Установить SurfGate v${version} с GitHub? Роутер скачает пакет и переустановит аддон.`)) {
           return;
@@ -227,7 +226,8 @@
         busy.value = true;
         savePanelNav({ view: 'settings', section: 'updates' });
         try {
-          await updateProgress.value?.run(version);
+          // Banner install always pulls GitHub latest (not a pinned stale tag).
+          await updateProgress.value?.run('latest');
           await loadStatus();
           await checkClient();
         } finally {

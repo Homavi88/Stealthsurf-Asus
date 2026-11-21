@@ -36,8 +36,31 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * Installed addon version for update banners.
+ * Prefer live script `ui_version` over cached `custom_settings.stealthsurf_version`
+ * — the NVRAM/file cache can lag after install and keep showing a false "update available".
+ * When both exist, use the higher of the two so a stale low cache cannot force a banner.
+ */
 export function installedVersion(uiVersion?: string): string {
-  return normalizeVersion(window.xray?.custom_settings?.stealthsurf_version || uiVersion || '');
+  const fromUi = normalizeVersion(uiVersion || '');
+  const fromSettings = normalizeVersion(window.xray?.custom_settings?.stealthsurf_version || '');
+  if (fromUi && fromSettings) {
+    return compareVersions(fromUi, fromSettings) >= 0 ? fromUi : fromSettings;
+  }
+  return fromUi || fromSettings || '';
+}
+
+/** Keep window.xray.custom_settings in sync with the live script version when it is newer/equal. */
+export function syncDisplayedVersion(uiVersion?: string): string {
+  const current = installedVersion(uiVersion);
+  if (current && window.xray?.custom_settings) {
+    const cached = normalizeVersion(window.xray.custom_settings.stealthsurf_version || '');
+    if (!cached || compareVersions(current, cached) === 1 || current !== cached) {
+      window.xray.custom_settings.stealthsurf_version = current;
+    }
+  }
+  return current;
 }
 
 function candidateUrls(url: string, proxy?: string | null): string[] {
