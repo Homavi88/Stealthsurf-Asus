@@ -189,7 +189,9 @@ printf '#!/bin/sh\nexit 0\n' >"$OFFICIAL_SS_DAEMON"
 chmod +x "$OFFICIAL_SS_DAEMON"
 KILLED=0
 PROC=1
+PORT=0
 ss_official_process_running() { [ "$PROC" = "1" ]; }
+ss_official_port_listening() { [ "$PORT" = "1" ]; }
 ss_official_kill_process() { KILLED=1; PROC=0; return 0; }
 ss_official_firewall_active() { return 1; }
 ss_official_cache_invalidate
@@ -199,6 +201,29 @@ else
   bad "force_stop ok"
 fi
 [ "$KILLED" = "1" ] && pass "force_stop killed" || bad "force_stop killed"
+
+# force_stop must fail (and not claim success) if :8800 LISTEN survives
+KILLED=0
+PROC=0
+PORT=1
+CLEANED=0
+ss_official_process_running() { [ "$PROC" = "1" ]; }
+ss_official_port_listening() { [ "$PORT" = "1" ]; }
+ss_official_kill_process() { KILLED=1; return 0; }
+ss_official_cleanup_orphan_firewall() { CLEANED=1; }
+ss_official_firewall_active() { return 0; }
+ss_official_cache_invalidate
+if ss_official_force_stop; then
+  bad "force_stop must fail while :8800 listens"
+else
+  pass "force_stop fails while :8800 listens"
+fi
+[ "$CLEANED" = "0" ] && pass "force_stop did not flush while :8800 up" || bad "force_stop must not flush while :8800 up"
+
+# Port helper must require LISTEN (0A), not TIME_WAIT
+grep -q '0A' "$ROOT/src/backend/official_conflict.sh" || bad "port check must require TCP_LISTEN 0A"
+grep -q 'stealthsurf-rou)' "$ROOT/src/backend/official_conflict.sh" || bad "comm check must use 15-char truncation"
+pass "LISTEN-only port check + truncated comm in source"
 
 # cleanup without force must skip when package installed
 CLEANED=0
