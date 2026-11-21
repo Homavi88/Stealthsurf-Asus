@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.4.44] - 2026-11-21
+
+### Fix: official StealthSurf detection / no more accidental cleanup
+
+- Home/status polls are **side-effect free** — no kill, no flush of `STEALTHSURF_*` (that was glitching the official app)
+- Detect running official via process **or :8800**
+- Treat package as installed by binary **or** version/www/sbin markers (do not “reap” a live install with a moved path)
+- Auto-clean `STEALTHSURF_*` only when official package is gone, or on force-clear / SurfGate start
+- Firewall teardown and legacy migrate no longer wipe `STEALTHSURF_*` while official is installed
+
+
 ## [1.4.43] - 2026-11-21
 
 ### Fix: IPv6 DNS strategy stuck on UseIPv4

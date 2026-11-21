@@ -1040,10 +1040,17 @@ cleanup_firewall_rules() {
         rm -f "$IPSET_LEARNED_FILE"
     fi
 
-    # Only our SSURF_* sets (and legacy Homavi88 STEALTHSURF_* once) — never foreign sets
-    ipset list -n 2>/dev/null | awk '/^(SSURF_|STEALTHSURF_)/{print $1}' | while read -r s; do
+    # Only our SSURF_* sets. Never touch STEALTHSURF_* — that namespace belongs to the
+    # official StealthSurf package; wiping it while official is installed breaks it.
+    ipset list -n 2>/dev/null | awk '/^SSURF_/{print $1}' | while read -r s; do
         ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null
     done
+    # Legacy Homavi88 STEALTHSURF_* ipsets only when official package is absent.
+    if ! type ss_official_daemon_on_disk >/dev/null 2>&1 || ! ss_official_daemon_on_disk 2>/dev/null; then
+        ipset list -n 2>/dev/null | awk '/^STEALTHSURF_/{print $1}' | while read -r s; do
+            ipset destroy "$s" 2>/dev/null || ipset flush "$s" 2>/dev/null
+        done
+    fi
 
     ipt_remove mangle FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
     ipt_remove mangle OUTPUT -p tcp --tcp-flags SYN,RST SYN -j TCPMSS --clamp-mss-to-pmtu
