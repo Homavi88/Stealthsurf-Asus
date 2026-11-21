@@ -187,10 +187,10 @@ function handleHttp(socket, ctx) {
         socket.end(`HTTP/1.1 403 ${decision.reason}\r\nContent-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n${decision.reason}`);
         return;
       }
-      const length = Number(/content-length:\s*(\d+)/i.exec(head)?.[1] || 0);
-      const body = rest.subarray(0, length);
       upstream.write(`${method} ${url.pathname}${url.search} HTTP/1.1\r\n${headers}\r\n\r\n`);
-      if (body.length) upstream.write(body);
+      const stopClient = () => socket.on("data", () => {});
+      if (/transfer-encoding:\s*chunked/i.test(head)) forwardChunked(socket, upstream, rest, ctx, decision, stopClient);
+      else forwardLimited(socket, upstream, rest, Number(/content-length:\s*(\d+)/i.exec(head)?.[1] || 0), ctx, decision, stopClient);
       pumpDown(socket, upstream, ctx, decision);
     });
   };
@@ -313,6 +313,68 @@ function socksRequest(host, port) {
   return Buffer.concat([Buffer.from([5, 1, 0]), addr, p]);
 }
 
+function forwardLimited(client, upstream, initial, length, ctx, decision, done) {
+  let sent = 0;
+  const lane = decision.action === "proxy" ? "vpn" : "direct";
+  const write = (chunk) => {
+    if (!chunk?.length || sent >= length) return;
+    const piece = chunk.subarray(0, length - sent);
+    sent += piece.length;
+    ctx.hooks.bytes?.(lane, "up", piece.length, decision);
+    if (!upstream.write(piece)) client.pause();
+  };
+  write(initial);
+  if (sent >= length) { done(); return; }
+  const onData = (chunk) => {
+    write(chunk);
+    if (sent >= length) {
+      client.off("data", onData);
+      done();
+    }
+  };
+  upstream.on("drain", () => client.resume());
+  client.on("data", onData);
+}
+
+function forwardChunked(client, upstream, initial, ctx, decision, done) {
+  let buf = Buffer.from(initial);
+  let finished = false;
+  const lane = decision.action === "proxy" ? "vpn" : "direct";
+  const write = (chunk) => {
+    if (!chunk.length) return;
+    ctx.hooks.bytes?.(lane, "up", chunk.length, decision);
+    if (!upstream.write(chunk)) client.pause();
+  };
+  const pull = () => {
+    while (!finished) {
+      const lineEnd = buf.indexOf("\r\n");
+      if (lineEnd < 0) return;
+      const size = Number.parseInt(buf.slice(0, lineEnd).toString("utf8"), 16);
+      if (!Number.isInteger(size) || size < 0) { client.destroy(); return; }
+      if (size === 0) {
+        const end = buf.indexOf("\r\n\r\n", lineEnd);
+        if (end < 0) return;
+        write(buf.subarray(0, end + 4));
+        finished = true;
+        client.off("data", onData);
+        done();
+        return;
+      }
+      const total = lineEnd + 2 + size + 2;
+      if (buf.length < total) return;
+      write(buf.subarray(0, total));
+      buf = buf.subarray(total);
+    }
+  };
+  function onData(chunk) {
+    buf = Buffer.concat([buf, chunk]);
+    pull();
+  }
+  upstream.on("drain", () => client.resume());
+  pull();
+  if (!finished) client.on("data", onData);
+}
+
 function pumpDown(client, upstream, ctx, decision) {
   const lane = decision.action === "proxy" ? "vpn" : "direct";
   upstream.on("data", (chunk) => {
@@ -320,7 +382,6 @@ function pumpDown(client, upstream, ctx, decision) {
     if (!client.write(chunk)) upstream.pause();
   });
   client.on("drain", () => upstream.resume());
-  client.on("data", () => {});
   const close = () => { client.destroy(); upstream.destroy(); };
   client.on("close", () => upstream.destroy());
   upstream.on("close", () => client.end());

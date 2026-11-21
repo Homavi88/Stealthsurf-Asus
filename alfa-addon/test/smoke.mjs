@@ -62,6 +62,11 @@ test("subscription links and all four engine configs build", () => {
   assert.throws(() => setPath({}, "router.__proto__.polluted", 1), /Недопустимый путь/);
   const ctx = { live: { fakeToHost: new Map([["198.18.0.8", "example.com"]]) } };
   assert.equal(dialTarget(ctx, "198.18.0.8"), "example.com");
+  assert.equal(buildSingBox(state, { ...node, protocol: "socks", host: "10.0.0.1", port: 1080 }).outbounds[0].type, "socks");
+  assert.equal(buildSingBox(state, { ...node, protocol: "http", host: "10.0.0.1", port: 8080 }).outbounds[0].type, "http");
+  const rejected = buildSingBox(state, { ...node, protocol: "amneziawg" });
+  assert.ok(rejected.route.rules.length > 0);
+  assert.ok(rejected.route.rules.every((rule) => rule.network));
 });
 
 test("edge keeps socks and http on different ports", async () => {
@@ -96,6 +101,14 @@ test("installed cores accept the 1.14 configs", () => {
     writeFileSync(plain, JSON.stringify(buildSingBox(state, node)));
     const plainCheck = spawnSync(singBin, ["check", "-c", plain], { encoding: "utf8" });
     assert.equal(plainCheck.status, 0, plainCheck.stderr || plainCheck.stdout);
+    const socksFile = join(dir, "sing-socks.json");
+    writeFileSync(socksFile, JSON.stringify(buildSingBox(state, { ...node, protocol: "socks", host: "10.0.0.1", port: 1080 })));
+    const socksCheck = spawnSync(singBin, ["check", "-c", socksFile], { encoding: "utf8" });
+    assert.equal(socksCheck.status, 0, socksCheck.stderr || socksCheck.stdout);
+    const rejectFile = join(dir, "sing-reject.json");
+    writeFileSync(rejectFile, JSON.stringify(buildSingBox(state, { ...node, protocol: "amneziawg" })));
+    const rejectCheck = spawnSync(singBin, ["check", "-c", rejectFile], { encoding: "utf8" });
+    assert.equal(rejectCheck.status, 0, rejectCheck.stderr || rejectCheck.stdout);
   }
   const mihomoBin = corePath("mihomo");
   if (mihomoBin && existsSync(mihomoBin)) {
@@ -103,6 +116,41 @@ test("installed cores accept the 1.14 configs", () => {
     writeFileSync(file, buildMihomo({ ...state, connection: { ...state.connection, shareLan: true } }, node));
     const checked = spawnSync(mihomoBin, ["-t", "-f", file], { encoding: "utf8" });
     assert.equal(checked.status, 0, checked.stderr || checked.stdout);
+  }
+});
+
+test("plain http proxy forwards a split body and ignores the next request", async () => {
+  const local = http.createServer((req, res) => {
+    const chunks = [];
+    req.on("data", (chunk) => chunks.push(chunk));
+    req.on("end", () => res.end(Buffer.concat(chunks)));
+  });
+  await new Promise((resolve) => local.listen(0, "127.0.0.1", resolve));
+  const state = defaultState();
+  state.vpn.connected = true;
+  state.engine.socksPort = 20980;
+  state.engine.httpPort = 20981;
+  const edge = await startEdge({ state, live: { tunnel: "off", fakeToHost: new Map() }, hooks: {} });
+  const port = local.address().port;
+  try {
+    const posted = await rawProxy(edge.httpPort, (socket) => {
+      const body = "hello-alfa-body";
+      socket.write(`POST http://127.0.0.1:${port}/x HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nContent-Length: ${body.length}\r\n\r\n`);
+      socket.write(body.slice(0, 5));
+      setTimeout(() => socket.write(body.slice(5) + "GET /second HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), 40);
+    });
+    assert.match(posted, /hello-alfa-body/);
+    assert.doesNotMatch(posted, /GET \/second/);
+    const chunked = await rawProxy(edge.httpPort, (socket) => {
+      socket.write(`POST http://127.0.0.1:${port}/c HTTP/1.1\r\nHost: 127.0.0.1:${port}\r\nTransfer-Encoding: chunked\r\n\r\n`);
+      socket.write("5\r\nhello\r\n");
+      setTimeout(() => socket.write("5\r\n-alfa\r\n0\r\n\r\nGET /second HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n"), 40);
+    });
+    assert.match(chunked, /hello-alfa/);
+    assert.doesNotMatch(chunked, /GET \/second/);
+  } finally {
+    edge.stop();
+    await new Promise((resolve) => local.close(resolve));
   }
 });
 
@@ -154,6 +202,17 @@ test("panel login, connect, proxy and explain", async () => {
     await stop();
   }
 });
+
+function rawProxy(port, write) {
+  return new Promise((resolve, reject) => {
+    const socket = net.connect(port, "127.0.0.1", () => write(socket));
+    let data = "";
+    socket.on("data", (chunk) => { data += chunk; });
+    socket.on("end", () => resolve(data));
+    socket.on("error", reject);
+    setTimeout(() => { socket.destroy(); resolve(data); }, 2000);
+  });
+}
 
 function proxyRequest(port, host, targetPort, path) {
   return new Promise((resolve, reject) => {

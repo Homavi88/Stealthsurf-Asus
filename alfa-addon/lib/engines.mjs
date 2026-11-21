@@ -271,6 +271,17 @@ function singPlan(node) {
       },
     };
   }
+  if (node.protocol === "socks" || node.protocol === "http") {
+    return {
+      outbound: {
+        ...base,
+        type: node.protocol,
+        version: node.protocol === "socks" ? "5" : undefined,
+        username: node.username || node.user || undefined,
+        password: node.password || undefined,
+      },
+    };
+  }
   return { reject: true };
 }
 
@@ -314,7 +325,9 @@ export function buildSingBox(state, node, { tunnelOnly = false } = {}) {
   const port = tunnelOnly ? ENGINE_PORT : Number(state.engine.socksPort || 20808);
   const plan = singPlan(node);
   const rules = tunnelOnly || plan.reject ? [] : ruleList(state).map(singRule).filter(Boolean);
-  if (plan.reject) rules.push({ action: "reject" });
+  if (plan.reject) {
+    rules.push({ action: "reject", network: "tcp" }, { action: "reject", network: "udp" });
+  }
   const dns = dnsServers(state);
   const dnsServersList = [{ type: "udp", tag: "remote", server: dns.primary[0] }];
   if (state.engine.fakeIp && !tunnelOnly) {
