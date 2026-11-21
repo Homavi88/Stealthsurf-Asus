@@ -119,7 +119,7 @@
             :disabled="busy"
             @click="clearOfficial"
           >
-            {{ busy ? '…' : 'Остановить leftover StealthSurf' }}
+            {{ busy ? '…' : 'Остановить official StealthSurf' }}
           </button>
         </div>
         <button
