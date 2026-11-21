@@ -539,9 +539,9 @@
       const ipv6ModeSubtitle = computed(() => {
         switch (options.ipv6_mode) {
           case 'block':
-            return 'Резать IPv6 на WAN (нет утечки мимо VPN)';
+            return 'Резать IPv6 на WAN + DNS UseIPv4 (без зависаний на AAAA)';
           case 'ignore':
-            return 'SurfGate не трогает IPv6';
+            return 'IPv6 не трогаем; DNS Prefer IPv4, если стратегия не задана';
           default:
             return 'IPv6 участвует в transparent proxy';
         }

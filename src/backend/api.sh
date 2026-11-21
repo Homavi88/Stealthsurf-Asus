@@ -108,8 +108,9 @@ api_write_config() {
   local tag_count
   tag_count=$(printf '%s' "$outbound_tags" | jq 'length' 2>/dev/null) || tag_count=0
   case "$tag_count" in '' | *[!0-9]*) tag_count=0 ;; esac
-  # Serialize probes when many outbounds (subscriptions / full catalog) to avoid RAM spikes.
-  if [ "$tag_count" -gt 5 ]; then
+  # Serialize probes when several outbounds (subscriptions / catalog) to avoid RAM spikes.
+  # Threshold is >=4: five parallel Hysteria/VLESS probes were enough to push Merlin toward OOM.
+  if [ "$tag_count" -ge 4 ]; then
     enable_concurrency=false
     # Floor probe interval — burst/rapid probes of dead subscription nodes OOM Merlin.
     if [ "$observatory_probe_interval" -lt 30 ]; then
@@ -123,7 +124,7 @@ api_write_config() {
   # burstObservatory has no enableConcurrency — dumping every outbound into it recreates
   # the Merlin OOM path. Prefer plain observatory (with concurrency off) when many tags.
   local observatory_block=""
-  if [ "$tag_count" -gt 5 ] && [ "$check_connection" = "true" ]; then
+  if [ "$tag_count" -ge 4 ] && [ "$check_connection" = "true" ]; then
     observatory_block=""
   else
     observatory_block=$(
@@ -146,6 +147,26 @@ api_write_config() {
   },"
   fi
 
+  # Merge stats flags into the main policy (later -c replaces policy wholesale).
+  # Preserve handshake/connIdle/bufferSize from the profile so we do not reset timeouts.
+  local policy_json
+  policy_json=$(
+    jq -c '
+      .policy // {}
+      | .levels //= {}
+      | .levels["0"] //= {}
+      | .levels["0"].statsUserUplink = true
+      | .levels["0"].statsUserDownlink = true
+      | .levels["0"].bufferSize = (.levels["0"].bufferSize // 256)
+      | .system //= {}
+      | .system.statsInboundUplink = true
+      | .system.statsInboundDownlink = true
+      | .system.statsOutboundUplink = true
+      | .system.statsOutboundDownlink = true
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null
+  ) || policy_json='{"levels":{"0":{"statsUserUplink":true,"statsUserDownlink":true,"bufferSize":256}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true,"statsOutboundUplink":true,"statsOutboundDownlink":true}}'
+  [ -n "$policy_json" ] || policy_json='{"levels":{"0":{"statsUserUplink":true,"statsUserDownlink":true,"bufferSize":256}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true,"statsOutboundUplink":true,"statsOutboundDownlink":true}}'
+
   cat >"$xray_api_config" <<EOF
 {
   "api": {
@@ -165,19 +186,46 @@ api_write_config() {
     }
   ],
   "stats": {},
-  "policy": {
-    "levels": {
-      "0": { "statsUserUplink": true, "statsUserDownlink": true }
-    },
-    "system": {
-      "statsInboundUplink": true,
-      "statsInboundDownlink": true,
-      "statsOutboundUplink": true,
-      "statsOutboundDownlink": true
-    }
-  },
+  "policy": $policy_json,
   $observatory_block
   "metrics": { "tag": "sys:metrics_out" }
+}
+EOF
+}
+
+# Minimal API extension: StatsService + outbound counters for Home speed/Σ.
+# Always written so traffic stats work even when connection/clients checks are off.
+api_write_stats_config() {
+  log_info "Writing StatsService configuration for Home traffic…"
+  mkdir -p "$XRAY_CONFIG_DIR"
+  local xray_api_config policy_json
+  xray_api_config=$(api_get_current_config)
+  policy_json=$(
+    jq -c '
+      .policy // {}
+      | .levels //= {}
+      | .levels["0"] //= {}
+      | .levels["0"].statsUserUplink = true
+      | .levels["0"].statsUserDownlink = true
+      | .levels["0"].bufferSize = (.levels["0"].bufferSize // 256)
+      | .system //= {}
+      | .system.statsInboundUplink = true
+      | .system.statsInboundDownlink = true
+      | .system.statsOutboundUplink = true
+      | .system.statsOutboundDownlink = true
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null
+  ) || policy_json=""
+  [ -n "$policy_json" ] || policy_json='{"levels":{"0":{"statsUserUplink":true,"statsUserDownlink":true,"bufferSize":256}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true,"statsOutboundUplink":true,"statsOutboundDownlink":true}}'
+
+  cat >"$xray_api_config" <<EOF
+{
+  "api": {
+    "tag": "sys:api",
+    "listen": "127.0.0.1:10185",
+    "services": ["HandlerService", "LoggerService", "StatsService", "ReflectionService"]
+  },
+  "stats": {},
+  "policy": $policy_json
 }
 EOF
 }
@@ -310,8 +358,9 @@ api_balancer_selectors() {
 
 api_write_observatory_config() {
   local xray_api_config selectors observatory_probe_url observatory_probe_interval
+  local policy_json tag_count enable_concurrency=true
 
-  log_info "Writing observatory configuration for balancers..."
+  log_info "Writing observatory + StatsService configuration for balancers..."
   mkdir -p "$XRAY_CONFIG_DIR"
 
   xray_api_config=$(api_get_current_config)
@@ -319,15 +368,40 @@ api_write_observatory_config() {
   observatory_probe_url=$(printf '%s' "${probe_url:-https://www.google.com/generate_204}" | jq -Rs '.')
   observatory_probe_interval=$(sanitize_probe_interval "$probe_interval")
 
-  local tag_count enable_concurrency=true
   tag_count=$(printf '%s' "$selectors" | jq 'length' 2>/dev/null) || tag_count=0
   case "$tag_count" in '' | *[!0-9]*) tag_count=0 ;; esac
-  if [ "$tag_count" -gt 5 ]; then
+  if [ "$tag_count" -ge 4 ]; then
     enable_concurrency=false
   fi
 
+  # Keep StatsService here — previously this path overwrote the API file with
+  # observatory-only JSON and Home traffic counters stayed at 0 forever.
+  policy_json=$(
+    jq -c '
+      .policy // {}
+      | .levels //= {}
+      | .levels["0"] //= {}
+      | .levels["0"].statsUserUplink = true
+      | .levels["0"].statsUserDownlink = true
+      | .levels["0"].bufferSize = (.levels["0"].bufferSize // 256)
+      | .system //= {}
+      | .system.statsInboundUplink = true
+      | .system.statsInboundDownlink = true
+      | .system.statsOutboundUplink = true
+      | .system.statsOutboundDownlink = true
+    ' "$XRAY_CONFIG_FILE" 2>/dev/null
+  ) || policy_json=""
+  [ -n "$policy_json" ] || policy_json='{"levels":{"0":{"statsUserUplink":true,"statsUserDownlink":true,"bufferSize":256}},"system":{"statsInboundUplink":true,"statsInboundDownlink":true,"statsOutboundUplink":true,"statsOutboundDownlink":true}}'
+
   cat >"$xray_api_config" <<EOF
 {
+  "api": {
+    "tag": "sys:api",
+    "listen": "127.0.0.1:10185",
+    "services": ["HandlerService", "LoggerService", "StatsService", "ReflectionService"]
+  },
+  "stats": {},
+  "policy": $policy_json,
   "observatory": {
     "subjectSelector": $selectors,
     "probeUrl": $observatory_probe_url,
@@ -338,20 +412,26 @@ api_write_observatory_config() {
 EOF
 }
 
+# Home panel traffic/speed needs StatsService even when connection/clients checks are off.
 api_config_required() {
-  [ "$check_connection" = "true" ] || [ "$clients_check" = "true" ] || api_balancers_need_observatory
+  return 0
 }
 
 api_apply_configuration() {
   load_xrayui_config
 
-  if ! api_config_required; then
-    log_info "Skipping API configuration as per user settings."
-    return
-  fi
-
+  # StatsService is always required for Home speed / Σ. Observatory is optional.
   if [ "$check_connection" != "true" ] && [ "$clients_check" != "true" ]; then
-    api_write_observatory_config
+    if api_balancers_need_observatory; then
+      api_write_observatory_config
+    else
+      api_write_stats_config
+    fi
+    # No metrics inbound when connection check is off — drop stale sys:metrics rule.
+    jq_update_file "$XRAY_CONFIG_FILE" '
+            .routing.rules //= [] |
+            .routing.rules |= map(select(.name != "sys:metrics"))
+          ' || log_error "Failed to clear sys:metrics rule; $XRAY_CONFIG_FILE was left unchanged."
     return
   fi
 

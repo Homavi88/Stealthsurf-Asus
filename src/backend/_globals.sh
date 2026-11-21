@@ -15,7 +15,7 @@ ADDON_TITLE="SurfGate"
 # Merlin/UI action_script prefix (Homavi88 panel protocol). Not the official addon.
 ADDON_ACTION_PREFIX="stealthsurf"
 
-XRAYUI_VERSION="1.4.41"
+XRAYUI_VERSION="1.4.42"
 # Xray-core version fresh installs get: the one this release was tested with.
 XRAYUI_TESTED_CORE="26.9.9"
 

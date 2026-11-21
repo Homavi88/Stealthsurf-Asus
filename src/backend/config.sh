@@ -106,7 +106,9 @@ EOF
     # Xray ≥26.9 dropped top-level "legacy reverse" (bridges/portals). SurfGate is a
     # client transparent proxy — strip it so start/test no longer fail with:
     #   "legacy reverse" has been removed and migrated to "VLESS Reverse Proxy"
-    jq '
+    # Prefer IPv4 DNS when IPv6 is blocked/ignored — AAAA then hangs until timeout
+    # ("site opens, then keeps loading"). Leave an explicit user queryStrategy alone.
+    jq --arg ipv6_mode "${ipv6_mode:-proxy}" '
       del(.reverse)
       | .log = (.log // {})
       | .log.loglevel = (.log.loglevel // "warning")
@@ -117,6 +119,10 @@ EOF
       | .routing.rules = (.routing.rules // [])
       | .dns = (.dns // {})
       | .dns.servers = (.dns.servers // ["localhost"])
+      | if (.dns.queryStrategy | type == "string") and (.dns.queryStrategy | length) > 0 then .
+        elif $ipv6_mode == "block" or $ipv6_mode == "ignore" then
+          .dns.queryStrategy = "UseIPv4"
+        else . end
       | if ([.inbounds[] | select(.tag == "all-in")] | length) > 0 then .
         else .inbounds += [{
           "protocol": "dokodemo-door",

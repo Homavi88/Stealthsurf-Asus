@@ -110,31 +110,31 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   });
 
   it.each([
-    ['leastPing', { strategy: { type: 'leastPing' } }, 0],
-    ['leastLoad in any letter case', { strategy: { type: 'LEASTLOAD' } }, 0],
-    ['random with a fallback outbound', { fallbackTag: 'direct' }, 0],
-    ['roundRobin with a fallback outbound', { strategy: { type: 'roundRobin' }, fallbackTag: 'direct' }, 0],
-    ['random without a fallback outbound', {}, 1],
-    ['roundRobin without a fallback outbound', { strategy: { type: 'roundRobin' } }, 1]
-  ])('loads the observatory for a %s balancer with both checks off', (_label, balancer, rc) => {
+    ['leastPing', { strategy: { type: 'leastPing' } }],
+    ['leastLoad in any letter case', { strategy: { type: 'LEASTLOAD' } }],
+    ['random with a fallback outbound', { fallbackTag: 'direct' }],
+    ['roundRobin with a fallback outbound', { strategy: { type: 'roundRobin' }, fallbackTag: 'direct' }],
+    ['random without a fallback outbound', {}],
+    ['roundRobin without a fallback outbound', { strategy: { type: 'roundRobin' } }]
+  ])('still requires API config for a %s balancer when both checks are off (StatsService)', (_label, balancer) => {
     const r = run(shell, {
       steps: ['required'],
       env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' },
       files: { 'opt/etc/xray/ssurf/config.json': balancerConfig(balancer) }
     });
-    expect(r.events).toEqual([`required rc=${rc}`]);
+    expect(r.events).toEqual(['required rc=0']);
   });
 
   it.each([
     ['observatory', { observatory: { subjectSelector: ['p-'] } }],
     ['burstObservatory', { burstObservatory: { subjectSelector: ['p-'] } }]
-  ])('leaves a configuration with its own %s alone when both checks are off', (_label, extra) => {
+  ])('still requires API config with a hand-written %s when both checks are off', (_label, extra) => {
     const config = { ...JSON.parse(balancerConfig({ strategy: { type: 'leastPing' } })), ...extra };
     const r = run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' }, files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) } });
-    expect(r.events).toEqual(['required rc=1']);
+    expect(r.events).toEqual(['required rc=0']);
   });
 
-  it('writes only an observatory for the balancers that need it when both checks are off', () => {
+  it('writes observatory + StatsService for balancers when both checks are off', () => {
     const config = {
       outbounds: [{ tag: 'p-a' }],
       routing: {
@@ -150,10 +150,32 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
       env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false', RS_PROBE_URL: 'https://probe.example/204', RS_PROBE_INTERVAL: '45' },
       files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) }
     });
-    expect(r.apiConfig).toEqual({
+    // Home traffic needs StatsService even when connection/clients checks are off —
+    // previously this path wrote observatory-only JSON and counters stayed at 0.
+    expect(r.apiConfig).toMatchObject({
+      api: { tag: 'sys:api', listen: '127.0.0.1:10185' },
+      stats: {},
       observatory: { subjectSelector: ['p-', 'q-', 'r-'], probeUrl: 'https://probe.example/204', probeInterval: '45s', enableConcurrency: true }
     });
-    expect(r.events).not.toContain('jq_update_file');
+    expect(r.apiConfig?.policy).toMatchObject({
+      system: { statsOutboundUplink: true, statsOutboundDownlink: true }
+    });
+    expect(r.events).toContain('jq_update_file');
+    expect(r.events).toContain('apply rc=0');
+  });
+
+  it('always writes StatsService when both checks are off and no balancer needs probes', () => {
+    const r = run(shell, {
+      steps: ['apply'],
+      env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' },
+      files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify({ outbounds: [{ tag: 'ss-1', protocol: 'vless' }] }) }
+    });
+    expect(r.apiConfig).toMatchObject({
+      api: { tag: 'sys:api', listen: '127.0.0.1:10185' },
+      stats: {},
+      policy: { system: { statsOutboundUplink: true, statsOutboundDownlink: true } }
+    });
+    expect(r.apiConfig).not.toHaveProperty('observatory');
     expect(r.events).toContain('apply rc=0');
   });
 
@@ -180,11 +202,27 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
       env: { RS_CHECK_CONNECTION: 'true', RS_PROBE_INTERVAL: '60' },
       files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify(config) }
     });
+    // >=4 tags: prefer plain observatory with concurrency off (avoids Merlin OOM).
     expect(r.apiConfig?.observatory).toEqual(
       expect.objectContaining({
         subjectSelector: outbounds.map((o) => o.tag),
         enableConcurrency: false,
         probeInterval: '60s'
+      })
+    );
+  });
+
+  it('disables concurrent probes already at 4 outbounds', () => {
+    const outbounds = Array.from({ length: 4 }, (_, i) => ({ tag: `p-${i}`, protocol: 'hysteria' }));
+    const r = run(shell, {
+      steps: ['apply'],
+      env: { RS_CHECK_CONNECTION: 'true', RS_PROBE_INTERVAL: '60' },
+      files: { 'opt/etc/xray/ssurf/config.json': JSON.stringify({ outbounds }) }
+    });
+    expect(r.apiConfig?.observatory).toEqual(
+      expect.objectContaining({
+        subjectSelector: outbounds.map((o) => o.tag),
+        enableConcurrency: false
       })
     );
   });
@@ -232,7 +270,9 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
 
   it('lists the clients that moved traffic since the last query', () => {
     const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/ssurf/config-api.json': CLIENTS_API_CONFIG, 'stats.json': STATS } });
-    expect(JSON.parse(r.clients ?? '')).toEqual([{ ip: '', email: ['alice@example'] }]);
+    expect(JSON.parse(r.clients ?? '')).toEqual([
+      { ip: '', mac: '', name: 'alice@example', outbound: 'inbound', last_seen: '', email: ['alice@example'] }
+    ]);
     expect(r.events).toEqual(['xray api statsquery -s 127.0.0.1:10185 -pattern user>>> -reset', 'clients rc=0']);
   });
 
@@ -245,12 +285,14 @@ describeIf.each(SHELLS)('api.sh under %s', (_name, shell) => {
   it('writes an empty client list when the stats service does not answer', () => {
     const r = run(shell, { steps: ['clients'], env: { RS_PID: '4242' }, files: { 'opt/etc/xray/ssurf/config-api.json': CLIENTS_API_CONFIG } });
     expect(JSON.parse(r.clients ?? '')).toEqual([]);
-    expect(r.events).toContain('ERROR: StatsService unreachable on 127.0.0.1:10185');
+    // Unreachable StatsService is log_debug (LAN device list still works) — no ERROR spam.
+    expect(r.events).toEqual(['xray api statsquery -s 127.0.0.1:10185 -pattern user>>> -reset', 'clients rc=0']);
   });
 
-  it('needs the API configuration when either check is on, and not without a configuration', () => {
+  it('always needs the API configuration (StatsService for Home traffic)', () => {
     expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'true', RS_CLIENTS_CHECK: 'false' } }).events).toEqual(['required rc=0']);
     expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'true' } }).events).toEqual(['required rc=0']);
-    expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' } }).events).toEqual(['required rc=1']);
+    // Even with both checks off — traffic/speed on Home still needs StatsService.
+    expect(run(shell, { steps: ['required'], env: { RS_CHECK_CONNECTION: 'false', RS_CLIENTS_CHECK: 'false' } }).events).toEqual(['required rc=0']);
   });
 });

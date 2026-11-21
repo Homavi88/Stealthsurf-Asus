@@ -38,6 +38,8 @@ XRAY_CONFIG_DIR="$RS_STATE/opt/etc/xray/ssurf"
 XRAY_CONFIG_FILE="$XRAY_CONFIG_DIR/config.json"
 XRAYUI_CONNECTION_STATUS_FILE="$RS_STATE/share/xray_connection_status.json"
 ADDON_SHARE_DIR="$RS_STATE/share"
+ADDON_TMP_DIR="$RS_STATE/tmp"
+mkdir -p "$ADDON_TMP_DIR"
 XRAYUI_CLIENTS_FILE="$RS_STATE/share/clients-online.json"
 check_connection=${RS_CHECK_CONNECTION:-true}
 clients_check=${RS_CLIENTS_CHECK:-false}

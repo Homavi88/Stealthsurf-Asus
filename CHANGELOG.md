@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.4.42] - 2026-11-21
+
+### Fix: Home traffic/speed stuck at 0 Б
+
+- **StatsService always on** — Home speed / Σ no longer depends on «Check connection» / «Clients online». Turning those off (to save RAM) previously skipped the API config, so counters stayed at zero while VPN worked.
+- Balancer-only API path no longer overwrites the API file with observatory-only JSON (which stripped StatsService).
+- VPN volume counts **all proxy outbounds**, not only `ss-*` tags (imported/manual nodes included).
+- `statsquery` has a 5s timeout and rejects empty/non-JSON so a stuck gRPC call cannot freeze live refresh.
+
+### Latency / RAM feel
+
+- Observatory concurrency off from **4+** outbounds (was >5) — fewer parallel Hysteria/VLESS probes on Merlin.
+- API policy merges into the profile policy and defaults `bufferSize` to 256 KB when unset (less RAM than unbounded defaults under many connections).
+- When IPv6 mode is **block** / **ignore**, DNS prefers **UseIPv4** so pages do not stall on AAAA while IPv6 is cut («сайт открылся, но догружается»).
+
 ## [1.4.41] - 2026-11-21
 
 ### Fix: official StealthSurf leftover after uninstall
