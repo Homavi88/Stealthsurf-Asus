@@ -1,0 +1,6 @@
+data/state.json
+data/run/
+data/cores/
+data/feedback/
+data/geo/
+data/*.log
