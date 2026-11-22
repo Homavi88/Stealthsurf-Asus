@@ -5,13 +5,13 @@ import { createGunzip, inflateRawSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
+import { DATA } from "./state.mjs";
+import { ENGINES, pickEngine } from "./catalog.mjs";
+import { dnsServers, ruleList } from "./policy.mjs";
 
 const execFile = promisify(execFileCb);
 const FETCH_UA = "stealthsurf-alfa";
 const DOWNLOAD_MS = 180_000;
-import { DATA } from "./state.mjs";
-import { ENGINES, pickEngine } from "./catalog.mjs";
-import { dnsServers, ruleList } from "./policy.mjs";
 
 export const RUN_DIR = join(DATA, "run");
 export const CORE_DIR = join(DATA, "cores");
