@@ -47,7 +47,7 @@ trap cleanup EXIT
 banner() {
   if [ "$UI_COLOR" -eq 1 ]; then
     printf '\n%b┌─ %sStealthSurf Alfa%s ──────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
-    printf '%b│%b 0.2.0-beta · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
+    printf '%b│%b 0.2.1-beta · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
     printf '%b└─────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
   else
     echo "==> StealthSurf Alfa installer (panel :$PORT, path $OUR_DIR)"

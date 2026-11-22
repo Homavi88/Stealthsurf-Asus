@@ -1,6 +1,6 @@
 /** Domain lists and engine capability matrix used by the live policy and by config compilers. */
 
-export const VERSION = "0.2.0-beta";
+export const VERSION = "0.2.1-beta";
 export const PANEL_PORT = 8788;
 /** Бета на LAN без пароля входа — панель открывается сразу. */
 export const OPEN_PANEL = true;
