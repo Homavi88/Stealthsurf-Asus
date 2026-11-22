@@ -1,0 +1,11 @@
+{
+  "name": "stealthsurf-alfa",
+  "version": "0.1.0-alpha",
+  "private": true,
+  "type": "module",
+  "description": "StealthSurf router addon alpha — panel on :8788",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test test/smoke.mjs"
+  }
+}
