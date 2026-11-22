@@ -13,6 +13,24 @@ die() {
   exit 1
 }
 
+resolve_node() {
+  if [ -n "${ALFA_NODE:-}" ] && [ -x "$ALFA_NODE" ]; then
+    echo "$ALFA_NODE"
+    return 0
+  fi
+  if [ -f "$ADDON_DIR/.node-bin" ]; then
+    saved="$(cat "$ADDON_DIR/.node-bin" 2>/dev/null)"
+    if [ -x "$saved" ]; then
+      echo "$saved"
+      return 0
+    fi
+  fi
+  for c in /opt/bin/node /opt/bin/nodejs; do
+    [ -x "$c" ] && echo "$c" && return 0
+  done
+  return 1
+}
+
 is_running() {
   [ -f "$PID_FILE" ] || return 1
   kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
@@ -24,13 +42,12 @@ start() {
     return 0
   fi
   [ -f "$ADDON_DIR/server.mjs" ] || die "нет $ADDON_DIR/server.mjs — сначала установите аддон"
-  command -v node >/dev/null 2>&1 || die "нужен node из Entware (/opt/bin/node)"
+  NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node из Entware (opkg install node)"
   mkdir -p "$ADDON_DIR/data"
   cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
-  # PORT читает server.mjs через process.env или аргумент не нужен — порт в catalog
-  nohup node server.mjs >>"$LOG_FILE" 2>&1 &
+  nohup "$NODE_BIN" server.mjs >>"$LOG_FILE" 2>&1 &
   echo $! >"$PID_FILE"
-  echo "alfa started on :$PORT (pid $(cat "$PID_FILE"))"
+  echo "alfa started on :$PORT (pid $(cat "$PID_FILE"), node $NODE_BIN)"
   echo "log: $LOG_FILE"
 }
 

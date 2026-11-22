@@ -226,9 +226,58 @@ opkg_install_via_curl() {
   /opt/bin/opkg install --force-overwrite "$TMP_ROOT/ipk/$file"
 }
 
+# BusyBox ash на Merlin часто врёт с `command -v` для свежих бинарников Entware.
+# Entware кладёт Node строго в /opt/bin/node — проверяем файл, не PATH.
+resolve_node() {
+  for c in /opt/bin/node /opt/bin/nodejs; do
+    if [ -x "$c" ]; then
+      echo "$c"
+      return 0
+    fi
+  done
+  old_ifs=$IFS
+  IFS=:
+  for d in $PATH; do
+    [ -n "$d" ] || continue
+    if [ -x "$d/node" ]; then
+      echo "$d/node"
+      IFS=$old_ifs
+      return 0
+    fi
+    if [ -x "$d/nodejs" ]; then
+      echo "$d/nodejs"
+      IFS=$old_ifs
+      return 0
+    fi
+  done
+  IFS=$old_ifs
+  return 1
+}
+
+node_diagnose() {
+  warn "искал исполняемый /opt/bin/node"
+  echo "    PATH=$PATH" >&2
+  ls -la /opt/bin/node /opt/bin/nodejs 2>&1 | sed 's/^/    /' >&2 || true
+  /opt/bin/opkg files node 2>/dev/null | head -n 15 | sed 's/^/    /' >&2 || true
+  /opt/bin/opkg list-installed node 2>/dev/null | sed 's/^/    /' >&2 || true
+  df -h /opt /tmp /jffs 2>/dev/null | sed 's/^/    /' >&2 || true
+}
+
+remember_node() {
+  NODE_BIN="$1"
+  export PATH="/opt/bin:/opt/sbin:$PATH"
+  export ALFA_NODE="$NODE_BIN"
+  mkdir -p "$OUR_DIR" 2>/dev/null || true
+  if [ -d "$OUR_DIR" ]; then
+    echo "$NODE_BIN" >"$OUR_DIR/.node-bin"
+  fi
+}
+
 ensure_node() {
-  if command -v node >/dev/null 2>&1; then
-    ok "node $(node -v 2>/dev/null || echo ok)"
+  if NODE_BIN="$(resolve_node)"; then
+    ver="$("$NODE_BIN" -v 2>/dev/null || echo ok)"
+    remember_node "$NODE_BIN"
+    ok "node $ver ($NODE_BIN)"
     return 0
   fi
   say "ставлю Node.js из Entware"
@@ -254,14 +303,31 @@ ensure_node() {
     }
   fi
 
-  # обновить PATH на случай свежего /opt/bin/node
-  export PATH="/opt/bin:/opt/sbin:$PATH"
-  hash -r 2>/dev/null || true
-  if ! command -v node >/dev/null 2>&1; then
-    fail "после установки нет команды node"
+  sync
+  export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH"
+  if ! NODE_BIN="$(resolve_node)"; then
+    # иногда opkg пишет файл без +x до sync/remount
+    if [ -f /opt/bin/node ]; then
+      chmod +x /opt/bin/node 2>/dev/null || true
+    fi
+    if [ -f /opt/bin/nodejs ]; then
+      chmod +x /opt/bin/nodejs 2>/dev/null || true
+    fi
+    NODE_BIN="$(resolve_node)" || true
+  fi
+  if [ -z "$NODE_BIN" ] || [ ! -x "$NODE_BIN" ]; then
+    node_diagnose
+    fail "после установки нет /opt/bin/node"
     exit 1
   fi
-  ok "node $(node -v 2>/dev/null || echo installed)"
+  ver="$("$NODE_BIN" -v 2>/dev/null || true)"
+  if [ -z "$ver" ]; then
+    warn "бинарник есть ($NODE_BIN), но -v не ответил — проверю библиотеки"
+    "$NODE_BIN" -v 2>&2 || true
+    ldd "$NODE_BIN" 2>&2 | head -n 20 || true
+  fi
+  remember_node "$NODE_BIN"
+  ok "node ${ver:-installed} ($NODE_BIN)"
 }
 
 download_addon() {

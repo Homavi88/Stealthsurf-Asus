@@ -18,6 +18,8 @@
 
 На роутере по SSH (нужны Merlin, JFFS custom scripts и Entware через `amtm`):
 
+Запускайте **под root** (админ SSH). Не пишите `sudo curl … | sh` — тогда `sudo` действует только на curl, а установщик идёт без прав:
+
 ```sh
 /opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/alfa-addon/install.sh | sh
 ```

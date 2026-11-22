@@ -69,6 +69,15 @@ test("install.sh has HTTPS opkg bypass and prefers package node", () => {
   assert.match(text, /preferred_feed|http_feed/);
   assert.match(text, /opkg install node/);
   assert.match(text, /BusyBox wget/);
+  assert.match(text, /resolve_node/);
+  assert.match(text, /\/opt\/bin\/node/);
+});
+
+test("service script starts absolute /opt/bin/node not bare node", () => {
+  const text = readFileSync(join(root, "scripts/alfa"), "utf8");
+  assert.match(text, /resolve_node/);
+  assert.match(text, /nohup "\$NODE_BIN" server\.mjs/);
+  assert.doesNotMatch(text, /nohup node server\.mjs/);
 });
 
 test("Entware node.ipk downloads over HTTP (router-safe path)", () => {
