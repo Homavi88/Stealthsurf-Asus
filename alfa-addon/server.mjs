@@ -18,6 +18,13 @@ const TYPES = {
 
 const runtime = createRuntime();
 
+// curl|sh / SSH шлёт SIGHUP дочерним процессам — панель должна жить дальше.
+try {
+  process.on("SIGHUP", () => {});
+} catch {
+  /* ignore */
+}
+
 function send(res, code, body, headers = {}) {
   const payload = Buffer.isBuffer(body) ? body : Buffer.from(body);
   res.writeHead(code, { "Cache-Control": "no-store", "Content-Length": payload.length, ...headers });

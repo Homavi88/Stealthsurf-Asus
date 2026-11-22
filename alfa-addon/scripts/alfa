@@ -4,8 +4,9 @@
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 
 ADDON_DIR="${ALFA_DIR:-/jffs/addons/alfa}"
-PID_FILE="/var/run/alfa.pid"
-LOG_FILE="/tmp/alfa-panel.log"
+# /tmp надёжнее /var/run на Merlin (tmpfs, но не чистится mid-session так агрессивно при замене jffs)
+PID_FILE="${ALFA_PID_FILE:-/tmp/alfa-panel.pid}"
+LOG_FILE="${ALFA_LOG_FILE:-/tmp/alfa-panel.log}"
 PORT="${ALFA_PORT:-8788}"
 
 die() {
@@ -36,14 +37,18 @@ is_running() {
   kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
 }
 
-# Все PID панели: pidfile + любой node server.mjs с cwd/путь к alfa.
+# PID панели: pidfile + node server.mjs с меткой alfa / cwd аддона.
 panel_pids() {
   pids=""
   if [ -f "$PID_FILE" ]; then
     p="$(cat "$PID_FILE" 2>/dev/null)"
     [ -n "$p" ] && pids="$p"
   fi
-  # BusyBox: ps w; только процессы с путём/меткой alfa + server.mjs
+  # совместимость со старым pidfile
+  if [ -f /var/run/alfa.pid ]; then
+    p="$(cat /var/run/alfa.pid 2>/dev/null)"
+    [ -n "$p" ] && pids="$pids $p"
+  fi
   extra="$(ps w 2>/dev/null | awk '
     /[s]erver\.mjs/ && /alfa/ { print $1 }
   ')"
@@ -53,7 +58,6 @@ panel_pids() {
       *) pids="$pids $p" ;;
     esac
   done
-  # cwd через /proc (Linux)
   for d in /proc/[0-9]*; do
     pid="${d#/proc/}"
     cwd="$(readlink "$d/cwd" 2>/dev/null || true)"
@@ -74,6 +78,12 @@ panel_pids() {
   echo "$pids" | tr -s ' ' '\n' | sed '/^$/d' | sort -u
 }
 
+port_pids() {
+  if command -v fuser >/dev/null 2>&1; then
+    fuser "${PORT}/tcp" 2>/dev/null | tr -s ' ' '\n' | sed '/^$/d'
+  fi
+}
+
 stop_pids() {
   for attempt in 1 2 3; do
     pids="$(panel_pids)"
@@ -87,9 +97,10 @@ stop_pids() {
     done
     sleep 1
   done
-  rm -f "$PID_FILE"
-  # освободить порт если остался слушатель
-  if command -v fuser >/dev/null 2>&1; then
+  rm -f "$PID_FILE" /var/run/alfa.pid
+  # порт только если всё ещё занят чужим слушателем
+  left="$(port_pids)"
+  if [ -n "$left" ] && command -v fuser >/dev/null 2>&1; then
     fuser -k "${PORT}/tcp" 2>/dev/null || true
   fi
 }
@@ -104,25 +115,35 @@ wait_stopped() {
     i=$((i + 1))
     sleep 1
   done
-  # последняя попытка
   stop_pids
   left="$(panel_pids)"
   [ -z "$left" ] || die "не удалось остановить панель (pids: $left)"
 }
 
+has_curl() {
+  command -v curl >/dev/null 2>&1 || [ -x /opt/bin/curl ]
+}
+
+http_code() {
+  if has_curl; then
+    CURL_BIN="$(command -v curl 2>/dev/null || echo /opt/bin/curl)"
+    "$CURL_BIN" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000
+  else
+    echo none
+  fi
+}
+
 wait_healthy() {
   i=0
-  while [ "$i" -lt 20 ]; do
+  while [ "$i" -lt 25 ]; do
     if is_running; then
-      if command -v curl >/dev/null 2>&1 || [ -x /opt/bin/curl ]; then
-        CURL_BIN="$(command -v curl 2>/dev/null || echo /opt/bin/curl)"
-        code="$("$CURL_BIN" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
-        if [ "$code" = "200" ]; then
-          echo "alfa healthy on :$PORT"
-          return 0
-        fi
-      else
-        # без curl — достаточно живого pid
+      code="$(http_code)"
+      if [ "$code" = "200" ]; then
+        echo "alfa healthy on :$PORT"
+        return 0
+      fi
+      # curl нет — достаточно живого pid после паузы
+      if [ "$code" = "none" ] && [ "$i" -ge 2 ]; then
         echo "alfa running pid $(cat "$PID_FILE") (curl нет — HTTP не проверен)"
         return 0
       fi
@@ -131,16 +152,34 @@ wait_healthy() {
     sleep 1
   done
   echo "alfa: панель не ответила на :$PORT — смотрите $LOG_FILE" >&2
-  tail -n 30 "$LOG_FILE" 2>/dev/null || true
+  tail -n 40 "$LOG_FILE" 2>/dev/null || true
   return 1
+}
+
+# Отвязка от SSH / curl|sh: иначе SIGHUP убивает node, когда установщик завершается.
+# Важно: trap '' HUP наследуется через exec (SIG_IGN). setsid здесь не используем —
+# BusyBox/util-linux setsid часто делает fork, и $! указывает на уже мёртвого родителя.
+daemonize_node() {
+  NODE_BIN="$1"
+  (
+    trap '' HUP
+    cd "$ADDON_DIR" || exit 1
+    exec "$NODE_BIN" server.mjs
+  ) >>"$LOG_FILE" 2>&1 </dev/null &
+  echo $!
 }
 
 start() {
   if is_running; then
-    echo "alfa already running pid $(cat "$PID_FILE")"
-    return 0
+    code="$(http_code)"
+    if [ "$code" = "200" ] || [ "$code" = "none" ]; then
+      echo "alfa already running pid $(cat "$PID_FILE")"
+      return 0
+    fi
+    echo "alfa: pid жив, но HTTP $code — перезапуск"
+    stop_pids
+    wait_stopped
   fi
-  # зомби без pidfile — убить перед стартом
   left="$(panel_pids)"
   if [ -n "$left" ]; then
     stop_pids
@@ -149,12 +188,29 @@ start() {
   [ -f "$ADDON_DIR/server.mjs" ] || die "нет $ADDON_DIR/server.mjs — сначала установите аддон"
   NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node из Entware (opkg install node)"
   mkdir -p "$ADDON_DIR/data"
-  cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
-  nohup "$NODE_BIN" server.mjs >>"$LOG_FILE" 2>&1 &
-  echo $! >"$PID_FILE"
-  echo "alfa started on :$PORT (pid $(cat "$PID_FILE"), node $NODE_BIN)"
+  : >>"$LOG_FILE"
+  pid="$(daemonize_node "$NODE_BIN")"
+  [ -n "$pid" ] || die "не удалось запустить node"
+  echo "$pid" >"$PID_FILE"
+  # совместимость со старыми проверками (на некоторых прошивках /var/run только root)
+  ( echo "$pid" >/var/run/alfa.pid ) 2>/dev/null || true
+  echo "alfa started on :$PORT (pid $pid, node $NODE_BIN)"
   echo "log: $LOG_FILE"
+  sleep 1
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "alfa: процесс $pid сразу завершился" >&2
+    tail -n 50 "$LOG_FILE" 2>/dev/null || true
+    return 1
+  fi
   wait_healthy || return 1
+  # ещё раз через секунду — ловим смерть после первого ответа
+  sleep 1
+  if ! kill -0 "$pid" 2>/dev/null; then
+    echo "alfa: процесс умер сразу после health-check" >&2
+    tail -n 50 "$LOG_FILE" 2>/dev/null || true
+    return 1
+  fi
+  return 0
 }
 
 stop() {
@@ -165,9 +221,19 @@ stop() {
 
 status() {
   if is_running; then
-    echo "running pid $(cat "$PID_FILE") port $PORT"
+    code="$(http_code)"
+    echo "running pid $(cat "$PID_FILE") port $PORT http=$code"
+    # без curl не считаем панель «упавшей»
+    if [ "$code" = "200" ] || [ "$code" = "none" ]; then
+      return 0
+    fi
+    return 1
   else
     echo "stopped"
+    if [ -f "$LOG_FILE" ]; then
+      echo "log tail:"
+      tail -n 15 "$LOG_FILE" 2>/dev/null || true
+    fi
     return 1
   fi
 }
@@ -182,11 +248,10 @@ uninstall() {
   stop_pids
   wait_stopped
   if [ -f /jffs/scripts/post-mount ]; then
-    # BusyBox sed
     sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
     sed -i '/\/jffs\/scripts\/alfa /d' /jffs/scripts/post-mount 2>/dev/null || true
   fi
-  rm -f /jffs/scripts/alfa "$PID_FILE" "$LOG_FILE"
+  rm -f /jffs/scripts/alfa "$PID_FILE" /var/run/alfa.pid "$LOG_FILE"
   rm -rf "$ADDON_DIR"
   echo "alfa removed from $ADDON_DIR"
   echo "SurfGate (/jffs/addons/ssurf) and official StealthSurf (/jffs/addons/stealthsurf) were not touched"
@@ -196,14 +261,13 @@ reset_password() {
   NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node"
   [ -f "$ADDON_DIR/scripts/reset-password.mjs" ] || die "нет scripts/reset-password.mjs"
   pass="${2:-alfa}"
-  # Сначала стоп: живой процесс иначе перезапишет state.json старым хешом из памяти.
-  echo "alfa: останавливаю панель перед сбросом пароля…"
+  echo "alfa: останавливаю панель перед сбросом…"
   stop_pids
   wait_stopped
-  cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
+  # не держим cwd внутри ADDON_DIR дольше нужного
   "$NODE_BIN" "$ADDON_DIR/scripts/reset-password.mjs" "$pass" || die "сброс пароля не удался"
-  start || die "панель не поднялась после сброса — смотрите $LOG_FILE"
-  echo "панель открыта без пароля: http://127.0.0.1:${PORT}/"
+  start || die "панель не поднялась — смотрите $LOG_FILE"
+  echo "панель: http://127.0.0.1:${PORT}/ (без пароля)"
 }
 
 case "$1" in
