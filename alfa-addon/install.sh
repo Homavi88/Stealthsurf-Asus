@@ -5,10 +5,12 @@
 #
 # Удаление:
 #   /opt/bin/curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/alfa-addon/install.sh | sh -s -- uninstall
-#   или: /jffs/scripts/alfa uninstall
 #
 # Каталог: /jffs/addons/alfa · служба: /jffs/scripts/alfa · панель: :8788
 # Не трогает SurfGate (:1131) и официальный StealthSurf (:8800).
+#
+# На Merlin opkg часто зовёт BusyBox wget без HTTPS → «not an http or ftp url».
+# Этот скрипт подставляет curl-обёртку wget и при необходимости качает .ipk сам.
 set -e
 
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
@@ -21,6 +23,7 @@ OFFICIAL_DIR="/jffs/addons/stealthsurf"
 SSURF_DIR="/jffs/addons/ssurf"
 TMP_ROOT="/tmp/alfa-install.$$"
 PORT=8788
+WGET_SHIM_DIR="/tmp/alfa-bin.$$"
 
 C0='\033[0m'
 CGREEN='\033[0;32m'
@@ -37,7 +40,7 @@ fail(){ if [ "$UI_COLOR" -eq 1 ]; then printf '  %b✗%b %s\n' "$CRED" "$C0" "$*
 warn(){ if [ "$UI_COLOR" -eq 1 ]; then printf '  %b!%b %s\n' "$CYELLOW" "$C0" "$*"; else echo "  [warn] $*"; fi; }
 
 cleanup() {
-  rm -rf "$TMP_ROOT" 2>/dev/null || true
+  rm -rf "$TMP_ROOT" "$WGET_SHIM_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -53,13 +56,89 @@ banner() {
 
 need_https() {
   if [ -x /opt/bin/curl ]; then
-    DL="/opt/bin/curl -fsSL"
+    CURL=/opt/bin/curl
   elif command -v curl >/dev/null 2>&1; then
-    DL="curl -fsSL"
+    CURL="$(command -v curl)"
   else
-    fail "нужен curl с HTTPS (Entware: opkg install curl)"
+    fail "нужен curl с HTTPS (есть у вас для этой команды — проверьте PATH)"
     exit 1
   fi
+  ok "HTTPS: $CURL"
+}
+
+# BusyBox wget не умеет https. opkg всё равно зовёт «wget» — подсовываем curl.
+install_wget_shim() {
+  mkdir -p "$WGET_SHIM_DIR"
+  cat >"$WGET_SHIM_DIR/wget" << EOF
+#!/bin/sh
+OUT=""
+URL=""
+while [ \$# -gt 0 ]; do
+  case "\$1" in
+    -O|--output-document)
+      OUT="\$2"; shift 2 ;;
+    -O*)
+      OUT="\${1#-O}"; shift ;;
+    --output-document=*)
+      OUT="\${1#*=}"; shift ;;
+    -q|--quiet|-nv|--no-verbose)
+      shift ;;
+    -T|--timeout|--connect-timeout|--tries|--dns-timeout|--read-timeout)
+      shift 2 ;;
+    --timeout=*|--connect-timeout=*|--tries=*|--no-check-certificate|--no-cache|--no-cookies)
+      shift ;;
+    --header|--user-agent|-U|--referer|-e|--execute)
+      shift 2 ;;
+    -*)
+      shift ;;
+    *)
+      URL="\$1"; shift ;;
+  esac
+done
+[ -n "\$URL" ] || exit 1
+if [ -n "\$OUT" ]; then
+  exec "$CURL" -fsSL --connect-timeout 30 --retry 2 -o "\$OUT" "\$URL"
+fi
+exec "$CURL" -fsSL --connect-timeout 30 --retry 2 "\$URL"
+EOF
+  chmod +x "$WGET_SHIM_DIR/wget"
+  export PATH="$WGET_SHIM_DIR:/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin"
+  ok "wget→curl для opkg"
+}
+
+entware_feed() {
+  # https://bin.entware.net/aarch64-k3.10
+  awk '/^src\/gz/{print $3; exit}' /opt/etc/opkg.conf 2>/dev/null
+}
+
+http_feed() {
+  feed="$(entware_feed)"
+  echo "$feed" | sed 's|^https://|http://|'
+}
+
+# Entware отдаёт те же пакеты по HTTP. HTTPS на части роутеров/сетей рвётся
+# (BusyBox wget и иногда даже curl: SSL_ERROR_SYSCALL) — для .ipk берём HTTP первым.
+preferred_feed() {
+  http="$(http_feed)"
+  [ -n "$http" ] && echo "$http" && return 0
+  entware_feed
+}
+
+fetch() {
+  # $1 url $2 outfile
+  "$CURL" -fsSL --connect-timeout 30 --retry 2 -o "$2" "$1"
+}
+
+fetch_entware() {
+  # $1 relative path or absolute url under feed, $2 outfile
+  rel="$1"
+  out="$2"
+  base="$(preferred_feed)"
+  if fetch "$base/$rel" "$out"; then
+    return 0
+  fi
+  https="$(entware_feed)"
+  [ -n "$https" ] && [ "$https" != "$base" ] && fetch "$https/$rel" "$out"
 }
 
 preflight() {
@@ -75,6 +154,76 @@ preflight() {
   ok "JFFS + Entware"
   if [ -d "$SSURF_DIR" ]; then ok "SurfGate рядом ($SSURF_DIR) — не трогаем"; fi
   if [ -d "$OFFICIAL_DIR" ]; then ok "официальный StealthSurf рядом ($OFFICIAL_DIR) — не трогаем"; fi
+  feed="$(entware_feed)"
+  if [ -n "$feed" ]; then ok "фид Entware: $feed"; else warn "не прочитал /opt/etc/opkg.conf"; fi
+}
+
+opkg_update_safe() {
+  install_wget_shim
+  if /opt/bin/opkg update; then
+    ok "opkg update"
+    return 0
+  fi
+  warn "opkg update по HTTPS не прошёл — пробую HTTP-фид"
+  feed_http="$(http_feed)"
+  [ -n "$feed_http" ] || return 1
+  conf_bak="$TMP_ROOT/opkg.conf.bak"
+  mkdir -p "$TMP_ROOT"
+  cp /opt/etc/opkg.conf "$conf_bak"
+  # временно http:// — BusyBox wget такое умеет; shim тоже
+  sed 's|https://bin.entware.net/|http://bin.entware.net/|g' "$conf_bak" >/opt/etc/opkg.conf
+  if /opt/bin/opkg update; then
+    ok "opkg update по HTTP"
+    # вернём https в conf — дальше shim закроет HTTPS
+    cp "$conf_bak" /opt/etc/opkg.conf
+    return 0
+  fi
+  cp "$conf_bak" /opt/etc/opkg.conf
+  return 1
+}
+
+# Скачать Packages и поставить пакет .ipk (+ прямые Depends) через curl, минуя wget.
+opkg_install_via_curl() {
+  pkg="$1"
+  feed="$(preferred_feed)"
+  [ -n "$feed" ] || return 1
+  mkdir -p "$TMP_ROOT/ipk"
+  idx="$TMP_ROOT/Packages"
+  say "качаю индекс пакетов ($pkg) с $feed"
+  fetch_entware "Packages.gz" "$TMP_ROOT/Packages.gz" || return 1
+  gzip -dc "$TMP_ROOT/Packages.gz" >"$idx" 2>/dev/null || gunzip -c "$TMP_ROOT/Packages.gz" >"$idx"
+
+  lookup_field() {
+    # $1 package $2 field name → value
+    awk -v want="$1" -v field="$2" '
+      BEGIN { FS=": " }
+      /^Package: / { p=$2; next }
+      $1 == field && p == want { print $2; exit }
+    ' "$idx"
+  }
+
+  file="$(lookup_field "$pkg" Filename)"
+  [ -n "$file" ] || {
+    fail "в индексе нет пакета $pkg"
+    return 1
+  }
+
+  # зависимости первого уровня (без версий)
+  deps="$(lookup_field "$pkg" Depends | tr ',' '\n' | sed 's/^ *//;s/ .*//;/^$/d' | grep -vE '^(libc|libssp|librt|libpthread)$' || true)"
+  for dep in $deps; do
+    if /opt/bin/opkg list-installed "$dep" 2>/dev/null | grep -q .; then
+      continue
+    fi
+    dfile="$(lookup_field "$dep" Filename)"
+    [ -n "$dfile" ] || continue
+    say "зависимость $dep"
+    fetch_entware "$dfile" "$TMP_ROOT/ipk/$dfile" || continue
+    /opt/bin/opkg install --force-overwrite "$TMP_ROOT/ipk/$dfile" || true
+  done
+
+  say "ставлю $pkg ($file)"
+  fetch_entware "$file" "$TMP_ROOT/ipk/$file" || return 1
+  /opt/bin/opkg install --force-overwrite "$TMP_ROOT/ipk/$file"
 }
 
 ensure_node() {
@@ -83,19 +232,35 @@ ensure_node() {
     return 0
   fi
   say "ставлю Node.js из Entware"
-  /opt/bin/opkg update || warn "opkg update не удался — пробую кэш"
-  if /opt/bin/opkg install nodejs; then
-    :
-  elif /opt/bin/opkg install node; then
-    :
+  mkdir -p "$TMP_ROOT"
+
+  if opkg_update_safe; then
+    # на aarch64-k3.10 пакет называется node, не nodejs
+    if /opt/bin/opkg install node || /opt/bin/opkg install nodejs; then
+      :
+    else
+      warn "opkg install node не вышел — качаю .ipk через curl"
+      opkg_install_via_curl node || opkg_install_via_curl nodejs || {
+        fail "не удалось поставить node"
+        exit 1
+      }
+    fi
   else
-    fail "не удалось поставить node/nodejs через opkg"
+    warn "opkg update недоступен — качаю node.ipk через curl"
+    opkg_install_via_curl node || opkg_install_via_curl nodejs || {
+      fail "не удалось поставить node (ни opkg, ни прямая загрузка)"
+      echo "    Проверьте: $CURL -fsSIL \$(awk '/^src\\/gz/{print \$3;exit}' /opt/etc/opkg.conf)/Packages.gz" >&2
+      exit 1
+    }
+  fi
+
+  # обновить PATH на случай свежего /opt/bin/node
+  export PATH="/opt/bin:/opt/sbin:$PATH"
+  hash -r 2>/dev/null || true
+  if ! command -v node >/dev/null 2>&1; then
+    fail "после установки нет команды node"
     exit 1
   fi
-  command -v node >/dev/null 2>&1 || {
-    fail "после opkg нет команды node"
-    exit 1
-  }
   ok "node $(node -v 2>/dev/null || echo installed)"
 }
 
@@ -104,17 +269,14 @@ download_addon() {
   mkdir -p "$TMP_ROOT"
   ARCHIVE="$TMP_ROOT/repo.tgz"
   URL="https://github.com/${ADDON_REPO}/archive/refs/heads/${ADDON_REF}.tar.gz"
-  # shellcheck disable=SC2086
-  $DL "$URL" -o "$ARCHIVE" || {
-    # fallback: tags as refs/tags/ — try heads only; if fail, try master
+  if ! fetch "$URL" "$ARCHIVE"; then
     URL="https://github.com/${ADDON_REPO}/archive/refs/heads/master.tar.gz"
-    $DL "$URL" -o "$ARCHIVE"
-  }
+    fetch "$URL" "$ARCHIVE"
+  fi
   tar -tzf "$ARCHIVE" >/dev/null 2>&1 || {
     fail "архив битый"
     exit 1
   }
-  # вытащить только alfa-addon, без скриншотов alfa/
   mkdir -p "$TMP_ROOT/extract"
   tar -xzf "$ARCHIVE" -C "$TMP_ROOT/extract"
   SRC="$(find "$TMP_ROOT/extract" -type d -name alfa-addon 2>/dev/null | head -n 1)"
@@ -131,15 +293,12 @@ install_files() {
   say "кладём файлы в $OUR_DIR"
   mkdir -p /jffs/addons /jffs/scripts
   mkdir -p "$OUR_DIR"
-  # сохранить data/ при обновлении
   if [ -d "$OUR_DIR/data" ]; then
     cp -a "$OUR_DIR/data" "$TMP_ROOT/data.bak"
     ok "сохранил data/"
   fi
-  # не копировать локальные data/cores из архива (их там нет) и не затирать backup
   rm -rf "$OUR_DIR"
   mkdir -p "$OUR_DIR"
-  # копируем содержимое, кроме data если был бэкап — восстановим
   cp -a "$SRC"/. "$OUR_DIR"/
   rm -rf "$OUR_DIR/data"
   if [ -d "$TMP_ROOT/data.bak" ]; then
@@ -149,6 +308,7 @@ install_files() {
     mkdir -p "$OUR_DIR/data"
   fi
   chmod +x "$OUR_DIR/scripts/alfa" 2>/dev/null || true
+  chmod +x "$OUR_DIR/install.sh" 2>/dev/null || true
   ok "файлы на месте"
 }
 
@@ -172,11 +332,10 @@ install_service() {
 start_panel() {
   say "запускаю панель"
   "$OUR_SCRIPT" restart
-  # короткая проверка
   i=0
-  while [ "$i" -lt 15 ]; do
-    if command -v curl >/dev/null 2>&1; then
-      code="$(curl -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
+  while [ "$i" -lt 20 ]; do
+    if command -v curl >/dev/null 2>&1 || [ -x /opt/bin/curl ]; then
+      code="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
         ok "панель отвечает http://127.0.0.1:${PORT}/ → $code"
         return 0
@@ -189,7 +348,7 @@ start_panel() {
     sleep 1
   done
   warn "панель ещё не ответила — смотрите /tmp/alfa-panel.log"
-  tail -n 20 /tmp/alfa-panel.log 2>/dev/null || true
+  tail -n 30 /tmp/alfa-panel.log 2>/dev/null || true
 }
 
 lan_hint() {
@@ -202,6 +361,7 @@ lan_hint() {
   echo "  статус:  $OUR_SCRIPT status"
   echo "  стоп:    $OUR_SCRIPT stop"
   echo "  удалить: $OUR_SCRIPT uninstall"
+  echo "  ядра:    в панели → Движок → скачать Xray / sing-box / mihomo"
   echo
 }
 
@@ -211,7 +371,6 @@ do_uninstall() {
   if [ -x "$OUR_SCRIPT" ]; then
     "$OUR_SCRIPT" uninstall
   else
-    # fallback без службы
     if [ -f /var/run/alfa.pid ]; then
       kill "$(cat /var/run/alfa.pid)" 2>/dev/null || true
       rm -f /var/run/alfa.pid
