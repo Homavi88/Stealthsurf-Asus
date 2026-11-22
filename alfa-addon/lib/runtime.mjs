@@ -1050,18 +1050,28 @@ export function createRuntime() {
     if (state.lockedUntil && Date.now() < state.lockedUntil) {
       throw Object.assign(new Error("Слишком много попыток, подождите минуту"), { status: 429 });
     }
-    if (pairCode && live.pairCodes.get(pairCode) > Date.now()) {
-      live.pairCodes.delete(pairCode);
+    const code = String(pairCode || "").trim().toLowerCase();
+    if (code && live.pairCodes.get(code) > Date.now()) {
+      live.pairCodes.delete(code);
       return issueSession();
     }
-    if (!checkPassword(password || "", state.password)) {
+    const pass = String(password || "").trim();
+    if (!pass) {
+      throw Object.assign(new Error("Введите пароль"), { status: 401 });
+    }
+    // Если хеш битый/пустой после сбоя установки — вернём пароль alfa.
+    if (!state.password?.salt || !state.password?.hash) {
+      state.password = hashPassword("alfa");
+      saveState(state, true);
+    }
+    if (!checkPassword(pass, state.password)) {
       state.failedLogins += 1;
       if (state.failedLogins >= 8) {
         state.lockedUntil = Date.now() + 60_000;
         state.failedLogins = 0;
       }
       saveState(state);
-      throw Object.assign(new Error("Неверный пароль"), { status: 401 });
+      throw Object.assign(new Error("Неверный пароль. Сброс на роутере: /jffs/scripts/alfa reset-password"), { status: 401 });
     }
     state.failedLogins = 0;
     state.lockedUntil = 0;

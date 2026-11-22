@@ -455,6 +455,22 @@ do_uninstall() {
   echo
 }
 
+reset_default_password() {
+  NODE_BIN="$(resolve_node)" || return 1
+  say "пароль панели → alfa"
+  "$OUR_SCRIPT" stop >/dev/null 2>&1 || true
+  cd "$OUR_DIR" || return 1
+  if [ ! -f "$OUR_DIR/scripts/reset-password.mjs" ]; then
+    fail "нет scripts/reset-password.mjs"
+    return 1
+  fi
+  if ! "$NODE_BIN" "$OUR_DIR/scripts/reset-password.mjs" alfa; then
+    fail "не удалось записать пароль alfa"
+    return 1
+  fi
+  ok "пароль сброшен: alfa"
+}
+
 do_install() {
   banner
   need_https
@@ -463,6 +479,9 @@ do_install() {
   download_addon
   install_files
   install_service
+  if ! reset_default_password; then
+    exit 1
+  fi
   if ! start_panel; then
     exit 1
   fi

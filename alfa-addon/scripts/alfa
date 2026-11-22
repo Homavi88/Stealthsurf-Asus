@@ -94,14 +94,28 @@ uninstall() {
   echo "SurfGate (/jffs/addons/ssurf) and official StealthSurf (/jffs/addons/stealthsurf) were not touched"
 }
 
+reset_password() {
+  NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node"
+  [ -f "$ADDON_DIR/scripts/reset-password.mjs" ] || die "нет scripts/reset-password.mjs"
+  pass="${2:-alfa}"
+  cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
+  "$NODE_BIN" "$ADDON_DIR/scripts/reset-password.mjs" "$pass" || die "сброс пароля не удался"
+  # процесс держит старый хеш в памяти — перезапуск
+  restart
+  echo "войдите с паролем: $pass"
+}
+
 case "$1" in
   start) start ;;
   stop) stop ;;
   restart) restart ;;
   status) status ;;
   uninstall|remove|un) uninstall ;;
+  reset-password|passwd)
+    reset_password "$@"
+    ;;
   *)
-    echo "usage: $0 {start|stop|restart|status|uninstall}"
+    echo "usage: $0 {start|stop|restart|status|uninstall|reset-password}"
     exit 1
     ;;
 esac
