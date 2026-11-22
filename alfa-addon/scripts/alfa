@@ -37,7 +37,7 @@ is_running() {
   kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
 }
 
-# PID панели: pidfile + node server.mjs с меткой alfa / cwd аддона.
+# PID панели: pidfile + node run.mjs/server.mjs с меткой alfa / cwd аддона.
 panel_pids() {
   pids=""
   if [ -f "$PID_FILE" ]; then
@@ -50,7 +50,7 @@ panel_pids() {
     [ -n "$p" ] && pids="$pids $p"
   fi
   extra="$(ps w 2>/dev/null | awk '
-    /[s]erver\.mjs/ && /alfa/ { print $1 }
+    (/[r]un\.mjs/ || /[s]erver\.mjs/) && /alfa/ { print $1 }
   ')"
   for p in $extra; do
     case " $pids " in
@@ -65,7 +65,7 @@ panel_pids() {
       "$ADDON_DIR"|"$ADDON_DIR"/*)
         cmd="$(tr '\0' ' ' <"$d/cmdline" 2>/dev/null || true)"
         case "$cmd" in
-          *server.mjs*)
+          *run.mjs*|*server.mjs*)
             case " $pids " in
               *" $pid "*) ;;
               *) pids="$pids $pid" ;;
@@ -76,6 +76,29 @@ panel_pids() {
     esac
   done
   echo "$pids" | tr -s ' ' '\n' | sed '/^$/d' | sort -u
+}
+
+# Merlin: открыть :8788 на INPUT (иначе с телефона в LAN localhost-check проходит, а 192.168.x.x — нет)
+ensure_firewall() {
+  if command -v iptables >/dev/null 2>&1; then
+    if ! iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+    fi
+  fi
+  if command -v ip6tables >/dev/null 2>&1; then
+    if ! ip6tables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null; then
+      ip6tables -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+    fi
+  fi
+  # переживает пересборку firewall Merlin
+  if [ -d /jffs/scripts ]; then
+    touch /jffs/scripts/firewall-start 2>/dev/null || true
+    chmod +x /jffs/scripts/firewall-start 2>/dev/null || true
+    if [ -f /jffs/scripts/firewall-start ] && ! grep -q "dport ${PORT}.*#alfa" /jffs/scripts/firewall-start 2>/dev/null; then
+      printf '%s\n' "iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null #alfa" >>/jffs/scripts/firewall-start
+      printf '%s\n' "ip6tables -I INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null #alfa" >>/jffs/scripts/firewall-start
+    fi
+  fi
 }
 
 port_pids() {
@@ -157,19 +180,22 @@ wait_healthy() {
 }
 
 # Отвязка от SSH / curl|sh: иначе SIGHUP убивает node, когда установщик завершается.
-# Важно: trap '' HUP наследуется через exec (SIG_IGN). setsid здесь не используем —
-# BusyBox/util-linux setsid часто делает fork, и $! указывает на уже мёртвого родителя.
+# trap '' HUP + run.mjs (глушит SIGHUP до загрузки панели).
 daemonize_node() {
   NODE_BIN="$1"
+  entry="run.mjs"
+  [ -f "$ADDON_DIR/run.mjs" ] || entry="server.mjs"
   (
     trap '' HUP
     cd "$ADDON_DIR" || exit 1
-    exec "$NODE_BIN" server.mjs
+    export ALFA_PID_FILE="$PID_FILE"
+    exec env ALFA_PID_FILE="$PID_FILE" "$NODE_BIN" "$entry"
   ) >>"$LOG_FILE" 2>&1 </dev/null &
   echo $!
 }
 
 start() {
+  ensure_firewall
   if is_running; then
     code="$(http_code)"
     if [ "$code" = "200" ] || [ "$code" = "none" ]; then
@@ -189,23 +215,28 @@ start() {
   NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node из Entware (opkg install node)"
   mkdir -p "$ADDON_DIR/data"
   : >>"$LOG_FILE"
+  # предварительный pid — run.mjs перезапишет своим
+  : >"$PID_FILE"
   pid="$(daemonize_node "$NODE_BIN")"
   [ -n "$pid" ] || die "не удалось запустить node"
   echo "$pid" >"$PID_FILE"
-  # совместимость со старыми проверками (на некоторых прошивках /var/run только root)
   ( echo "$pid" >/var/run/alfa.pid ) 2>/dev/null || true
   echo "alfa started on :$PORT (pid $pid, node $NODE_BIN)"
   echo "log: $LOG_FILE"
   sleep 1
+  # если run.mjs уже записал другой pid — читаем актуальный
+  if [ -f "$PID_FILE" ]; then
+    newpid="$(cat "$PID_FILE" 2>/dev/null)"
+    [ -n "$newpid" ] && pid="$newpid"
+  fi
   if ! kill -0 "$pid" 2>/dev/null; then
     echo "alfa: процесс $pid сразу завершился" >&2
     tail -n 50 "$LOG_FILE" 2>/dev/null || true
     return 1
   fi
   wait_healthy || return 1
-  # ещё раз через секунду — ловим смерть после первого ответа
   sleep 1
-  if ! kill -0 "$pid" 2>/dev/null; then
+  if ! kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null; then
     echo "alfa: процесс умер сразу после health-check" >&2
     tail -n 50 "$LOG_FILE" 2>/dev/null || true
     return 1
@@ -250,6 +281,9 @@ uninstall() {
   if [ -f /jffs/scripts/post-mount ]; then
     sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
     sed -i '/\/jffs\/scripts\/alfa /d' /jffs/scripts/post-mount 2>/dev/null || true
+  fi
+  if [ -f /jffs/scripts/firewall-start ]; then
+    sed -i '/#alfa$/d' /jffs/scripts/firewall-start 2>/dev/null || true
   fi
   rm -f /jffs/scripts/alfa "$PID_FILE" /var/run/alfa.pid "$LOG_FILE"
   rm -rf "$ADDON_DIR"

@@ -47,7 +47,7 @@ trap cleanup EXIT
 banner() {
   if [ "$UI_COLOR" -eq 1 ]; then
     printf '\n%b┌─ %sStealthSurf Alfa%s ──────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
-    printf '%b│%b 0.1.3-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
+    printf '%b│%b 0.1.4-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
     printf '%b└─────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
   else
     echo "==> StealthSurf Alfa installer (panel :$PORT, path $OUR_DIR)"
@@ -428,12 +428,25 @@ install_service() {
   if ! grep -q 'scripts/alfa start' /jffs/scripts/post-mount 2>/dev/null; then
     echo '/jffs/scripts/alfa start #alfa' >>/jffs/scripts/post-mount
   fi
-  ok "автозапуск в post-mount"
+  # firewall Merlin: доступ к :8788 с LAN/телефона
+  touch /jffs/scripts/firewall-start
+  chmod +x /jffs/scripts/firewall-start
+  if ! grep -q "dport ${PORT}.*#alfa" /jffs/scripts/firewall-start 2>/dev/null; then
+    printf '%s\n' "iptables -I INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null #alfa" >>/jffs/scripts/firewall-start
+    printf '%s\n' "ip6tables -I INPUT -p tcp --dport ${PORT} -j ACCEPT 2>/dev/null #alfa" >>/jffs/scripts/firewall-start
+  fi
+  if command -v iptables >/dev/null 2>&1; then
+    iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || \
+      iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+  fi
+  ok "автозапуск в post-mount + firewall :$PORT"
 }
 
 start_panel() {
   say "запускаю панель"
   cd /tmp || cd / || true
+  lan_ip="$(nvram get lan_ipaddr 2>/dev/null || true)"
+  [ -n "$lan_ip" ] || lan_ip="192.168.50.1"
   "$OUR_SCRIPT" restart || {
     fail "старт службы не удался — /tmp/alfa-panel.log"
     tail -n 40 /tmp/alfa-panel.log 2>/dev/null || true
@@ -445,7 +458,6 @@ start_panel() {
       code="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
         ok "панель отвечает http://127.0.0.1:${PORT}/ → $code"
-        # пауза: ловим смерть от SIGHUP после выхода curl|sh / родительского sh
         sleep 2
         code2="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
         if [ "$code2" != "200" ] || ! "$OUR_SCRIPT" status >/dev/null 2>&1; then
@@ -454,6 +466,21 @@ start_panel() {
           return 1
         fi
         ok "панель держится после паузы"
+        # проверка с LAN-адреса (как с телефона)
+        lan_code="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://${lan_ip}:${PORT}/" 2>/dev/null || echo 000)"
+        if [ "$lan_code" = "200" ]; then
+          ok "LAN http://${lan_ip}:${PORT}/ → $lan_code"
+        else
+          warn "localhost ок, но LAN ${lan_ip}:${PORT} → $lan_code — открываю firewall"
+          iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+          sleep 1
+          lan_code="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://${lan_ip}:${PORT}/" 2>/dev/null || echo 000)"
+          if [ "$lan_code" = "200" ]; then
+            ok "LAN после firewall → $lan_code"
+          else
+            warn "LAN всё ещё $lan_code — проверьте Wi‑Fi и URL с портом :$PORT"
+          fi
+        fi
         return 0
       fi
     elif "$OUR_SCRIPT" status >/dev/null 2>&1; then
@@ -468,19 +495,37 @@ start_panel() {
   return 1
 }
 
+# Переживает SIGHUP от curl|sh: через пару секунд снова поднимет, если умерла
+schedule_watchdog() {
+  (
+    trap '' HUP
+    sleep 5
+    if ! "$OUR_SCRIPT" status >/dev/null 2>&1; then
+      echo "alfa-watchdog: панель не жива — start" >>/tmp/alfa-watchdog.log
+      "$OUR_SCRIPT" start >>/tmp/alfa-watchdog.log 2>&1 || true
+    else
+      echo "alfa-watchdog: ok $(date 2>/dev/null)" >>/tmp/alfa-watchdog.log
+    fi
+  ) >/dev/null 2>&1 &
+}
+
 lan_hint() {
   ip="$(nvram get lan_ipaddr 2>/dev/null || true)"
   [ -n "$ip" ] || ip="192.168.50.1"
   echo
   ok "готово"
   echo "  панель:  http://${ip}:${PORT}/"
-  echo "           ↑ обязателен порт :${PORT}  (не просто ${ip})"
+  echo "           ↑ обязателен порт :${PORT}  и http:// (не https)"
   echo "  вход:    без пароля (открытая альфа)"
   echo "  статус:  $OUR_SCRIPT status"
   echo "  лог:     /tmp/alfa-panel.log"
   echo "  стоп:    $OUR_SCRIPT stop"
   echo "  удалить: $OUR_SCRIPT uninstall"
   echo "  ядра:    в панели → Движок → скачать Xray / sing-box / mihomo"
+  echo
+  echo "  Если shell пишет getcwd / (unknown) — это нормально после замены каталога:"
+  echo "    cd /tmp"
+  echo "    $OUR_SCRIPT status"
   echo
 }
 
@@ -508,7 +553,10 @@ do_uninstall() {
       sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
       sed -i '/\/jffs\/scripts\/alfa /d' /jffs/scripts/post-mount 2>/dev/null || true
     fi
-    rm -f "$OUR_SCRIPT" /tmp/alfa-panel.log
+    if [ -f /jffs/scripts/firewall-start ]; then
+      sed -i '/#alfa$/d' /jffs/scripts/firewall-start 2>/dev/null || true
+    fi
+    rm -f "$OUR_SCRIPT" /tmp/alfa-panel.log /tmp/alfa-panel.pid /var/run/alfa.pid
     rm -rf "$OUR_DIR"
     ok "каталог и служба удалены"
   fi
@@ -549,6 +597,7 @@ do_install() {
   if ! start_panel; then
     exit 1
   fi
+  schedule_watchdog
   lan_hint
   cd /tmp || true
 }
