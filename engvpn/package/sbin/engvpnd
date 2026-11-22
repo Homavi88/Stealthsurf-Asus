@@ -1,0 +1,191 @@
+#!/bin/sh
+# EngVPN Merlin daemon CLI — open reimplementation (shell + Node panel).
+# Analogous surface to stealthsurf-routerd: serve | set-password | status | stop | update-check
+set -u
+
+SHARE=$(cd "${0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
+	echo "engvpnd: cannot resolve share/engvpn" >&2
+	exit 1
+}
+PREFIX=${SHARE%/share/engvpn}
+RUNTIME=$SHARE/runtime
+DATA_DIR=${ENGVPN_DATA_DIR:-$PREFIX/data}
+PORT=${ENGVPN_PORT:-8790}
+PIDFILE=${ENGVPN_PIDFILE:-/tmp/engvpn-panel.pid}
+LOGFILE=${ENGVPN_LOGFILE:-/tmp/engvpn-panel.log}
+VERSION_FILE=$SHARE/VERSION
+
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export ENGVPN_PORT="$PORT"
+export ENGVPN_OPEN_PANEL="${ENGVPN_OPEN_PANEL:-0}"
+export ENGVPN_PID_FILE="$PIDFILE"
+
+usage() {
+	cat <<EOF
+Usage: engvpnd <command> [options]
+
+  serve [--data-dir DIR]     Start the EngVPN panel (foreground)
+  set-password [--data-dir DIR]
+                             Read panel password from stdin; store pbkdf2 hash
+  status                     Print running / stopped and port
+  stop                       Stop the panel process
+  update-check               Print installed version and feed hint
+  version                    Print package version
+EOF
+}
+
+resolve_node() {
+	if [ -n "${ENGVPN_NODE:-}" ] && [ -x "$ENGVPN_NODE" ]; then
+		echo "$ENGVPN_NODE"
+		return 0
+	fi
+	if [ -f "$PREFIX/.node-bin" ]; then
+		saved=$(cat "$PREFIX/.node-bin" 2>/dev/null)
+		[ -x "$saved" ] && echo "$saved" && return 0
+	fi
+	# Entware first, then PATH (dev hosts), then common absolute locations.
+	for c in /opt/bin/node /opt/bin/nodejs \
+		"$(command -v node 2>/dev/null)" \
+		/usr/bin/node /usr/local/bin/node; do
+		[ -n "$c" ] && [ -x "$c" ] && echo "$c" && return 0
+	done
+	return 1
+}
+
+remember_node() {
+	node=$1
+	[ -n "$node" ] || return 0
+	printf '%s\n' "$node" >"$PREFIX/.node-bin" 2>/dev/null || true
+}
+
+ensure_data() {
+	mkdir -p "$DATA_DIR" || return 1
+	chmod 700 "$DATA_DIR" 2>/dev/null || true
+	# Runtime reads ./data relative to runtime root — keep a link/copy path.
+	if [ ! -e "$RUNTIME/data" ]; then
+		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || {
+			mkdir -p "$RUNTIME/data"
+			# fall back: point ENGVPN via symlink failed on FAT; use env below
+		}
+	fi
+}
+
+cmd_set_password() {
+	ensure_data || {
+		echo "engvpnd: cannot create $DATA_DIR" >&2
+		exit 1
+	}
+	node=$(resolve_node) || {
+		echo "engvpnd: Node.js required for set-password (Entware: opkg install node)" >&2
+		exit 1
+	}
+	remember_node "$node"
+	export ENGVPN_DATA_DIR="$DATA_DIR"
+	# Password on stdin only — never argv (visible in /proc).
+	"$node" "$SHARE/set-password.mjs" --data-dir "$DATA_DIR"
+}
+
+cmd_serve() {
+	ensure_data || exit 1
+	node=$(resolve_node) || {
+		echo "engvpnd: Node.js required (Entware: opkg install node)" >&2
+		exit 1
+	}
+	remember_node "$node"
+	[ -f "$RUNTIME/run.mjs" ] || {
+		echo "engvpnd: missing runtime at $RUNTIME" >&2
+		exit 1
+	}
+	# Ignore SIGHUP so curl|sh / dropped SSH does not kill the panel.
+	trap '' HUP
+	cd "$RUNTIME" || exit 1
+	# Prefer linked data dir; otherwise symlink for this process tree.
+	if [ ! -d "$RUNTIME/data" ]; then
+		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || true
+	fi
+	export ENGVPN_PID_FILE="$PIDFILE"
+	printf '%s\n' "$$" >"$PIDFILE" 2>/dev/null || true
+	exec "$node" "$RUNTIME/run.mjs"
+}
+
+alive_pid() {
+	[ -n "$1" ] && [ -d "/proc/$1" ]
+}
+
+cmd_status() {
+	pid=""
+	[ -f "$PIDFILE" ] && read -r pid <"$PIDFILE" 2>/dev/null
+	if alive_pid "$pid"; then
+		echo "running pid=$pid port=$PORT prefix=$PREFIX"
+		return 0
+	fi
+	# Fallback: look for run.mjs under our runtime
+	extra=$(ps w 2>/dev/null | awk -v rt="$RUNTIME" '/[r]un\.mjs/ && index($0, rt) { print $1; exit }')
+	if [ -n "$extra" ]; then
+		echo "running pid=$extra port=$PORT prefix=$PREFIX"
+		return 0
+	fi
+	echo "stopped port=$PORT prefix=$PREFIX"
+	return 1
+}
+
+cmd_stop() {
+	pid=""
+	[ -f "$PIDFILE" ] && read -r pid <"$PIDFILE" 2>/dev/null
+	if alive_pid "$pid"; then
+		kill "$pid" 2>/dev/null || true
+		i=0
+		while [ "$i" -lt 20 ] && alive_pid "$pid"; do
+			sleep 1
+			i=$((i + 1))
+		done
+		alive_pid "$pid" && kill -9 "$pid" 2>/dev/null || true
+	fi
+	rm -f "$PIDFILE"
+	echo "stopped"
+}
+
+cmd_update_check() {
+	ver="unknown"
+	[ -f "$VERSION_FILE" ] && ver=$(cat "$VERSION_FILE")
+	echo "installed=$ver"
+	echo "feed=${ENGVPN_FEED:-https://cdn.example.invalid/engvpn/router/latest.json}"
+	echo "note=Self-update downloads an EngVPN feed package (SHA-256); cores fetch from upstream GitHub releases."
+}
+
+# Parse optional --data-dir
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--data-dir)
+		DATA_DIR=$2
+		shift 2
+		;;
+	--help | -h)
+		usage
+		exit 0
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+ACTION=${1:-}
+[ -n "$ACTION" ] && shift
+
+case "$ACTION" in
+serve) cmd_serve "$@" ;;
+set-password) cmd_set_password "$@" ;;
+status) cmd_status ;;
+stop) cmd_stop ;;
+update-check) cmd_update_check ;;
+version)
+	[ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "0.0.0"
+	;;
+"" | help | -h | --help) usage ;;
+*)
+	echo "engvpnd: unknown command: $ACTION" >&2
+	usage >&2
+	exit 2
+	;;
+esac

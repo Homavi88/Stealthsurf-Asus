@@ -1,0 +1,21 @@
+{
+  "version": "0.1.0",
+  "notes": "EngVPN Merlin open addon — panel :8790, Node runtime, downloadable Xray/sing-box/mihomo.",
+  "packages": {
+    "merlin-aarch64": {
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.1.0/engvpn_0.1.0_merlin-aarch64.tar.gz",
+      "sha256": "37e632989795956172a3817fa846ab17e7bdf900003a8358e7061b700dbad410",
+      "size": 81818
+    },
+    "merlin-armv7": {
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.1.0/engvpn_0.1.0_merlin-armv7.tar.gz",
+      "sha256": "37e632989795956172a3817fa846ab17e7bdf900003a8358e7061b700dbad410",
+      "size": 81818
+    },
+    "merlin-x86_64": {
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.1.0/engvpn_0.1.0_merlin-x86_64.tar.gz",
+      "sha256": "37e632989795956172a3817fa846ab17e7bdf900003a8358e7061b700dbad410",
+      "size": 81818
+    }
+  }
+}
