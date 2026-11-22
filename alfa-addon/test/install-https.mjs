@@ -88,6 +88,21 @@ test("install stops panel before replacing addon dir", () => {
   const fn = text.slice(text.indexOf("install_files()"), text.indexOf("install_service()"));
   assert.ok(fn.indexOf('"$OUR_SCRIPT" stop') < fn.indexOf('rm -rf "$OUR_DIR"'));
   assert.match(text, /cd \/tmp/);
+  assert.match(fn, /alfa-panel\.pid/);
+  assert.match(fn, /kill -9/);
+});
+
+test("uninstall fallback clears both pidfiles", () => {
+  const text = readFileSync(join(root, "install.sh"), "utf8");
+  const fn = text.slice(text.indexOf("do_uninstall()"), text.indexOf("reset_default_password()"));
+  assert.match(fn, /\/tmp\/alfa-panel\.pid/);
+  assert.match(fn, /\/var\/run\/alfa\.pid/);
+});
+
+test("status/start treat missing curl as ok when pid alive", () => {
+  const text = readFileSync(join(root, "scripts/alfa"), "utf8");
+  assert.match(text, /has_curl/);
+  assert.match(text, /code" = "none"/);
 });
 
 test("reset-password stops panel before rewriting hash then health-checks", () => {

@@ -362,8 +362,35 @@ install_files() {
   # стоп старой панели до rm -rf — иначе node держит удалённые inode и потом падает
   if [ -x "$OUR_SCRIPT" ]; then
     "$OUR_SCRIPT" stop >/dev/null 2>&1 || true
-  elif [ -f /tmp/alfa-panel.pid ] || [ -f /var/run/alfa.pid ]; then
-    kill "$(cat /tmp/alfa-panel.pid 2>/dev/null || cat /var/run/alfa.pid 2>/dev/null)" 2>/dev/null || true
+  else
+    for pf in /tmp/alfa-panel.pid /var/run/alfa.pid; do
+      if [ -f "$pf" ]; then
+        oldpid="$(cat "$pf" 2>/dev/null)"
+        [ -n "$oldpid" ] && kill "$oldpid" 2>/dev/null || true
+      fi
+    done
+    # дождаться выхода, иначе rm -rf под живым node
+    w=0
+    while [ "$w" -lt 10 ]; do
+      alive=0
+      for pf in /tmp/alfa-panel.pid /var/run/alfa.pid; do
+        [ -f "$pf" ] || continue
+        oldpid="$(cat "$pf" 2>/dev/null)"
+        if [ -n "$oldpid" ] && kill -0 "$oldpid" 2>/dev/null; then
+          alive=1
+          break
+        fi
+      done
+      [ "$alive" -eq 0 ] && break
+      w=$((w + 1))
+      sleep 1
+    done
+    for pf in /tmp/alfa-panel.pid /var/run/alfa.pid; do
+      if [ -f "$pf" ]; then
+        oldpid="$(cat "$pf" 2>/dev/null)"
+        [ -n "$oldpid" ] && kill -9 "$oldpid" 2>/dev/null || true
+      fi
+    done
     rm -f /tmp/alfa-panel.pid /var/run/alfa.pid
   fi
   mkdir -p /jffs/addons /jffs/scripts
@@ -463,10 +490,20 @@ do_uninstall() {
   if [ -x "$OUR_SCRIPT" ]; then
     "$OUR_SCRIPT" uninstall
   else
-    if [ -f /var/run/alfa.pid ]; then
-      kill "$(cat /var/run/alfa.pid)" 2>/dev/null || true
-      rm -f /var/run/alfa.pid
-    fi
+    for pf in /tmp/alfa-panel.pid /var/run/alfa.pid; do
+      if [ -f "$pf" ]; then
+        oldpid="$(cat "$pf" 2>/dev/null)"
+        [ -n "$oldpid" ] && kill "$oldpid" 2>/dev/null || true
+      fi
+    done
+    sleep 1
+    for pf in /tmp/alfa-panel.pid /var/run/alfa.pid; do
+      if [ -f "$pf" ]; then
+        oldpid="$(cat "$pf" 2>/dev/null)"
+        [ -n "$oldpid" ] && kill -9 "$oldpid" 2>/dev/null || true
+      fi
+    done
+    rm -f /tmp/alfa-panel.pid /var/run/alfa.pid
     if [ -f /jffs/scripts/post-mount ]; then
       sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
       sed -i '/\/jffs\/scripts\/alfa /d' /jffs/scripts/post-mount 2>/dev/null || true
