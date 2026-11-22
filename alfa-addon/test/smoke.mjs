@@ -7,18 +7,39 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluate } from "../lib/policy.mjs";
-import { assertPatch, checkPassword, defaultState, hashPassword, setPath, ROOT, DATA } from "../lib/state.mjs";
+import {
+  assertPatch,
+  checkPassword,
+  defaultState,
+  hashPassword,
+  passwordNeedsUpgrade,
+  setPath,
+  ROOT,
+  DATA,
+} from "../lib/state.mjs";
 import { readFileSync } from "node:fs";
+import { scryptSync, randomBytes } from "node:crypto";
 import { buildMihomo, buildSingBox, buildXray, corePath, writeConfigs } from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
 import { dialTarget, startEdge } from "../lib/proxy.mjs";
 
-test("password hash trims and round-trips with explicit scrypt", () => {
+test("password hash uses pbkdf2 and trims", () => {
   const stored = hashPassword("alfa");
+  assert.equal(stored.algo, "pbkdf2-sha256");
   assert.equal(checkPassword("alfa", stored), true);
   assert.equal(checkPassword("  alfa  ", stored), true);
   assert.equal(checkPassword("alfa ", stored), true);
   assert.equal(checkPassword("wrong", stored), false);
+  assert.equal(passwordNeedsUpgrade(stored), false);
+});
+
+test("legacy scrypt hashes still verify and need upgrade", () => {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync("alfa", salt, 32, { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 }).toString("hex");
+  const legacy = { salt, hash };
+  assert.equal(checkPassword("alfa", legacy), true);
+  assert.equal(passwordNeedsUpgrade(legacy), true);
+  assert.equal(checkPassword("nope", legacy), false);
 });
 
 test("ROOT works on Node 18 without import.meta.dirname", () => {

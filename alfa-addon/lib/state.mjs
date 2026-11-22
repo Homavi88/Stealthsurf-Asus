@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from "node:crypto";
+import { pbkdf2Sync, randomBytes, scryptSync, timingSafeEqual, randomUUID } from "node:crypto";
 import { arch, hostname, totalmem, platform } from "node:os";
 import { VERSION, engineSupports } from "./catalog.mjs";
 
@@ -10,29 +10,59 @@ const LIB_DIR = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(LIB_DIR, "..");
 export const DATA = join(ROOT, "data");
 export const STATE_PATH = join(DATA, "state.json");
+export const DEFAULT_PANEL_PASSWORD = "alfa";
 
 function hoursOn() {
   return Array.from({ length: 24 }, () => true);
 }
 
-// Явные параметры scrypt: на роутере с малой RAM дефолтный maxmem иногда мешает.
+// pbkdf2 надёжнее на Entware/OpenSSL роутера; старые scrypt-хеши принимаем.
+const PBKDF2_ITERATIONS = 120000;
 const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
 
+function safeEqualHex(hex, buf) {
+  try {
+    const prev = Buffer.from(String(hex), "hex");
+    if (prev.length !== buf.length) return false;
+    return timingSafeEqual(prev, buf);
+  } catch {
+    return false;
+  }
+}
+
 export function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  const hash = scryptSync(String(password).trim(), salt, 32, SCRYPT).toString("hex");
-  return { salt, hash };
+  const pass = String(password).trim();
+  const hash = pbkdf2Sync(pass, salt, PBKDF2_ITERATIONS, 32, "sha256").toString("hex");
+  return { salt, hash, algo: "pbkdf2-sha256", iterations: PBKDF2_ITERATIONS };
 }
 
 export function checkPassword(password, stored) {
   if (!stored?.salt || !stored?.hash) return false;
+  const pass = String(password).trim();
+  if (!pass) return false;
   try {
-    const hash = scryptSync(String(password).trim(), stored.salt, 32, SCRYPT);
-    const prev = Buffer.from(stored.hash, "hex");
-    if (prev.length !== hash.length) return false;
-    return timingSafeEqual(prev, hash);
+    if (stored.algo === "pbkdf2-sha256" || stored.algo === "pbkdf2") {
+      const iter = Number(stored.iterations) || PBKDF2_ITERATIONS;
+      return safeEqualHex(stored.hash, pbkdf2Sync(pass, stored.salt, iter, 32, "sha256"));
+    }
+    // хеш без algo: сначала pbkdf2 (после сброса 0.1.1), потом legacy scrypt
+    try {
+      if (safeEqualHex(stored.hash, pbkdf2Sync(pass, stored.salt, PBKDF2_ITERATIONS, 32, "sha256"))) return true;
+    } catch { /* legacy */ }
+    try {
+      if (safeEqualHex(stored.hash, scryptSync(pass, stored.salt, 32, SCRYPT))) return true;
+    } catch { /* default scrypt */ }
+    try {
+      if (safeEqualHex(stored.hash, scryptSync(pass, stored.salt, 32))) return true;
+    } catch { /* ignore */ }
+    return false;
   } catch {
     return false;
   }
+}
+
+export function passwordNeedsUpgrade(stored) {
+  return Boolean(stored?.hash) && stored.algo !== "pbkdf2-sha256";
 }
 
 function demoNodes() {
@@ -128,7 +158,7 @@ export function defaultState() {
   return {
     version: VERSION,
     createdAt: Date.now(),
-    password: hashPassword("alfa"),
+    password: hashPassword(DEFAULT_PANEL_PASSWORD),
     failedLogins: 0,
     lockedUntil: 0,
     sessions: {},

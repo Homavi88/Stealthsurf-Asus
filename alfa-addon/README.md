@@ -4,7 +4,7 @@
 
 | | |
 | --- | --- |
-| Версия | `0.1.0-alpha` |
+| Версия | `0.1.1-alpha` |
 | Панель | `http://<IP_роутера>:8788/` |
 | Пароль первого входа | `alfa` |
 | Каталог на роутере | `/jffs/addons/alfa` |
@@ -49,7 +49,7 @@ http://192.168.50.1:8788/
 /jffs/scripts/alfa status
 /jffs/scripts/alfa restart
 /jffs/scripts/alfa stop
-/jffs/scripts/alfa reset-password    # снова alfa
+/jffs/scripts/alfa reset-password    # стоп → alfa → старт + проверка панели
 ```
 
 Ядра Xray / sing-box / mihomo скачиваются в панели: **Движок**. На ARM-роутере берутся сборки `arm64` / `armv7`.

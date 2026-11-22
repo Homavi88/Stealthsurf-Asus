@@ -1,6 +1,6 @@
 /** Domain lists and engine capability matrix used by the live policy and by config compilers. */
 
-export const VERSION = "0.1.0-alpha";
+export const VERSION = "0.1.1-alpha";
 export const PANEL_PORT = 8788;
 
 export const ENGINES = {
