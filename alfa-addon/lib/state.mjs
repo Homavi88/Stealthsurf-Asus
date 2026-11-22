@@ -15,17 +15,24 @@ function hoursOn() {
   return Array.from({ length: 24 }, () => true);
 }
 
+// Явные параметры scrypt: на роутере с малой RAM дефолтный maxmem иногда мешает.
+const SCRYPT = { N: 16384, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
+
 export function hashPassword(password, salt = randomBytes(16).toString("hex")) {
-  const hash = scryptSync(String(password), salt, 32).toString("hex");
+  const hash = scryptSync(String(password).trim(), salt, 32, SCRYPT).toString("hex");
   return { salt, hash };
 }
 
 export function checkPassword(password, stored) {
   if (!stored?.salt || !stored?.hash) return false;
-  const hash = scryptSync(String(password), stored.salt, 32);
-  const prev = Buffer.from(stored.hash, "hex");
-  if (prev.length !== hash.length) return false;
-  return timingSafeEqual(prev, hash);
+  try {
+    const hash = scryptSync(String(password).trim(), stored.salt, 32, SCRYPT);
+    const prev = Buffer.from(stored.hash, "hex");
+    if (prev.length !== hash.length) return false;
+    return timingSafeEqual(prev, hash);
+  } catch {
+    return false;
+  }
 }
 
 function demoNodes() {

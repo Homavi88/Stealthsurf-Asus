@@ -86,6 +86,7 @@ node server.mjs
 13. На RT-BE88U `opkg` падал: BusyBox wget не качает HTTPS с `bin.entware.net`. Установщик ставит curl-обёртку `wget`, умеет временно ходить на HTTP-фид и ставит пакет `node` (не `nodejs`) прямой загрузкой `.ipk`, если `opkg install` всё ещё ломается.
 14. После успешного `Configuring node` проверка `command -v node` на BusyBox ash всё равно могла сказать «нет команды». Ищем `/opt/bin/node` по файлу, пишем путь в `.node-bin`, служба запускает абсолютный путь.
 15. Entware Node 18.20 падал на старте: `import.meta.dirname` там нет. Корень аддона берётся через `fileURLToPath(import.meta.url)`.
+16. «Неверный пароль» после переустановок: старый `data/state.json` сохранялся. Установщик снова ставит пароль `alfa`, есть `/jffs/scripts/alfa reset-password`, вход обрезает пробелы, scrypt с явным `maxmem`.
 
 ## Чего альфа не делает
 

@@ -1036,7 +1036,7 @@ document.addEventListener("change", (event) => {
 document.addEventListener("submit", (event) => {
   if (event.target.id !== "login") return;
   event.preventDefault();
-  const password = document.querySelector("#password").value;
+  const password = String(document.querySelector("#password").value || "").trim();
   run(async () => {
     const body = /^[0-9a-f]{6}$/i.test(password) && password !== "alfa" ? { pairCode: password } : { password };
     await api("/api/login", body);

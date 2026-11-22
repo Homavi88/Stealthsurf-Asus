@@ -7,11 +7,19 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluate } from "../lib/policy.mjs";
-import { assertPatch, defaultState, setPath, ROOT, DATA } from "../lib/state.mjs";
+import { assertPatch, checkPassword, defaultState, hashPassword, setPath, ROOT, DATA } from "../lib/state.mjs";
 import { readFileSync } from "node:fs";
 import { buildMihomo, buildSingBox, buildXray, corePath, writeConfigs } from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
 import { dialTarget, startEdge } from "../lib/proxy.mjs";
+
+test("password hash trims and round-trips with explicit scrypt", () => {
+  const stored = hashPassword("alfa");
+  assert.equal(checkPassword("alfa", stored), true);
+  assert.equal(checkPassword("  alfa  ", stored), true);
+  assert.equal(checkPassword("alfa ", stored), true);
+  assert.equal(checkPassword("wrong", stored), false);
+});
 
 test("ROOT works on Node 18 without import.meta.dirname", () => {
   assert.equal(typeof ROOT, "string");

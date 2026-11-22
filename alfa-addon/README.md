@@ -41,7 +41,7 @@
 http://192.168.50.1:8788/
 ```
 
-Подставьте свой LAN IP. Пароль: `alfa`.
+Подставьте свой LAN IP. Пароль после каждой установки: **`alfa`** (скрипт сбрасывает его специально, даже если сохранился старый `data/`).
 
 ### Управление
 
@@ -49,6 +49,7 @@ http://192.168.50.1:8788/
 /jffs/scripts/alfa status
 /jffs/scripts/alfa restart
 /jffs/scripts/alfa stop
+/jffs/scripts/alfa reset-password    # снова alfa
 ```
 
 Ядра Xray / sing-box / mihomo скачиваются в панели: **Движок**. На ARM-роутере берутся сборки `arm64` / `armv7`.
