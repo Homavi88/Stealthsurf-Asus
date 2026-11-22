@@ -125,42 +125,53 @@ function spark(history) {
 }
 
 function sw(path, on) {
-  return `<button type="button" class="switch ${on ? "on" : ""}" data-toggle="${path}"></button>`;
+  return `<button type="button" class="switch ${on ? "on" : ""}" data-toggle="${path}" aria-pressed="${on ? "true" : "false"}"></button>`;
 }
 function cell(title, desc, control = "") {
   return `<div class="cell"><div class="cell-text"><div class="cell-title">${title}</div>${desc ? `<div class="cell-desc">${desc}</div>` : ""}</div>${control}</div>`;
 }
-function sel(path, value, options) {
-  return `<select data-set="${esc(path)}">${options.map(([v, label]) => `<option value="${esc(v)}" ${String(v) === String(value) ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
+function navRow(id, title, ico) {
+  return `<button type="button" class="nav-item" data-go="${id}"><span class="nav-ico" aria-hidden="true">${ico}</span><span class="cell-text"><span class="nav-title">${esc(title)}</span></span><span class="chev">›</span></button>`;
+}
+function sel(path, value, options, full = false) {
+  return `<select class="ctrl${full ? " full" : ""}" data-input="${esc(path)}">${options.map(([v, label]) => `<option value="${esc(v)}" ${String(v) === String(value) ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
 }
 function backBar(title) {
   return `<div class="drawer-bar"><button class="icon-btn" data-act="back" aria-label="Назад">‹</button><h2>${esc(title)}</h2><button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></div>`;
 }
 
 function screenMenu() {
-  const items = [
-    ["router", "Роутер"],
-    ["subscription", "Подписка"],
-    ["routing", "Маршрутизация"],
-    ["network", "Сеть и системные службы"],
-    ["connection", "Подключение"],
-    ["automode", "Авторежим"],
-    ["netauto", "Автовыбор по сети"],
-    ["engine", "Движок"],
-    ["appearance", "Оформление"],
-    ["other", "Другое"],
-    ["updates", "Обновления"],
-    ["feedback", "Предложить идею"],
-    ["diagnostics", "Диагностика"],
-  ].filter(([, title]) => title.toLowerCase().includes((ui.query || "").toLowerCase()));
+  const q = (ui.query || "").toLowerCase();
+  const match = (title) => !q || title.toLowerCase().includes(q);
+  const groups = [
+    [["router", "Роутер", "⌂"]],
+    [
+      ["subscription", "Подписка", "◎"],
+      ["routing", "Маршрутизация", "⤳"],
+      ["network", "Сеть и системные службы", "◍"],
+      ["connection", "Подключение", "⇄"],
+      ["automode", "Авторежим", "⟳"],
+      ["netauto", "Автовыбор по сети", "▣"],
+    ],
+    [
+      ["engine", "Движок", "⚙"],
+      ["appearance", "Оформление", "◐"],
+      ["other", "Другое", "⋯"],
+    ],
+    [
+      ["updates", "Обновления", "↓"],
+      ["feedback", "Предложить идею", "✦"],
+      ["diagnostics", "Диагностика", "⌁"],
+    ],
+  ].map((g) => g.filter(([, title]) => match(title))).filter((g) => g.length);
   const account = S.account.email
-    ? `${esc(S.account.email)}<div class="cell-desc">На балансе ${esc(S.account.balance)} ₽<br>${esc(S.account.subscriptionName || "Основная подписка")}</div>`
-    : `Аккаунт<div class="cell-desc">Почта и консоль в этой альфе локальные</div>`;
+    ? `<div class="nav-title">${esc(S.account.email)}</div><div class="cell-desc">На балансе ${esc(S.account.balance)} ₽ · ${esc(S.account.subscriptionName || "Основная подписка")}</div>`
+    : `<div class="nav-title">Аккаунт</div><div class="cell-desc">Почта и консоль локальные · бета</div>`;
   return `<div class="drawer-bar"><h2>Настройки</h2><button class="icon-btn" data-act="close">✕</button></div>
     <div class="drawer-body">
-      <button class="nav-item" data-go="account"><div class="cell-text">${account}</div><span class="chev">›</span></button>
+      <div class="group"><button type="button" class="nav-item" data-go="account"><span class="nav-ico">☺</span><div class="cell-text">${account}</div><span class="chev">›</span></button></div>
       <div class="search"><span>⌕</span><input id="q" placeholder="Поиск настроек" value="${esc(ui.query)}"></div>
-      <div class="group">${items.map(([id, title]) => `<button class="nav-item" data-go="${id}"><span>${esc(title)}</span><span class="chev">›</span></button>`).join("")}</div>
+      ${groups.map((g) => `<div class="group">${g.map(([id, title, ico]) => navRow(id, title, ico)).join("")}</div>`).join("")}
     </div>`;
 }
 
@@ -183,6 +194,7 @@ function screenAccount() {
 function screenRouter() {
   const r = S.router;
   const marked = S.devices.filter((d) => d.excluded).length;
+  const modeLabel = { off: "Выключено", all: "Все устройства", selected: "Только выбранные", except: "Все, кроме выбранных" }[r.mode];
   const modeText = {
     off: "Домашняя сеть идёт напрямую.",
     all: "Через VPN идут все устройства. PPTP и IPsec роутер отправляет напрямую: VPN несёт только TCP и UDP.",
@@ -190,13 +202,15 @@ function screenRouter() {
     except: "Через VPN идут все устройства, кроме отмеченных. PPTP и IPsec идут напрямую.",
   }[r.mode];
   return `${backBar("Роутер")}<div class="drawer-body">
-    <div class="h">VPN ДЛЯ ВСЕЙ СЕТИ</div>
     <div class="group">
-      ${sel("router.mode", r.mode, [["off", "Выключено"], ["all", "Все устройства"], ["selected", "Только выбранные"], ["except", "Все, кроме выбранных"]])}
-      <p class="muted">${modeText}</p>
+      <div class="mode-block">
+        <div class="cell-title">VPN для всей сети</div>
+        ${sel("router.mode", r.mode, [["off", "Выключено"], ["all", "Все устройства"], ["selected", "Только выбранные"], ["except", "Все, кроме выбранных"]], true)}
+        <p class="muted">${modeText}</p>
+      </div>
       ${cell("Статус", S.vpn.connected ? `Работает · через VPN ${fmtBytes((S.runtime.session.vpnDown || 0) + (S.runtime.session.vpnUp || 0))}` : "VPN выключен")}
-      ${cell("Устройства", `Отмечено ${marked}`, `<button class="ghost" data-go="devices">Открыть</button>`)}
-      ${cell("Маршруты устройств", "Свой конфиг или сайты мимо VPN", `<button class="ghost" data-go="devices">Открыть</button>`)}
+      <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Устройства</div><div class="cell-desc">Отмечено ${marked} · режим «${esc(modeLabel)}»</div></div><span class="chev">›</span></button>
+      <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Маршруты устройств</div><div class="cell-desc">Свой конфиг или сайты мимо VPN</div></div><span class="chev">›</span></button>
       ${cell("DNS через VPN", "Запросы адресов сайтов тоже идут через VPN", sw("router.dnsViaVpn", r.dnsViaVpn))}
       ${cell("Блокировать QUIC", "Браузеры уходят на TCP", sw("router.blockQuic", r.blockQuic))}
       ${cell("Не давать обходить DNS роутера", "Private Relay, частный DNS и известные DoH", sw("router.dnsLock", r.dnsLock))}
@@ -209,7 +223,7 @@ function screenRouter() {
       ${cell("Блокировать рекламу", "И с VPN, и без него", sw("router.adblock", r.adblock))}
       ${cell("Заблокировано сегодня", String(r.adStats.today || 0))}
       ${cell("За 7 дней", String(r.adStats.week || 0))}
-      ${cell("Недавно", (r.adStats.recent || []).slice(0, 3).map((x) => esc(x.host)).join(", ") || "пока пусто", `<button class="ghost" data-go="ads">Списки</button>`)}
+      <button type="button" class="cell" data-go="ads"><div class="cell-text"><div class="cell-title">Списки и исключения</div><div class="cell-desc">${(r.adStats.recent || []).slice(0, 2).map((x) => esc(x.host)).join(", ") || "свои сайты и белый список"}</div></div><span class="chev">›</span></button>
     </div>
     <div class="h">ПОЕЗДКИ</div>
     <div class="group">
@@ -1021,8 +1035,8 @@ document.addEventListener("input", (event) => {
   }
 });
 document.addEventListener("change", (event) => {
-  if (event.target.dataset.input) {
-    const path = event.target.dataset.input;
+  const path = event.target.dataset.input || event.target.dataset.set;
+  if (path) {
     let value = event.target.value;
     if (/port|Concurrency|window/.test(path)) value = Number(value);
     run(() => invoke("patch", { path, value }));

@@ -193,14 +193,33 @@ button { cursor: pointer; }
 .search { display: flex; gap: 8px; align-items: center; background: #0e1016; border-radius: 14px; padding: 10px 12px; margin: 8px 0; }
 .search input { border: 0; background: transparent; outline: none; width: 100%; padding: 0; }
 .nav-item, .cell {
-  display: flex; gap: 10px; align-items: center; width: 100%; text-align: left;
-  background: transparent; border: 0; color: inherit; padding: 12px; border-radius: 14px;
+  display: flex; gap: 12px; align-items: center; width: 100%; text-align: left;
+  background: transparent; border: 0; color: inherit; padding: 14px 12px; border-radius: 14px;
 }
 .nav-item + .nav-item, .cell + .cell { box-shadow: inset 0 1px 0 var(--line); }
-.cell { align-items: flex-start; }
-.cell-text { flex: 1; min-width: 0; }
-.cell-title { font-weight: 650; }
-.cell-desc { color: var(--muted); font-size: 13px; margin-top: 3px; line-height: 1.35; }
+.cell { align-items: center; }
+.cell-text { flex: 1 1 0; min-width: 0; }
+.cell-title { font-weight: 650; font-size: 15px; line-height: 1.3; overflow-wrap: anywhere; }
+.cell-desc { color: var(--muted); font-size: 13px; margin-top: 3px; line-height: 1.35; overflow-wrap: anywhere; }
+.nav-ico {
+  width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
+  display: grid; place-items: center; font-size: 14px;
+  background: color-mix(in srgb, var(--blue) 16%, transparent); color: var(--blue-2);
+}
+.nav-item .cell-text { flex: 1 1 0; min-width: 0; }
+.nav-item .nav-title { font-weight: 600; font-size: 15px; }
+/* контролы в строке — НЕ width:100%, иначе текст сжимается в столбик */
+.cell .ghost, .cell .switch, .cell select.ctrl, .cell input.ctrl {
+  flex: 0 0 auto; width: auto; max-width: 48%; margin-top: 0;
+}
+.cell .ghost { width: auto; padding: 8px 12px; border-radius: 12px; }
+.cell select.ctrl {
+  padding: 8px 10px; border-radius: 12px; background: #0e1016; border: 1px solid var(--line);
+  max-width: min(52%, 200px);
+}
+.mode-block { padding: 12px; }
+.mode-block select.ctrl { width: 100%; max-width: none; margin-top: 8px; }
+.mode-block .muted { margin: 8px 0 0; }
 .switch {
   width: 46px; height: 28px; border-radius: 999px; border: 0; background: #3a3f4b; position: relative; flex: 0 0 auto;
 }
@@ -210,6 +229,8 @@ button { cursor: pointer; }
 .switch.on { background: var(--blue); }
 .switch.on:after { left: 21px; }
 select, textarea.text, input.text { padding-right: 16px; background: #0e1016; }
+/* глобальный select width:100% не должен ломать .cell */
+.drawer-body > select, .group > select.ctrl.full { width: 100%; }
 textarea.text { min-height: 110px; resize: vertical; }
 .seg { display: flex; gap: 6px; background: #0e1016; padding: 4px; border-radius: 14px; }
 .seg button { flex: 1; border: 0; background: transparent; border-radius: 11px; padding: 8px; color: var(--muted); }
