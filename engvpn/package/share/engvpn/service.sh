@@ -122,19 +122,36 @@ do_start() {
 	}
 	ensure_firewall
 	open_panel_port_hook
-	# Supervisor: restart panel if it exits unexpectedly.
+	# Restore transparent rules if configured (after reboot / service start)
+	if [ -f "$DATA_DIR/transparent.conf" ] && [ -x "$SHARE/transparent.sh" ]; then
+		mode=$(awk -F= '$1=="mode"{print $2}' "$DATA_DIR/transparent.conf" 2>/dev/null || true)
+		if [ -n "$mode" ] && [ "$mode" != off ]; then
+			sh "$SHARE/transparent.sh" apply >>"$LOG" 2>&1 || true
+		fi
+	fi
+	# Supervisor: restart panel if it exits; periodic watchdog for rules.
 	(
 		trap '' HUP
 		mkdir -p "$VOLATILE_DIR" 2>/dev/null || true
 		printf '%s\n' "$$" >"$SUPERVISOR_PIDFILE"
+		ticks=0
 		while :; do
 			"$DAEMON" serve --data-dir "$DATA_DIR" >>"$LOG" 2>&1 &
 			child=$!
 			printf '%s\n' "$child" >"$PIDFILE"
-			wait "$child"
+			# Soft-watchdog while panel runs: every ~60s restore rules if flushed
+			while kill -0 "$child" 2>/dev/null; do
+				sleep 5
+				ticks=$((ticks + 5))
+				if [ "$ticks" -ge 60 ]; then
+					ticks=0
+					"$DAEMON" watchdog >>"$LOG" 2>&1 || true
+				fi
+				[ -f "$DATA_DIR/.stop-requested" ] && break
+			done
+			wait "$child" 2>/dev/null
 			code=$?
 			rm -f "$PIDFILE"
-			# Clean stop requested
 			[ -f "$DATA_DIR/.stop-requested" ] && rm -f "$DATA_DIR/.stop-requested" && break
 			mkdir -p "$VOLATILE_DIR" 2>/dev/null || true
 			echo "EngVPN panel exited ($code); restarting in 3s" >>"$LOG" 2>/dev/null || true

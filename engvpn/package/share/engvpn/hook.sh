@@ -27,11 +27,11 @@ firewall-start | nat-start)
 	# Re-open panel port; replay transparent rules if a state file exists.
 	PORT=${ENGVPN_PORT:-8790}
 	if type iptables >/dev/null 2>&1; then
-		iptables -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null ||
-			iptables -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
+		iptables -w -C INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null ||
+			iptables -w -I INPUT -p tcp --dport "$PORT" -j ACCEPT 2>/dev/null || true
 	fi
-	if [ -f "$STATE" ] && [ -x "$REPLAY" ]; then
-		sh "$REPLAY" replay >/dev/null 2>&1 || true
+	if [ -x "$REPLAY" ]; then
+		ENGVPN_NETFILTER_STATE="$STATE" sh "$REPLAY" replay >/dev/null 2>&1 || true
 	fi
 	;;
 esac

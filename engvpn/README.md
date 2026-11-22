@@ -4,9 +4,10 @@ Open Merlin installer/package modeled on StealthSurf’s `merlin.sh` + router ta
 
 | | |
 | --- | --- |
-| Version | see [`VERSION`](./VERSION) |
+| Version | see [`VERSION`](./VERSION) (0.2.0+) |
 | Panel | `http://<lan>:8790/` (password required) |
 | Prefix | `/jffs/addons/engvpn` or `/tmp/mnt/<drive>/engvpn` |
+| Transparent | `engvpnd transparent` — iptables REDIRECT / TPROXY, selective devices, kill-switch |
 | Runtime | Node.js panel (vendored from `alfa-addon`, EngVPN-branded) + downloadable open cores |
 | Does not touch | `/jffs/addons/stealthsurf` (`:8800`), `/jffs/addons/ssurf` (`:1131`), `/jffs/addons/alfa` (`:8788`) |
 
@@ -26,36 +27,45 @@ ENGVPN_PASSWORD='your-password' curl -fsSL …/engvpn/merlin.sh | sh
 
 Override prefix: `ENGVPN_PREFIX=/tmp/mnt/USB/engvpn`.
 
+## Transparent / selective VPN
+
+```sh
+# Edit /jffs/addons/engvpn/data/transparent.conf
+# mode=all|selected|exclude|off  method=redirect|tproxy  killswitch=0|1
+engvpnd transparent apply
+engvpnd transparent status
+```
+
+Panel: `POST /api/invoke/transparent` with `{"action":"apply","mode":"all"}`.  
+Xray gets a dokodemo inbound when mode ≠ `off`. No `stealthsurf-nfqws`.
+
+## Update
+
+```sh
+engvpnd update-check
+engvpnd update
+```
+
+Publish release assets: `./publish-release.sh` (dry-run) or `./publish-release.sh --push`.
+
 ## Package layout
 
 ```
-sbin/engvpnd                 # CLI: serve | set-password | status | stop | update-check
-share/engvpn/install.sh      # install | upgrade | uninstall
-share/engvpn/service.sh      # start | stop | restart | check
-share/engvpn/hook.sh         # Merlin user-script hooks
-share/engvpn/netfilter.sh    # panel port + optional rule replay
-share/engvpn/runtime/        # Node panel (open)
-share/engvpn/files           # manifest
+sbin/engvpnd
+share/engvpn/install.sh | service.sh | hook.sh
+share/engvpn/transparent.sh | netfilter.sh | update.sh
+share/engvpn/runtime/          # Node panel
+share/engvpn/files             # manifest
 ```
 
 ## Build & smoke (dev host)
 
 ```sh
 cd engvpn
-./build-package.sh          # → dist/*.tar.gz + feed/latest.json
-./smoke-test.sh             # syntax, install, password, hooks, panel health, uninstall
+./build-package.sh
+./smoke-test.sh
 ```
 
-## Parity vs StealthSurf (summary)
+## Parity vs remaining hard gaps
 
-| Surface | EngVPN |
-| --- | --- |
-| Bootstrap + SHA-256 feed | yes (`merlin.sh`) |
-| arm64 / armv7 keys | yes (same payload; cores fetch per-arch) |
-| JFFS / USB prefix + disk/RAM checks | yes |
-| Panel password at install | yes (`engvpnd set-password`) |
-| Service + Merlin hooks | yes |
-| Closed `stealthsurf-routerd` / `nfqws` / GRE / OpenFlux | **not shipped** — open Node panel + Xray/sing-box/mihomo downloads |
-| Full transparent TPROXY / kill-switch | **gap** — SOCKS/HTTP edge + optional netfilter stub |
-
-Details: project report `docs/engvpn-merlin-addon.md` in the EngVPN agent store / PR description.
+See project report and PR description. Hard gaps: closed routerd/GRE/OpenFlux/Ferrum/nfqws; Minisign; Entware Node; pixel-perfect StealthSurf cloud UI.

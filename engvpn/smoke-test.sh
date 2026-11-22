@@ -80,8 +80,46 @@ grep -q 'EngVPN' "$SCRIPTS/firewall-start"
 echo "  hooks ok"
 
 echo "==> engvpnd status / version"
-"$PREFIX/sbin/engvpnd" version | grep -q .
-"$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
+"$PREFIX/sbin/engvpnd" version | grep -q "$VERSION"
+ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
+echo "  version + update-check ok"
+
+echo "==> transparent dry-run + dokodemo snippet"
+# Stop panel first so watchdog cannot race with dry-run iptables probes
+"$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
+mkdir -p "$PREFIX/data"
+cat >"$PREFIX/data/transparent.conf" <<EOF
+mode=all
+method=redirect
+port=12345
+mark=0x39000
+table=79
+killswitch=0
+lan_if=br0
+lan_cidr=192.168.50.0/24
+EOF
+dry_out=$(ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/transparent.sh" dry-run 2>&1) || {
+	echo "transparent dry-run failed: $dry_out" >&2
+	exit 1
+}
+printf '%s\n' "$dry_out" | grep -q 'mode=all' || {
+	echo "unexpected dry-run output: $dry_out" >&2
+	exit 1
+}
+[ -f "$PREFIX/data/run/dokodemo.inbound.json" ] || {
+	echo "missing dokodemo.inbound.json" >&2
+	exit 1
+}
+grep -q dokodemo-door "$PREFIX/data/run/dokodemo.inbound.json"
+# Apply on smoke host may need root; try and accept failure without root
+if [ "$(id -u)" = 0 ]; then
+	ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/transparent.sh" apply
+	ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/transparent.sh" status | grep -q active
+	ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/transparent.sh" stop
+	echo "  transparent apply/stop ok (root)"
+else
+	echo "  transparent dry-run ok (skip apply; not root)"
+fi
 
 if command -v node >/dev/null 2>&1; then
 	echo "==> start panel (node available)"
@@ -107,13 +145,26 @@ if command -v node >/dev/null 2>&1; then
 	code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:8790/api/login" \
 		-H 'Content-Type: application/json' -d '{"password":"wrong-password-xx"}' || true)
 	echo "  bad login http=$code"
-	code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:8790/api/login" \
+	# Capture session cookie for invoke
+	rm -f /tmp/engvpn-smoke-cookie.txt
+	code=$(curl -s -c /tmp/engvpn-smoke-cookie.txt -o /tmp/engvpn-smoke-login.json -w '%{http_code}' -X POST "http://127.0.0.1:8790/api/login" \
 		-H 'Content-Type: application/json' -d '{"password":"SmokeTest9!"}' || true)
 	echo "  good login http=$code"
 	[ "$code" = 200 ] || {
 		echo "expected 200 on good login" >&2
 		exit 1
 	}
+	# Panel EngVPN transparent dry-run via invoke
+	inv=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/transparent" \
+		-H 'Content-Type: application/json' -d '{"action":"dry-run","mode":"all","method":"redirect"}' || true)
+	echo "$inv" | grep -q '"ok":true' || {
+		echo "transparent invoke failed: $inv" >&2
+		exit 1
+	}
+	echo "  transparent invoke ok"
+	upd=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/engvpnUpdateCheck" \
+		-H 'Content-Type: application/json' -d '{}' || true)
+	echo "$upd" | grep -q 'installed' || echo "  update-check invoke: $upd"
 	"$PREFIX/share/engvpn/service.sh" stop
 	echo "  stop ok"
 else
