@@ -42,6 +42,16 @@ test("legacy scrypt hashes still verify and need upgrade", () => {
   assert.equal(checkPassword("nope", legacy), false);
 });
 
+test("UI select uses data-input and cell CSS avoids full-width crush", () => {
+  const js = readFileSync(join(ROOT, "public/app.js"), "utf8");
+  assert.match(js, /function sel\(/);
+  assert.match(js, /data-input="\$\{esc\(path\)\}"/);
+  assert.match(js, /navRow\(/);
+  const css = readFileSync(join(ROOT, "public/app.css"), "utf8");
+  assert.match(css, /\.cell select\.ctrl/);
+  assert.match(css, /max-width:\s*min\(52%/);
+});
+
 test("ROOT works on Node 18 without import.meta.dirname", () => {
   assert.equal(typeof ROOT, "string");
   assert.equal(typeof DATA, "string");
