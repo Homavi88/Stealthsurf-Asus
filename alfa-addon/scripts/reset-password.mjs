@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-/** Сброс пароля панели. Запуск из каталога аддона или с путём к нему. */
+/** В 0.1.2+ панель открыта без пароля. Скрипт оставлен для совместимости install.sh. */
+import { OPEN_PANEL } from "../lib/catalog.mjs";
 import {
   loadState,
   saveState,
@@ -7,6 +8,17 @@ import {
   checkPassword,
   DEFAULT_PANEL_PASSWORD,
 } from "../lib/state.mjs";
+
+if (OPEN_PANEL) {
+  const state = loadState();
+  state.failedLogins = 0;
+  state.lockedUntil = 0;
+  // очищаем блокировки; хеш не обязателен для входа
+  if (!state.password?.hash) state.password = hashPassword(DEFAULT_PANEL_PASSWORD);
+  saveState(state, true);
+  console.log("ok openAccess=true (пароль для входа не нужен)");
+  process.exit(0);
+}
 
 const next = String(process.argv[2] || DEFAULT_PANEL_PASSWORD).trim();
 if (next.length < 4) {
@@ -21,10 +33,6 @@ state.sessions = {};
 saveState(state, true);
 if (!checkPassword(next, state.password)) {
   console.error("хеш не сверился после записи");
-  process.exit(1);
-}
-if (state.password.algo !== "pbkdf2-sha256") {
-  console.error("ожидался algo=pbkdf2-sha256");
   process.exit(1);
 }
 console.log(`ok password=${next} algo=${state.password.algo}`);

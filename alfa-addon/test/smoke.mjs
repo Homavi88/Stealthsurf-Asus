@@ -195,7 +195,7 @@ test("plain http proxy forwards a split body and ignores the next request", asyn
   }
 });
 
-test("panel login, connect, proxy and explain", async () => {
+test("panel opens without password, connect, proxy and explain", async () => {
   const { start, stop } = await import("../server.mjs");
   const origin = await start(8788, "127.0.0.1");
   assert.ok(origin);
@@ -203,15 +203,21 @@ test("panel login, connect, proxy and explain", async () => {
   await new Promise((resolve) => local.listen(0, "127.0.0.1", resolve));
   const localPort = local.address().port;
   try {
-    const bad = await fetch("http://127.0.0.1:8788/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "nope" }) });
-    assert.equal(bad.status, 401);
-    const good = await fetch("http://127.0.0.1:8788/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password: "alfa" }) });
-    assert.equal(good.status, 200);
-    const cookie = good.headers.getSetCookie?.()[0] || good.headers.get("set-cookie");
+    const health = await fetch("http://127.0.0.1:8788/api/health");
+    assert.equal(health.status, 200);
+    assert.equal((await health.json()).openAccess, true);
+    const session = await fetch("http://127.0.0.1:8788/api/session");
+    assert.equal(session.status, 200);
+    const sessionBody = await session.json();
+    assert.equal(sessionBody.authenticated, true);
+    assert.equal(sessionBody.openAccess, true);
+    const cookie = session.headers.getSetCookie?.()[0] || session.headers.get("set-cookie");
+    assert.match(cookie || "", /alfa_session=/);
     const token = /alfa_session=([^;]+)/.exec(cookie)[1];
     const headers = { "Content-Type": "application/json", Cookie: `alfa_session=${token}` };
-    const session = await fetch("http://127.0.0.1:8788/api/session", { headers });
-    assert.equal((await session.json()).authenticated, true);
+    // повторный session с cookie тоже ок
+    const again = await fetch("http://127.0.0.1:8788/api/session", { headers });
+    assert.equal((await again.json()).authenticated, true);
     const page = await fetch("http://127.0.0.1:8788/");
     assert.match(await page.text(), /StealthSurf VPN/);
     const connected = await fetch("http://127.0.0.1:8788/api/invoke/connect", { method: "POST", headers, body: "{}" });

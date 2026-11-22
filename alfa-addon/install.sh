@@ -47,7 +47,7 @@ trap cleanup EXIT
 banner() {
   if [ "$UI_COLOR" -eq 1 ]; then
     printf '\n%b┌─ %sStealthSurf Alfa%s ──────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
-    printf '%b│%b 0.1.1-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
+    printf '%b│%b 0.1.2-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
     printf '%b└─────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
   else
     echo "==> StealthSurf Alfa installer (panel :$PORT, path $OUR_DIR)"
@@ -424,7 +424,7 @@ lan_hint() {
   echo
   ok "готово"
   echo "  панель:  http://${ip}:${PORT}/"
-  echo "  пароль:  alfa"
+  echo "  вход:    без пароля (открытая альфа)"
   echo "  статус:  $OUR_SCRIPT status"
   echo "  стоп:    $OUR_SCRIPT stop"
   echo "  удалить: $OUR_SCRIPT uninstall"
@@ -457,18 +457,18 @@ do_uninstall() {
 
 reset_default_password() {
   NODE_BIN="$(resolve_node)" || return 1
-  say "пароль панели → alfa"
+  say "вход без пароля (открытая альфа)"
   "$OUR_SCRIPT" stop >/dev/null 2>&1 || true
   cd "$OUR_DIR" || return 1
   if [ ! -f "$OUR_DIR/scripts/reset-password.mjs" ]; then
     fail "нет scripts/reset-password.mjs"
     return 1
   fi
-  if ! "$NODE_BIN" "$OUR_DIR/scripts/reset-password.mjs" alfa; then
-    fail "не удалось записать пароль alfa"
+  if ! "$NODE_BIN" "$OUR_DIR/scripts/reset-password.mjs"; then
+    fail "не удалось подготовить доступ к панели"
     return 1
   fi
-  ok "пароль сброшен: alfa"
+  ok "панель без пароля"
 }
 
 do_install() {

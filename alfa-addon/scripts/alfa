@@ -203,7 +203,7 @@ reset_password() {
   cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
   "$NODE_BIN" "$ADDON_DIR/scripts/reset-password.mjs" "$pass" || die "сброс пароля не удался"
   start || die "панель не поднялась после сброса — смотрите $LOG_FILE"
-  echo "войдите с паролем: $pass"
+  echo "панель открыта без пароля: http://127.0.0.1:${PORT}/"
 }
 
 case "$1" in

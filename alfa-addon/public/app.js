@@ -232,7 +232,7 @@ function screenRouter() {
     <div class="group">${cell("Резерв 1", "Если текущий перестанет отвечать", sel("router.reserveId", r.reserveId, [["", "Не выбран"], ...nodes().filter((n) => n.protocol !== "direct").map((n) => [n.id, n.name])]))}</div>
     <div class="h">STEALTHSURF НА РОУТЕРЕ</div>
     <div class="group">
-      ${cell("Пароль панели", "Нужен, чтобы открыть панель", `<button class="ghost" data-go="password">Сменить</button>`)}
+      ${cell("Вход в панель", "Без пароля · альфа на LAN", `<span class="muted">открыто</span>`)}
       ${cell("Сохранить настройки в файл", "Режим, устройства, маршруты, расписания", `<button class="ghost" data-act="export">Скачать</button>`)}
       ${cell("Загрузить настройки из файла", "Заменит текущие", `<input type="file" data-act="import" accept="application/json">`)}
     </div>
@@ -762,22 +762,19 @@ function home() {
   </div>`;
 }
 
-function login() {
-  return `<div class="login"><form class="login-card" id="login">
+function bootSplash() {
+  return `<div class="login"><div class="login-card">
     <svg class="globe" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><circle cx="32" cy="32" r="18"/><path d="M14 32h36M32 14c6 6 6 30 0 36M32 14c-6 6-6 30 0 36"/></svg>
     <h1>StealthSurf VPN</h1>
-    <p>Введите пароль панели, заданный при установке на роутер</p>
-    <div class="field"><input id="password" type="${ui.showPass ? "text" : "password"}" autocomplete="current-password" autofocus><button type="button" class="eye" data-act="eye">👁</button></div>
-    <div class="err">${esc(ui.toast)}</div>
-    <button class="primary" type="submit">Войти</button>
-    <div class="hint">Альфа · порт 8788 · пароль по умолчанию alfa</div>
-  </form></div>`;
+    <p>Открываю панель…</p>
+    <div class="hint">Альфа · порт 8788 · вход без пароля</div>
+  </div></div>`;
 }
 
 function render() {
   applyTheme();
   const scroll = document.querySelector(".drawer-body")?.scrollTop || 0;
-  app.innerHTML = S ? home() : login();
+  app.innerHTML = S ? home() : bootSplash();
   const body = document.querySelector(".drawer-body");
   if (body) body.scrollTop = scroll;
   const q = document.querySelector("#q");
@@ -1033,20 +1030,6 @@ document.addEventListener("change", (event) => {
   if (event.target.dataset.rename) run(() => invoke("deviceRename", { id: event.target.dataset.rename, name: event.target.value }));
   if (event.target.dataset.local) ui.form[event.target.dataset.local] = event.target.value;
 });
-document.addEventListener("submit", (event) => {
-  if (event.target.id !== "login") return;
-  event.preventDefault();
-  const password = String(document.querySelector("#password").value || "").trim();
-  run(async () => {
-    const body = /^[0-9a-f]{6}$/i.test(password) && password !== "alfa" ? { pairCode: password } : { password };
-    await api("/api/login", body);
-    S = await api("/api/snapshot");
-    ui.toast = "";
-    listen();
-    render();
-  });
-});
-
 function listen() {
   if (es) es.close();
   es = new EventSource("/api/events");
@@ -1068,10 +1051,19 @@ function listen() {
   };
 }
 
-api("/api/session").then(async (s) => {
-  if (s.authenticated) {
-    S = await api("/api/snapshot");
-    listen();
-  }
+async function openPanel() {
   render();
-}).catch(() => render());
+  const session = await api("/api/session");
+  if (!session.authenticated) {
+    await api("/api/login", {});
+  }
+  S = await api("/api/snapshot");
+  ui.toast = "";
+  listen();
+  render();
+}
+
+openPanel().catch((err) => {
+  ui.toast = err.message || "Не удалось открыть панель";
+  render();
+});

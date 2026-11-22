@@ -63,11 +63,16 @@ function setCookie(res, token) {
   res.setHeader("Set-Cookie", value);
 }
 
-function guard(req, res) {
-  const token = cookieToken(req);
+/** Всегда выдаёт рабочую сессию: при OPEN_PANEL — без пароля. */
+function ensureAuth(req, res) {
+  let token = cookieToken(req);
   if (!runtime.sessionOk(token)) {
-    json(res, 401, { authenticated: false });
-    return null;
+    token = runtime.openPanel ? runtime.openSession() : null;
+    if (!token) {
+      json(res, 401, { authenticated: false, openAccess: false });
+      return null;
+    }
+    setCookie(res, token);
   }
   return token;
 }
@@ -76,15 +81,16 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url || "/", "http://127.0.0.1");
     if (req.method === "GET" && url.pathname === "/api/health") {
-      json(res, 200, { ok: true, version: runtime.state.version, port: PANEL_PORT });
+      json(res, 200, { ok: true, version: runtime.state.version, port: PANEL_PORT, openAccess: runtime.openPanel });
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/session") {
-      const token = cookieToken(req);
+      const token = ensureAuth(req, res);
       json(res, 200, {
-        authenticated: runtime.sessionOk(token),
+        authenticated: Boolean(token && runtime.sessionOk(token)),
         installerAccess: false,
-        passwordSet: true,
+        passwordSet: !runtime.openPanel,
+        openAccess: runtime.openPanel,
       });
       return;
     }
@@ -92,17 +98,23 @@ const server = http.createServer(async (req, res) => {
       const body = await readBody(req, 64 * 1024);
       const token = runtime.login(body.password, body.pairCode);
       setCookie(res, token);
-      json(res, 200, { authenticated: true, installerAccess: false, passwordSet: true });
+      json(res, 200, { authenticated: true, installerAccess: false, passwordSet: !runtime.openPanel, openAccess: runtime.openPanel });
       return;
     }
     if (req.method === "POST" && url.pathname === "/api/logout") {
       runtime.logout(cookieToken(req));
-      setCookie(res, "");
-      json(res, 200, { authenticated: false });
+      if (runtime.openPanel) {
+        const token = runtime.openSession();
+        setCookie(res, token);
+        json(res, 200, { authenticated: true, openAccess: true });
+      } else {
+        setCookie(res, "");
+        json(res, 200, { authenticated: false });
+      }
       return;
     }
     if (req.method === "GET" && url.pathname === "/api/events") {
-      if (!guard(req, res)) return;
+      if (!ensureAuth(req, res)) return;
       res.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -114,13 +126,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (url.pathname === "/api/snapshot" && req.method === "GET") {
-      if (!guard(req, res)) return;
+      if (!ensureAuth(req, res)) return;
       json(res, 200, runtime.snapshot());
       return;
     }
     const invoke = url.pathname.match(/^\/api\/invoke\/([a-zA-Z0-9_-]+)$/);
     if (invoke && req.method === "POST") {
-      if (!guard(req, res)) return;
+      if (!ensureAuth(req, res)) return;
       const body = await readBody(req);
       const result = await runtime.invoke(invoke[1], body);
       json(res, 200, { ok: true, result });
@@ -160,6 +172,6 @@ export async function stop() {
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
   start().then(() => {
-    console.log(`StealthSurf alfa http://0.0.0.0:${PANEL_PORT}`);
+    console.log(`StealthSurf alfa http://0.0.0.0:${PANEL_PORT} openAccess=${runtime.openPanel}`);
   });
 }

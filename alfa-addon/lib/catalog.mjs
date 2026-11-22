@@ -1,7 +1,9 @@
 /** Domain lists and engine capability matrix used by the live policy and by config compilers. */
 
-export const VERSION = "0.1.1-alpha";
+export const VERSION = "0.1.2-alpha";
 export const PANEL_PORT = 8788;
+/** Альфа на LAN без пароля входа — панель открывается сразу. */
+export const OPEN_PANEL = true;
 
 export const ENGINES = {
   auto: {

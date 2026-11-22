@@ -23,6 +23,7 @@ import {
   visibleNodes,
   DATA,
 } from "./state.mjs";
+import { OPEN_PANEL } from "./catalog.mjs";
 import { evaluate } from "./policy.mjs";
 import { nodeIdentity, parseShareLink, parseSubscriptionBody, parseWireGuardIni } from "./subscription.mjs";
 import {
@@ -974,6 +975,7 @@ export function createRuntime() {
   }
 
   function setPassword(body) {
+    if (OPEN_PANEL) throw new Error("В этой сборке вход без пароля — смена не нужна");
     if (!checkPassword(body.oldPassword || "", state.password)) throw new Error("Текущий пароль не подошёл");
     if (!body.password || String(body.password).length < 4) throw new Error("Новый пароль короче 4 символов");
     state.password = hashPassword(body.password);
@@ -1048,7 +1050,22 @@ export function createRuntime() {
     });
   }
 
+  function issueSession() {
+    const token = randomBytes(24).toString("hex");
+    state.sessions[token] = { exp: Date.now() + 14 * 864e5 };
+    saveState(state, true);
+    return token;
+  }
+
+  /** Открытый доступ: сессия без пароля (альфа на LAN). */
+  function openSession() {
+    state.failedLogins = 0;
+    state.lockedUntil = 0;
+    return issueSession();
+  }
+
   function login(password, pairCode) {
+    if (OPEN_PANEL) return openSession();
     if (state.lockedUntil && Date.now() < state.lockedUntil) {
       throw Object.assign(new Error("Слишком много попыток, подождите минуту"), { status: 429 });
     }
@@ -1061,7 +1078,6 @@ export function createRuntime() {
     if (!pass) {
       throw Object.assign(new Error("Введите пароль"), { status: 401 });
     }
-    // Если хеш битый/пустой после сбоя установки — вернём пароль alfa.
     if (!state.password?.salt || !state.password?.hash) {
       state.password = hashPassword(DEFAULT_PANEL_PASSWORD);
       saveState(state, true);
@@ -1083,13 +1099,6 @@ export function createRuntime() {
     return issueSession();
   }
 
-  function issueSession() {
-    const token = randomBytes(24).toString("hex");
-    state.sessions[token] = { exp: Date.now() + 14 * 864e5 };
-    saveState(state, true);
-    return token;
-  }
-
   function sessionOk(token) {
     const row = token && state.sessions[token];
     if (!row) return false;
@@ -1101,11 +1110,26 @@ export function createRuntime() {
   }
 
   function logout(token) {
+    if (OPEN_PANEL) return;
     if (token) delete state.sessions[token];
     saveState(state);
   }
 
-  return { state, live, boot, shutdown, login, logout, sessionOk, invoke, snapshot, broadcast, ctx };
+  return {
+    state,
+    live,
+    boot,
+    shutdown,
+    login,
+    logout,
+    openSession,
+    sessionOk,
+    openPanel: OPEN_PANEL,
+    invoke,
+    snapshot,
+    broadcast,
+    ctx,
+  };
 }
 
 function emptyBytes() {

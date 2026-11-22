@@ -391,7 +391,8 @@ export function publicState(state, runtime = {}) {
   const { password, sessions, failedLogins, lockedUntil, ...rest } = state;
   return {
     ...rest,
-    passwordSet: Boolean(password?.hash),
+    passwordSet: false,
+    openAccess: true,
     runtime,
   };
 }
