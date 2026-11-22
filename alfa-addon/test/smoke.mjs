@@ -7,10 +7,22 @@ import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { evaluate } from "../lib/policy.mjs";
-import { assertPatch, defaultState, setPath } from "../lib/state.mjs";
+import { assertPatch, defaultState, setPath, ROOT, DATA } from "../lib/state.mjs";
+import { readFileSync } from "node:fs";
 import { buildMihomo, buildSingBox, buildXray, corePath, writeConfigs } from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
 import { dialTarget, startEdge } from "../lib/proxy.mjs";
+
+test("ROOT works on Node 18 without import.meta.dirname", () => {
+  assert.equal(typeof ROOT, "string");
+  assert.equal(typeof DATA, "string");
+  assert.ok(ROOT.length > 0);
+  assert.ok(existsSync(join(ROOT, "server.mjs")));
+  assert.ok(existsSync(join(ROOT, "lib/state.mjs")));
+  const src = readFileSync(join(ROOT, "lib/state.mjs"), "utf8");
+  assert.match(src, /fileURLToPath\(import\.meta\.url\)/);
+  assert.doesNotMatch(src, /join\(import\.meta\.dirname/);
+});
 
 test("policy sends telegram direct, ads blocked, exceptions direct", () => {
   const state = defaultState();

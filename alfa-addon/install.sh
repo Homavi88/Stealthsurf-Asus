@@ -413,8 +413,9 @@ start_panel() {
     i=$((i + 1))
     sleep 1
   done
-  warn "панель ещё не ответила — смотрите /tmp/alfa-panel.log"
-  tail -n 30 /tmp/alfa-panel.log 2>/dev/null || true
+  fail "панель не ответила на :$PORT — смотрите /tmp/alfa-panel.log"
+  tail -n 40 /tmp/alfa-panel.log 2>/dev/null || true
+  return 1
 }
 
 lan_hint() {
@@ -462,7 +463,9 @@ do_install() {
   download_addon
   install_files
   install_service
-  start_panel
+  if ! start_panel; then
+    exit 1
+  fi
   lan_hint
 }
 

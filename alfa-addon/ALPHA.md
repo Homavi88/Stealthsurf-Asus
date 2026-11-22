@@ -85,6 +85,7 @@ node server.mjs
 12. Установка одной командой: `curl …/alfa-addon/install.sh | sh`. Скрипт ставит Node, копирует аддон, службу и автозапуск, поднимает панель. Удаление: та же команда с `uninstall` или `/jffs/scripts/alfa uninstall`. Скачивание ядер выбирает amd64 / arm64 / arm под архитектуру роутера.
 13. На RT-BE88U `opkg` падал: BusyBox wget не качает HTTPS с `bin.entware.net`. Установщик ставит curl-обёртку `wget`, умеет временно ходить на HTTP-фид и ставит пакет `node` (не `nodejs`) прямой загрузкой `.ipk`, если `opkg install` всё ещё ломается.
 14. После успешного `Configuring node` проверка `command -v node` на BusyBox ash всё равно могла сказать «нет команды». Ищем `/opt/bin/node` по файлу, пишем путь в `.node-bin`, служба запускает абсолютный путь.
+15. Entware Node 18.20 падал на старте: `import.meta.dirname` там нет. Корень аддона берётся через `fileURLToPath(import.meta.url)`.
 
 ## Чего альфа не делает
 

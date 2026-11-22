@@ -1,10 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomBytes, scryptSync, timingSafeEqual, randomUUID } from "node:crypto";
 import { arch, hostname, totalmem, platform } from "node:os";
 import { VERSION, engineSupports } from "./catalog.mjs";
 
-export const ROOT = join(import.meta.dirname, "..");
+// Node 18 (Entware) не имеет import.meta.dirname — только с 20.11+.
+const LIB_DIR = dirname(fileURLToPath(import.meta.url));
+export const ROOT = join(LIB_DIR, "..");
 export const DATA = join(ROOT, "data");
 export const STATE_PATH = join(DATA, "state.json");
 
