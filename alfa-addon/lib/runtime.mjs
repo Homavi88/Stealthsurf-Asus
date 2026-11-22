@@ -12,9 +12,11 @@ import {
   appendLog,
   assertPatch,
   checkPassword,
+  DEFAULT_PANEL_PASSWORD,
   findNode,
   hashPassword,
   loadState,
+  passwordNeedsUpgrade,
   publicState,
   saveState,
   setPath,
@@ -1061,7 +1063,7 @@ export function createRuntime() {
     }
     // Если хеш битый/пустой после сбоя установки — вернём пароль alfa.
     if (!state.password?.salt || !state.password?.hash) {
-      state.password = hashPassword("alfa");
+      state.password = hashPassword(DEFAULT_PANEL_PASSWORD);
       saveState(state, true);
     }
     if (!checkPassword(pass, state.password)) {
@@ -1071,7 +1073,10 @@ export function createRuntime() {
         state.failedLogins = 0;
       }
       saveState(state);
-      throw Object.assign(new Error("Неверный пароль. Сброс на роутере: /jffs/scripts/alfa reset-password"), { status: 401 });
+      throw Object.assign(new Error("Неверный пароль. Сброс: /jffs/scripts/alfa reset-password"), { status: 401 });
+    }
+    if (passwordNeedsUpgrade(state.password)) {
+      state.password = hashPassword(pass);
     }
     state.failedLogins = 0;
     state.lockedUntil = 0;

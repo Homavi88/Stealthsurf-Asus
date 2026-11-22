@@ -36,10 +36,115 @@ is_running() {
   kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
 }
 
+# Все PID панели: pidfile + любой node server.mjs с cwd/путь к alfa.
+panel_pids() {
+  pids=""
+  if [ -f "$PID_FILE" ]; then
+    p="$(cat "$PID_FILE" 2>/dev/null)"
+    [ -n "$p" ] && pids="$p"
+  fi
+  # BusyBox: ps w; только процессы с путём/меткой alfa + server.mjs
+  extra="$(ps w 2>/dev/null | awk '
+    /[s]erver\.mjs/ && /alfa/ { print $1 }
+  ')"
+  for p in $extra; do
+    case " $pids " in
+      *" $p "*) ;;
+      *) pids="$pids $p" ;;
+    esac
+  done
+  # cwd через /proc (Linux)
+  for d in /proc/[0-9]*; do
+    pid="${d#/proc/}"
+    cwd="$(readlink "$d/cwd" 2>/dev/null || true)"
+    case "$cwd" in
+      "$ADDON_DIR"|"$ADDON_DIR"/*)
+        cmd="$(tr '\0' ' ' <"$d/cmdline" 2>/dev/null || true)"
+        case "$cmd" in
+          *server.mjs*)
+            case " $pids " in
+              *" $pid "*) ;;
+              *) pids="$pids $pid" ;;
+            esac
+            ;;
+        esac
+        ;;
+    esac
+  done
+  echo "$pids" | tr -s ' ' '\n' | sed '/^$/d' | sort -u
+}
+
+stop_pids() {
+  for attempt in 1 2 3; do
+    pids="$(panel_pids)"
+    [ -z "$pids" ] && break
+    for pid in $pids; do
+      if [ "$attempt" -lt 3 ]; then
+        kill "$pid" 2>/dev/null || true
+      else
+        kill -9 "$pid" 2>/dev/null || true
+      fi
+    done
+    sleep 1
+  done
+  rm -f "$PID_FILE"
+  # освободить порт если остался слушатель
+  if command -v fuser >/dev/null 2>&1; then
+    fuser -k "${PORT}/tcp" 2>/dev/null || true
+  fi
+}
+
+wait_stopped() {
+  i=0
+  while [ "$i" -lt 15 ]; do
+    left="$(panel_pids)"
+    if [ -z "$left" ] && ! is_running; then
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+  # последняя попытка
+  stop_pids
+  left="$(panel_pids)"
+  [ -z "$left" ] || die "не удалось остановить панель (pids: $left)"
+}
+
+wait_healthy() {
+  i=0
+  while [ "$i" -lt 20 ]; do
+    if is_running; then
+      if command -v curl >/dev/null 2>&1 || [ -x /opt/bin/curl ]; then
+        CURL_BIN="$(command -v curl 2>/dev/null || echo /opt/bin/curl)"
+        code="$("$CURL_BIN" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
+        if [ "$code" = "200" ]; then
+          echo "alfa healthy on :$PORT"
+          return 0
+        fi
+      else
+        # без curl — достаточно живого pid
+        echo "alfa running pid $(cat "$PID_FILE") (curl нет — HTTP не проверен)"
+        return 0
+      fi
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+  echo "alfa: панель не ответила на :$PORT — смотрите $LOG_FILE" >&2
+  tail -n 30 "$LOG_FILE" 2>/dev/null || true
+  return 1
+}
+
 start() {
   if is_running; then
     echo "alfa already running pid $(cat "$PID_FILE")"
     return 0
+  fi
+  # зомби без pidfile — убить перед стартом
+  left="$(panel_pids)"
+  if [ -n "$left" ]; then
+    stop_pids
+    wait_stopped
   fi
   [ -f "$ADDON_DIR/server.mjs" ] || die "нет $ADDON_DIR/server.mjs — сначала установите аддон"
   NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node из Entware (opkg install node)"
@@ -49,21 +154,12 @@ start() {
   echo $! >"$PID_FILE"
   echo "alfa started on :$PORT (pid $(cat "$PID_FILE"), node $NODE_BIN)"
   echo "log: $LOG_FILE"
-}
-
-stop_pids() {
-  if [ -f "$PID_FILE" ]; then
-    kill "$(cat "$PID_FILE")" 2>/dev/null || true
-    rm -f "$PID_FILE"
-  fi
-  # только процесс панели альфы
-  ps w 2>/dev/null | awk '/[s]erver\.mjs/ && /\/jffs\/addons\/alfa\// {print $1}' | while read -r pid; do
-    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
-  done
+  wait_healthy || return 1
 }
 
 stop() {
   stop_pids
+  wait_stopped
   echo "alfa stopped"
 }
 
@@ -78,11 +174,13 @@ status() {
 
 restart() {
   stop_pids
+  wait_stopped
   start
 }
 
 uninstall() {
   stop_pids
+  wait_stopped
   if [ -f /jffs/scripts/post-mount ]; then
     # BusyBox sed
     sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
@@ -98,10 +196,13 @@ reset_password() {
   NODE_BIN="$(resolve_node)" || die "нужен /opt/bin/node"
   [ -f "$ADDON_DIR/scripts/reset-password.mjs" ] || die "нет scripts/reset-password.mjs"
   pass="${2:-alfa}"
+  # Сначала стоп: живой процесс иначе перезапишет state.json старым хешом из памяти.
+  echo "alfa: останавливаю панель перед сбросом пароля…"
+  stop_pids
+  wait_stopped
   cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
   "$NODE_BIN" "$ADDON_DIR/scripts/reset-password.mjs" "$pass" || die "сброс пароля не удался"
-  # процесс держит старый хеш в памяти — перезапуск
-  restart
+  start || die "панель не поднялась после сброса — смотрите $LOG_FILE"
   echo "войдите с паролем: $pass"
 }
 

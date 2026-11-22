@@ -80,6 +80,19 @@ test("service script starts absolute /opt/bin/node not bare node", () => {
   assert.doesNotMatch(text, /nohup node server\.mjs/);
 });
 
+test("reset-password stops panel before rewriting hash then health-checks", () => {
+  const text = readFileSync(join(root, "scripts/alfa"), "utf8");
+  assert.match(text, /wait_stopped/);
+  assert.match(text, /wait_healthy/);
+  const fn = text.slice(text.indexOf("reset_password()"), text.indexOf('case "$1"'));
+  const stopAt = fn.indexOf("wait_stopped");
+  const writeAt = fn.indexOf('"$NODE_BIN" "$ADDON_DIR/scripts/reset-password.mjs"');
+  const startAt = fn.search(/\n\s*start /);
+  assert.ok(stopAt >= 0 && writeAt >= 0 && startAt >= 0);
+  assert.ok(stopAt < writeAt, "stop before writing hash");
+  assert.ok(writeAt < startAt, "write hash before start");
+});
+
 test("Entware node.ipk downloads over HTTP (router-safe path)", () => {
   const gz = execFileSync("curl", ["-fsSL", "http://bin.entware.net/aarch64-k3.10/Packages.gz"], {
     maxBuffer: 20 * 1024 * 1024,
