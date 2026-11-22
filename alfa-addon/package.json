@@ -1,6 +1,6 @@
 {
   "name": "stealthsurf-alfa",
-  "version": "0.2.0-beta",
+  "version": "0.2.1-beta",
   "private": true,
   "type": "module",
   "description": "StealthSurf router addon beta — panel on :8788",

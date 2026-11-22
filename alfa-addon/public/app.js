@@ -2,7 +2,7 @@ const $ = (html) => html;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const app = document.querySelector("#app");
 let S = null;
-let ui = { stack: [], query: "", pop: false, toast: "", busy: false, form: {}, modal: null, result: null, showPass: false };
+let ui = { stack: [], query: "", pop: false, toast: "", busy: false, busyCore: null, form: {}, modal: null, result: null, showPass: false };
 let es;
 
 const fmt = (n) => {
@@ -45,10 +45,14 @@ async function invoke(cmd, body, opts = {}) {
   }
   return data.result;
 }
-function toast(msg) { ui.toast = msg; render(); setTimeout(() => { if (ui.toast === msg) { ui.toast = ""; render(); } }, 3200); }
+function toast(msg, ms = 3200) {
+  ui.toast = msg;
+  render();
+  setTimeout(() => { if (ui.toast === msg) { ui.toast = ""; render(); } }, ms);
+}
 async function run(fn) {
   try { await fn(); }
-  catch (error) { toast(error.message); }
+  catch (error) { toast(error.message || String(error), 6500); }
 }
 
 function applyTheme() {
@@ -129,6 +133,9 @@ function sw(path, on) {
 }
 function cell(title, desc, control = "") {
   return `<div class="cell"><div class="cell-text"><div class="cell-title">${title}</div>${desc ? `<div class="cell-desc">${desc}</div>` : ""}</div>${control}</div>`;
+}
+function fieldBlock(title, desc, control) {
+  return `<div class="field-block"><div class="cell-title">${title}</div>${desc ? `<div class="cell-desc">${desc}</div>` : ""}<div class="field-control">${control}</div></div>`;
 }
 function navRow(id, title, ico) {
   return `<button type="button" class="nav-item" data-go="${id}"><span class="nav-ico" aria-hidden="true">${ico}</span><span class="cell-text"><span class="nav-title">${esc(title)}</span></span><span class="chev">›</span></button>`;
@@ -566,8 +573,10 @@ function screenEngine() {
     ${cell("Доменная стратегия", "Авто берёт AsIs, а с FakeIP — IPIfNonMatch", sel("engine.domainStrategy", e.domainStrategy, [["auto", "Авто"], ["AsIs", "AsIs"], ["IPIfNonMatch", "IPIfNonMatch"], ["IPOnDemand", "IPOnDemand"]]))}
     ${cell("FakeIP", "Временные адреса 198.18.0.0/15, имя решает VPN. Включается со следующего подключения.", sw("engine.fakeIp", e.fakeIp))}
     <div class="h">ЛОКАЛЬНЫЙ ПРОКСИ</div>
-    ${cell("SOCKS / смешанный", "Если занят, берётся ближайший свободный", `<input class="text" data-input="engine.socksPort" value="${esc(e.socksPort)}">`)}
-    ${cell("HTTP-порт Xray", "sing-box и mihomo для обоих протоколов используют смешанный порт", `<input class="text" data-input="engine.httpPort" value="${esc(e.httpPort)}">`)}
+    <div class="group">
+      ${fieldBlock("SOCKS / смешанный", "Если занят, берётся ближайший свободный", `<input class="text" data-input="engine.socksPort" inputmode="numeric" value="${esc(e.socksPort)}">`)}
+      ${fieldBlock("HTTP-порт Xray", "sing-box и mihomo для обоих протоколов используют смешанный порт", `<input class="text" data-input="engine.httpPort" inputmode="numeric" value="${esc(e.httpPort)}">`)}
+    </div>
     <p class="muted">Сейчас слушают SOCKS ${S.runtime.socksPort || "—"} и HTTP ${S.runtime.httpPort || "—"}. DNS альфы: порт 5353.</p>
     <div class="h">ГЕО-БАЗЫ</div>
     <div class="seg">
@@ -579,8 +588,9 @@ function screenEngine() {
     <div class="h">ЗАГРУЖЕННЫЕ ЯДРА</div>
     ${["xray", "ferrum", "sing-box", "mihomo"].map((id) => {
       const c = cores[id] || {};
-      return `<div class="card"><b>${esc(c.title || id)}</b><p>Эталон снимка: ${esc(c.ref || "")}. ${c.installed ? `Файл ${fmtBytes(c.bytes)}. ${esc(c.version || "")}` : "Не скачано"}</p>
-        <button class="ghost" data-act="get-core" data-id="${id}">${id === "ferrum" ? "Как поставить" : "Скачать"}</button>
+      const busy = ui.busyCore === id;
+      return `<div class="card core-card"><b>${esc(c.title || id)}</b><p>Эталон снимка: ${esc(c.ref || "")}. ${c.installed ? `Файл ${fmtBytes(c.bytes)}. ${esc(c.version || "")}` : "Не скачано"}</p>
+        <button class="ghost${busy ? " busy" : ""}" data-act="get-core" data-id="${id}" ${busy ? "disabled" : ""}>${id === "ferrum" ? "Как поставить" : busy ? "Скачиваю…" : "Скачать"}</button>
         ${c.installed ? `<button class="ghost" data-act="test-core" data-id="${id}">Проверить конфиг</button><button class="danger" data-act="del-core" data-id="${id}">Удалить</button>` : ""}
       </div>`;
     }).join("")}
@@ -592,14 +602,15 @@ function screenLook() {
   const a = S.appearance;
   const themes = [["system", "Системная"], ["light", "Светлая"], ["dark", "Тёмная"], ["retro", "Ретро"], ["halloween", "Хэллоуин"]];
   return `${backBar("Оформление")}<div class="drawer-body">
-    <div class="themes">${themes.map(([id, label]) => `<button class="theme-card ${a.theme === id ? "on" : ""}" data-theme="${id}"><div class="swatch"></div>${label}</button>`).join("")}</div>
+    <p class="muted">Светлая тема — отдельный режим панели. Можно включить здесь или через «Системная», если в телефоне светлый режим.</p>
+    <div class="themes">${themes.map(([id, label]) => `<button class="theme-card ${a.theme === id ? "on" : ""}" data-theme="${id}"><div class="swatch" data-sw="${id}"></div>${label}</button>`).join("")}</div>
     ${cell("Акцентная тема", "Цвет кнопок и ссылок", sel("appearance.accent", a.accent, [["stealth", "StealthSurf"], ["ocean", "Океан"], ["ember", "Уголь"], ["mint", "Мята"]]))}
     <div class="h">ИКОНКА ПАНЕЛИ</div>
     <div class="icons">
       ${[["base", "База"], ["surf", "Сёрфик"], ["cat", "Котик"], ["bunny", "Зайка"]].map(([id, label]) => `<button class="icon-card ${a.icon === id ? "on" : ""}" data-icon="${id}">${label}</button>`).join("")}
     </div>
     <p class="muted">Значок виден на вкладке. На работу маршрутов не влияет.</p>
-    ${cell("Чёрная тема", "Чистый чёрный фон для OLED", sw("appearance.oled", a.oled))}
+    ${cell("Чёрная тема", "Чистый чёрный фон для OLED (только тёмная)", sw("appearance.oled", a.oled))}
   </div>`;
 }
 function screenOther() {
@@ -958,10 +969,19 @@ document.addEventListener("click", (event) => {
   if (act === "automode") return run(() => invoke("automode", {}));
   if (act === "detect-net") return run(() => invoke("detectNetwork", {}));
   if (act === "get-core") return run(async () => {
-    if (t.dataset.id === "ferrum") { toast("Положите бинарник Ferrum в data/cores/ferrum"); return; }
-    toast("Скачиваю ядро…");
-    await invoke("downloadCore", { id: t.dataset.id });
-    toast("Ядро скачано");
+    const id = t.dataset.id;
+    if (id === "ferrum") { toast("Положите бинарник Ferrum в data/cores/ferrum", 5000); return; }
+    if (ui.busyCore) { toast("Уже скачивается другое ядро…"); return; }
+    ui.busyCore = id;
+    toast("Скачиваю ядро с GitHub… это может занять минуту", 8000);
+    render();
+    try {
+      await invoke("downloadCore", { id });
+      toast("Ядро скачано", 4000);
+    } finally {
+      ui.busyCore = null;
+      render();
+    }
   });
   if (act === "del-core") return run(() => invoke("deleteCore", { id: t.dataset.id }));
   if (act === "test-core") return run(async () => {

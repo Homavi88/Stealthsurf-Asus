@@ -19,7 +19,8 @@ import {
 } from "../lib/state.mjs";
 import { readFileSync } from "node:fs";
 import { scryptSync, randomBytes } from "node:crypto";
-import { buildMihomo, buildSingBox, buildXray, corePath, writeConfigs } from "../lib/engines.mjs";
+import { deflateRawSync } from "node:zlib";
+import { buildMihomo, buildSingBox, buildXray, corePath, extractZipMember, writeConfigs } from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
 import { dialTarget, startEdge } from "../lib/proxy.mjs";
 
@@ -42,14 +43,54 @@ test("legacy scrypt hashes still verify and need upgrade", () => {
   assert.equal(checkPassword("nope", legacy), false);
 });
 
+test("extractZipMember reads stored and deflated members without unzip", () => {
+  const payload = Buffer.from("stealthsurf-core-bin");
+  const stored = (() => {
+    const name = Buffer.from("xray");
+    const header = Buffer.alloc(30);
+    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(0, 6);
+    header.writeUInt16LE(0, 8); // store
+    header.writeUInt32LE(payload.length, 18);
+    header.writeUInt32LE(payload.length, 22);
+    header.writeUInt16LE(name.length, 26);
+    header.writeUInt16LE(0, 28);
+    return Buffer.concat([header, name, payload]);
+  })();
+  assert.equal(extractZipMember(stored, "xray").toString(), "stealthsurf-core-bin");
+  const deflated = deflateRawSync(payload);
+  const zipDef = (() => {
+    const name = Buffer.from("xray");
+    const header = Buffer.alloc(30);
+    header.writeUInt32LE(0x04034b50, 0);
+    header.writeUInt16LE(20, 4);
+    header.writeUInt16LE(0, 6);
+    header.writeUInt16LE(8, 8); // deflate
+    header.writeUInt32LE(deflated.length, 18);
+    header.writeUInt32LE(payload.length, 22);
+    header.writeUInt16LE(name.length, 26);
+    header.writeUInt16LE(0, 28);
+    return Buffer.concat([header, name, deflated]);
+  })();
+  assert.equal(extractZipMember(zipDef, "xray").toString(), "stealthsurf-core-bin");
+});
+
 test("UI select uses data-input and cell CSS avoids full-width crush", () => {
   const js = readFileSync(join(ROOT, "public/app.js"), "utf8");
   assert.match(js, /function sel\(/);
   assert.match(js, /data-input="\$\{esc\(path\)\}"/);
   assert.match(js, /navRow\(/);
+  assert.match(js, /function fieldBlock\(/);
+  assert.match(js, /busyCore/);
   const css = readFileSync(join(ROOT, "public/app.css"), "utf8");
   assert.match(css, /\.cell select\.ctrl/);
   assert.match(css, /max-width:\s*min\(52%/);
+  assert.match(css, /\.cell input\.text/);
+  assert.match(css, /\.switch\s*\{[\s\S]*?width:\s*46px\s*!important/);
+  assert.match(css, /:root\[data-theme="light"\]/);
+  assert.match(css, /--input:/);
+  assert.match(css, /\.field-block/);
 });
 
 test("ROOT works on Node 18 without import.meta.dirname", () => {

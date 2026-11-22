@@ -1,16 +1,17 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, existsSync, rmSync, statSync, createWriteStream, createReadStream } from "node:fs";
-import { join } from "node:path";
-import { createGunzip } from "node:zlib";
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, statSync, renameSync, createWriteStream, createReadStream, chmodSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { createGunzip, inflateRawSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
-import { Readable } from "node:stream";
 import { execFile as execFileCb } from "node:child_process";
 import { promisify } from "node:util";
-
-const execFile = promisify(execFileCb);
 import { DATA } from "./state.mjs";
 import { ENGINES, pickEngine } from "./catalog.mjs";
 import { dnsServers, ruleList } from "./policy.mjs";
+
+const execFile = promisify(execFileCb);
+const FETCH_UA = "stealthsurf-alfa";
+const DOWNLOAD_MS = 180_000;
 
 export const RUN_DIR = join(DATA, "run");
 export const CORE_DIR = join(DATA, "cores");
@@ -585,12 +586,37 @@ export async function detectVersion(id) {
   return line.slice(0, 180);
 }
 
+function mirrorUrls(url) {
+  const list = [url];
+  if (url.startsWith("https://")) {
+    list.push(`https://ghfast.top/${url}`);
+    list.push(`https://mirror.ghproxy.com/${url}`);
+  }
+  return list;
+}
+
+async function fetchJson(url, ms = 25000) {
+  let last = "";
+  for (const candidate of mirrorUrls(url)) {
+    try {
+      const response = await fetch(candidate, {
+        headers: { "User-Agent": FETCH_UA, Accept: "application/vnd.github+json" },
+        signal: AbortSignal.timeout(ms),
+      });
+      if (!response.ok) {
+        last = `${response.status}`;
+        continue;
+      }
+      return response.json();
+    } catch (error) {
+      last = error.message || String(error);
+    }
+  }
+  throw new Error(`GitHub API недоступен (${last})`);
+}
+
 async function githubLatest(repo) {
-  const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
-    headers: { "User-Agent": "stealthsurf-alfa", Accept: "application/vnd.github+json" },
-  });
-  if (!response.ok) throw new Error(`GitHub ${repo}: ${response.status}`);
-  return response.json();
+  return fetchJson(`https://api.github.com/repos/${repo}/releases/latest`);
 }
 
 function pickAsset(release, test) {
@@ -626,6 +652,127 @@ function pickCoreAsset(id, release) {
   return null;
 }
 
+async function downloadToFile(url, dest, onProgress) {
+  let last = "";
+  for (const candidate of mirrorUrls(url)) {
+    try {
+      onProgress?.(`скачиваю ${candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую"}…`);
+      const response = await fetch(candidate, {
+        headers: { "User-Agent": FETCH_UA },
+        signal: AbortSignal.timeout(DOWNLOAD_MS),
+        redirect: "follow",
+      });
+      if (!response.ok) {
+        last = `HTTP ${response.status}`;
+        continue;
+      }
+      const buf = Buffer.from(await response.arrayBuffer());
+      if (!buf.length) {
+        last = "пустой ответ";
+        continue;
+      }
+      writeFileSync(dest, buf);
+      return buf.length;
+    } catch (error) {
+      last = error.name === "TimeoutError" || error.name === "AbortError"
+        ? "таймаут загрузки"
+        : (error.message || String(error));
+    }
+  }
+  throw new Error(`не удалось скачать файл: ${last}`);
+}
+
+/** Распаковать один файл из zip без внешнего unzip (Merlin часто без него). */
+export function extractZipMember(buf, memberName) {
+  let offset = 0;
+  while (offset + 30 <= buf.length) {
+    const sig = buf.readUInt32LE(offset);
+    if (sig !== 0x04034b50) break;
+    const flags = buf.readUInt16LE(offset + 6);
+    const method = buf.readUInt16LE(offset + 8);
+    let compSize = buf.readUInt32LE(offset + 18);
+    const nameLen = buf.readUInt16LE(offset + 26);
+    const extraLen = buf.readUInt16LE(offset + 28);
+    const name = buf.subarray(offset + 30, offset + 30 + nameLen).toString("utf8");
+    const dataStart = offset + 30 + nameLen + extraLen;
+    if (flags & 0x8) {
+      // data descriptor — ищем сигнатуру после сжатых данных по имени
+      throw new Error("zip с data descriptor не поддержан; поставьте unzip или другой релиз");
+    }
+    const dataEnd = dataStart + compSize;
+    if (dataEnd > buf.length) throw new Error("повреждённый zip");
+    const base = name.split("/").pop();
+    if (base === memberName || name === memberName) {
+      const slice = buf.subarray(dataStart, dataEnd);
+      if (method === 0) return Buffer.from(slice);
+      if (method === 8) return inflateRawSync(slice);
+      throw new Error(`zip: неизвестный метод сжатия ${method}`);
+    }
+    offset = dataEnd;
+  }
+  throw new Error(`в архиве нет файла ${memberName}`);
+}
+
+function findNamedFile(dir, fileName, depth = 0) {
+  if (depth > 4) return null;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const hit = findNamedFile(path, fileName, depth + 1);
+      if (hit) return hit;
+    } else if (entry.name === fileName) return path;
+  }
+  return null;
+}
+
+function moveIntoPlace(found, dest) {
+  if (!found) return;
+  if (found === dest) return;
+  mkdirSync(dirname(dest), { recursive: true });
+  try { renameSync(found, dest); }
+  catch {
+    writeFileSync(dest, readFileSync(found));
+    rmSync(found, { force: true });
+  }
+}
+
+async function unpackCore(id, assetName, tmp, dest) {
+  const spec = ENGINES[id];
+  if (assetName.endsWith(".zip")) {
+    let unzipped = false;
+    try {
+      await execFile("unzip", ["-o", "-j", tmp, spec.bin, "-d", CORE_DIR], { timeout: 60000 });
+      unzipped = true;
+    } catch {
+      writeFileSync(dest, extractZipMember(readFileSync(tmp), spec.bin));
+      return;
+    }
+    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+    return;
+  }
+  if (assetName.endsWith(".tar.gz")) {
+    let last = "";
+    for (const args of [
+      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${spec.bin}`],
+      ["-xzf", tmp, "-C", CORE_DIR],
+    ]) {
+      try {
+        await execFile("tar", args, { timeout: 60000 });
+        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+        if (existsSync(dest)) return;
+      } catch (error) {
+        last = error.message || String(error);
+      }
+    }
+    throw new Error(`tar не смог распаковать: ${last || "бинарник не найден"}`);
+  }
+  if (assetName.endsWith(".gz")) {
+    await pipeline(createReadStream(tmp), createGunzip(), createWriteStream(dest));
+    return;
+  }
+  throw new Error(`неизвестный формат ${assetName}`);
+}
+
 export async function downloadCore(id, onProgress) {
   if (id === "ferrum") {
     throw new Error("Ferrum — ядро StealthSurf. Его нет в открытых релизах, положите бинарник в data/cores/ferrum");
@@ -638,21 +785,19 @@ export async function downloadCore(id, onProgress) {
   if (!asset) throw new Error(`В релизе ${release.tag_name} нет файла для linux-${hostArch()}`);
   onProgress?.(`скачиваю ${asset.name}`);
   mkdirSync(CORE_DIR, { recursive: true });
-  const tmp = join(CORE_DIR, asset.name);
-  const response = await fetch(asset.browser_download_url, { headers: { "User-Agent": "stealthsurf-alfa" } });
-  if (!response.ok) throw new Error(`загрузка ${asset.name}: ${response.status}`);
-  await pipeline(Readable.fromWeb(response.body), createWriteStream(tmp));
+  const tmp = join(CORE_DIR, `.${asset.name}.part`);
   const dest = corePath(id);
-  if (asset.name.endsWith(".zip")) {
-    await execFile("unzip", ["-o", tmp, spec.bin, "-d", CORE_DIR]);
-  } else if (asset.name.endsWith(".tar.gz")) {
-    await execFile("tar", ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${spec.bin}`]);
-  } else if (asset.name.endsWith(".gz")) {
-    await pipeline(createReadStream(tmp), createGunzip(), createWriteStream(dest));
+  try {
+    await downloadToFile(asset.browser_download_url, tmp, onProgress);
+    if (existsSync(dest)) rmSync(dest, { force: true });
+    onProgress?.("распаковываю…");
+    await unpackCore(id, asset.name, tmp, dest);
+    if (!existsSync(dest)) throw new Error("архив распаковался без бинарника");
+    try { await execFile("chmod", ["755", dest]); }
+    catch { chmodSync(dest, 0o755); }
+  } finally {
+    rmSync(tmp, { force: true });
   }
-  if (!existsSync(dest)) throw new Error("архив распаковался без бинарника");
-  await execFile("chmod", ["755", dest]);
-  rmSync(tmp, { force: true });
   const version = await detectVersion(id);
   return { version: version || release.tag_name, bytes: statSync(dest).size, tag: release.tag_name };
 }

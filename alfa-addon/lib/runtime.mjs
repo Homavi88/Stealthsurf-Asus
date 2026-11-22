@@ -917,7 +917,7 @@ export function createRuntime() {
     state.engine.cores[id] = { version: result.version, note: result.tag, bytes: result.bytes, at: Date.now() };
     saveState(state, true);
     ctx.hooks.log("info", `${ENGINES[id].title} ${result.version} скачан`);
-    return { ok: true, ...result, cores: coreStatus(state) };
+    return snapshot();
   }
 
   async function removeCore(id) {
