@@ -116,9 +116,29 @@ http_feed() {
   echo "$feed" | sed 's|^https://|http://|'
 }
 
+# Entware отдаёт те же пакеты по HTTP. HTTPS на части роутеров/сетей рвётся
+# (BusyBox wget и иногда даже curl: SSL_ERROR_SYSCALL) — для .ipk берём HTTP первым.
+preferred_feed() {
+  http="$(http_feed)"
+  [ -n "$http" ] && echo "$http" && return 0
+  entware_feed
+}
+
 fetch() {
   # $1 url $2 outfile
   "$CURL" -fsSL --connect-timeout 30 --retry 2 -o "$2" "$1"
+}
+
+fetch_entware() {
+  # $1 relative path or absolute url under feed, $2 outfile
+  rel="$1"
+  out="$2"
+  base="$(preferred_feed)"
+  if fetch "$base/$rel" "$out"; then
+    return 0
+  fi
+  https="$(entware_feed)"
+  [ -n "$https" ] && [ "$https" != "$base" ] && fetch "$https/$rel" "$out"
 }
 
 preflight() {
@@ -165,15 +185,12 @@ opkg_update_safe() {
 # Скачать Packages и поставить пакет .ipk (+ прямые Depends) через curl, минуя wget.
 opkg_install_via_curl() {
   pkg="$1"
-  feed="$(entware_feed)"
+  feed="$(preferred_feed)"
   [ -n "$feed" ] || return 1
   mkdir -p "$TMP_ROOT/ipk"
   idx="$TMP_ROOT/Packages"
-  say "качаю индекс пакетов ($pkg)"
-  if ! fetch "$feed/Packages.gz" "$TMP_ROOT/Packages.gz"; then
-    feed="$(http_feed)"
-    fetch "$feed/Packages.gz" "$TMP_ROOT/Packages.gz" || return 1
-  fi
+  say "качаю индекс пакетов ($pkg) с $feed"
+  fetch_entware "Packages.gz" "$TMP_ROOT/Packages.gz" || return 1
   gzip -dc "$TMP_ROOT/Packages.gz" >"$idx" 2>/dev/null || gunzip -c "$TMP_ROOT/Packages.gz" >"$idx"
 
   lookup_field() {
@@ -200,12 +217,12 @@ opkg_install_via_curl() {
     dfile="$(lookup_field "$dep" Filename)"
     [ -n "$dfile" ] || continue
     say "зависимость $dep"
-    fetch "$feed/$dfile" "$TMP_ROOT/ipk/$dfile" || fetch "$(http_feed)/$dfile" "$TMP_ROOT/ipk/$dfile" || continue
+    fetch_entware "$dfile" "$TMP_ROOT/ipk/$dfile" || continue
     /opt/bin/opkg install --force-overwrite "$TMP_ROOT/ipk/$dfile" || true
   done
 
   say "ставлю $pkg ($file)"
-  fetch "$feed/$file" "$TMP_ROOT/ipk/$file" || fetch "$(http_feed)/$file" "$TMP_ROOT/ipk/$file" || return 1
+  fetch_entware "$file" "$TMP_ROOT/ipk/$file" || return 1
   /opt/bin/opkg install --force-overwrite "$TMP_ROOT/ipk/$file"
 }
 

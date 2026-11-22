@@ -66,6 +66,23 @@ test("install.sh has HTTPS opkg bypass and prefers package node", () => {
   const text = readFileSync(installSh, "utf8");
   assert.match(text, /install_wget_shim/);
   assert.match(text, /opkg_install_via_curl/);
+  assert.match(text, /preferred_feed|http_feed/);
   assert.match(text, /opkg install node/);
   assert.match(text, /BusyBox wget/);
+});
+
+test("Entware node.ipk downloads over HTTP (router-safe path)", () => {
+  const gz = execFileSync("curl", ["-fsSL", "http://bin.entware.net/aarch64-k3.10/Packages.gz"], {
+    maxBuffer: 20 * 1024 * 1024,
+  });
+  const text = gunzipSync(gz).toString("utf8");
+  const file = /Filename: (node_v[\d.]+-\d+_aarch64-3\.10\.ipk)/.exec(text)?.[1];
+  assert.ok(file);
+  const dir = mkdtempSync(join(tmpdir(), "alfa-ipk-"));
+  const out = join(dir, file);
+  const run = spawnSync("curl", ["-fsSL", "-o", out, `http://bin.entware.net/aarch64-k3.10/${file}`], {
+    encoding: "utf8",
+  });
+  assert.equal(run.status, 0, run.stderr);
+  assert.ok(readFileSync(out).length > 1_000_000);
 });
