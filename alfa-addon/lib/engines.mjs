@@ -597,6 +597,35 @@ function pickAsset(release, test) {
   return (release.assets || []).find((asset) => test(asset.name));
 }
 
+function hostArch() {
+  const arch = process.arch;
+  if (arch === "arm64") return "arm64";
+  if (arch === "arm") return "arm";
+  return "amd64";
+}
+
+function pickCoreAsset(id, release) {
+  const arch = hostArch();
+  const tag = release.tag_name;
+  if (id === "xray") {
+    if (arch === "arm64") return pickAsset(release, (name) => name === "Xray-linux-arm64-v8a.zip");
+    if (arch === "arm") return pickAsset(release, (name) => name === "Xray-linux-arm32-v7a.zip");
+    return pickAsset(release, (name) => name === "Xray-linux-64.zip");
+  }
+  if (id === "sing-box") {
+    const needle = arch === "arm64" ? "linux-arm64" : arch === "arm" ? "linux-armv7" : "linux-amd64";
+    return pickAsset(release, (name) => name.includes(needle) && name.endsWith(".tar.gz") && !name.includes("musl"));
+  }
+  if (id === "mihomo") {
+    const needle = arch === "arm64" ? "arm64" : arch === "arm" ? "armv7" : "amd64";
+    return pickAsset(release, (name) =>
+      name === `mihomo-linux-${needle}-${tag}.gz`
+      || name === `mihomo-linux-${needle}-compatible.gz`
+      || (name.includes(`linux-${needle}`) && name.endsWith(".gz") && !name.includes("go120")));
+  }
+  return null;
+}
+
 export async function downloadCore(id, onProgress) {
   if (id === "ferrum") {
     throw new Error("Ferrum — ядро StealthSurf. Его нет в открытых релизах, положите бинарник в data/cores/ferrum");
@@ -605,11 +634,8 @@ export async function downloadCore(id, onProgress) {
   if (!spec?.repo) throw new Error("Неизвестное ядро");
   onProgress?.(`смотрю релиз ${spec.repo}`);
   const release = await githubLatest(spec.repo);
-  let asset = null;
-  if (id === "xray") asset = pickAsset(release, (name) => name === "Xray-linux-64.zip");
-  if (id === "sing-box") asset = pickAsset(release, (name) => name.includes("linux-amd64") && name.endsWith(".tar.gz") && !name.includes("musl"));
-  if (id === "mihomo") asset = pickAsset(release, (name) => name === `mihomo-linux-amd64-${release.tag_name}.gz` || name === "mihomo-linux-amd64-compatible.gz");
-  if (!asset) throw new Error(`В релизе ${release.tag_name} нет файла для linux-amd64`);
+  const asset = pickCoreAsset(id, release);
+  if (!asset) throw new Error(`В релизе ${release.tag_name} нет файла для linux-${hostArch()}`);
   onProgress?.(`скачиваю ${asset.name}`);
   mkdirSync(CORE_DIR, { recursive: true });
   const tmp = join(CORE_DIR, asset.name);
