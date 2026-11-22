@@ -1,0 +1,90 @@
+#!/bin/sh
+# StealthSurf Alfa — служба панели :8788
+# Не трогает /jffs/addons/ssurf и /jffs/addons/stealthsurf.
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
+ADDON_DIR="${ALFA_DIR:-/jffs/addons/alfa}"
+PID_FILE="/var/run/alfa.pid"
+LOG_FILE="/tmp/alfa-panel.log"
+PORT="${ALFA_PORT:-8788}"
+
+die() {
+  echo "alfa: $*" >&2
+  exit 1
+}
+
+is_running() {
+  [ -f "$PID_FILE" ] || return 1
+  kill -0 "$(cat "$PID_FILE" 2>/dev/null)" 2>/dev/null
+}
+
+start() {
+  if is_running; then
+    echo "alfa already running pid $(cat "$PID_FILE")"
+    return 0
+  fi
+  [ -f "$ADDON_DIR/server.mjs" ] || die "нет $ADDON_DIR/server.mjs — сначала установите аддон"
+  command -v node >/dev/null 2>&1 || die "нужен node из Entware (/opt/bin/node)"
+  mkdir -p "$ADDON_DIR/data"
+  cd "$ADDON_DIR" || die "не открыть $ADDON_DIR"
+  # PORT читает server.mjs через process.env или аргумент не нужен — порт в catalog
+  nohup node server.mjs >>"$LOG_FILE" 2>&1 &
+  echo $! >"$PID_FILE"
+  echo "alfa started on :$PORT (pid $(cat "$PID_FILE"))"
+  echo "log: $LOG_FILE"
+}
+
+stop_pids() {
+  if [ -f "$PID_FILE" ]; then
+    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    rm -f "$PID_FILE"
+  fi
+  # только процесс панели альфы
+  ps w 2>/dev/null | awk '/[s]erver\.mjs/ && /\/jffs\/addons\/alfa\// {print $1}' | while read -r pid; do
+    [ -n "$pid" ] && kill "$pid" 2>/dev/null || true
+  done
+}
+
+stop() {
+  stop_pids
+  echo "alfa stopped"
+}
+
+status() {
+  if is_running; then
+    echo "running pid $(cat "$PID_FILE") port $PORT"
+  else
+    echo "stopped"
+    return 1
+  fi
+}
+
+restart() {
+  stop_pids
+  start
+}
+
+uninstall() {
+  stop_pids
+  if [ -f /jffs/scripts/post-mount ]; then
+    # BusyBox sed
+    sed -i '/#alfa$/d' /jffs/scripts/post-mount 2>/dev/null || true
+    sed -i '/\/jffs\/scripts\/alfa /d' /jffs/scripts/post-mount 2>/dev/null || true
+  fi
+  rm -f /jffs/scripts/alfa "$PID_FILE" "$LOG_FILE"
+  rm -rf "$ADDON_DIR"
+  echo "alfa removed from $ADDON_DIR"
+  echo "SurfGate (/jffs/addons/ssurf) and official StealthSurf (/jffs/addons/stealthsurf) were not touched"
+}
+
+case "$1" in
+  start) start ;;
+  stop) stop ;;
+  restart) restart ;;
+  status) status ;;
+  uninstall|remove|un) uninstall ;;
+  *)
+    echo "usage: $0 {start|stop|restart|status|uninstall}"
+    exit 1
+    ;;
+esac
