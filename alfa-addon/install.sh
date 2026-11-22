@@ -47,7 +47,7 @@ trap cleanup EXIT
 banner() {
   if [ "$UI_COLOR" -eq 1 ]; then
     printf '\n%b┌─ %sStealthSurf Alfa%s ──────────────────────────┐%b\n' "$CCYAN" "$CBLD" "$CCYAN" "$C0"
-    printf '%b│%b 0.1.2-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
+    printf '%b│%b 0.1.3-alpha · panel :%s · /jffs/addons/alfa%b│%b\n' "$CCYAN" "$CDIM" "$PORT" "$CCYAN" "$C0"
     printf '%b└─────────────────────────────────────────────────┘%b\n\n' "$CCYAN" "$C0"
   else
     echo "==> StealthSurf Alfa installer (panel :$PORT, path $OUR_DIR)"
@@ -357,6 +357,15 @@ download_addon() {
 install_files() {
   SRC="$(cat "$TMP_ROOT/src.path")"
   say "кладём файлы в $OUR_DIR"
+  # не держим cwd внутри каталога, который сейчас удалим (иначе getcwd / SIGHUP-сюрпризы)
+  cd /tmp || cd / || true
+  # стоп старой панели до rm -rf — иначе node держит удалённые inode и потом падает
+  if [ -x "$OUR_SCRIPT" ]; then
+    "$OUR_SCRIPT" stop >/dev/null 2>&1 || true
+  elif [ -f /tmp/alfa-panel.pid ] || [ -f /var/run/alfa.pid ]; then
+    kill "$(cat /tmp/alfa-panel.pid 2>/dev/null || cat /var/run/alfa.pid 2>/dev/null)" 2>/dev/null || true
+    rm -f /tmp/alfa-panel.pid /var/run/alfa.pid
+  fi
   mkdir -p /jffs/addons /jffs/scripts
   mkdir -p "$OUR_DIR"
   if [ -d "$OUR_DIR/data" ]; then
@@ -397,13 +406,27 @@ install_service() {
 
 start_panel() {
   say "запускаю панель"
-  "$OUR_SCRIPT" restart
+  cd /tmp || cd / || true
+  "$OUR_SCRIPT" restart || {
+    fail "старт службы не удался — /tmp/alfa-panel.log"
+    tail -n 40 /tmp/alfa-panel.log 2>/dev/null || true
+    return 1
+  }
   i=0
   while [ "$i" -lt 20 ]; do
     if command -v curl >/dev/null 2>&1 || [ -x /opt/bin/curl ]; then
       code="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
       if [ "$code" = "200" ]; then
         ok "панель отвечает http://127.0.0.1:${PORT}/ → $code"
+        # пауза: ловим смерть от SIGHUP после выхода curl|sh / родительского sh
+        sleep 2
+        code2="$("$CURL" -fsS -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PORT}/" 2>/dev/null || echo 000)"
+        if [ "$code2" != "200" ] || ! "$OUR_SCRIPT" status >/dev/null 2>&1; then
+          fail "панель упала сразу после старта — смотрите /tmp/alfa-panel.log"
+          tail -n 40 /tmp/alfa-panel.log 2>/dev/null || true
+          return 1
+        fi
+        ok "панель держится после паузы"
         return 0
       fi
     elif "$OUR_SCRIPT" status >/dev/null 2>&1; then
@@ -424,8 +447,10 @@ lan_hint() {
   echo
   ok "готово"
   echo "  панель:  http://${ip}:${PORT}/"
+  echo "           ↑ обязателен порт :${PORT}  (не просто ${ip})"
   echo "  вход:    без пароля (открытая альфа)"
   echo "  статус:  $OUR_SCRIPT status"
+  echo "  лог:     /tmp/alfa-panel.log"
   echo "  стоп:    $OUR_SCRIPT stop"
   echo "  удалить: $OUR_SCRIPT uninstall"
   echo "  ядра:    в панели → Движок → скачать Xray / sing-box / mihomo"
@@ -459,7 +484,7 @@ reset_default_password() {
   NODE_BIN="$(resolve_node)" || return 1
   say "вход без пароля (открытая альфа)"
   "$OUR_SCRIPT" stop >/dev/null 2>&1 || true
-  cd "$OUR_DIR" || return 1
+  cd /tmp || cd / || true
   if [ ! -f "$OUR_DIR/scripts/reset-password.mjs" ]; then
     fail "нет scripts/reset-password.mjs"
     return 1
@@ -472,6 +497,8 @@ reset_default_password() {
 }
 
 do_install() {
+  # всегда из /tmp: curl|sh и rm -rf /jffs/addons/alfa иначе ломают cwd
+  cd /tmp || cd / || true
   banner
   need_https
   preflight
@@ -486,6 +513,7 @@ do_install() {
     exit 1
   fi
   lan_hint
+  cd /tmp || true
 }
 
 case "${1:-install}" in

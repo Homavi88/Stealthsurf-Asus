@@ -73,11 +73,21 @@ test("install.sh has HTTPS opkg bypass and prefers package node", () => {
   assert.match(text, /\/opt\/bin\/node/);
 });
 
-test("service script starts absolute /opt/bin/node not bare node", () => {
+test("service script daemonizes node and ignores HUP", () => {
   const text = readFileSync(join(root, "scripts/alfa"), "utf8");
   assert.match(text, /resolve_node/);
-  assert.match(text, /nohup "\$NODE_BIN" server\.mjs/);
-  assert.doesNotMatch(text, /nohup node server\.mjs/);
+  assert.match(text, /daemonize_node/);
+  assert.match(text, /trap '' HUP/);
+  assert.match(text, /exec "\$NODE_BIN" server\.mjs/);
+  const server = readFileSync(join(root, "server.mjs"), "utf8");
+  assert.match(server, /process\.on\("SIGHUP"/);
+});
+
+test("install stops panel before replacing addon dir", () => {
+  const text = readFileSync(join(root, "install.sh"), "utf8");
+  const fn = text.slice(text.indexOf("install_files()"), text.indexOf("install_service()"));
+  assert.ok(fn.indexOf('"$OUR_SCRIPT" stop') < fn.indexOf('rm -rf "$OUR_DIR"'));
+  assert.match(text, /cd \/tmp/);
 });
 
 test("reset-password stops panel before rewriting hash then health-checks", () => {
