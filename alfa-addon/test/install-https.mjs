@@ -73,14 +73,25 @@ test("install.sh has HTTPS opkg bypass and prefers package node", () => {
   assert.match(text, /\/opt\/bin\/node/);
 });
 
-test("service script daemonizes node and ignores HUP", () => {
+test("service script daemonizes via run.mjs and opens firewall", () => {
   const text = readFileSync(join(root, "scripts/alfa"), "utf8");
   assert.match(text, /resolve_node/);
   assert.match(text, /daemonize_node/);
   assert.match(text, /trap '' HUP/);
-  assert.match(text, /exec "\$NODE_BIN" server\.mjs/);
-  const server = readFileSync(join(root, "server.mjs"), "utf8");
-  assert.match(server, /process\.on\("SIGHUP"/);
+  assert.match(text, /run\.mjs/);
+  assert.match(text, /ensure_firewall/);
+  assert.match(text, /firewall-start/);
+  const run = readFileSync(join(root, "run.mjs"), "utf8");
+  assert.match(run, /process\.on\("SIGHUP"/);
+  assert.ok(run.indexOf('process.on("SIGHUP"') < run.indexOf('import("./server.mjs")'));
+});
+
+test("install checks LAN URL and schedules watchdog", () => {
+  const text = readFileSync(join(root, "install.sh"), "utf8");
+  assert.match(text, /schedule_watchdog/);
+  assert.match(text, /lan_ip/);
+  assert.match(text, /firewall-start/);
+  assert.match(text, /getcwd/);
 });
 
 test("install stops panel before replacing addon dir", () => {
