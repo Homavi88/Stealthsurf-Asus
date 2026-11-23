@@ -1,7 +1,7 @@
 #!/bin/sh
 # EngVPN Merlin daemon CLI — open reimplementation.
 # Surface closer to stealthsurf-routerd: serve | set-password | status | stop |
-# update-check | update | transparent | cleanup | reconnect | watchdog
+# update-check | update | transparent | dpi | warp | cleanup | reconnect | watchdog
 set -u
 
 SHARE=$(cd "${0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
@@ -35,8 +35,12 @@ Usage: engvpnd <command> [options]
   update                       Download feed package and upgrade in place
   transparent <start|stop|status|apply|dry-run>
                                Open iptables REDIRECT/TPROXY selective VPN
+  dpi <start|stop|status|install|dry-run>
+                               Open zapret/nfqws DPI (NFQUEUE packet mangling)
+  warp <create|status|import-file|gre-up|gre-down|dry-run>
+                               Cloudflare WARP (open API) + optional GRE tunnel
   reconnect                    Re-apply transparent rules + restart panel service
-  cleanup                      Tear down transparent rules and temp files
+  cleanup                      Tear down transparent/dpi rules and temp files
   watchdog                     One-shot health: panel port + optional transparent restore
   version                      Print package version
 EOF
@@ -178,12 +182,34 @@ cmd_transparent() {
 	sh "$SHARE/transparent.sh" "$@"
 }
 
+cmd_dpi() {
+	[ -x "$SHARE/dpi.sh" ] || {
+		echo "engvpnd: missing dpi.sh" >&2
+		exit 1
+	}
+	ensure_data
+	sh "$SHARE/dpi.sh" "$@"
+}
+
+cmd_warp() {
+	[ -x "$SHARE/warp.sh" ] || {
+		echo "engvpnd: missing warp.sh" >&2
+		exit 1
+	}
+	ensure_data
+	sh "$SHARE/warp.sh" "$@"
+}
+
 cmd_reconnect() {
 	ensure_data
 	# Re-apply transparent rules if configured
 	if [ -f "$DATA_DIR/transparent.conf" ]; then
 		mode=$(awk -F= '$1=="mode"{print $2}' "$DATA_DIR/transparent.conf" 2>/dev/null)
 		[ "$mode" != off ] && [ -n "$mode" ] && sh "$SHARE/transparent.sh" apply || true
+	fi
+	if [ -f "$DATA_DIR/dpi.conf" ]; then
+		en=$(awk -F= '$1=="enabled"{print $2}' "$DATA_DIR/dpi.conf" 2>/dev/null)
+		[ "$en" = 1 ] && sh "$SHARE/dpi.sh" apply 2>/dev/null || true
 	fi
 	if [ -x "$SHARE/service.sh" ]; then
 		sh "$SHARE/service.sh" restart
@@ -196,7 +222,9 @@ cmd_reconnect() {
 
 cmd_cleanup() {
 	[ -x "$SHARE/transparent.sh" ] && sh "$SHARE/transparent.sh" stop || true
-	rm -rf /tmp/engvpn /tmp/engvpn-package /tmp/engvpn-update.* 2>/dev/null || true
+	[ -x "$SHARE/dpi.sh" ] && sh "$SHARE/dpi.sh" stop || true
+	[ -x "$SHARE/warp.sh" ] && sh "$SHARE/warp.sh" gre-down || true
+	rm -rf /tmp/engvpn /tmp/engvpn-package /tmp/engvpn-update.* /tmp/engvpn-zapret.* /tmp/engvpn-nfqws.* 2>/dev/null || true
 	echo "cleanup: done"
 }
 
@@ -252,6 +280,8 @@ stop) cmd_stop ;;
 update-check) cmd_update_check ;;
 update) cmd_update "$@" ;;
 transparent) cmd_transparent "$@" ;;
+dpi) cmd_dpi "$@" ;;
+warp) cmd_warp "$@" ;;
 reconnect) cmd_reconnect ;;
 cleanup) cmd_cleanup ;;
 watchdog) cmd_watchdog ;;

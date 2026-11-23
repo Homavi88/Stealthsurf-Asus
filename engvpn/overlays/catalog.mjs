@@ -1,6 +1,6 @@
 /** Domain lists and engine capability matrix used by the live policy and by config compilers. */
 
-export const VERSION = "0.3.0";
+export const VERSION = "0.4.0";
 export const PANEL_PORT = Number(process.env.ENGVPN_PORT || 8790);
 /** Installer sets a panel password; open LAN access only if ENGVPN_OPEN_PANEL=1. */
 export const OPEN_PANEL = process.env.ENGVPN_OPEN_PANEL === "1";
@@ -24,12 +24,15 @@ export const ENGINES = {
   },
   ferrum: {
     id: "ferrum",
-    title: "Ferrum",
-    repo: null,
+    title: "Ferrum (Xray Reality)",
+    // Open equivalent: same Xray-core binary under the Ferrum slot (Reality / VLESS).
+    // Proprietary StealthSurf Ferrum is NOT downloaded.
+    repo: "XTLS/Xray-core",
+    assetHint: "Xray-linux-64.zip",
     bin: "ferrum",
-    ref: "Not shipped (closed StealthSurf binary) — place compatible binary in data/cores/ferrum if you have one",
+    ref: "open-xray-reality (XTLS/Xray-core)",
     protocols: ["vless", "vmess", "trojan", "shadowsocks", "socks", "http", "direct"],
-    routing: "Same JSON as Xray. EngVPN does not download this binary.",
+    routing: "Открытый слот Ferrum: скачивает Xray-core и принимает тот же JSON (Reality).",
     config: "xray",
   },
   "sing-box": {

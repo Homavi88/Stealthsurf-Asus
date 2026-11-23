@@ -51,6 +51,7 @@ load_conf() {
 			val=${line#*=}
 			case "$key" in
 			mode | method | port | mark | table | killswitch | lan_if | lan_cidr)
+				# method: redirect | tproxy | auto | prefer-tproxy
 				eval "$key=\$val"
 				;;
 			esac
@@ -92,15 +93,58 @@ ipt() {
 	fi
 }
 
+# Detect TPROXY + UDP support. Prefer module presence, then live iptables probe.
+# Returns: 0 = full TCP+UDP TPROXY, 1 = unavailable
 have_tproxy() {
 	[ "${ENGVPN_SMOKE:-}" = 1 ] && return 1
-	# Probe without hanging the installer/smoke host.
-	ipt -t mangle -N "$CHAIN" 2>/dev/null || true
-	if ipt -t mangle -A "$CHAIN" -p tcp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null; then
-		ipt -t mangle -D "$CHAIN" -p tcp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null || true
-		return 0
+	# Kernel modules (Merlin often needs them loaded)
+	if ! lsmod 2>/dev/null | grep -q xt_TPROXY; then
+		modprobe xt_TPROXY 2>/dev/null || modprobe tproxy 2>/dev/null || true
 	fi
-	return 1
+	if ! lsmod 2>/dev/null | grep -q xt_socket; then
+		modprobe xt_socket 2>/dev/null || true
+	fi
+	ipt -t mangle -N ENGVPN_TP_PROBE 2>/dev/null || true
+	ok=0
+	if ipt -t mangle -A ENGVPN_TP_PROBE -p tcp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null; then
+		ipt -t mangle -D ENGVPN_TP_PROBE -p tcp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null || true
+		# Also probe UDP — full parity needs both
+		if ipt -t mangle -A ENGVPN_TP_PROBE -p udp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null; then
+			ipt -t mangle -D ENGVPN_TP_PROBE -p udp -j TPROXY --on-port 1 --tproxy-mark 1 2>/dev/null || true
+			ok=1
+		else
+			# TCP-only TPROXY still better than REDIRECT for TCP; allow it
+			ok=1
+			echo "transparent: UDP TPROXY probe failed — TCP TPROXY only" >&2
+		fi
+	fi
+	ipt -t mangle -F ENGVPN_TP_PROBE 2>/dev/null || true
+	ipt -t mangle -X ENGVPN_TP_PROBE 2>/dev/null || true
+	[ "$ok" = 1 ]
+}
+
+# Auto-prefer TPROXY when method=auto or unset preference and modules allow.
+resolve_method() {
+	case "$method" in
+	tproxy)
+		if ! have_tproxy; then
+			echo "transparent: TPROXY unavailable; falling back to redirect (TCP only, no UDP divert)" >&2
+			method=redirect
+		fi
+		;;
+	auto | prefer-tproxy)
+		if have_tproxy; then
+			method=tproxy
+			echo "transparent: auto-selected TPROXY+UDP" >&2
+		else
+			method=redirect
+			echo "transparent: auto-selected REDIRECT (no xt_TPROXY)" >&2
+		fi
+		;;
+	redirect | "")
+		method=redirect
+		;;
+	esac
 }
 
 flush_chain() {
@@ -312,9 +356,16 @@ apply_rules() {
 		echo "transparent: mode=off"
 		return 0
 	fi
-	if [ "$method" = tproxy ] && ! have_tproxy; then
-		echo "transparent: TPROXY unavailable; falling back to redirect" >&2
-		method=redirect
+	resolve_method
+	# Persist resolved method so panel/status stay honest
+	if [ -f "$CONF" ]; then
+		tmp=$CONF.tmp.$$
+		awk -v m="$method" '
+			BEGIN { done=0 }
+			/^method=/ { print "method=" m; done=1; next }
+			{ print }
+			END { if (!done) print "method=" m }
+		' "$CONF" >"$tmp" && mv "$tmp" "$CONF"
 	fi
 	# Rebuild cleanly
 	unlink_hooks
@@ -343,13 +394,26 @@ dry_run() {
 	echo "mode=$mode method=$method port=$port mark=$mark table=$table killswitch=$killswitch"
 	echo "lan_if=$lan_if lan_cidr=$lan_cidr"
 	echo "conf=$CONF devices=$DEVICES"
-	# Avoid live iptables probes here (can block on xtables lock); report module hint only.
+	# Avoid live iptables probes on smoke; report module / capability hints.
 	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
 		echo "tproxy_available=skipped"
-	elif lsmod 2>/dev/null | grep -q xt_TPROXY; then
-		echo "tproxy_available=maybe"
+		echo "udp_tproxy=skipped"
+		echo "fallback=redirect"
 	else
-		echo "tproxy_available=unknown"
+		if have_tproxy; then
+			echo "tproxy_available=yes"
+			echo "udp_tproxy=yes"
+			echo "recommended_method=tproxy"
+		elif lsmod 2>/dev/null | grep -q xt_TPROXY; then
+			echo "tproxy_available=maybe"
+			echo "udp_tproxy=unknown"
+			echo "recommended_method=tproxy"
+		else
+			echo "tproxy_available=no"
+			echo "udp_tproxy=no"
+			echo "recommended_method=redirect"
+			echo "fallback_note=TCP REDIRECT only; UDP needs xt_TPROXY + dokodemo tproxy"
+		fi
 	fi
 	[ -f "$DEVICES" ] && echo "devices:" && grep -v '^#' "$DEVICES" | grep -v '^$' || echo "devices: (none)"
 	dokodemo_hint

@@ -16,21 +16,40 @@ mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh set-password.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh dpi.sh warp.sh set-password.mjs verify-minisign.mjs; do
 	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
 done
 cp -a "$ROOT/VERSION" "$STAGE/share/engvpn/VERSION"
-# Default transparent config template (mode=off)
+# Minisign public key (verify on install/update)
+if [ -f "$ROOT/keys/engvpn.minisign.pub" ]; then
+	cp -a "$ROOT/keys/engvpn.minisign.pub" "$STAGE/share/engvpn/engvpn.minisign.pub"
+elif [ -f "$ROOT/package/share/engvpn/engvpn.minisign.pub" ]; then
+	cp -a "$ROOT/package/share/engvpn/engvpn.minisign.pub" "$STAGE/share/engvpn/engvpn.minisign.pub"
+fi
+# Default transparent config template (mode=off; prefer TPROXY when modules allow)
 cat >"$STAGE/share/engvpn/transparent.conf.example" <<'EOF'
 mode=off
-method=redirect
+method=auto
 port=12345
 mark=0x39000
 table=79
 killswitch=0
 lan_if=br0
 lan_cidr=
+EOF
+cat >"$STAGE/share/engvpn/dpi.conf.example" <<'EOF'
+enabled=0
+queue=390
+youtube=1
+discord=1
+mode=nfqws
+EOF
+cat >"$STAGE/share/engvpn/gre.conf.example" <<'EOF'
+gre_enabled=0
+gre_remote=
+gre_local=
+gre_dev=engvpn-gre
 EOF
 
 # Vendor open panel runtime from alfa-addon (no proprietary binaries).
@@ -108,11 +127,11 @@ text = text.replace('accent: "stealth"', 'accent: "engvpn"')
 text = text.replace('oled: true', 'oled: false')
 text = text.replace(
     'subscriptionName: "Основная подписка"',
-    'subscriptionName: "Локальные подписки"',
+    'subscriptionName: "Локальные подписки",\n    apiKeySet: false,\n    apiKeyMasked: "",\n    balance: null,\n    cloud: false',
 )
 text = text.replace(
     'note: "Альфа собрана локально и не ставится поверх прошивки сама."',
-    'note: "EngVPN обновляется из своего feed (SHA-256) через engvpnd update."',
+    'note: "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update."',
 )
 text = text.replace(
     'firmware: `${platform()} / стенд альфы`',
@@ -138,12 +157,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, writeTransparentConf, modeFromRouter, engvpnParityInvoke } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from "./runtime-engvpn.mjs";',
     )
-elif "engvpnParityInvoke" not in text:
+elif "engvpnSaveAccount" not in text:
     text = text.replace(
-        "writeTransparentConf, modeFromRouter } from \"./runtime-engvpn.mjs\";",
         "writeTransparentConf, modeFromRouter, engvpnParityInvoke } from \"./runtime-engvpn.mjs\";",
+        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
     )
 needle = '      case "autoSetup":'
 insert = '''      case "transparent":
@@ -157,11 +176,40 @@ insert = '''      case "transparent":
         return engvpnReconnect();
       case "engvpnWatchdog":
         return engvpnWatchdog();
+      case "engvpnDpi":
+      case "dpi":
+        return engvpnDpi(body.action || body.command || "status", body);
+      case "engvpnWarp":
+        return engvpnWarp(body.action || body.command || "status", body);
+      case "saveAccount":
+      case "save_account":
+        return engvpnSaveAccount(body, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
+      case "syncAccount":
+      case "sync_account":
+        return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
+      case "clearAccount":
+      case "clear_account":
+        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
       case "autoSetup":'''
 if "case \"transparent\":" not in text:
     if needle not in text:
         raise SystemExit("autoSetup case not found for inject")
     text = text.replace(needle, insert, 1)
+elif "case \"saveAccount\":" not in text:
+    text = text.replace(
+        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n      case "autoSetup":',
+        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n'
+        '      case "engvpnDpi":\n      case "dpi":\n        return engvpnDpi(body.action || body.command || "status", body);\n'
+        '      case "engvpnWarp":\n        return engvpnWarp(body.action || body.command || "status", body);\n'
+        '      case "saveAccount":\n      case "save_account":\n'
+        '        return engvpnSaveAccount(body, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "syncAccount":\n      case "sync_account":\n'
+        '        return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "clearAccount":\n      case "clear_account":\n'
+        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "autoSetup":',
+        1,
+    )
 
 # Define transparent sync helper BEFORE invoke / parity wrappers reference it
 if "async function engvpnSyncTransparent()" not in text:
@@ -189,14 +237,40 @@ old_patch = '      case "patch":\n        return patch(body.path, body.value);'
 new_patch = (
     '      case "patch": {\n'
     "        const result = patch(body.path, body.value);\n"
-    "        if (body?.path === \"router.mode\") {\n"
+    "        if (body?.path === \"router.mode\" || body?.path === \"router.transparentMethod\" || body?.path === \"router.blockWithoutVpn\") {\n"
+    "          if (body?.path === \"router.transparentMethod\") writeTransparentConf({ method: body.value || \"auto\" });\n"
+    "          if (body?.path === \"router.blockWithoutVpn\") writeTransparentConf({ killswitch: body.value ? \"1\" : \"0\" });\n"
     "          await engvpnSyncTransparent();\n"
+    "        }\n"
+    "        if (body?.path === \"network.youtubeZapret\" || body?.path === \"network.discordZapret\") {\n"
+    "          try {\n"
+    "            const want = !!(state.network?.youtubeZapret || state.network?.discordZapret);\n"
+    "            await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n"
+    "          } catch (e) { ctx.hooks.log(\"warn\", `dpi toggle: ${e.message || e}`); }\n"
     "        }\n"
     "        return result;\n"
     "      }"
 )
 if old_patch in text and 'if (body?.path === "router.mode")' not in text:
     text = text.replace(old_patch, new_patch, 1)
+elif 'router.transparentMethod' not in text and 'if (body?.path === "router.mode")' in text:
+    text = text.replace(
+        '        if (body?.path === "router.mode") {\n'
+        '          await engvpnSyncTransparent();\n'
+        '        }',
+        '        if (body?.path === "router.mode" || body?.path === "router.transparentMethod" || body?.path === "router.blockWithoutVpn") {\n'
+        '          if (body?.path === "router.transparentMethod") writeTransparentConf({ method: body.value || "auto" });\n'
+        '          if (body?.path === "router.blockWithoutVpn") writeTransparentConf({ killswitch: body.value ? "1" : "0" });\n'
+        '          await engvpnSyncTransparent();\n'
+        '        }\n'
+        '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {\n'
+        '          try {\n'
+        '            const want = !!(state.network?.youtubeZapret || state.network?.discordZapret);\n'
+        '            await engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n'
+        '          } catch (e) { ctx.hooks.log("warn", `dpi toggle: ${e.message || e}`); }\n'
+        '        }',
+        1,
+    )
 
 # StealthSurf-compatible get_* / update_router_settings before switch body
 if "engvpnParityInvoke(" not in text:
@@ -207,6 +281,8 @@ if "engvpnParityInvoke(" not in text:
         "    if (parity !== undefined) {\n"
         "      if (parity && parity.alias === \"selectNode\") return selectNode(parity.id);\n"
         "      if (parity && parity.alias === \"setPassword\") return setPassword({ oldPassword: parity.oldPassword || parity.current || \"\", password: parity.password || parity.newPassword || \"\" });\n"
+        "      if (parity && parity.alias === \"engvpnSaveAccount\") return engvpnSaveAccount(parity, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
+        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
         "      if (command === \"update_router_settings\") {\n"
         "        saveState(state);\n"
         "        try { await engvpnSyncTransparent(); } catch { /* ignore */ }\n"
@@ -218,12 +294,94 @@ if "engvpnParityInvoke(" not in text:
         "    switch (command) {",
         1,
     )
+# Override closed WARP stubs with open engvpnWarp
+if "engvpnWarp(\"create\")" not in text:
+    text = text.replace(
+        '''      case "warpCreate":
+        state.connection.warpProfile = {
+          id: randomUUID().slice(0, 8),
+          createdAt: Date.now(),
+          method: state.connection.warpMethod,
+          status: "local",
+          note: "Локальная заготовка. Для настоящего WARP импортируйте профиль wgcf.",
+        };
+        saveState(state);
+        return snapshot();
+      case "warpImport":
+        state.connection.warpProfile = { ...parseWireGuardIni(body.text || ""), status: "imported", createdAt: Date.now() };
+        saveState(state);
+        return snapshot();''',
+        '''      case "warpCreate": {
+        const wr = await engvpnWarp("create", body);
+        const iniPath = (await import("node:path")).join(DATA, "warp.profile.ini");
+        let ini = "";
+        try { ini = (await import("node:fs")).readFileSync(iniPath, "utf8"); } catch { /* ignore */ }
+        state.connection.warpProfile = { ...parseWireGuardIni(ini || body.text || ""), status: "warp-open", createdAt: Date.now(), note: wr.output || "Cloudflare WARP (open)" };
+        state.connection.warpMode = state.connection.warpMode === "off" ? "proxy" : state.connection.warpMode;
+        saveState(state);
+        return snapshot();
+      }
+      case "warpImport": {
+        await engvpnWarp("import", body);
+        state.connection.warpProfile = { ...parseWireGuardIni(body.text || ""), status: "imported", createdAt: Date.now() };
+        saveState(state);
+        return snapshot();
+      }''',
+        1,
+    )
+# Hook zapret recheck → also apply open DPI when youtube/discord zapret enabled
+if "engvpnDpi(\"apply\"" not in text:
+    text = text.replace(
+        "    state.network.zapret.lastCheck = Date.now();\n"
+        "    state.network.zapret.checking = false;\n"
+        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена, сервисы возвращены из запасного VPN\" : \"Рабочие прямые пути подтверждены\");\n"
+        "    if (state.vpn.connected) await connect();\n"
+        "    else saveState(state);\n"
+        "    return snapshot();\n"
+        "  }",
+        "    state.network.zapret.lastCheck = Date.now();\n"
+        "    state.network.zapret.checking = false;\n"
+        "    try {\n"
+        "      const want = !!(state.network.youtubeZapret || state.network.discordZapret);\n"
+        "      await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network.youtubeZapret, discord: !!state.network.discordZapret });\n"
+        "      ctx.hooks.log(\"info\", want ? \"DPI nfqws: apply\" : \"DPI nfqws: stop\");\n"
+        "    } catch (e) {\n"
+        "      ctx.hooks.log(\"warn\", `dpi: ${e.message || e}`);\n"
+        "    }\n"
+        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена, сервисы возвращены из запасного VPN\" : \"Рабочие прямые пути подтверждены\");\n"
+        "    if (state.vpn.connected) await connect();\n"
+        "    else saveState(state);\n"
+        "    return snapshot();\n"
+        "  }",
+        1,
+    )
 rtm.write_text(text)
 print("patched runtime.mjs EngVPN commands")
 # dokodemo inbound injection into xray plan when transparent mode != off
 eng = rt / "lib/engines.mjs"
 et = eng.read_text()
 et = et.replace("stealthsurf-alfa", "engvpn")
+# Ferrum open slot: download Xray-core as ferrum binary
+if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
+    et = et.replace(
+        '''export async function downloadCore(id, onProgress) {
+  if (id === "ferrum") {
+    throw new Error("Ferrum — ядро StealthSurf. Его нет в открытых релизах, положите бинарник в data/cores/ferrum");
+  }
+  const spec = ENGINES[id];
+  if (!spec?.repo) throw new Error("Неизвестное ядро");
+  onProgress?.(`смотрю релиз ${spec.repo}`);
+  const release = await githubLatest(spec.repo);
+  const asset = pickCoreAsset(id, release);''',
+        '''export async function downloadCore(id, onProgress) {
+  const spec = ENGINES[id];
+  if (!spec?.repo) throw new Error("Неизвестное ядро");
+  // Ferrum slot: open Xray-core (Reality-capable), saved as data/cores/ferrum
+  const assetId = id === "ferrum" ? "xray" : id;
+  onProgress?.(id === "ferrum" ? `Ferrum-слот: скачиваю открытый Xray (${spec.repo})` : `смотрю релиз ${spec.repo}`);
+  const release = await githubLatest(spec.repo);
+  const asset = pickCoreAsset(assetId, release);''',
+    )
 if "engvpn-transparent" not in et:
     marker = "  if (!tunnelOnly) {\n    inbounds.push({\n      tag: \"http-in\","
     doko = '''  // EngVPN: dokodemo for iptables REDIRECT/TPROXY when data/transparent.conf mode != off
@@ -329,25 +487,63 @@ size7=$(echo "$A7" | awk '{ print $4 }')
 shax=$(echo "$X86" | awk '{ print $3 }')
 sizex=$(echo "$X86" | awk '{ print $4 }')
 
+# Minisign: sign archives when secret key is available
+MINISIGN_KEY=${ENGVPN_MINISIGN_KEY:-$ROOT/keys/engvpn.minisign.key}
+sign_one() {
+	arch=$1
+	pkg="$OUT/engvpn_${VERSION}_${arch}.tar.gz"
+	if [ -f "$MINISIGN_KEY" ] && command -v minisign >/dev/null 2>&1; then
+		minisign -Sm "$pkg" -s "$MINISIGN_KEY" </dev/null || true
+		[ -f "${pkg}.minisig" ] && echo "signed $arch" || echo "sign skipped $arch"
+	else
+		echo "minisign key missing — skip signing $arch (SHA-256 only)"
+	fi
+}
+sign_one merlin-aarch64
+sign_one merlin-armv7
+sign_one merlin-x86_64
+
+minisig_field() {
+	arch=$1
+	sig="$OUT/engvpn_${VERSION}_${arch}.tar.gz.minisig"
+	if [ -f "$sig" ]; then
+		printf '"minisig": "file://%s",' "$sig"
+	else
+		printf '"minisig": "",'
+	fi
+}
+minisig_release() {
+	arch=$1
+	sig="$OUT/engvpn_${VERSION}_${arch}.tar.gz.minisig"
+	if [ -f "$sig" ]; then
+		printf '"minisig": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-%s/engvpn_%s_%s.tar.gz.minisig",' "$VERSION" "$VERSION" "$arch"
+	else
+		printf '"minisig": "",'
+	fi
+}
+
 # Local file:// feed for smoke; also write relative GitHub-style URLs for docs
 FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN Merlin open addon — panel :8790, Node runtime, downloadable Xray/sing-box/mihomo.",
+  "notes": "EngVPN 0.4 hard-parity — API keys, open DPI/WARP/Ferrum-slot, Minisign, TPROXY+UDP.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
+      $(minisig_field merlin-aarch64)
       "sha256": "$sha64",
       "size": $size64
     },
     "merlin-armv7": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
+      $(minisig_field merlin-armv7)
       "sha256": "$sha7",
       "size": $size7
     },
     "merlin-x86_64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
+      $(minisig_field merlin-x86_64)
       "sha256": "$shax",
       "size": $sizex
     }
@@ -359,20 +555,23 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN Merlin open addon — panel :8790, Node runtime, downloadable Xray/sing-box/mihomo.",
+  "notes": "EngVPN 0.4 hard-parity — API keys, open DPI/WARP/Ferrum-slot, Minisign, TPROXY+UDP.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
+      $(minisig_release merlin-aarch64)
       "sha256": "$sha64",
       "size": $size64
     },
     "merlin-armv7": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-armv7.tar.gz",
+      $(minisig_release merlin-armv7)
       "sha256": "$sha7",
       "size": $size7
     },
     "merlin-x86_64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-x86_64.tar.gz",
+      $(minisig_release merlin-x86_64)
       "sha256": "$shax",
       "size": $sizex
     }

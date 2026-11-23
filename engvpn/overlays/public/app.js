@@ -190,8 +190,12 @@ function screenMenu() {
       ["diagnostics", "Диагностика", "⌁"],
     ],
   ].map((g) => g.filter(([, title]) => match(title))).filter((g) => g.length);
-  const email = S.account.email || "Локальный аккаунт EngVPN";
-  const account = `<div class="nav-title">${esc(email)}</div><div class="cell-desc">${esc(S.account.subscriptionName || "Локальные подписки")} · без облака StealthSurf</div>`;
+  const email = S.account.email || "Аккаунт EngVPN";
+  const bal = S.account.balance != null ? ` · ${esc(String(S.account.balance))} ₽` : "";
+  const subLine = S.account.apiKeySet
+    ? `${esc(S.account.subscriptionName || "Основная подписка (API)")}${bal}`
+    : `${esc(S.account.subscriptionName || "Локальные подписки")} · API-ключ или URL`;
+  const account = `<div class="nav-title">${esc(email)}</div><div class="cell-desc">${subLine}</div>`;
   return `<div class="drawer-bar"><h2>Настройки</h2><button class="icon-btn" data-act="close">✕</button></div>
     <div class="drawer-body">
       <div class="group"><button type="button" class="nav-item" data-go="account"><span class="nav-ico">☺</span><div class="cell-text">${account}</div><span class="chev">›</span></button></div>
@@ -201,17 +205,42 @@ function screenMenu() {
 }
 
 function screenAccount() {
-  const a = S.account;
+  const a = S.account || {};
+  const keySet = !!a.apiKeySet;
+  const masked = a.apiKeyMasked || "";
   return `${backBar("Аккаунт")}<div class="drawer-body">
-    <div class="card stub-note"><b>Без облака StealthSurf</b><p>Баланс ₽, консоль и синхронизация аккаунта — закрытый сервис StealthSurf. В EngVPN хранятся только локальные подписки и пароль панели.</p></div>
-    ${cell("Метка", "Только на этом роутере", `<input class="text" data-input="account.email" placeholder="например admin@home" value="${esc(a.email)}">`)}
+    <div class="card">
+      <b>StealthSurf API</b>
+      <p class="muted">Публичный HTTP API (<code>api.stealthsurf.net</code>). Ключ вида <code>stlth_…</code> — из кабинета StealthSurf. EngVPN не хранит пароль облака, только ваш Bearer-ключ на роутере.</p>
+    </div>
+    <div class="h">API-КЛЮЧ</div>
     <div class="group">
+      ${keySet ? cell("Статус", `Активен · ${esc(masked)}`) : cell("Статус", "Не задан — покажите поля URL подписки ниже")}
+      ${keySet ? cell("Баланс", a.balance != null ? `${esc(String(a.balance))} ₽` : "—") : ""}
+      ${keySet ? cell("Email", a.email || "—") : ""}
+      <input class="text" id="apikey" type="password" placeholder="stlth_XXXXXXXX_…" autocomplete="off">
+      <button class="primary" data-act="save-api-key">Сохранить ключ и синхронизировать</button>
+      ${keySet ? `<button class="ghost" data-act="sync-account">Обновить конфиги из API</button><button class="danger" data-act="clear-api-key">Удалить ключ</button>` : ""}
+    </div>
+    ${!keySet ? `<div class="h">URL ПОДПИСКИ (БЕЗ КЛЮЧА)</div>
+    <div class="group">
+      <p class="muted">Если API-ключ пуст или неактивен — вставьте ссылку подписки или одиночный <code>vless://</code> / <code>trojan://</code>.</p>
+      <input class="text" id="subname-acc" placeholder="Имя (необязательно)" value="Подписка по URL">
+      <textarea class="text" id="suburl-acc" placeholder="https://… или vless:// / trojan:// / ss://">${esc(a.subscriptionUrl || "")}</textarea>
+      <button class="primary" data-act="save-sub-url">Сохранить URL подписки</button>
+    </div>` : `<div class="h">ДОП. URL ПОДПИСКИ</div>
+    <div class="group">
+      <p class="muted">Дополнительно можно держать локальный URL (раздел «Подписка»).</p>
+      <button class="ghost" data-go="subscription">Открыть подписки</button>
+    </div>`}
+    <div class="h">НА РОУТЕРЕ</div>
+    <div class="group">
+      ${cell("Метка", "Только на этом роутере", `<input class="text" data-input="account.email" placeholder="например admin@home" value="${esc(a.email || "")}">`)}
       ${cell("Подписка", a.subscriptionName || "Локальные ссылки")}
       ${cell("Внутренний ID", S.routerId)}
     </div>
     <button class="ghost" data-act="pair">Код входа на другом устройстве LAN</button>
     ${ui.result?.code ? `<p class="muted">Код на 5 минут: <b>${esc(ui.result.code)}</b>. На другом устройстве введите его вместо пароля панели.</p>` : ""}
-    <p class="muted">Добавляйте свои vless:// / trojan:// / подписки в разделе «Подписка».</p>
   </div>`;
 }
 
@@ -241,6 +270,7 @@ function screenRouter() {
       ${cell("Игры с компьютеров — напрямую", "Списки Steam, Epic и других площадок", sw("router.gamesDirect", r.gamesDirect))}
       ${cell("Блокировать интернет без VPN", "Пока VPN выключен, наружу закрыто", sw("router.blockWithoutVpn", r.blockWithoutVpn))}
       ${cell("IPv6 устройств", "Через VPN, блокировать или напрямую", sel("router.ipv6", r.ipv6, [["vpn", "Через VPN"], ["block", "Блокировать"], ["direct", "Напрямую"]]))}
+      ${cell("Метод transparent", "auto → TPROXY+UDP если xt_TPROXY есть, иначе REDIRECT", sel("router.transparentMethod", r.transparentMethod || "auto", [["auto", "Авто (TPROXY если можно)"], ["tproxy", "TPROXY + UDP"], ["redirect", "REDIRECT (только TCP)"]]))}
     </div>
     <div class="h">БЛОКИРОВКА РЕКЛАМЫ</div>
     <div class="group">
@@ -380,12 +410,19 @@ function screenPassword() {
 }
 
 function screenSubscription() {
+  const api = S.account?.apiKeySet;
   return `${backBar("Подписка")}<div class="drawer-body">
-    <div class="card stub-note"><b>Свои ссылки</b><p>Облачная «Основная подписка» StealthSurf недоступна. Добавляйте URL подписки или одиночные конфиги — они остаются на роутере.</p></div>
+    <div class="card">
+      <b>${api ? "Основная подписка (API)" : "Локальные подписки"}</b>
+      <p class="muted">${api
+        ? "Конфиги подтягиваются через StealthSurf API-ключ в разделе «Аккаунт». Здесь же можно добавить свой URL."
+        : "Задайте API-ключ в «Аккаунт» или вставьте URL / одиночный конфиг ниже."}</p>
+    </div>
     <div class="group">
-      ${cell("Активная подписка", "Локальный список EngVPN", sel("activeSub", S.activeSubscription, S.subscriptions.map((s) => [s.id, s.name])))}
+      ${cell("Активная подписка", "Список на роутере", sel("activeSub", S.activeSubscription, S.subscriptions.map((s) => [s.id, s.name])))}
       <p class="muted">Сейчас в списке ${nodes().length} конфигов.</p>
       <button class="ghost" data-act="refresh-sub">Обновить список</button>
+      ${api ? `<button class="ghost" data-act="sync-account">Синхронизировать из API</button>` : ""}
     </div>
     <button class="nav-item" data-go="subadd">Добавить подписку <span class="chev">›</span></button>
     ${S.subscriptions.filter((s) => !s.builtin).map((s) => `<div class="cell">${esc(s.name)}<button class="danger" data-act="del-sub" data-id="${s.id}">Удалить</button></div>`).join("")}
@@ -495,7 +532,7 @@ function screenNetwork() {
     ${cell("Расширенные настройки zapret", "Свои списки и проверка пути", `<button class="ghost" data-go="zapret">Открыть</button>`)}
     ${cell("Telegram напрямую", "Прямой путь", sw("network.telegramDirect", n.telegramDirect))}
   </div>
-  <p class="muted">В списке конфигов есть «Без VPN»: устройства идут напрямую, а обход блокировок остаётся на контуре EngVPN. Подмена пакетов ядром zapret на этом стенде не выполняется: EngVPN выбирает прямой путь или возвращает сервис в VPN.</p></div>`;
+  <p class="muted">Обход блокировок: открытый <b>zapret/nfqws</b> (NFQUEUE) через <code>engvpnd dpi</code>. При включении YouTube/Discord EngVPN ставит правила и поднимает nfqws. Если NFQUEUE недоступен на ядре — остаётся маршрутизация direct/VPN.</p></div>`;
 }
 function screenZapret() {
   const z = S.network.zapret;
@@ -530,8 +567,19 @@ function screenConnection() {
   </div>
   <div class="h">CLOUDFLARE WARP</div>
   <div class="group">
-    <div class="card stub-note"><b>Не клонируется</b><p>Закрытый WARP-стек StealthSurf в EngVPN не поставляется. Можно вручную добавить свой WireGuard/AmneziaWG конфиг через подписку.</p></div>
-    ${cell("Режим (заглушка UI)", "Сохраняется локально, демон WARP не запускается", sel("connection.warpMode", c.warpMode, [["off", "Выключен"], ["proxy", "Прокси"], ["tunnel", "Внутри туннеля"]]))}
+    <p class="muted">Открытая регистрация Cloudflare WARP (как wgcf) → WireGuard-профиль для sing-box / mihomo. Без закрытого стека StealthSurf.</p>
+    ${cell("Режим", "Прокси / внутри туннеля / выкл.", sel("connection.warpMode", c.warpMode, [["off", "Выключен"], ["proxy", "Прокси"], ["tunnel", "Внутри туннеля"]]))}
+    ${cell("Способ", "WireGuard (открытый)", sel("connection.warpMethod", c.warpMethod || "wireguard", [["wireguard", "WireGuard"], ["amneziawg", "AmneziaWG"], ["auto", "Авто"]]))}
+    <p class="muted">${c.warpProfile ? `Профиль: ${esc(c.warpProfile.status || "есть")}` : "Профиль ещё не создан."}</p>
+    <button class="primary" data-act="warp-create">Создать профиль WARP</button>
+    <textarea class="text" id="warpini" placeholder="[Interface] PrivateKey=… [Peer] PublicKey=… Endpoint=…"></textarea>
+    <button class="ghost" data-act="warp-import">Импортировать профиль</button>
+  </div>
+  <div class="h">GRE (РЕЗЕРВ)</div>
+  <div class="group">
+    <p class="muted">Опциональный GRE-туннель: заполните <code>data/gre.conf</code> и поднимите через CLI.</p>
+    <button class="ghost" data-act="gre-up">GRE up</button>
+    <button class="ghost" data-act="gre-down">GRE down</button>
   </div>
   <div class="h">МУЛЬТИПЛЕКСИРОВАНИЕ (MUX)</div>
   <div class="group">
@@ -578,7 +626,7 @@ function screenEngine() {
   const cores = S.runtime.cores || {};
   const pref = e.preference;
   return `${backBar("Движок")}<div class="drawer-body">
-    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Явный движок прячет конфиги, которые он не умеет. Xray — полная маршрутизация, но без WireGuard и AmneziaWG. Ferrum — те же конфиги на Rust. sing-box — конвертация без Amnezia. mihomo — конвертация и все протоколы.</p>
+    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum</b> — открытый слот: скачивает Xray-core (Reality) как <code>data/cores/ferrum</code>. sing-box / mihomo — конвертация; mihomo умеет AmneziaWG.</p>
     <div class="seg">
       ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => `<button class="${pref === id ? "on" : ""}" data-engine="${id}">${id === "auto" ? "Авто" : id === "sing-box" ? "sing-box" : id[0].toUpperCase() + id.slice(1)}</button>`).join("")}
     </div>
@@ -604,7 +652,7 @@ function screenEngine() {
       const c = cores[id] || {};
       const busy = ui.busyCore === id;
       return `<div class="card core-card"><b>${esc(c.title || id)}</b><p>Эталон снимка: ${esc(c.ref || "")}. ${c.installed ? `Файл ${fmtBytes(c.bytes)}. ${esc(c.version || "")}` : "Не скачано"}</p>
-        <button class="ghost${busy ? " busy" : ""}" data-act="get-core" data-id="${id}" ${busy ? "disabled" : ""}>${id === "ferrum" ? "Как поставить" : busy ? "Скачиваю…" : "Скачать"}</button>
+        <button class="ghost${busy ? " busy" : ""}" data-act="get-core" data-id="${id}" ${busy ? "disabled" : ""}>${busy ? "Скачиваю…" : id === "ferrum" ? "Скачать (Xray Reality)" : "Скачать"}</button>
         ${c.installed ? `<button class="ghost" data-act="test-core" data-id="${id}">Проверить конфиг</button><button class="danger" data-act="del-core" data-id="${id}">Удалить</button>` : ""}
       </div>`;
     }).join("")}
@@ -1002,15 +1050,39 @@ document.addEventListener("click", (event) => {
   if (act === "zapret-list") return run(() => invoke("zapretList", { name: document.querySelector("#zname").value, domains: document.querySelector("#zdom").value }));
   if (act === "zapret-method") return run(() => invoke("zapretMethod", { name: document.querySelector("#zmethod").value, kind: document.querySelector("[data-set=zkind]").value }));
   if (act === "zapret-reset") return run(() => invoke("patch", { path: "network.zapret.serviceWays", value: {} }));
-  if (act === "warp-create") return run(() => invoke("warpCreate", {}));
+  if (act === "save-api-key") return run(async () => {
+    const apiKey = document.querySelector("#apikey")?.value || "";
+    await invoke("saveAccount", { apiKey });
+    toast("API-ключ сохранён, конфиги синхронизированы");
+  });
+  if (act === "save-sub-url") return run(async () => {
+    const subscriptionUrl = document.querySelector("#suburl-acc")?.value || "";
+    const name = document.querySelector("#subname-acc")?.value || "Подписка по URL";
+    await invoke("saveAccount", { subscriptionUrl, name, preferUrl: true });
+    toast("URL подписки сохранён");
+  });
+  if (act === "sync-account") return run(async () => {
+    await invoke("syncAccount", {});
+    toast("Синхронизация завершена");
+  });
+  if (act === "clear-api-key") return run(async () => {
+    await invoke("clearAccount", {});
+    toast("API-ключ удалён");
+  });
+  if (act === "warp-create") return run(async () => {
+    toast("Регистрирую Cloudflare WARP…", 6000);
+    await invoke("warpCreate", {});
+    toast("Профиль WARP создан");
+  });
   if (act === "warp-import") return run(() => invoke("warpImport", { text: document.querySelector("#warpini").value }));
+  if (act === "gre-up") return run(() => invoke("engvpnWarp", { action: "gre-up" }));
+  if (act === "gre-down") return run(() => invoke("engvpnWarp", { action: "gre-down" }));
   if (act === "add-bridge") return run(() => invoke("addBridge", { to: document.querySelector("[data-set=bridge-to]").value }));
   if (act === "del-bridge") return run(() => invoke("deleteBridge", { id: t.dataset.id }));
   if (act === "automode") return run(() => invoke("automode", {}));
   if (act === "detect-net") return run(() => invoke("detectNetwork", {}));
   if (act === "get-core") return run(async () => {
     const id = t.dataset.id;
-    if (id === "ferrum") { toast("Положите бинарник Ferrum в data/cores/ferrum", 5000); return; }
     if (ui.busyCore) { toast("Уже скачивается другое ядро…"); return; }
     ui.busyCore = id;
     toast("Скачиваю ядро с GitHub… это может занять минуту", 8000);
