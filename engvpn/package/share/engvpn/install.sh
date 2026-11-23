@@ -32,6 +32,24 @@ if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
 	SERVICE_LOCK=$LOCK_DIR/.engvpn-service.lock
 fi
 
+# Staged progress: merlin.sh sets ENGVPN_STAGE_TOTAL / ENGVPN_STAGE_NUM so
+# [n/N] continues across the outer installer. Standalone install uses local totals.
+STAGE_TOTAL=${ENGVPN_STAGE_TOTAL:-0}
+STAGE_NUM=${ENGVPN_STAGE_NUM:-0}
+STAGE_NAME=""
+
+stage() {
+	# $1 = short id (for errors), $2 = RU message
+	if [ "$STAGE_TOTAL" -gt 0 ] 2>/dev/null; then
+		STAGE_NUM=$((STAGE_NUM + 1))
+		STAGE_NAME=$1
+		echo "[$STAGE_NUM/$STAGE_TOTAL] $2"
+	else
+		STAGE_NAME=$1
+		echo "==> $2"
+	fi
+}
+
 say() {
 	echo "$*"
 	logger -t engvpn "$*" 2>/dev/null || true
@@ -43,7 +61,11 @@ complain() {
 }
 
 fail() {
-	complain "$*"
+	if [ -n "${STAGE_NAME:-}" ]; then
+		complain "Ошибка на этапе «$STAGE_NAME»: $*"
+	else
+		complain "$*"
+	fi
 	[ -n "$LOCKED" ] && rm -rf "$STAGE"
 	exit 1
 }
@@ -467,47 +489,58 @@ ask_restore() {
 
 do_install() {
 	archive=$1
-	[ -f "$archive" ] || fail "Missing archive $archive"
+	stage "Распаковка" "Распаковка пакета…"
+	[ -f "$archive" ] || fail "нет архива $archive"
 	check_place
 	other=$(other_install)
-	[ -z "$other" ] || fail "EngVPN already installed at ${other%/share/engvpn}"
-	unpack "$archive" || fail "Archive unpack failed"
+	[ -z "$other" ] || fail "EngVPN уже установлен в ${other%/share/engvpn}"
+	unpack "$archive" || fail "не удалось распаковать архив"
+
+	stage "Резервная копия" "Резервная копия…"
 	# Snapshot existing data/package before mutating (uses staged backup.sh on first install)
 	user_backup
 	clear_leftovers
-	enough_room || fail "Not enough space under $PREFIX for the new files"
+	enough_room || fail "недостаточно места в $PREFIX для новых файлов"
 	had_manifest=""
 	[ -f "$MANIFEST" ] && had_manifest=1
 	if ! back_up; then
 		rm -rf "$ROLLBACK"
-		fail "Not enough /tmp space to back up the installed version"
+		fail "недостаточно места в /tmp для резервной копии установленной версии"
 	fi
 	hold_on
 	mkdir -p "$DATA_DIR" && chmod 700 "$DATA_DIR"
 	if ! stop_service; then
 		[ -n "$had_manifest" ] || rm -rf "$ROLLBACK"
-		fail "EngVPN service did not stop"
+		fail "сервис EngVPN не остановился"
 	fi
+
+	stage "Установка файлов" "Установка файлов…"
 	problem=""
 	if ! place; then
-		problem="Files failed to install"
+		problem="не удалось установить файлы"
 	else
+		stage "Хуки" "Хуки пользовательских скриптов…"
 		enable_scripts
 		if ! add_hooks; then
-			problem="Could not write user scripts in $SCRIPTS"
+			problem="не удалось записать скрипты в $SCRIPTS"
 		else
 			# Copy VERSION into share if present in stage
 			[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
-			start_service || problem="EngVPN service failed to start"
+			if [ "${ENGVPN_DEFER_START:-}" = 1 ]; then
+				: # merlin.sh starts after saving the panel password
+			else
+				stage "Запуск" "Запуск сервиса…"
+				start_service || problem="сервис EngVPN не запустился"
+			fi
 		fi
 	fi
 	if [ -n "$problem" ]; then
-		roll_back || fail "$problem, and rollback failed"
+		roll_back || fail "$problem, и откат не удался"
 		rm -rf "$ROLLBACK"
-		fail "$problem: previous version restored"
+		fail "$problem: восстановлена предыдущая версия"
 	fi
 	rm -rf "$ROLLBACK" "$STAGE"
-	say "EngVPN installed at $PREFIX"
+	say "EngVPN установлен в $PREFIX"
 }
 
 do_upgrade() {

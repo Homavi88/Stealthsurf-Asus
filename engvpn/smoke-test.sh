@@ -64,7 +64,30 @@ export ENGVPN_LOCAL_PACKAGE="$ARCHIVE"
 export ENGVPN_LOCAL_VERSION="$VERSION"
 
 # merlin.sh still expects curl for non-local; LOCAL path skips download
-sh ./merlin.sh
+install_log=$SMOKE_ROOT/merlin-install.log
+sh ./merlin.sh >"$install_log" 2>&1 || {
+	echo "merlin.sh failed:" >&2
+	cat "$install_log" >&2
+	exit 1
+}
+echo "==> install progress stages"
+# Expect [1/9]…[9/9] with RU stage labels
+for n in 1 2 3 4 5 6 7 8 9; do
+	grep -E "^\\[$n/9\\] " "$install_log" >/dev/null || {
+		echo "missing progress stage [$n/9] in:" >&2
+		cat "$install_log" >&2
+		exit 1
+	}
+done
+grep -q 'Проверки окружения' "$install_log"
+grep -q 'Локальный пакет' "$install_log"
+grep -q 'Распаковка пакета' "$install_log"
+grep -q 'Резервная копия' "$install_log"
+grep -q 'Установка файлов' "$install_log"
+grep -q 'Хуки' "$install_log"
+grep -q 'Сохранение пароля' "$install_log"
+grep -q 'Запуск сервиса' "$install_log"
+echo "  progress [1/9]…[9/9] ok"
 
 echo "==> verify layout"
 [ -x "$PREFIX/sbin/engvpnd" ]

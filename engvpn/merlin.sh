@@ -10,6 +10,9 @@
 #
 # Open reimplementation — does not ship StealthSurf proprietary binaries.
 # Requires Entware Node.js for the panel runtime (opkg install node).
+#
+# Progress: prints [n/N] stages (RU). On failure: stage name + reason, exit 1.
+# Non-interactive: ENGVPN_PASSWORD, ENGVPN_PREFIX, ENGVPN_LOCAL_PACKAGE, ENGVPN_FEED, …
 
 set -u
 
@@ -23,8 +26,23 @@ MIN_FREE_KB=20480
 MIN_UPDATE_FREE_KB=10240
 MIN_TMP_FREE_KB=32768
 
+# Staged progress ([n/N]). install.sh continues from STAGE_NUM.
+STAGE_TOTAL=9
+STAGE_NUM=0
+STAGE_NAME=""
+
+stage() {
+	STAGE_NUM=$((STAGE_NUM + 1))
+	STAGE_NAME=$1
+	echo "[$STAGE_NUM/$STAGE_TOTAL] $2"
+}
+
 fail() {
-	echo "Error: $*" >&2
+	if [ -n "${STAGE_NAME:-}" ]; then
+		echo "Ошибка на этапе «$STAGE_NAME»: $*" >&2
+	else
+		echo "Ошибка: $*" >&2
+	fi
 	exit 1
 }
 
@@ -35,13 +53,15 @@ free_kb() {
 	df -k "$1" 2>/dev/null | awk 'NR > 1 && NF >= 5 { value = $(NF - 2) } END { print value }'
 }
 
+stage "Проверки" "Проверки окружения…"
+
 # Off-router smoke / packaging hosts can skip Merlin and root checks.
 if [ "${ENGVPN_SMOKE:-}" != 1 ]; then
 	uid=$(awk '/^Uid:/ { print $3 }' /proc/self/status)
-	[ "$uid" = 0 ] || fail "run this script as the router administrator (root)"
-	type nvram >/dev/null 2>&1 && [ -d /jffs ] || fail "this is not an ASUS firmware with JFFS"
+	[ "$uid" = 0 ] || fail "запустите скрипт от имени администратора роутера (root)"
+	type nvram >/dev/null 2>&1 && [ -d /jffs ] || fail "это не прошивка ASUS с JFFS"
 	uname -o 2>/dev/null | grep -qi merlin || [ -f /usr/sbin/helper.sh ] ||
-		fail "Asuswrt-Merlin is required (stock ASUS has no user scripts)"
+		fail "нужен Asuswrt-Merlin (в стоковой ASUS нет пользовательских скриптов)"
 fi
 
 case "$(uname -m)" in
@@ -51,7 +71,7 @@ x86_64 | amd64)
 	# Dev / smoke host
 	key=merlin-x86_64
 	;;
-*) fail "CPU $(uname -m) is not supported yet: need ARM64, ARMv7, or x86_64 (dev)" ;;
+*) fail "CPU $(uname -m) пока не поддерживается: нужны ARM64, ARMv7 или x86_64 (dev)" ;;
 esac
 
 release=$(uname -r)
@@ -60,13 +80,13 @@ minor=${release#*.}
 minor=${minor%%.*}
 if [ "${ENGVPN_SMOKE:-}" != 1 ]; then
 	if [ "${major:-0}" -lt 3 ] || { [ "$major" -eq 3 ] && [ "${minor:-0}" -lt 2 ]; }; then
-		fail "Linux kernel $release is too old (need 4.1+)"
+		fail "ядро Linux $release слишком старое (нужно 4.1+)"
 	fi
 	memory=$(awk '/^MemTotal:/ { print $2 }' /proc/meminfo)
-	[ "${memory:-0}" -ge "$MIN_MEMORY_KB" ] || fail "need at least 256 MB RAM"
+	[ "${memory:-0}" -ge "$MIN_MEMORY_KB" ] || fail "нужно не менее 256 МБ ОЗУ"
 	tmp=$(free_kb /tmp)
 	[ -z "$tmp" ] || [ "$tmp" -ge "$MIN_TMP_FREE_KB" ] ||
-		fail "/tmp has $((tmp / 1024)) MB free; need $((MIN_TMP_FREE_KB / 1024)) MB"
+		fail "в /tmp свободно $((tmp / 1024)) МБ; нужно $((MIN_TMP_FREE_KB / 1024)) МБ"
 fi
 
 installed() {
@@ -122,12 +142,12 @@ if [ -z "$prefix" ]; then
 			done
 		fi
 		[ -n "$prefix" ] ||
-			fail "JFFS has $((${free:-0} / 1024)) MB free; need $((MIN_FREE_KB / 1024)) MB. Free space or attach an ext4 USB drive"
+			fail "на JFFS свободно $((${free:-0} / 1024)) МБ; нужно $((MIN_FREE_KB / 1024)) МБ. Освободите место или подключите USB с ext4"
 	fi
 else
 	case "$prefix" in
 	/*) ;;
-	*) fail "Invalid install directory: $prefix" ;;
+	*) fail "неверный каталог установки: $prefix" ;;
 	esac
 	probe_dir=${prefix%/engvpn}
 	while [ ! -d "$probe_dir" ] && [ -n "$probe_dir" ] && [ "$probe_dir" != "/" ]; do
@@ -143,7 +163,7 @@ else
 		need=$MIN_UPDATE_FREE_KB
 	fi
 	if [ -n "$room" ] && [ "$room" -lt "$need" ]; then
-		fail "${prefix%/engvpn} has $((free / 1024)) MB free; need at least $((need / 1024)) MB"
+		fail "в ${prefix%/engvpn} свободно $((free / 1024)) МБ; нужно не меньше $((need / 1024)) МБ"
 	fi
 fi
 
@@ -151,8 +171,8 @@ fi
 password=${ENGVPN_PASSWORD:-}
 if [ -z "$password" ]; then
 	{ : </dev/tty; } 2>/dev/null ||
-		fail "no TTY for panel password: use ssh -t, or set ENGVPN_PASSWORD for non-interactive install"
-	echo "Choose an EngVPN panel password (keeps guests on your LAN out of the panel)"
+		fail "нет TTY для пароля панели: используйте ssh -t или задайте ENGVPN_PASSWORD"
+	echo "Задайте пароль панели EngVPN (гости в LAN не попадут в панель)"
 	hidden_read() {
 		if type stty >/dev/null 2>&1; then
 			stty -echo </dev/tty 2>/dev/null
@@ -171,9 +191,9 @@ $password
 EOF
 	}
 	while :; do
-		printf "Password (8–128 characters): "
+		printf "Пароль (8–128 символов): "
 		password=""
-		hidden_read password || fail "could not read password"
+		hidden_read password || fail "не удалось прочитать пароль"
 		echo
 		bytes=$(wc -c <<EOF
 $password
@@ -190,36 +210,38 @@ EOF
 		bytes=$((bytes - 1))
 		length=$((length - 1))
 		if [ "$((length))" -lt 8 ] || [ "$((length))" -gt 128 ]; then
-			echo "Password must be 8–128 characters"
+			echo "Пароль должен быть 8–128 символов"
 			continue
 		fi
 		if [ "$((printable))" -ne "$((bytes))" ] || c1_control; then
-			echo "Password must not contain control characters"
+			echo "Пароль не должен содержать управляющие символы"
 			continue
 		fi
-		printf "Again: "
+		printf "Ещё раз: "
 		confirmation=""
-		hidden_read confirmation || fail "could not read password"
+		hidden_read confirmation || fail "не удалось прочитать пароль"
 		echo
 		case $confirmation in
 		"$password") break ;;
 		esac
-		echo "Passwords do not match"
+		echo "Пароли не совпадают"
 	done
 fi
 
 WORK=/tmp/engvpn-get.$$
 rm -rf "$WORK"
-mkdir -m 700 "$WORK" || fail "could not create work dir in /tmp"
+mkdir -m 700 "$WORK" || fail "не удалось создать рабочий каталог в /tmp"
 
 # Local package override for offline / smoke installs
 if [ -n "${ENGVPN_LOCAL_PACKAGE:-}" ] && [ -f "$ENGVPN_LOCAL_PACKAGE" ]; then
+	stage "Загрузка" "Локальный пакет…"
 	archive=$ENGVPN_LOCAL_PACKAGE
 	version=${ENGVPN_LOCAL_VERSION:-local}
-	echo "Using local package $archive"
+	echo "  → $archive"
+	stage "Проверка" "Проверка (локальный пакет — SHA-256 ленты не применяется)…"
 else
-	echo "Reading EngVPN version feed…"
-	feed=$(curl -fsS --retry 3 "$FEED") || fail "could not download $FEED"
+	stage "Загрузка" "Загрузка ленты и пакета…"
+	feed=$(curl -fsS --retry 3 "$FEED") || fail "не удалось скачать $FEED"
 	field() {
 		printf '%s\n' "$feed" | awk -v key="\"$key\": {" -v name="\"$1\":" '
 			index($0, key) { inside = 1; next }
@@ -235,7 +257,7 @@ else
 	url=$(field url)
 	sha256=$(field sha256)
 	[ -n "$version" ] && [ -n "$url" ] && [ -n "$sha256" ] ||
-		fail "feed has no package for $key"
+		fail "в ленте нет пакета для $key"
 	# Allow GitHub release URLs or configured prefix
 	case "$url" in
 	https://github.com/* | https://raw.githubusercontent.com/* | "$PACKAGE_PREFIX"* | http://127.0.0.1/* | http://localhost/*) ;;
@@ -243,27 +265,29 @@ else
 		# Also allow file:// for smoke
 		case "$url" in
 		file://*) ;;
-		*) fail "package URL must be under an allowed HTTPS host (got $url)" ;;
+		*) fail "URL пакета должен быть с разрешённого HTTPS-хоста (получено $url)" ;;
 		esac
 		;;
 	esac
-	echo "Downloading EngVPN $version…"
+	echo "  → EngVPN $version ($key)"
 	archive=$WORK/engvpn.tar.gz
 	case "$url" in
 	file://*)
 		src=${url#file://}
-		cp -f "$src" "$archive" || fail "could not copy $src"
+		cp -f "$src" "$archive" || fail "не удалось скопировать $src"
 		;;
 	*)
-		curl -fsS --retry 3 -o "$archive" "$url" || fail "could not download package"
+		curl -fsS --retry 3 -o "$archive" "$url" || fail "не удалось скачать пакет"
 		;;
 	esac
+
+	stage "Проверка" "Проверка SHA-256 и подписи…"
 	if type sha256sum >/dev/null 2>&1; then
 		actual=$(sha256sum "$archive" | awk '{ print $1 }')
 	else
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
-	[ "$actual" = "$sha256" ] || fail "package checksum does not match the feed"
+	[ "$actual" = "$sha256" ] || fail "контрольная сумма пакета не совпадает с лентой"
 	# Minisign (optional but preferred when feed publishes .minisig)
 	sig_url=$(field minisig)
 	[ -z "$sig_url" ] && sig_url="${url}.minisig"
@@ -275,49 +299,61 @@ else
 		;;
 	esac
 	if [ -f "$sig" ]; then
-		# Extract pubkey from package for verify (bootstrap chicken/egg: use embedded feed pubkey via curl raw, or skip until after unpack)
-		# For first install we verify with known public key from the repo feed tree when available.
 		pub_url=${ENGVPN_MINISIGN_PUB:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/keys/engvpn.minisign.pub}
 		pub=$WORK/engvpn.minisign.pub
 		curl -fsS --retry 2 -o "$pub" "$pub_url" 2>/dev/null || true
 		if [ -f "$pub" ] && command -v minisign >/dev/null 2>&1; then
-			minisign -Vm "$archive" -x "$sig" -p "$pub" || fail "minisign verification failed"
-			echo "Minisign OK"
+			minisign -Vm "$archive" -x "$sig" -p "$pub" || fail "проверка Minisign не прошла"
+			echo "  → Minisign OK"
 		elif [ -f "$pub" ] && command -v node >/dev/null 2>&1; then
-			# Defer full Node verify until package has verify-minisign.mjs — SHA-256 already checked
-			echo "Minisign signature present (Node verify after install)"
+			echo "  → подпись Minisign есть (полная проверка Node — после установки); SHA-256 уже сверен"
 		else
-			echo "Note: minisig present but verifier unavailable; SHA-256 already checked"
+			echo "  → .minisig есть, но верификатор недоступен; SHA-256 уже сверен"
 		fi
 	fi
 fi
 
 tar -xzOf "$archive" ./share/engvpn/install.sh >"$WORK/install.sh" ||
-	fail "package has no installer"
+	fail "в пакете нет install.sh"
 chmod +x "$WORK/install.sh"
 
 # Hint: Node is required at runtime
 if ! { [ -x /opt/bin/node ] || command -v node >/dev/null 2>&1; }; then
-	echo "Note: EngVPN panel needs Node.js (Entware: opkg update && opkg install node)"
+	echo "Примечание: панели нужен Node.js (Entware: opkg update && opkg install node)"
 fi
 
 trap ':' INT TERM HUP
-# Pass smoke env through
+# Pass smoke / progress env through; defer start until password is saved.
 export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
 export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
-sh "$WORK/install.sh" install "$archive" "$prefix" || fail "install did not finish"
+export ENGVPN_DEFER_START=1
+export ENGVPN_STAGE_TOTAL="$STAGE_TOTAL"
+export ENGVPN_STAGE_NUM="$STAGE_NUM"
+# install.sh prints its own staged errors; do not wrap with a second fail().
+if ! sh "$WORK/install.sh" install "$archive" "$prefix"; then
+	exit 1
+fi
+# install.sh printed stages 4–7 (unpack…hooks); child cannot export STAGE_NUM back.
+STAGE_NUM=7
 
+stage "Пароль" "Сохранение пароля панели…"
 (
 	trap '' INT TERM HUP
 	"$prefix/sbin/engvpnd" set-password --data-dir "$prefix/data" <<EOF
 $password
 EOF
-) || fail "panel password was not saved"
+) || fail "пароль панели не сохранён"
+
+stage "Запуск" "Запуск сервиса…"
+export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
+export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
+export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
+"$prefix/share/engvpn/service.sh" restart || fail "сервис EngVPN не запустился"
 
 lan=""
 type nvram >/dev/null 2>&1 && lan=$(nvram get lan_ipaddr 2>/dev/null)
 echo
-echo "EngVPN $version installed at $prefix."
-echo "Open the panel: http://${lan:-192.168.50.1}:8790 — sign in with the password you chose"
-echo "Paths: does not touch /jffs/addons/stealthsurf (:8800) or /jffs/addons/ssurf (:1131)"
+echo "EngVPN $version установлен в $prefix."
+echo "Панель: http://${lan:-192.168.50.1}:8790 — войдите с выбранным паролем"
+echo "Пути: не трогает /jffs/addons/stealthsurf (:8800) и /jffs/addons/ssurf (:1131)"
