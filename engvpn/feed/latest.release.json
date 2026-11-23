@@ -1,24 +1,24 @@
 {
-  "version": "0.5.0",
-  "notes": "EngVPN 0.5 — backup/restore, LAN ARP discovery, SmartDNS bypass, UI polish.",
+  "version": "0.5.1",
+  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.0/engvpn_0.5.0_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "9900dc6d6865ada888ad37a7acdad488351bee7f4161818b8c415c504c56fd4f",
-      "size": 113266
+      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
+      "size": 116165
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.0/engvpn_0.5.0_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "9900dc6d6865ada888ad37a7acdad488351bee7f4161818b8c415c504c56fd4f",
-      "size": 113266
+      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
+      "size": 116165
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.0/engvpn_0.5.0_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "9900dc6d6865ada888ad37a7acdad488351bee7f4161818b8c415c504c56fd4f",
-      "size": 113266
+      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
+      "size": 116165
     }
   }
 }

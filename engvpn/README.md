@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.0** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.1** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.0)
+Релиз: [engvpn-0.5.1](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.1)
 
 ---
 
@@ -64,7 +64,7 @@ ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Hom
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.0
+## Панель 0.5.1
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
