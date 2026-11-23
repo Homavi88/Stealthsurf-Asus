@@ -48,9 +48,13 @@ for item in lib public scripts server.mjs run.mjs package.json README.md; do
 	fi
 done
 
-# EngVPN overlays
+# EngVPN overlays (catalog + daemon helpers + branded panel UI)
 cp -a "$ROOT/overlays/catalog.mjs" "$RUNTIME/lib/catalog.mjs"
 cp -a "$ROOT/overlays/runtime-engvpn.mjs" "$RUNTIME/lib/runtime-engvpn.mjs"
+if [ -d "$ROOT/overlays/public" ]; then
+	mkdir -p "$RUNTIME/public"
+	cp -a "$ROOT/overlays/public/." "$RUNTIME/public/"
+fi
 
 # Brand run.mjs / server cookie name for EngVPN
 cat >"$RUNTIME/run.mjs" <<'EOF'
@@ -99,24 +103,47 @@ print("patched server.mjs cookies/brand")
 st = rt / "lib/state.mjs"
 text = st.read_text()
 text = text.replace('export const DEFAULT_PANEL_PASSWORD = "alfa";', 'export const DEFAULT_PANEL_PASSWORD = "changeme";')
+text = text.replace('theme: "dark"', 'theme: "light"')
+text = text.replace('accent: "stealth"', 'accent: "engvpn"')
+text = text.replace('oled: true', 'oled: false')
+text = text.replace(
+    'subscriptionName: "Основная подписка"',
+    'subscriptionName: "Локальные подписки"',
+)
+text = text.replace(
+    'note: "Альфа собрана локально и не ставится поверх прошивки сама."',
+    'note: "EngVPN обновляется из своего feed (SHA-256) через engvpnd update."',
+)
+text = text.replace(
+    'firmware: `${platform()} / стенд альфы`',
+    'firmware: `${platform()} / EngVPN`',
+)
+text = text.replace(
+    'referencePanel: "http://192.168.50.1:8800"',
+    'referencePanel: "http://192.168.50.1:8790"',
+)
+# boot log brand
 st.write_text(text)
-idx = rt / "public/index.html"
-if idx.exists():
-    t = idx.read_text()
-    t = t.replace("StealthSurf", "EngVPN").replace("Alfa", "EngVPN").replace("alfa", "engvpn")
-    idx.write_text(t)
-# runtime.mjs: EngVPN invoke + brand strings
+print("patched state.mjs EngVPN defaults")
+# runtime.mjs: EngVPN invoke + brand strings + StealthSurf-shaped get_* aliases
 rtm = rt / "lib/runtime.mjs"
 text = rtm.read_text()
 text = text.replace("stealthsurf-alfa", "engvpn")
 text = text.replace("Сброс: /jffs/scripts/alfa reset-password", "Сброс: engvpnd set-password")
 text = text.replace('filename: "stealthsurf-alfa.json"', 'filename: "engvpn-settings.json"')
 text = text.replace('await mqttPublish(mqtt, "stealthsurf/vpn", payload);', 'await mqttPublish(mqtt, "engvpn/vpn", payload);')
+text = text.replace("Альфа ", "EngVPN ")
+text = text.replace("слушает панель на порту 8788", "слушает панель на порту 8790")
 if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, writeTransparentConf, modeFromRouter } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, writeTransparentConf, modeFromRouter, engvpnParityInvoke } from "./runtime-engvpn.mjs";',
+    )
+elif "engvpnParityInvoke" not in text:
+    text = text.replace(
+        "writeTransparentConf, modeFromRouter } from \"./runtime-engvpn.mjs\";",
+        "writeTransparentConf, modeFromRouter, engvpnParityInvoke } from \"./runtime-engvpn.mjs\";",
     )
 needle = '      case "autoSetup":'
 insert = '''      case "transparent":
@@ -135,41 +162,62 @@ if "case \"transparent\":" not in text:
     if needle not in text:
         raise SystemExit("autoSetup case not found for inject")
     text = text.replace(needle, insert, 1)
-# When router.mode patched, sync transparent.conf (best-effort after patch)
-if "modeFromRouter(state.router.mode)" not in text:
+
+# Define transparent sync helper BEFORE invoke / parity wrappers reference it
+if "async function engvpnSyncTransparent()" not in text:
+    if "async function invoke(command, body = {}) {" not in text:
+        raise SystemExit("invoke() not found for engvpnSyncTransparent")
     text = text.replace(
-        "function patch(body) {",
-        "function patch(body) {\n"
-        "    const beforeMode = state.router?.mode;\n",
+        "async function invoke(command, body = {}) {",
+        "async function engvpnSyncTransparent() {\n"
+        "    try {\n"
+        "      if (!state.router) return;\n"
+        "      const mode = modeFromRouter(state.router.mode);\n"
+        "      writeTransparentConf({ mode });\n"
+        "      if (mode !== \"off\") await engvpnTransparent(\"apply\", { mode });\n"
+        "      else await engvpnTransparent(\"stop\", {});\n"
+        "    } catch (e) {\n"
+        "      ctx.hooks.log(\"warn\", `transparent sync: ${e.message || e}`);\n"
+        "    }\n"
+        "  }\n\n"
+        "  async function invoke(command, body = {}) {",
+        1,
     )
-    # After saveState in patch — find a simple hook: after patch returns snapshot
-    # Safer: wrap end of patch via marker
-    if "async function invoke(command, body = {})" in text and "engvpnSyncTransparent" not in text:
-        text = text.replace(
-            "async function invoke(command, body = {}) {",
-            "async function engvpnSyncTransparent() {\n"
-            "    try {\n"
-            "      if (!state.router) return;\n"
-            "      const mode = modeFromRouter(state.router.mode);\n"
-            "      writeTransparentConf({ mode });\n"
-            "      if (mode !== \"off\") await engvpnTransparent(\"apply\", { mode });\n"
-            "      else await engvpnTransparent(\"stop\", {});\n"
-            "    } catch (e) {\n"
-            "      ctx.hooks.log(\"warn\", `transparent sync: ${e.message || e}`);\n"
-            "    }\n"
-            "  }\n\n"
-            "  async function invoke(command, body = {}) {",
-        )
-        text = text.replace(
-            '      case "patch":\n        return patch(body);',
-            '      case "patch": {\n'
-            "        const result = patch(body);\n"
-            "        if (body?.path === \"router.mode\" || (body?.router && body.router.mode != null)) {\n"
-            "          await engvpnSyncTransparent();\n"
-            "        }\n"
-            "        return result;\n"
-            "      }",
-        )
+
+# Hook router.mode patches → transparent.conf
+old_patch = '      case "patch":\n        return patch(body.path, body.value);'
+new_patch = (
+    '      case "patch": {\n'
+    "        const result = patch(body.path, body.value);\n"
+    "        if (body?.path === \"router.mode\") {\n"
+    "          await engvpnSyncTransparent();\n"
+    "        }\n"
+    "        return result;\n"
+    "      }"
+)
+if old_patch in text and 'if (body?.path === "router.mode")' not in text:
+    text = text.replace(old_patch, new_patch, 1)
+
+# StealthSurf-compatible get_* / update_router_settings before switch body
+if "engvpnParityInvoke(" not in text:
+    text = text.replace(
+        "  async function invoke(command, body = {}) {\n    switch (command) {",
+        "  async function invoke(command, body = {}) {\n"
+        "    const parity = engvpnParityInvoke(command, body, state, snapshot);\n"
+        "    if (parity !== undefined) {\n"
+        "      if (parity && parity.alias === \"selectNode\") return selectNode(parity.id);\n"
+        "      if (parity && parity.alias === \"setPassword\") return setPassword({ oldPassword: parity.oldPassword || parity.current || \"\", password: parity.password || parity.newPassword || \"\" });\n"
+        "      if (command === \"update_router_settings\") {\n"
+        "        saveState(state);\n"
+        "        try { await engvpnSyncTransparent(); } catch { /* ignore */ }\n"
+        "        return snapshot();\n"
+        "      }\n"
+        "      if (parity && typeof parity.then === \"function\") return parity;\n"
+        "      return parity;\n"
+        "    }\n"
+        "    switch (command) {",
+        1,
+    )
 rtm.write_text(text)
 print("patched runtime.mjs EngVPN commands")
 # dokodemo inbound injection into xray plan when transparent mode != off
