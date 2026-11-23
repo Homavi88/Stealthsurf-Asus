@@ -3,22 +3,22 @@
   "notes": "EngVPN 0.4 hard-parity — API keys, open DPI/WARP/Ferrum-slot, Minisign, TPROXY+UDP.",
   "packages": {
     "merlin-aarch64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-aarch64.tar.gz",
-      "minisig": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-aarch64.tar.gz.minisig",
-      "sha256": "a1f7c7bb47d6996dd416d4473e98eebef822835344a4581b2436392ac9e740b6",
-      "size": 103926
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-aarch64.tar.gz",
+      "minisig": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-aarch64.tar.gz.minisig",
+      "sha256": "1949f1f1cf737798d5f8fb586e1bb1c62eba243984f99383b0095554d51061c4",
+      "size": 103888
     },
     "merlin-armv7": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-armv7.tar.gz",
-      "minisig": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-armv7.tar.gz.minisig",
-      "sha256": "a1f7c7bb47d6996dd416d4473e98eebef822835344a4581b2436392ac9e740b6",
-      "size": 103926
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-armv7.tar.gz",
+      "minisig": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-armv7.tar.gz.minisig",
+      "sha256": "1949f1f1cf737798d5f8fb586e1bb1c62eba243984f99383b0095554d51061c4",
+      "size": 103888
     },
     "merlin-x86_64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-x86_64.tar.gz",
-      "minisig": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.4.0_merlin-x86_64.tar.gz.minisig",
-      "sha256": "a1f7c7bb47d6996dd416d4473e98eebef822835344a4581b2436392ac9e740b6",
-      "size": 103926
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-x86_64.tar.gz",
+      "minisig": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.4.0/engvpn_0.4.0_merlin-x86_64.tar.gz.minisig",
+      "sha256": "1949f1f1cf737798d5f8fb586e1bb1c62eba243984f99383b0095554d51061c4",
+      "size": 103888
     }
   }
 }
