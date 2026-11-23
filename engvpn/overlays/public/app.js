@@ -328,15 +328,19 @@ function screenDevices() {
   const mode = { off: "Сеть напрямую", all: "Все устройства", selected: "Только выбранные", except: "Все, кроме выбранных" }[S.router.mode];
   return `${backBar("Устройства")}<div class="drawer-body">
     <div class="card"><b>${mode}</b><p>${S.router.mode === "except" ? "Отмеченные устройства выходят в интернет напрямую, остальные идут через VPN." : "Отметка выбирает, кто идёт через VPN."}</p></div>
-    <div class="search"><input id="devq" class="text" data-local="q" placeholder="Имя, IP или MAC-адрес" value="${esc(ui.form.q || "")}"></div>
-    <div class="muted">Устройства сети ${list.length} из ${S.devices.length}</div>
-    ${list.map((d) => `<div class="cell">
+    <div class="search"><span class="search-ico" aria-hidden="true">⌕</span><input id="devq" class="text" data-local="q" placeholder="Имя, IP или MAC-адрес" value="${esc(ui.form.q || "")}"></div>
+    <div class="muted section-count">Устройства сети ${list.length} из ${S.devices.length}</div>
+    <div class="device-list">
+    ${list.map((d) => `<div class="cell device-row">
       <input type="checkbox" data-device="${d.id}" ${d.excluded ? "checked" : ""}>
       <button class="cell-text" data-go="device" data-id="${d.id}" style="background:none;border:0;color:inherit;text-align:left">
         <div class="cell-title">${esc(d.name)} ${d.isNew ? "<span class='beta'>новое</span>" : ""}</div>
-        <div class="cell-desc">${d.online ? "●" : "○"} ${esc(d.ip)} · ${esc(d.mac)}</div>
+        <div class="cell-desc"><span class="dot ${d.online ? "on" : "off"}" aria-hidden="true"></span> ${esc(d.ip)} · ${esc(d.mac)}</div>
       </button>
-    </div>`).join("")}
+      <button type="button" class="icon-btn edit-btn" data-go="device" data-id="${d.id}" aria-label="Изменить">✎</button>
+    </div>`).join("") || `<p class="muted">Пока пусто. Нажмите «Обновить список» — EngVPN читает ARP, соседей и dnsmasq leases.</p>`}
+    </div>
+    <button class="primary" data-act="scan-devices">Обновить список</button>
     <button class="ghost" data-act="add-device">Добавить устройство по IP</button>
   </div>`;
 }
@@ -526,13 +530,24 @@ function screenConfigRoute() {
 
 function screenNetwork() {
   const n = S.network;
+  const sd = S.smartdns || { enabled: false, entries: [] };
   return `${backBar("Сеть и системные службы")}<div class="drawer-body"><div class="group">
     ${cell("YouTube через zapret", "Напрямую, а если путь не работает — через VPN", sw("network.youtubeZapret", n.youtubeZapret))}
     ${cell("Discord через zapret", "Вместе с голосовыми каналами", sw("network.discordZapret", n.discordZapret))}
     ${cell("Расширенные настройки zapret", "Свои списки и проверка пути", `<button class="ghost" data-go="zapret">Открыть</button>`)}
     ${cell("Telegram напрямую", "Прямой путь", sw("network.telegramDirect", n.telegramDirect))}
   </div>
-  <p class="muted">Обход блокировок: открытый <b>zapret/nfqws</b> (NFQUEUE) через <code>engvpnd dpi</code>. При включении YouTube/Discord EngVPN ставит правила и поднимает nfqws. Если NFQUEUE недоступен на ядре — остаётся маршрутизация direct/VPN.</p></div>`;
+  <div class="h">SMARTDNS — МИМО VPN</div>
+  <div class="group">
+    ${cell("Обход по списку", "Домены и IP идут напрямую (iptables RETURN + routing direct)", sw("smartdns.enabled", !!sd.enabled))}
+    <div class="field-block">
+      <div class="cell-title">Список доменов и IP</div>
+      <div class="cell-desc">По одному на строку: example.com, 1.2.3.4, 10.0.0.0/8</div>
+      <textarea class="text" id="smartdns-list" placeholder="telegram.org&#10;1.1.1.1">${esc((sd.entries || []).join("\n"))}</textarea>
+      <button class="primary" data-act="save-smartdns">Сохранить и применить</button>
+    </div>
+  </div>
+  <p class="muted">Обход блокировок: открытый <b>zapret/nfqws</b> через <code>engvpnd dpi</code>. SmartDNS — локальный список EngVPN (не консоль StealthSurf).</p></div>`;
 }
 function screenZapret() {
   const z = S.network.zapret;
@@ -920,6 +935,16 @@ document.addEventListener("click", (event) => {
   if (t.dataset.toggle) {
     const path = t.dataset.toggle;
     const on = !t.classList.contains("on");
+    if (path === "smartdns.enabled") {
+      S.smartdns = S.smartdns || { enabled: false, entries: [] };
+      S.smartdns.enabled = on;
+      run(async () => {
+        const text = (S.smartdns.entries || []).join("\n");
+        const result = await invoke("smartdns", { action: "apply", enabled: on, text });
+        if (result?.entries) S.smartdns = { enabled: !!result.enabled, entries: result.entries };
+      });
+      return;
+    }
     run(() => invoke("patch", { path, value: on }));
     return;
   }
@@ -974,6 +999,17 @@ document.addEventListener("click", (event) => {
     if (ip) run(() => invoke("deviceSet", { ip, name: ip }));
     return;
   }
+  if (act === "scan-devices") return run(async () => {
+    await invoke("scanDevices", {});
+    toast("Список устройств обновлён");
+  });
+  if (act === "save-smartdns") return run(async () => {
+    const text = document.querySelector("#smartdns-list")?.value || "";
+    const enabled = !!(S.smartdns?.enabled);
+    const result = await invoke("smartdns", { action: "apply", enabled, text });
+    if (result && result.entries) S.smartdns = { enabled: !!result.enabled, entries: result.entries };
+    toast("SmartDNS применён");
+  });
   if (act === "why") return run(async () => {
     const host = document.querySelector("#why").value.trim();
     ui.result = await invoke("explain", { host, clientIp: t.dataset.ip }, { quiet: true });

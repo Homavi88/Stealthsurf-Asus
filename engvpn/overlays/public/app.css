@@ -214,7 +214,10 @@ button { cursor: pointer; }
 .loadline { text-align: center; color: var(--muted); font-size: 13px; margin: 14px 0; }
 .card {
   background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 14px 14px;
-  box-shadow: 0 10px 30px rgba(0,0,0,.18);
+  box-shadow: 0 8px 24px rgba(37, 99, 235, .08);
+}
+:root[data-theme="dark"] .card, :root[data-theme="retro"] .card, :root[data-theme="halloween"] .card {
+  box-shadow: 0 10px 30px rgba(0,0,0,.28);
 }
 .card + .card { margin-top: 10px; }
 .card-btn { width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 0; }
@@ -265,7 +268,19 @@ button { cursor: pointer; }
 .drawer-body { overflow: auto; padding: 8px 14px 24px; }
 .group { background: var(--card-2); border-radius: 18px; padding: 4px; margin: 10px 0; }
 .search { display: flex; gap: 8px; align-items: center; background: var(--input); border-radius: 14px; padding: 10px 12px; margin: 8px 0; }
+.search-ico { color: var(--faint); font-size: 15px; flex: 0 0 auto; }
 .search input { border: 0; background: transparent; outline: none; width: 100%; padding: 0; }
+.section-count { margin: 4px 4px 8px; font-size: 12px; letter-spacing: .02em; text-transform: uppercase; }
+.device-list { background: var(--card-2); border-radius: 16px; padding: 4px; margin-bottom: 10px; }
+.device-row { padding: 12px 10px; }
+.device-row .edit-btn { opacity: .45; width: 32px; height: 32px; }
+.device-row:hover .edit-btn { opacity: 1; }
+.dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 4px; vertical-align: middle;
+}
+.dot.on { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 22%, transparent); }
+.dot.off { background: #b0b8c4; }
 .nav-item, .cell {
   display: flex; gap: 12px; align-items: center; width: 100%; text-align: left;
   background: transparent; border: 0; color: inherit; padding: 14px 12px; border-radius: 14px;

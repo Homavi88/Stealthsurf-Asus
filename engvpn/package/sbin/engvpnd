@@ -39,8 +39,13 @@ Usage: engvpnd <command> [options]
                                Open zapret/nfqws DPI (NFQUEUE packet mangling)
   warp <create|status|import-file|gre-up|gre-down|dry-run>
                                Cloudflare WARP (open API) + optional GRE tunnel
+  backup <create|restore|latest|list>
+                               Snapshot / restore prefix data + package files
+  smartdns <status|apply|stop|dry-run>
+                               Domain/IP bypass list → routing + iptables RETURN
+  discover                     LAN devices from ARP/neigh/dnsmasq (JSONL)
   reconnect                    Re-apply transparent rules + restart panel service
-  cleanup                      Tear down transparent/dpi rules and temp files
+  cleanup                      Tear down transparent/dpi/smartdns rules and temp files
   watchdog                     One-shot health: panel port + optional transparent restore
   version                      Print package version
 EOF
@@ -200,6 +205,32 @@ cmd_warp() {
 	sh "$SHARE/warp.sh" "$@"
 }
 
+cmd_backup() {
+	[ -x "$SHARE/backup.sh" ] || {
+		echo "engvpnd: missing backup.sh" >&2
+		exit 1
+	}
+	sh "$SHARE/backup.sh" "$@"
+}
+
+cmd_smartdns() {
+	[ -x "$SHARE/smartdns.sh" ] || {
+		echo "engvpnd: missing smartdns.sh" >&2
+		exit 1
+	}
+	ensure_data
+	sh "$SHARE/smartdns.sh" "$@"
+}
+
+cmd_discover() {
+	[ -x "$SHARE/discover-devices.sh" ] || {
+		echo "engvpnd: missing discover-devices.sh" >&2
+		exit 1
+	}
+	ensure_data
+	sh "$SHARE/discover-devices.sh" "$@"
+}
+
 cmd_reconnect() {
 	ensure_data
 	# Re-apply transparent rules if configured
@@ -210,6 +241,10 @@ cmd_reconnect() {
 	if [ -f "$DATA_DIR/dpi.conf" ]; then
 		en=$(awk -F= '$1=="enabled"{print $2}' "$DATA_DIR/dpi.conf" 2>/dev/null)
 		[ "$en" = 1 ] && sh "$SHARE/dpi.sh" apply 2>/dev/null || true
+	fi
+	if [ -f "$DATA_DIR/smartdns.conf" ]; then
+		en=$(awk -F= '$1=="enabled"{print $2}' "$DATA_DIR/smartdns.conf" 2>/dev/null)
+		[ "$en" = 1 ] && sh "$SHARE/smartdns.sh" apply 2>/dev/null || true
 	fi
 	if [ -x "$SHARE/service.sh" ]; then
 		sh "$SHARE/service.sh" restart
@@ -223,6 +258,7 @@ cmd_reconnect() {
 cmd_cleanup() {
 	[ -x "$SHARE/transparent.sh" ] && sh "$SHARE/transparent.sh" stop || true
 	[ -x "$SHARE/dpi.sh" ] && sh "$SHARE/dpi.sh" stop || true
+	[ -x "$SHARE/smartdns.sh" ] && sh "$SHARE/smartdns.sh" stop || true
 	[ -x "$SHARE/warp.sh" ] && sh "$SHARE/warp.sh" gre-down || true
 	rm -rf /tmp/engvpn /tmp/engvpn-package /tmp/engvpn-update.* /tmp/engvpn-zapret.* /tmp/engvpn-nfqws.* 2>/dev/null || true
 	echo "cleanup: done"
@@ -282,6 +318,9 @@ update) cmd_update "$@" ;;
 transparent) cmd_transparent "$@" ;;
 dpi) cmd_dpi "$@" ;;
 warp) cmd_warp "$@" ;;
+backup) cmd_backup "$@" ;;
+smartdns) cmd_smartdns "$@" ;;
+discover) cmd_discover "$@" ;;
 reconnect) cmd_reconnect ;;
 cleanup) cmd_cleanup ;;
 watchdog) cmd_watchdog ;;

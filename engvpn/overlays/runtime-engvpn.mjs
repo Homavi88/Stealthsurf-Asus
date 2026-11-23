@@ -3,10 +3,11 @@
  * Open components only — shells out to engvpnd / transparent / dpi / warp / update.
  * StealthSurf HTTP API (user-provided API keys) + local subscription URLs.
  */
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { hostname, totalmem, freemem, arch, platform, cpus, loadavg } from "node:os";
 import { randomUUID } from "node:crypto";
@@ -243,7 +244,7 @@ async function ssFetch(path, apiKey) {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       Accept: "application/json",
-      "User-Agent": "EngVPN/0.4",
+      "User-Agent": "EngVPN/0.5",
     },
     signal: AbortSignal.timeout(30000),
   });
@@ -485,6 +486,264 @@ function readDpiStatus() {
   };
 }
 
+/* ─── LAN discovery (ARP / neigh / dnsmasq) ─── */
+
+function normalizeMac(mac) {
+  return String(mac || "")
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, ":");
+}
+
+function deviceIdFromMac(mac) {
+  const clean = normalizeMac(mac).replace(/:/g, "");
+  return clean ? `lan-${clean.slice(-8)}` : `lan-${randomUUID().slice(0, 8)}`;
+}
+
+function parseProcArp() {
+  const path = "/proc/net/arp";
+  if (!existsSync(path)) return [];
+  const out = [];
+  for (const line of readFileSync(path, "utf8").split("\n").slice(1)) {
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 4) continue;
+    const [ip, , , mac] = parts;
+    if (!mac || mac === "00:00:00:00:00:00") continue;
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(ip)) continue;
+    out.push({ ip, mac: normalizeMac(mac), online: true, name: "" });
+  }
+  return out;
+}
+
+function parseDnsmasqLeases() {
+  const candidates = [
+    "/var/lib/misc/dnsmasq.leases",
+    "/tmp/dnsmasq.leases",
+    "/tmp/var/lib/misc/dnsmasq.leases",
+    "/jffs/dnsmasq.leases",
+    join(DATA, "dnsmasq.leases"),
+  ];
+  const out = [];
+  for (const path of candidates) {
+    if (!existsSync(path)) continue;
+    for (const line of readFileSync(path, "utf8").split("\n")) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 4) continue;
+      const [, mac, ip, host] = parts;
+      if (!mac || !ip) continue;
+      out.push({
+        ip,
+        mac: normalizeMac(mac),
+        online: true,
+        name: host && host !== "*" ? host : "",
+      });
+    }
+  }
+  return out;
+}
+
+function parseNvramNames() {
+  const map = new Map();
+  try {
+    // Best-effort: custom_clientlist from a cached file written by discover script
+    const cache = join(DATA, "client-names.tsv");
+    if (existsSync(cache)) {
+      for (const line of readFileSync(cache, "utf8").split("\n")) {
+        const [mac, name] = line.split("\t");
+        if (mac && name) map.set(normalizeMac(mac), name);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return map;
+}
+
+/** Merge shell discover JSONL + local ARP/leases; preserve panel exclusions/names. */
+export function discoverLanDevices(state) {
+  const byIp = new Map();
+  const absorb = (row) => {
+    if (!row?.ip || !row?.mac) return;
+    if (row.ip.startsWith("127.") || row.ip === "0.0.0.0") return;
+    const prev = byIp.get(row.ip) || {};
+    byIp.set(row.ip, {
+      ip: row.ip,
+      mac: normalizeMac(row.mac || prev.mac),
+      name: row.name || prev.name || "",
+      online: row.online !== false,
+    });
+  };
+  for (const row of parseDnsmasqLeases()) absorb(row);
+  for (const row of parseProcArp()) absorb(row);
+
+  // Shell helper (ip neigh + nvram names) when available
+  try {
+    const script = join(SHARE, "discover-devices.sh");
+    if (existsSync(script)) {
+      const cached = join(DATA, "discover.cache.jsonl");
+      if (existsSync(cached)) {
+        for (const line of readFileSync(cached, "utf8").split("\n")) {
+          if (!line.trim()) continue;
+          try {
+            absorb(JSON.parse(line));
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      let dir = "";
+      try {
+        dir = mkdtempSync(join(tmpdir(), "engvpn-disc-"));
+        const outFile = join(dir, "out.jsonl");
+        execFileSync("sh", [script, outFile], {
+          env: { ...process.env, ENGVPN_DATA_DIR: DATA },
+          timeout: 4000,
+        });
+        if (existsSync(outFile)) {
+          const body = readFileSync(outFile, "utf8");
+          writeFileSync(cached, body, { mode: 0o600 });
+          for (const line of body.split("\n")) {
+            if (!line.trim() || line.startsWith("count=")) continue;
+            try {
+              absorb(JSON.parse(line));
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } catch {
+        /* discover optional on non-Merlin hosts */
+      } finally {
+        if (dir) {
+          try {
+            rmSync(dir, { recursive: true, force: true });
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+
+  const names = parseNvramNames();
+  const existing = new Map((state?.devices || []).map((d) => [d.ip, d]));
+  const existingByMac = new Map((state?.devices || []).map((d) => [normalizeMac(d.mac), d]));
+  const devices = [];
+  for (const row of byIp.values()) {
+    const prev = existing.get(row.ip) || existingByMac.get(row.mac) || {};
+    const name = prev.name && !prev.demo ? prev.name : row.name || names.get(row.mac) || row.ip;
+    devices.push({
+      id: prev.id || deviceIdFromMac(row.mac),
+      name,
+      ip: row.ip,
+      mac: row.mac,
+      online: row.online !== false,
+      isNew: prev.isNew ?? !prev.id,
+      excluded: !!prev.excluded,
+      route: prev.route || "default",
+      configId: prev.configId || "",
+      bypass: prev.bypass || [],
+      traffic: prev.traffic || { session: 0, today: 0, d7: 0, d30: 0 },
+      demo: false,
+    });
+  }
+  devices.sort((a, b) => a.ip.localeCompare(b.ip, undefined, { numeric: true }));
+  return devices;
+}
+
+/** Replace demo devices with live LAN list when discovery finds anything. */
+export function mergeDiscoveredDevices(state) {
+  if (!state) return [];
+  const found = discoverLanDevices(state);
+  if (!found.length) {
+    // Keep non-demo user-added devices; drop demo placeholders when on Merlin-ish host
+    const real = (state.devices || []).filter((d) => !d.demo);
+    if (real.length) {
+      state.devices = real;
+      return real;
+    }
+    return state.devices || [];
+  }
+  // Preserve manually added offline devices not seen in ARP
+  const seen = new Set(found.map((d) => d.ip));
+  for (const d of state.devices || []) {
+    if (d.demo) continue;
+    if (seen.has(d.ip)) continue;
+    found.push({ ...d, online: false, demo: false });
+  }
+  state.devices = found;
+  return found;
+}
+
+/* ─── SmartDNS bypass (local domain/IP list) ─── */
+
+export function readSmartDns() {
+  const confPath = join(DATA, "smartdns.conf");
+  const listPath = join(DATA, "smartdns-bypass.txt");
+  let enabled = false;
+  if (existsSync(confPath)) {
+    for (const line of readFileSync(confPath, "utf8").split("\n")) {
+      const m = line.match(/^enabled=(.*)$/);
+      if (m) enabled = m[1] === "1";
+    }
+  }
+  const entries = [];
+  if (existsSync(listPath)) {
+    for (const line of readFileSync(listPath, "utf8").split("\n")) {
+      const t = line.trim();
+      if (!t || t.startsWith("#")) continue;
+      entries.push(t);
+    }
+  }
+  return { enabled, entries, stub: false, note: "" };
+}
+
+export function writeSmartDns({ enabled, entries } = {}) {
+  mkdirSync(DATA, { recursive: true });
+  const cur = readSmartDns();
+  const nextEnabled = enabled != null ? !!enabled : cur.enabled;
+  const nextEntries = Array.isArray(entries) ? entries.map((e) => String(e).trim()).filter(Boolean) : cur.entries;
+  writeFileSync(join(DATA, "smartdns.conf"), `enabled=${nextEnabled ? "1" : "0"}\n`, { mode: 0o600 });
+  writeFileSync(
+    join(DATA, "smartdns-bypass.txt"),
+    `# EngVPN SmartDNS bypass — domain, IP or CIDR per line\n${nextEntries.join("\n")}${nextEntries.length ? "\n" : ""}`,
+    { mode: 0o600 },
+  );
+  return { enabled: nextEnabled, entries: nextEntries, stub: false };
+}
+
+export async function engvpnSmartDns(command = "status", body = {}) {
+  if (body && typeof body === "object") {
+    if (body.enabled != null || Array.isArray(body.entries) || Array.isArray(body.domains)) {
+      const entries = body.entries || body.domains;
+      writeSmartDns({ enabled: body.enabled, entries });
+    }
+    if (typeof body.text === "string") {
+      const entries = body.text
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter((l) => l && !l.startsWith("#"));
+      writeSmartDns({ enabled: body.enabled, entries });
+    }
+  }
+  const action = command === "save" ? "apply" : command || "status";
+  try {
+    const { stdout } = await shEngvpnd("smartdns", action === "get" ? "status" : action);
+    return { ok: true, ...readSmartDns(), output: stdout.trim() };
+  } catch (e) {
+    return { ok: true, ...readSmartDns(), output: String(e.message || e) };
+  }
+}
+
+export async function engvpnBackup(command = "latest", prefix) {
+  const args = [command || "latest"];
+  if (prefix) args.push(prefix);
+  const { stdout } = await shEngvpnd("backup", ...args);
+  return { ok: true, output: stdout.trim() };
+}
+
 /** StealthSurf-shaped get_* helpers backed by EngVPN panel state + daemon. */
 export function engvpnParityInvoke(command, body, state, snapshotFn) {
   const snap = typeof snapshotFn === "function" ? snapshotFn() : state;
@@ -509,8 +768,10 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
           zapret: true,
           dpi: true,
           telegramDirect: true,
-          smartDns: false,
+          smartDns: true,
           lanProxyServer: true,
+          lanDiscover: true,
+          backup: true,
           warp: true,
           gre: true,
           gaming: false,
@@ -557,8 +818,9 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
       };
     case "get_router_devices":
     case "get_router_new_devices":
-    case "scan_devices":
-      return (state.devices || []).map((d) => ({
+    case "scan_devices": {
+      const list = mergeDiscoveredDevices(state);
+      return list.map((d) => ({
         ip: d.ip,
         mac: d.mac,
         name: d.name,
@@ -568,7 +830,9 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
         excluded: !!d.excluded,
         sentBytes: d.traffic?.session || 0,
         receivedBytes: 0,
+        demo: !!d.demo,
       }));
+    }
     case "get_router_load":
     case "get_load_monitor":
       return {
@@ -645,7 +909,15 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "get_telegram_direct_status":
       return { enabled: !!state.network?.telegramDirect, ready: !!state.network?.telegramDirect };
     case "get_smart_dns_bypass":
-      return { enabled: false, stub: true, note: "SmartDNS / сервисы без VPN консоли StealthSurf не клонированы" };
+    case "get_smartdns":
+      return { ...readSmartDns(), path: join(DATA, "smartdns-bypass.txt") };
+    case "set_smart_dns_bypass":
+    case "set_smartdns":
+    case "save_smartdns":
+      return { alias: "engvpnSmartDns", action: "apply", ...body };
+    case "engvpn_backup":
+    case "backup_create":
+      return { alias: "engvpnBackup", action: body?.action || "create" };
     case "get_stored_cores":
       return state.runtime?.cores || state.engine?.cores || {};
     case "get_warp_status":

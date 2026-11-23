@@ -16,7 +16,7 @@ mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh dpi.sh warp.sh set-password.mjs verify-minisign.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh dpi.sh warp.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
 	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
 done
@@ -50,6 +50,15 @@ gre_enabled=0
 gre_remote=
 gre_local=
 gre_dev=engvpn-gre
+EOF
+cat >"$STAGE/share/engvpn/smartdns.conf.example" <<'EOF'
+enabled=0
+EOF
+cat >"$STAGE/share/engvpn/smartdns-bypass.txt.example" <<'EOF'
+# domain, IP or CIDR — traffic to these goes direct (no VPN)
+# example.com
+# 1.2.3.4
+# 10.0.0.0/8
 EOF
 
 # Vendor open panel runtime from alfa-addon (no proprietary binaries).
@@ -141,7 +150,9 @@ text = text.replace(
     'referencePanel: "http://192.168.50.1:8800"',
     'referencePanel: "http://192.168.50.1:8790"',
 )
-# boot log brand
+# Prefer live LAN discovery over demo devices (empty until scan fills)
+if "demoDevices()" in text and "devices: []" not in text:
+    text = text.replace("devices: demoDevices(),", "devices: [],  // filled by EngVPN LAN discovery (ARP/dnsmasq)")
 st.write_text(text)
 print("patched state.mjs EngVPN defaults")
 # runtime.mjs: EngVPN invoke + brand strings + StealthSurf-shaped get_* aliases
@@ -157,12 +168,22 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from "./runtime-engvpn.mjs";',
+    )
+elif "readSmartDns" not in text and "engvpnSmartDns" in text:
+    text = text.replace(
+        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, writeTransparentConf",
+        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf",
+    )
+elif "engvpnSmartDns" not in text:
+    text = text.replace(
+        "writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
+        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
     )
 elif "engvpnSaveAccount" not in text:
     text = text.replace(
         "writeTransparentConf, modeFromRouter, engvpnParityInvoke } from \"./runtime-engvpn.mjs\";",
-        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
+        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
     )
 needle = '      case "autoSetup":'
 insert = '''      case "transparent":
@@ -190,6 +211,18 @@ insert = '''      case "transparent":
       case "clearAccount":
       case "clear_account":
         return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
+      case "smartdns":
+      case "smartDns":
+      case "engvpnSmartDns":
+        return engvpnSmartDns(body.action || body.command || "apply", body);
+      case "engvpnBackup":
+      case "backup":
+        return engvpnBackup(body.action || body.command || "create", body.prefix);
+      case "scanDevices":
+      case "refreshDevices":
+        mergeDiscoveredDevices(state);
+        saveState(state);
+        return snapshot();
       case "autoSetup":'''
 if "case \"transparent\":" not in text:
     if needle not in text:
@@ -207,6 +240,32 @@ elif "case \"saveAccount\":" not in text:
         '        return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
         '      case "clearAccount":\n      case "clear_account":\n'
         '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "smartdns":\n      case "smartDns":\n      case "engvpnSmartDns":\n'
+        '        return engvpnSmartDns(body.action || body.command || "apply", body);\n'
+        '      case "engvpnBackup":\n      case "backup":\n'
+        '        return engvpnBackup(body.action || body.command || "create", body.prefix);\n'
+        '      case "scanDevices":\n      case "refreshDevices":\n'
+        '        mergeDiscoveredDevices(state);\n'
+        '        saveState(state);\n'
+        '        return snapshot();\n'
+        '      case "autoSetup":',
+        1,
+    )
+elif "case \"smartdns\":" not in text:
+    text = text.replace(
+        '      case "clearAccount":\n      case "clear_account":\n'
+        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "autoSetup":',
+        '      case "clearAccount":\n      case "clear_account":\n'
+        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
+        '      case "smartdns":\n      case "smartDns":\n      case "engvpnSmartDns":\n'
+        '        return engvpnSmartDns(body.action || body.command || "apply", body);\n'
+        '      case "engvpnBackup":\n      case "backup":\n'
+        '        return engvpnBackup(body.action || body.command || "create", body.prefix);\n'
+        '      case "scanDevices":\n      case "refreshDevices":\n'
+        '        mergeDiscoveredDevices(state);\n'
+        '        saveState(state);\n'
+        '        return snapshot();\n'
         '      case "autoSetup":',
         1,
     )
@@ -272,6 +331,33 @@ elif 'router.transparentMethod' not in text and 'if (body?.path === "router.mode
         1,
     )
 
+# Enrich snapshot with smartdns + one-shot LAN discover when only demos/empty
+import re as _re
+if "__snap.smartdns" not in text:
+    m = _re.search(r"function snapshot\(\)\s*\{.*?^\s*(return publicState\([^;]+;)", text, _re.S | _re.M)
+    if m:
+        ret = m.group(1)
+        replacement = (
+            "const __snap = " + ret[len("return "):].rstrip(";") + ";\n"
+            "    try { __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n"
+            "    try {\n"
+            "      const onlyDemo = !(state.devices || []).length || (state.devices || []).every((d) => d.demo);\n"
+            "      if (onlyDemo) mergeDiscoveredDevices(state);\n"
+            "    } catch { /* ignore */ }\n"
+            "    return __snap;"
+        )
+        text = text[: m.start(1)] + replacement + text[m.end(1) :]
+        print("patched snapshot() with smartdns + discover")
+
+if "engvpnSmartDns" in text and "alias === \"engvpnSmartDns\"" not in text and "engvpnParityInvoke(" in text:
+    text = text.replace(
+        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n",
+        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
+        "      if (parity && parity.alias === \"engvpnSmartDns\") return engvpnSmartDns(parity.action || \"apply\", parity);\n"
+        "      if (parity && parity.alias === \"engvpnBackup\") return engvpnBackup(parity.action || \"create\", parity.prefix);\n",
+        1,
+    )
+
 # StealthSurf-compatible get_* / update_router_settings before switch body
 if "engvpnParityInvoke(" not in text:
     text = text.replace(
@@ -283,6 +369,8 @@ if "engvpnParityInvoke(" not in text:
         "      if (parity && parity.alias === \"setPassword\") return setPassword({ oldPassword: parity.oldPassword || parity.current || \"\", password: parity.password || parity.newPassword || \"\" });\n"
         "      if (parity && parity.alias === \"engvpnSaveAccount\") return engvpnSaveAccount(parity, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
         "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
+        "      if (parity && parity.alias === \"engvpnSmartDns\") return engvpnSmartDns(parity.action || \"apply\", parity);\n"
+        "      if (parity && parity.alias === \"engvpnBackup\") return engvpnBackup(parity.action || \"create\", parity.prefix);\n"
         "      if (command === \"update_router_settings\") {\n"
         "        saveState(state);\n"
         "        try { await engvpnSyncTransparent(); } catch { /* ignore */ }\n"
@@ -527,7 +615,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.4 hard-parity — API keys, open DPI/WARP/Ferrum-slot, Minisign, TPROXY+UDP.",
+  "notes": "EngVPN 0.5 — backup/restore, LAN ARP discovery, SmartDNS bypass, UI polish.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -555,7 +643,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.4 hard-parity — API keys, open DPI/WARP/Ferrum-slot, Minisign, TPROXY+UDP.",
+  "notes": "EngVPN 0.5 — backup/restore, LAN ARP discovery, SmartDNS bypass, UI polish.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

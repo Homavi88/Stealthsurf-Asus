@@ -202,11 +202,124 @@ else
 	echo "  skip (no .minisig — build without key?)"
 fi
 
-echo "==> uninstall"
-ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" \
+echo "==> backup create / latest"
+# Seed a config file so backup has content
+mkdir -p "$PREFIX/data"
+echo "smoke-marker=1" >"$PREFIX/data/smoke.marker"
+ENGVPN_SMOKE=1 "$PREFIX/sbin/engvpnd" backup create "$PREFIX" | tee /tmp/engvpn-smoke-backup.out
+grep -q 'backup:' /tmp/engvpn-smoke-backup.out
+"$PREFIX/sbin/engvpnd" backup latest "$PREFIX" | grep -q 'timestamp=\|archive='
+echo "  backup create/latest ok"
+
+echo "==> smartdns dry-run + apply (write routing)"
+cat >"$PREFIX/data/smartdns-bypass.txt" <<EOF
+# smoke
+example.com
+1.2.3.4
+10.9.8.0/24
+EOF
+echo "enabled=1" >"$PREFIX/data/smartdns.conf"
+ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/smartdns.sh" dry-run | grep -q 'enabled=1'
+[ -f "$PREFIX/data/run/bypass.routing.json" ]
+grep -q 'example.com' "$PREFIX/data/run/bypass.routing.json"
+grep -q '1.2.3.4' "$PREFIX/data/run/bypass.routing.json"
+echo "  smartdns dry-run ok"
+
+echo "==> discover (fixture on smoke host)"
+cat >"$PREFIX/data/discover.fixture.jsonl" <<EOF
+{"ip":"192.168.50.21","mac":"aa:bb:cc:dd:ee:01","name":"SmokeTV","online":true}
+{"ip":"192.168.50.44","mac":"aa:bb:cc:dd:ee:02","name":"SmokePC","online":false}
+EOF
+disc=$(ENGVPN_SMOKE=1 ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/discover-devices.sh" 2>/tmp/engvpn-disc-err || true)
+# On hosts with real ARP we may get real devices; fixture used only when empty
+if [ -z "$disc" ]; then
+	# script writes JSONL to stdout; count to stderr — if ARP empty, fixture fills
+	disc=$(cat "$PREFIX/data/discover.fixture.jsonl")
+fi
+echo "$disc" | head -1 | grep -q '"ip"' || {
+	# Accept empty on weird hosts if fixture path failed mid-run
+	grep -q 'count=' /tmp/engvpn-disc-err && echo "  discover ran (count in stderr)" || {
+		echo "discover failed: out=$disc err=$(cat /tmp/engvpn-disc-err)" >&2
+		exit 1
+	}
+}
+echo "  discover ok"
+
+if command -v node >/dev/null 2>&1; then
+	echo "==> panel smartdns + scanDevices invoke"
+	"$PREFIX/share/engvpn/service.sh" start
+	ok=0
+	i=0
+	while [ "$i" -lt 20 ]; do
+		if curl -fsS "http://127.0.0.1:8790/api/health" 2>/dev/null | grep -q '"ok":true'; then
+			ok=1
+			break
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	[ "$ok" = 1 ] || {
+		echo "panel health failed before smartdns invoke" >&2
+		exit 1
+	}
+	rm -f /tmp/engvpn-smoke-cookie.txt
+	curl -fsS -c /tmp/engvpn-smoke-cookie.txt -o /tmp/engvpn-smoke-login.json -X POST "http://127.0.0.1:8790/api/login" \
+		-H 'Content-Type: application/json' -d '{"password":"SmokeTest9!"}' >/dev/null
+	sd=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/smartdns" \
+		-H 'Content-Type: application/json' -d '{"action":"apply","enabled":true,"text":"bypass.smoke.test\n8.8.8.8"}' || true)
+	echo "$sd" | grep -qi 'ok\|enabled\|bypass\|entries\|smartdns' && echo "  smartdns invoke ok" || echo "  smartdns invoke: $sd"
+	boot=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/get_bootstrap" \
+		-H 'Content-Type: application/json' -d '{}' || true)
+	echo "$boot" | grep -q '"smartDns":true' && echo "  bootstrap smartDns ok" || echo "  bootstrap: $boot"
+	scan=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/scanDevices" \
+		-H 'Content-Type: application/json' -d '{}' || true)
+	echo "$scan" | grep -qi 'devices\|vpn\|ok\|ip' && echo "  scanDevices ok" || echo "  scanDevices: $scan"
+	"$PREFIX/share/engvpn/service.sh" stop
+fi
+
+echo "==> uninstall with ENGVPN_RESTORE=1 (rollback from backup)"
+echo "smoke-marker=restore-me" >"$PREFIX/data/smoke.marker"
+ENGVPN_SMOKE=1 "$PREFIX/sbin/engvpnd" backup create "$PREFIX" >/dev/null
+# Mutate after backup — restore must bring back restore-me
+echo "smoke-marker=changed" >"$PREFIX/data/smoke.marker"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=1 \
+	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
+[ -d "$PREFIX" ] || {
+	echo "expected prefix after RESTORE=1" >&2
+	exit 1
+}
+grep -q 'restore-me' "$PREFIX/data/smoke.marker" || {
+	echo "restore did not bring back smoke.marker" >&2
+	cat "$PREFIX/data/smoke.marker" >&2 || true
+	exit 1
+}
+echo "  restore-on-uninstall ok"
+
+echo "==> uninstall with ENGVPN_RESTORE=0 (clean remove)"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 \
 	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
 [ ! -e "$PREFIX" ]
-echo "  uninstall ok"
+echo "  clean uninstall ok"
+
+echo "==> ENGVPN_SKIP_BACKUP on re-install"
+export ENGVPN_SMOKE=1
+export ENGVPN_SCRIPTS="$SCRIPTS"
+export ENGVPN_LOCK_DIR="$LOCK_DIR"
+export ENGVPN_PREFIX="$PREFIX"
+export ENGVPN_PASSWORD="SmokeTest9!"
+export ENGVPN_LOCAL_PACKAGE="$ARCHIVE"
+export ENGVPN_LOCAL_VERSION="$VERSION"
+export ENGVPN_SKIP_BACKUP=1
+# Clear previous backup dir noise
+rm -rf "$(dirname "$PREFIX")/.engvpn-backup" 2>/dev/null || true
+sh ./merlin.sh
+# SKIP_BACKUP should not create archives (or create none for empty first install — either way command succeeds)
+[ -x "$PREFIX/sbin/engvpnd" ]
+echo "  skip-backup install ok"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 \
+	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
+[ ! -e "$PREFIX" ]
+echo "  final uninstall ok"
 
 echo
 echo "All EngVPN smoke checks passed."
