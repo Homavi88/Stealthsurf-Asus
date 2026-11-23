@@ -656,7 +656,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5 — backup/restore, LAN ARP discovery, SmartDNS bypass, UI polish.",
+  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -684,7 +684,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5 — backup/restore, LAN ARP discovery, SmartDNS bypass, UI polish.",
+  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
