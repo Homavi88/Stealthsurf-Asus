@@ -10,7 +10,7 @@
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: после публикации — `engvpn-0.5.0` в GitHub Releases.
+Релиз: [engvpn-0.5.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.0)
 
 ---
 
