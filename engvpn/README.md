@@ -1,97 +1,97 @@
-# EngVPN — Asuswrt-Merlin addon
+# EngVPN — аддон для Asuswrt-Merlin
 
-Open-source Merlin VPN addon with a StealthSurf-comparable **install path** and runtime surface. Built from open components only (Node panel, downloadable Xray / sing-box / mihomo). Does **not** ship StealthSurf proprietary binaries or trademarks.
+Открытый VPN-аддон для Merlin с установкой и поверхностью, близкой к StealthSurf. Собран только из открытых компонентов (панель на Node, загружаемые Xray / sing-box / mihomo). **Не** содержит проприетарных бинарников и торговых марок StealthSurf.
 
 | | |
 | --- | --- |
-| Version | **0.2.0** ([`VERSION`](./VERSION)) |
-| Panel | `http://<lan_ip>:8790/` (password required) |
-| Install prefix | `/jffs/addons/engvpn` or `/tmp/mnt/<USB>/engvpn` |
+| Версия | **0.2.0** ([`VERSION`](./VERSION)) |
+| Панель | `http://<lan_ip>:8790/` (нужен пароль) |
+| Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
-| Isolation | Leaves SurfGate `:1131`, official StealthSurf `:8800`, and alfa `:8788` alone |
+| Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Release: [engvpn-0.2.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.2.0)
+Релиз: [engvpn-0.2.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.2.0)
 
 ---
 
-## Requirements
+## Требования
 
-1. **Asuswrt-Merlin** with JFFS custom scripts enabled  
-2. **Entware** (`amtm`) and **Node.js**: `opkg update && opkg install node`  
-3. Root SSH and an HTTPS client (`curl`)  
-4. Enough free space on JFFS (or an ext2/3/4 USB drive)
+1. **Asuswrt-Merlin** с включёнными пользовательскими скриптами JFFS  
+2. **Entware** (`amtm`) и **Node.js**: `opkg update && opkg install node`  
+3. Root-доступ по SSH и HTTPS-клиент (`curl`)  
+4. Достаточно места на JFFS (или USB с ext2/3/4)
 
-## Install
+## Установка
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-The installer asks for a panel password (8–128 characters), downloads the package for your CPU (`merlin-aarch64` / `merlin-armv7`), verifies **SHA-256**, and starts the service.
+Установщик запросит пароль панели (8–128 символов), скачает пакет под ваш CPU (`merlin-aarch64` / `merlin-armv7`), проверит **SHA-256** и запустит сервис.
 
-Non-interactive:
+Без интерактива:
 
 ```sh
 ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Optional:
+Опционально:
 
-| Variable | Meaning |
+| Переменная | Назначение |
 | --- | --- |
-| `ENGVPN_PREFIX` | Install path (e.g. `/tmp/mnt/USB/engvpn`) |
-| `ENGVPN_LOCAL_PACKAGE` | Path to a local `.tar.gz` (skip download) |
-| `ENGVPN_FEED` | Override feed URL |
+| `ENGVPN_PREFIX` | Путь установки (например `/tmp/mnt/USB/engvpn`) |
+| `ENGVPN_LOCAL_PACKAGE` | Путь к локальному `.tar.gz` (без скачивания) |
+| `ENGVPN_FEED` | Другой URL ленты (feed) |
 
-Open the panel:
+Откройте панель:
 
 ```text
 http://192.168.50.1:8790/
 ```
 
-(use your LAN IP). Sign in with the password you chose.
+(подставьте IP роутера в LAN). Войдите с выбранным паролем.
 
-## Everyday use
+## Повседневное использование
 
 ```sh
 engvpnd status
 engvpnd transparent status
 engvpnd update-check
-engvpnd update                 # self-update from the feed (SHA-256)
+engvpnd update                 # самообновление из feed (SHA-256)
 ```
 
-Service:
+Сервис:
 
 ```sh
 /jffs/addons/engvpn/share/engvpn/service.sh start|stop|restart|check
 ```
 
-### Transparent / selective VPN
+### Прозрачный / выборочный VPN
 
-Edit `/jffs/addons/engvpn/data/transparent.conf`:
+Правьте `/jffs/addons/engvpn/data/transparent.conf`:
 
 ```ini
 mode=all          # off | all | selected | exclude
-method=redirect   # redirect (default) | tproxy
+method=redirect   # redirect (по умолчанию) | tproxy
 port=12345
 killswitch=0
 ```
 
-Optional device list: `data/devices.select` (one IP or MAC per line). Then:
+Список устройств (по желанию): `data/devices.select` (IP или MAC, по одному на строку). Затем:
 
 ```sh
 engvpnd transparent apply
 ```
 
-Uses open **iptables** REDIRECT (or TPROXY when available) plus a dokodemo inbound in Xray — not `stealthsurf-nfqws`.
+Использует открытый **iptables** REDIRECT (или TPROXY, если доступен) и dokodemo inbound в Xray — не `stealthsurf-nfqws`.
 
-## Uninstall
+## Удаление
 
 ```sh
 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
 ```
 
-## Build / smoke (developers)
+## Сборка / smoke (для разработчиков)
 
 ```sh
 cd engvpn
@@ -101,13 +101,13 @@ cd engvpn
 ./publish-release.sh --push   # GitHub Release engvpn-$VERSION
 ```
 
-## Gaps vs official StealthSurf
+## Отличия от официального StealthSurf
 
 | Upstream | EngVPN |
 | --- | --- |
-| Closed `stealthsurf-routerd` / GRE / OpenFlux / Ferrum | Not shipped — open Node panel + public cores |
-| `stealthsurf-nfqws` | Not shipped — routing via iptables + dokodemo |
-| Minisign signatures | HTTPS + SHA-256 only |
-| Static daemon (no Entware) | Needs Entware **Node** |
+| Закрытый `stealthsurf-routerd` / GRE / OpenFlux / Ferrum | Не поставляется — открытая панель Node + публичные ядра |
+| `stealthsurf-nfqws` | Не поставляется — маршрутизация через iptables + dokodemo |
+| Подписи Minisign | Только HTTPS + SHA-256 |
+| Статический демон (без Entware) | Нужен Entware **Node** |
 
-More detail: project report and [PR #152](https://github.com/Homavi88/Stealthsurf-Asus/pull/152).
+Подробнее: отчёт по проекту и [PR #152](https://github.com/Homavi88/Stealthsurf-Asus/pull/152).
