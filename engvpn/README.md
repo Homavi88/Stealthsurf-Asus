@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.1** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.2** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.1](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.1)
+Релиз: [engvpn-0.5.2](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.2)
 
 ---
 
@@ -64,7 +64,7 @@ ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Hom
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.1
+## Панель 0.5.2
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -73,6 +73,7 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Сеть** — zapret/nfqws + **SmartDNS** (локальный список доменов/IP мимо VPN)  
 - **Подключение** — Cloudflare WARP + GRE  
 - **Движок** — Xray / Ferrum-слот (открытый Xray Reality) / sing-box / mihomo  
+- **Обновления** — интервал проверки feed + опциональное автообновление (Merlin `cru`)  
 
 Конфиги на диске (кратко):
 
@@ -84,6 +85,7 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 | `data/warp.conf` / `warp.profile.ini` | режим WARP и профиль WireGuard |
 | `data/gre.conf` | опциональный GRE (`gre_enabled`, remote/local) |
 | `data/smartdns.conf` + `smartdns-bypass.txt` | обход VPN по домену/IP/CIDR |
+| `data/updates.conf` | интервал проверки, `auto=0\|1`, ночное окно автоустановки |
 
 Публичный ключ Minisign: [`keys/engvpn.minisign.pub`](./keys/engvpn.minisign.pub).
 
@@ -109,6 +111,7 @@ engvpnd --help
 | `stop` | Остановить процесс панели |
 | `version` | Версия пакета |
 | `update-check` / `update` | Сверка / самообновление из feed |
+| `schedule-update …` | Периодическая проверка (+ опц. автоустановка) через Merlin `cru` |
 | `transparent …` | Прозрачный / выборочный VPN |
 | `dpi …` | zapret/nfqws (NFQUEUE) |
 | `warp …` | Cloudflare WARP + GRE |
@@ -133,6 +136,7 @@ engvpnd warp create
 engvpnd backup create
 engvpnd update-check
 engvpnd update
+engvpnd schedule-update status
 engvpnd reconnect
 engvpnd cleanup
 engvpnd watchdog
@@ -156,6 +160,23 @@ engvpnd update 90                       # ждать старт сервиса �
 ```
 
 Переменные: `ENGVPN_FEED`, `ENGVPN_PACKAGE_PREFIX`, `ENGVPN_FORCE_UPDATE=1`.
+
+### Плановая проверка и автообновление (0.5.2)
+
+Панель → **Обновления**: интервал проверки (`6h` / `12h` / `1d` / `3d` / `7d` / `off`) и тумблер **Автообновление** (по умолчанию **выкл.**).
+
+- Проверка ходит в GitHub feed (`latest.json`), как `engvpnd update-check`.
+- Если автообновление включено и в feed новее — в ночном окне (`window_start`–`window_end`, по умолчанию 02:00–05:00) вызывается `engvpnd update` (SHA-256 + Minisign).
+- Расписание хранится в `data/updates.conf` и ставится в Merlin **`cru`** (или `crontab`). После перезагрузки `services-start` / `post-mount` снова вызывает `schedule-update.sh install-cru` — job не теряется.
+
+```sh
+engvpnd schedule-update status          # conf + cru
+engvpnd schedule-update install-cru     # переустановить job из updates.conf
+engvpnd schedule-update run             # одна проверка (+ apply при auto=1)
+engvpnd schedule-update write-conf interval=12h auto=0
+```
+
+Конфиг: `data/updates.conf` (`interval`, `auto=0|1`, `window_start`, `window_end`, …). Лог: `/tmp/engvpn-update-check.log`.
 
 ### Transparent
 

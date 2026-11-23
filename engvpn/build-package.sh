@@ -16,11 +16,21 @@ mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh dpi.sh warp.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
 	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
 done
 cp -a "$ROOT/VERSION" "$STAGE/share/engvpn/VERSION"
+cat >"$STAGE/share/engvpn/updates.conf.example" <<'EOF'
+interval=1d
+auto=0
+window_start=2
+window_end=5
+geo_weekly=1
+cores_when_missing=1
+last_check=
+last_result=
+EOF
 # Minisign public key (verify on install/update)
 if [ -f "$ROOT/keys/engvpn.minisign.pub" ]; then
 	cp -a "$ROOT/keys/engvpn.minisign.pub" "$STAGE/share/engvpn/engvpn.minisign.pub"
@@ -167,8 +177,17 @@ if "transparentMethod" not in text:
     )
 text = text.replace(
     'note: "Альфа собрана локально и не ставится поверх прошивки сама."',
-    'note: "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update."',
+    'note: "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update. Расписание — Merlin cru."',
 )
+# Scheduled update defaults: check daily, auto-apply off
+text = text.replace("    updates: {\n      auto: true,", "    updates: {\n      auto: false,")
+if 'interval: "6h"' in text and "updates:" in text:
+    # Only the updates.interval default (first occurrence after updates block is fine)
+    text = text.replace(
+        '      auto: false,\n      windowStart: 2,\n      windowEnd: 5,\n      geoWeekly: true,\n      coresWhenMissing: true,\n      interval: "6h",',
+        '      auto: false,\n      windowStart: 2,\n      windowEnd: 5,\n      geoWeekly: true,\n      coresWhenMissing: true,\n      interval: "1d",',
+        1,
+    )
 text = text.replace(
     'firmware: `${platform()} / стенд альфы`',
     'firmware: `${platform()} / EngVPN`',
@@ -195,12 +214,17 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule } from "./runtime-engvpn.mjs";',
+    )
+elif "syncUpdatesSchedule" not in text and "hydratePanelSnapshot" in text:
+    text = text.replace(
+        "readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
+        "readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, engvpnScheduleUpdate } from \"./runtime-engvpn.mjs\";",
     )
 elif "hydratePanelSnapshot" not in text and "engvpnParityInvoke" in text:
     text = text.replace(
         "engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
-        "engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
+        "engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, engvpnScheduleUpdate } from \"./runtime-engvpn.mjs\";",
     )
 elif "readSmartDns" not in text and "engvpnSmartDns" in text:
     text = text.replace(
@@ -224,7 +248,14 @@ insert = '''      case "transparent":
         return engvpnTransparent("apply", body);
       case "engvpnUpdateCheck":
       case "checkEngvpnUpdates":
-        return engvpnUpdateCheck();
+        {
+          const res = await engvpnUpdateCheck(state);
+          saveState(state);
+          return res;
+        }
+      case "engvpnScheduleUpdate":
+      case "scheduleUpdate":
+        return engvpnScheduleUpdate(body.action || body.command || "status", ...(body.args || []));
       case "engvpnReconnect":
         return engvpnReconnect();
       case "engvpnWatchdog":
@@ -362,6 +393,38 @@ elif 'router.transparentMethod' not in text and 'if (body?.path === "router.mode
         '        }',
         1,
     )
+
+# Sync Updates screen → updates.conf + Merlin cru
+if "syncUpdatesSchedule" in text and 'path.startsWith("updates.")' not in text:
+    needle_upd = '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {'
+    if needle_upd in text:
+        text = text.replace(
+            needle_upd,
+            '        if (typeof body?.path === "string" && body.path.startsWith("updates.")) {\n'
+            '          try { await syncUpdatesSchedule(state); } catch (e) { ctx.hooks.log("warn", `updates schedule: ${e.message || e}`); }\n'
+            '        }\n'
+            '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {',
+            1,
+        )
+
+# Override alfa checkUpdates stub → real feed check + schedule stamp
+if 'return await engvpnUpdateCheck(state)' not in text and 'case "checkUpdates":' in text:
+    import re as _re_chk
+    text2, n_chk = _re_chk.subn(
+        r'case "checkUpdates":\s*state\.updates\.lastCheck = Date\.now\(\);\s*'
+        r'state\.updates\.latest = state\.version;\s*saveState\(state\);\s*'
+        r'return \{ ok: true, latest: state\.version, message: "[^"]*" \};',
+        'case "checkUpdates": {\n'
+        '        const res = await engvpnUpdateCheck(state);\n'
+        '        saveState(state);\n'
+        '        return res;\n'
+        '      }',
+        text,
+        count=1,
+    )
+    if n_chk:
+        text = text2
+        print("patched checkUpdates → engvpnUpdateCheck")
 
 # Enrich snapshot with account/transparent/smartdns + one-shot LAN discover
 import re as _re
@@ -656,7 +719,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
+  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -684,7 +747,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
+  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

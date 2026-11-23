@@ -135,12 +135,123 @@ export async function engvpnTransparent(command, body = {}) {
   return { ok: true, output: stdout.trim() };
 }
 
-export async function engvpnUpdateCheck() {
+/** Read/write data/updates.conf used by schedule-update.sh + Merlin cru. */
+export function readUpdatesConf() {
+  const path = join(DATA, "updates.conf");
+  const out = {
+    interval: "1d",
+    auto: false,
+    windowStart: 2,
+    windowEnd: 5,
+    geoWeekly: true,
+    coresWhenMissing: true,
+    lastCheck: null,
+    lastResult: "",
+  };
+  if (!existsSync(path)) return out;
+  for (const line of readFileSync(path, "utf8").split("\n")) {
+    const m = line.match(/^([a-z_]+)=(.*)$/);
+    if (!m) continue;
+    const [, k, v] = m;
+    if (k === "interval") out.interval = v || out.interval;
+    else if (k === "auto") out.auto = v === "1";
+    else if (k === "window_start") out.windowStart = Number(v) || out.windowStart;
+    else if (k === "window_end") out.windowEnd = Number(v) || out.windowEnd;
+    else if (k === "geo_weekly") out.geoWeekly = v === "1";
+    else if (k === "cores_when_missing") out.coresWhenMissing = v === "1";
+    else if (k === "last_check" && v) {
+      const t = Date.parse(v);
+      out.lastCheck = Number.isFinite(t) ? t : v;
+    } else if (k === "last_result") out.lastResult = v;
+  }
+  return out;
+}
+
+export function writeUpdatesConf(partial = {}) {
+  mkdirSync(DATA, { recursive: true });
+  const cur = readUpdatesConf();
+  const next = { ...cur, ...partial };
+  const body = [
+    `interval=${next.interval || "1d"}`,
+    `auto=${next.auto ? "1" : "0"}`,
+    `window_start=${next.windowStart ?? 2}`,
+    `window_end=${next.windowEnd ?? 5}`,
+    `geo_weekly=${next.geoWeekly !== false ? "1" : "0"}`,
+    `cores_when_missing=${next.coresWhenMissing !== false ? "1" : "0"}`,
+    `last_check=${next.lastCheck ? new Date(next.lastCheck).toISOString() : ""}`,
+    `last_result=${next.lastResult || ""}`,
+    "",
+  ].join("\n");
+  writeFileSync(join(DATA, "updates.conf"), body, { mode: 0o600 });
+  return next;
+}
+
+/** Persist panel updates.* → updates.conf and (re)install Merlin cru / cron. */
+export async function syncUpdatesSchedule(state) {
+  const u = state?.updates || {};
+  writeUpdatesConf({
+    interval: u.interval || "1d",
+    auto: !!u.auto,
+    windowStart: u.windowStart ?? 2,
+    windowEnd: u.windowEnd ?? 5,
+    geoWeekly: u.geoWeekly !== false,
+    coresWhenMissing: u.coresWhenMissing !== false,
+    lastCheck: u.lastCheck || null,
+    lastResult: u.lastResult || u.note || "",
+  });
+  try {
+    await shEngvpnd(
+      "schedule-update",
+      "write-conf",
+      `interval=${u.interval || "1d"}`,
+      `auto=${u.auto ? "1" : "0"}`,
+      `window_start=${u.windowStart ?? 2}`,
+      `window_end=${u.windowEnd ?? 5}`,
+      `geo_weekly=${u.geoWeekly !== false ? "1" : "0"}`,
+      `cores_when_missing=${u.coresWhenMissing !== false ? "1" : "0"}`,
+    );
+  } catch {
+    // Hosts without cru still keep updates.conf; services-start retries install-cru.
+    try {
+      await shScript("schedule-update.sh", "install-cru");
+    } catch {
+      /* ignore */
+    }
+  }
+  return { ok: true };
+}
+
+export async function engvpnUpdateCheck(state) {
   const { stdout } = await shEngvpnd("update-check");
   const out = {};
   for (const line of stdout.split("\n")) {
     const i = line.indexOf("=");
     if (i > 0) out[line.slice(0, i)] = line.slice(i + 1);
+  }
+  const now = Date.now();
+  if (state?.updates) {
+    state.updates.lastCheck = now;
+    if (out.feed || out.latest) state.updates.latest = out.feed || out.latest;
+    const available = out.update === "1" || out.available === "1" || out.update_available === "1";
+    state.updates.lastResult = available ? `available:${out.feed || out.latest || ""}` : `up-to-date:${out.feed || ""}`;
+  }
+  try {
+    writeUpdatesConf({
+      ...(state?.updates
+        ? {
+            interval: state.updates.interval,
+            auto: !!state.updates.auto,
+            windowStart: state.updates.windowStart,
+            windowEnd: state.updates.windowEnd,
+            geoWeekly: state.updates.geoWeekly,
+            coresWhenMissing: state.updates.coresWhenMissing,
+          }
+        : {}),
+      lastCheck: now,
+      lastResult: state?.updates?.lastResult || "",
+    });
+  } catch {
+    /* ignore */
   }
   if (!out.message) {
     const parts = [];
@@ -149,7 +260,15 @@ export async function engvpnUpdateCheck() {
     if (out.update === "1" || out.available === "1" || out.update_available === "1") parts.push("доступно обновление");
     out.message = parts.length ? parts.join(" · ") : "Проверка feed EngVPN завершена";
   }
+  out.ok = true;
+  out.lastCheck = now;
   return out;
+}
+
+export async function engvpnScheduleUpdate(command = "status", ...extra) {
+  const args = [command || "status", ...extra.filter((x) => x != null && x !== "")];
+  const { stdout } = await shEngvpnd("schedule-update", ...args);
+  return { ok: true, output: stdout.trim() };
 }
 
 export async function engvpnReconnect() {
@@ -900,6 +1019,28 @@ export function hydratePanelSnapshot(snap, state) {
     if (!snap.smartdns) snap.smartdns = readSmartDns();
   } catch {
     snap.smartdns = { enabled: false, entries: [] };
+  }
+  try {
+    const uc = readUpdatesConf();
+    if (!snap.updates) snap.updates = {};
+    snap.updates.interval = uc.interval || snap.updates.interval || "1d";
+    if (typeof snap.updates.auto !== "boolean") snap.updates.auto = !!uc.auto;
+    // Prefer conf file as source of truth after schedule sync
+    if (existsSync(join(DATA, "updates.conf"))) {
+      snap.updates.auto = !!uc.auto;
+      snap.updates.interval = uc.interval || "1d";
+      snap.updates.windowStart = uc.windowStart;
+      snap.updates.windowEnd = uc.windowEnd;
+      snap.updates.geoWeekly = uc.geoWeekly;
+      snap.updates.coresWhenMissing = uc.coresWhenMissing;
+      if (uc.lastCheck) snap.updates.lastCheck = uc.lastCheck;
+      if (uc.lastResult) snap.updates.lastResult = uc.lastResult;
+    }
+    if (state) {
+      state.updates = { ...(state.updates || {}), ...snap.updates };
+    }
+  } catch {
+    /* ignore */
   }
   return snap;
 }

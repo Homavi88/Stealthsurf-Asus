@@ -1,24 +1,24 @@
 {
-  "version": "0.5.1",
-  "notes": "EngVPN 0.5.1 — install progress [1/9]…[9/9], UI→invoke wiring, StealthSurf API sync (balance/configs).",
+  "version": "0.5.2",
+  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-aarch64.tar.gz",
+      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.2_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
-      "size": 116165
+      "sha256": "8d4795e66add368bd4fb3ab720d6ad973a07d248d8ec91503f99e9df14818b44",
+      "size": 120139
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-armv7.tar.gz",
+      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.2_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
-      "size": 116165
+      "sha256": "8d4795e66add368bd4fb3ab720d6ad973a07d248d8ec91503f99e9df14818b44",
+      "size": 120139
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.1/engvpn_0.5.1_merlin-x86_64.tar.gz",
+      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.2_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "1fedbc59cc0b626e40fd75dac658bce2616ae247773089ccf392f1166602bef1",
-      "size": 116165
+      "sha256": "8d4795e66add368bd4fb3ab720d6ad973a07d248d8ec91503f99e9df14818b44",
+      "size": 120139
     }
   }
 }
