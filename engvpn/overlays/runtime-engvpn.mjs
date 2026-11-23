@@ -258,6 +258,112 @@ async function ssFetch(path, apiKey) {
   return data.data;
 }
 
+/** Page through GET /configs until empty (docs: limit 1–1000, default 100). */
+async function ssFetchAllConfigs(apiKey) {
+  const page = 200;
+  const all = [];
+  for (let offset = 0; offset < 5000; offset += page) {
+    const chunk = await ssFetch(`/configs?limit=${page}&offset=${offset}`, apiKey);
+    const rows = Array.isArray(chunk) ? chunk.filter(Boolean) : [];
+    all.push(...rows);
+    if (rows.length < page) break;
+  }
+  return all;
+}
+
+async function ssFetchLocationsMap(apiKey) {
+  try {
+    const list = await ssFetch("/locations", apiKey);
+    const map = new Map();
+    for (const loc of Array.isArray(list) ? list : []) {
+      if (!loc || loc.id == null) continue;
+      map.set(Number(loc.id), loc);
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+/** Soft: cloud-server VPN configs (failures ignored — not every account has them). */
+async function ssFetchCloudConfigs(apiKey) {
+  const out = [];
+  try {
+    const servers = await ssFetch("/cloud-servers?limit=100&offset=0", apiKey);
+    const list = Array.isArray(servers) ? servers.filter(Boolean) : [];
+    for (const srv of list.slice(0, 50)) {
+      const sid = srv.id ?? srv.server_id;
+      if (sid == null) continue;
+      try {
+        const cfgs = await ssFetch(`/cloud-servers/${sid}/configs`, apiKey);
+        for (const cfg of Array.isArray(cfgs) ? cfgs.filter(Boolean) : []) {
+          out.push({
+            ...cfg,
+            title: cfg.title || srv.title || `Cloud #${sid}`,
+            _cloudServerId: sid,
+            _sourceKind: "cloud",
+          });
+        }
+      } catch {
+        /* skip one server */
+      }
+    }
+  } catch {
+    /* no cloud servers */
+  }
+  return out;
+}
+
+function flagFromLocation(loc, cfg = {}) {
+  const code = String(loc?.code || cfg.country || cfg.flag || "").toLowerCase();
+  if (code.length === 2) return code;
+  if (cfg.flag && String(cfg.flag).length <= 4) return String(cfg.flag).toLowerCase();
+  return "auto";
+}
+
+function cfgToNode(cfg, { parseShareLink, locations } = {}) {
+  const url = cfg.connection_url || cfg.uri || "";
+  if (!url) return null;
+  const loc = locations?.get?.(Number(cfg.location_id));
+  const baseName = cfg.title || loc?.title || loc?.caption || `SS #${cfg.id}`;
+  const flag = flagFromLocation(loc, cfg);
+  const until = untilFromTs(cfg.expires_at) || cfg.until || "";
+  const online = cfg.is_online !== false;
+  const idPrefix = cfg._sourceKind === "cloud" ? `ss-cloud-${cfg._cloudServerId}-` : "ss-";
+  const id = `${idPrefix}${cfg.id}`;
+  if (parseShareLink && !String(url).startsWith("[")) {
+    try {
+      const parsed = parseShareLink(url);
+      if (parsed) {
+        return {
+          ...parsed,
+          id,
+          name: baseName || parsed.name,
+          until: until || parsed.until || "",
+          online,
+          flag: flag !== "auto" ? flag : parsed.flag || "auto",
+          country: loc?.code || parsed.country || "auto",
+          source: cfg._sourceKind === "cloud" ? "stealthsurf-cloud" : "stealthsurf-api",
+          ssConfigId: cfg.id,
+          locationId: cfg.location_id ?? null,
+          protocol: cfg.protocol || parsed.protocol,
+        };
+      }
+    } catch {
+      /* fallthrough */
+    }
+  }
+  const n = nodeFromConnectionUrl(url, { ...cfg, title: baseName, flag, until, is_online: online });
+  if (!n) return null;
+  n.id = id;
+  n.flag = flag;
+  n.country = loc?.code || n.country || "auto";
+  n.locationId = cfg.location_id ?? null;
+  if (cfg._sourceKind === "cloud") n.source = "stealthsurf-cloud";
+  if (cfg.protocol) n.protocol = String(cfg.protocol).replace(/-2410$/, "").replace(/^amnezia-wg.*/, "amneziawg") || n.protocol;
+  return n;
+}
+
 function untilFromTs(ts) {
   if (!ts) return "";
   try {
@@ -305,13 +411,16 @@ export async function engvpnSaveAccount(body = {}, state, helpers = {}) {
   const clearKey = body.clearKey === true;
 
   if (clearKey) {
-    writeAccountFile({ apiKey: "", active: false, email: "", balance: null, subscriptionKey: "", lastSync: 0 });
+    writeAccountFile({ apiKey: "", active: false, email: "", balance: null, referralBalance: null, configsCount: 0, subscriptionKey: "", lastSync: 0 });
     if (state.account) {
       state.account.email = state.account.email || "";
       state.account.subscriptionName = "Локальные подписки";
       state.account.balance = null;
+      state.account.referralBalance = null;
+      state.account.configsCount = 0;
       state.account.apiKeySet = false;
       state.account.apiKeyMasked = "";
+      state.account.cloud = false;
     }
     saveState?.(state);
     return snapshot?.() || { ok: true };
@@ -340,6 +449,7 @@ export async function engvpnSaveAccount(body = {}, state, helpers = {}) {
         state.activeSubscription = sub.id;
         state.account = state.account || {};
         state.account.subscriptionName = name;
+        state.account.subscriptionUrl = subscriptionUrl;
         state.account.apiKeySet = !!acct.apiKey && !!acct.active;
         state.account.apiKeyMasked = maskKey(acct.apiKey);
         saveState?.(state);
@@ -352,6 +462,7 @@ export async function engvpnSaveAccount(body = {}, state, helpers = {}) {
         state.activeSubscription = sub.id;
         state.account = state.account || {};
         state.account.subscriptionName = name;
+        state.account.subscriptionUrl = subscriptionUrl;
         state.account.apiKeySet = !!acct.apiKey && !!acct.active;
         state.account.apiKeyMasked = maskKey(acct.apiKey);
         saveState?.(state, true);
@@ -380,70 +491,74 @@ export async function engvpnSaveAccount(body = {}, state, helpers = {}) {
   }
 
   const profile = await ssFetch("/profile", key);
-  const configs = await ssFetch("/configs?limit=100&offset=0", key);
-  const list = Array.isArray(configs) ? configs.filter(Boolean) : [];
+  const [list, locations, cloudList] = await Promise.all([
+    ssFetchAllConfigs(key),
+    ssFetchLocationsMap(key),
+    ssFetchCloudConfigs(key),
+  ]);
 
   const nodes = [];
-  for (const cfg of list) {
-    const url = cfg.connection_url || cfg.uri || "";
-    if (!url) continue;
-    if (parseShareLink && !String(url).startsWith("[")) {
-      try {
-        const parsed = parseShareLink(url);
-        if (parsed) {
-          nodes.push({
-            ...parsed,
-            id: `ss-${cfg.id}`,
-            name: cfg.title || parsed.name || `SS #${cfg.id}`,
-            until: untilFromTs(cfg.expires_at) || parsed.until || "",
-            online: cfg.is_online !== false,
-            source: "stealthsurf-api",
-            ssConfigId: cfg.id,
-          });
-          continue;
-        }
-      } catch { /* fallthrough */ }
-    }
-    const n = nodeFromConnectionUrl(url, cfg);
-    if (n) nodes.push(n);
+  const seen = new Set();
+  for (const cfg of [...list, ...cloudList]) {
+    const n = cfgToNode(cfg, { parseShareLink, locations });
+    if (!n || seen.has(n.id)) continue;
+    seen.add(n.id);
+    nodes.push(n);
   }
+
+  const balance = profile?.balance != null ? Number(profile.balance) : null;
+  const referralBalance = profile?.referral_balance != null ? Number(profile.referral_balance) : null;
 
   writeAccountFile({
     apiKey: key,
     active: true,
     email: profile?.email || "",
-    balance: profile?.balance ?? null,
+    balance: Number.isFinite(balance) ? balance : null,
+    referralBalance: Number.isFinite(referralBalance) ? referralBalance : null,
     subscriptionKey: profile?.subscription_key || "",
     lastSync: Date.now(),
     profileId: profile?.id,
+    configsCount: nodes.length,
   });
 
   if (state) {
     state.account = state.account || {};
     state.account.email = profile?.email || state.account.email || "";
     state.account.subscriptionName = "Основная подписка (API)";
-    state.account.balance = profile?.balance ?? null;
+    state.account.subscriptionUrl = subscriptionUrl || readAccountFile().subscriptionUrl || state.account.subscriptionUrl || "";
+    state.account.balance = Number.isFinite(balance) ? balance : null;
+    state.account.referralBalance = Number.isFinite(referralBalance) ? referralBalance : null;
     state.account.apiKeySet = true;
     state.account.apiKeyMasked = maskKey(key);
     state.account.cloud = true;
     state.account.stub = "";
+    state.account.configsCount = nodes.length;
     let sub = (state.subscriptions || []).find((s) => s.id === "ss-api");
     const direct = typeof directNode === "function" ? directNode() : { id: "direct", name: "Без VPN", protocol: "direct" };
     if (!sub) {
       sub = { id: "ss-api", name: "StealthSurf API", url: "", nodes: [], builtin: false, source: "stealthsurf-api" };
       state.subscriptions = [...(state.subscriptions || []), sub];
     }
+    sub.name = `StealthSurf API (${nodes.length})`;
     sub.nodes = [...nodes, direct];
     sub.updatedAt = Date.now();
     state.activeSubscription = "ss-api";
-    // Optional: if user also pasted a subscription URL, keep it as second sub
+    // Point selection at an API node so home «Локации» shows the synced list
+    const stillValid = nodes.some((n) => n.id === state.vpn?.selectedId);
+    if (!stillValid && nodes[0]) {
+      state.vpn = state.vpn || {};
+      state.vpn.selectedId = nodes[0].id;
+      state.vpn.lastVpnId = nodes[0].id;
+    } else if (stillValid && state.vpn) {
+      state.vpn.lastVpnId = state.vpn.selectedId;
+    }
     if (subscriptionUrl) {
       writeAccountFile({ subscriptionUrl });
     }
     saveState?.(state, true);
-    return snapshot?.() || { ok: true, nodes: nodes.length, email: profile?.email };
+    return snapshot?.() || { ok: true, nodes: nodes.length, email: profile?.email, balance, referralBalance };
   }
-  return { ok: true, nodes: nodes.length, email: profile?.email, balance: profile?.balance };
+  return { ok: true, nodes: nodes.length, email: profile?.email, balance, referralBalance };
 }
 
 export async function engvpnSyncAccount(state, helpers) {
@@ -744,6 +859,51 @@ export async function engvpnBackup(command = "latest", prefix) {
   return { ok: true, output: stdout.trim() };
 }
 
+/**
+ * Keep panel snapshot in sync with on-disk EngVPN files (account.json, transparent.conf).
+ * Mutates state.account / state.router when provided so subsequent patches stay consistent.
+ */
+export function hydratePanelSnapshot(snap, state) {
+  if (!snap || typeof snap !== "object") return snap;
+  try {
+    const acct = readAccountFile();
+    const account = { ...(snap.account || {}) };
+    account.apiKeySet = !!(acct.apiKey && acct.active);
+    account.apiKeyMasked = maskKey(acct.apiKey);
+    account.subscriptionUrl = acct.subscriptionUrl || account.subscriptionUrl || "";
+    if (acct.email) account.email = acct.email;
+    if (acct.balance != null) account.balance = acct.balance;
+    if (acct.referralBalance != null) account.referralBalance = acct.referralBalance;
+    if (acct.configsCount != null) account.configsCount = acct.configsCount;
+    if (account.apiKeySet && !account.subscriptionName) account.subscriptionName = "Основная подписка (API)";
+    if (!account.apiKeySet && (!account.subscriptionName || account.subscriptionName === "Основная подписка")) {
+      account.subscriptionName = account.subscriptionUrl ? "Подписка по URL" : "Локальные подписки";
+    }
+    account.cloud = !!account.apiKeySet;
+    snap.account = account;
+    if (state) {
+      state.account = { ...(state.account || {}), ...account };
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    const conf = readTransparentConf();
+    if (snap.router) {
+      snap.router.transparentMethod = conf.method || snap.router.transparentMethod || "auto";
+      if (state?.router) state.router.transparentMethod = snap.router.transparentMethod;
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (!snap.smartdns) snap.smartdns = readSmartDns();
+  } catch {
+    snap.smartdns = { enabled: false, entries: [] };
+  }
+  return snap;
+}
+
 /** StealthSurf-shaped get_* helpers backed by EngVPN panel state + daemon. */
 export function engvpnParityInvoke(command, body, state, snapshotFn) {
   const snap = typeof snapshotFn === "function" ? snapshotFn() : state;
@@ -878,6 +1038,8 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
         subscriptionName: state.account?.subscriptionName || (acct.active ? "Основная подписка (API)" : "Локальные подписки"),
         cloud: !!acct.active,
         balance: acct.balance ?? state.account?.balance ?? null,
+        referralBalance: acct.referralBalance ?? state.account?.referralBalance ?? null,
+        configsCount: acct.configsCount ?? state.account?.configsCount ?? null,
         apiKeySet: !!(acct.apiKey && acct.active),
         apiKeyMasked: maskKey(acct.apiKey),
         subscriptionUrl: acct.subscriptionUrl || "",
@@ -887,6 +1049,8 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
       return {
         email: acct.email || state.account?.email || "",
         balance: acct.balance,
+        referralBalance: acct.referralBalance ?? null,
+        configsCount: acct.configsCount ?? null,
         apiKeySet: !!(acct.apiKey && acct.active),
         apiKeyMasked: maskKey(acct.apiKey),
         subscriptionUrl: acct.subscriptionUrl || "",

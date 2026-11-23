@@ -96,13 +96,24 @@ function applyTheme() {
 }
 
 function selected() {
+  const active = (S.subscriptions || []).find((s) => s.id === S.activeSubscription);
+  if (active) {
+    const hit = (active.nodes || []).find((n) => n.id === S.vpn.selectedId);
+    if (hit) return hit;
+  }
   for (const sub of S.subscriptions || []) {
-    const node = sub.nodes.find((n) => n.id === S.vpn.selectedId);
+    const node = (sub.nodes || []).find((n) => n.id === S.vpn.selectedId);
     if (node) return node;
   }
-  return S.runtime?.nodes?.[0] || null;
+  return (S.runtime?.nodes || []).find((n) => n.protocol !== "direct") || S.runtime?.nodes?.[0] || null;
 }
 function nodes() { return S.runtime?.nodes || []; }
+function formatRub(v) {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  if (!Number.isFinite(n)) return `${esc(String(v))} ₽`;
+  return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
+}
 function pingOf(id) { return S.pings?.[id]?.ms; }
 
 function flag(kind) {
@@ -191,9 +202,10 @@ function screenMenu() {
     ],
   ].map((g) => g.filter(([, title]) => match(title))).filter((g) => g.length);
   const email = S.account.email || "Аккаунт EngVPN";
-  const bal = S.account.balance != null ? ` · ${esc(String(S.account.balance))} ₽` : "";
+  const bal = S.account.apiKeySet && S.account.balance != null ? ` · ${formatRub(S.account.balance)}` : "";
+  const cfgN = S.account.apiKeySet && S.account.configsCount != null ? ` · ${S.account.configsCount} конфиг.` : "";
   const subLine = S.account.apiKeySet
-    ? `${esc(S.account.subscriptionName || "Основная подписка (API)")}${bal}`
+    ? `${esc(S.account.subscriptionName || "Основная подписка (API)")}${bal}${cfgN}`
     : `${esc(S.account.subscriptionName || "Локальные подписки")} · API-ключ или URL`;
   const account = `<div class="nav-title">${esc(email)}</div><div class="cell-desc">${subLine}</div>`;
   return `<div class="drawer-bar"><h2>Настройки</h2><button class="icon-btn" data-act="close">✕</button></div>
@@ -216,7 +228,9 @@ function screenAccount() {
     <div class="h">API-КЛЮЧ</div>
     <div class="group">
       ${keySet ? cell("Статус", `Активен · ${esc(masked)}`) : cell("Статус", "Не задан — покажите поля URL подписки ниже")}
-      ${keySet ? cell("Баланс", a.balance != null ? `${esc(String(a.balance))} ₽` : "—") : ""}
+      ${keySet ? cell("Баланс", formatRub(a.balance)) : ""}
+      ${keySet && a.referralBalance != null ? cell("Реферальный баланс", formatRub(a.referralBalance)) : ""}
+      ${keySet ? cell("Конфиги из API", a.configsCount != null ? `${esc(String(a.configsCount))} · список на главном экране` : "нажмите «Обновить конфиги»") : ""}
       ${keySet ? cell("Email", a.email || "—") : ""}
       <input class="text" id="apikey" type="password" placeholder="stlth_XXXXXXXX_…" autocomplete="off">
       <button class="primary" data-act="save-api-key">Сохранить ключ и синхронизировать</button>
@@ -302,8 +316,10 @@ function screenRouter() {
     <div class="h">ENGVPN НА РОУТЕРЕ</div>
     <div class="group">
       <button type="button" class="cell" data-go="password"><div class="cell-text"><div class="cell-title">Пароль панели</div><div class="cell-desc">Нужен, чтобы открыть эту панель с устройств домашней сети</div></div><span class="chev">›</span></button>
-      ${cell("Сохранить настройки в файл", "Режим, устройства, маршруты, расписания", `<button class="ghost" data-act="export">Скачать</button>`)}
+      ${cell("Сохранить настройки в файл", "Режим, устройства, маршруты, расписания (JSON)", `<button class="ghost" data-act="export">Скачать</button>`)}
       ${cell("Загрузить настройки из файла", "Заменит текущие", `<input type="file" data-act="import" accept="application/json">`)}
+      ${cell("Резервная копия пакета", "Архив data/ + конфиги через engvpnd backup", `<button class="ghost" data-act="backup-create">Создать</button>`)}
+      ${cell("Последний бэкап", "Показать путь к последнему архиву", `<button class="ghost" data-act="backup-latest">Показать</button>`)}
     </div>
     <div class="h">О РОУТЕРЕ</div>
     <div class="group">
@@ -978,7 +994,14 @@ document.addEventListener("click", (event) => {
     }
   });
   if (act === "pick") return run(() => invoke("selectNode", { id: t.dataset.id }));
-  if (act === "refresh") return run(() => invoke("refreshSubscription", {}));
+  if (act === "refresh") return run(async () => {
+    if (S.account?.apiKeySet) {
+      await invoke("syncAccount", {});
+      toast("Конфиги и баланс обновлены из API");
+      return;
+    }
+    await invoke("refreshSubscription", {});
+  });
   if (act === "ping") return run(async () => { await invoke("pingAll", {}, { quiet: true }); toast("Пинг обновлён"); });
   if (act === "ip") { const ip = S.runtime.exitIp || S.runtime.publicIp; if (ip) window.open(`https://2ip.io/${ip}`, "_blank"); return; }
   if (act === "toggle-auto") return run(() => invoke("patch", { path: "other.autoSetup", value: !S.other.autoSetup }));
@@ -988,6 +1011,14 @@ document.addEventListener("click", (event) => {
   if (act === "let-direct") return run(() => { ui.modal = null; return invoke("dismissNew", { keepVpn: false }); });
   if (act === "open-console") { if (S.account.consoleUrl) window.open(S.account.consoleUrl, "_blank"); else toast("Ссылка консоли не задана"); return; }
   if (act === "pair") return run(async () => { ui.result = await invoke("pair", {}, { quiet: true }); render(); });
+  if (act === "backup-create") return run(async () => {
+    const res = await invoke("engvpnBackup", { action: "create" }, { quiet: true });
+    toast(res?.output || "Бэкап создан");
+  });
+  if (act === "backup-latest") return run(async () => {
+    const res = await invoke("engvpnBackup", { action: "latest" }, { quiet: true });
+    toast(res?.output || "Нет архивов");
+  });
   if (act === "export") return run(async () => {
     const file = await invoke("export", {}, { quiet: true });
     const blob = new Blob([JSON.stringify(file.settings, null, 2)], { type: "application/json" });
@@ -1088,8 +1119,12 @@ document.addEventListener("click", (event) => {
   if (act === "zapret-reset") return run(() => invoke("patch", { path: "network.zapret.serviceWays", value: {} }));
   if (act === "save-api-key") return run(async () => {
     const apiKey = document.querySelector("#apikey")?.value || "";
-    await invoke("saveAccount", { apiKey });
-    toast("API-ключ сохранён, конфиги синхронизированы");
+    const result = await invoke("saveAccount", { apiKey });
+    const n = result?.nodes ?? S.account?.configsCount;
+    const bal = result?.balance ?? S.account?.balance;
+    toast(n != null
+      ? `Синхронизировано: ${n} конфиг. · баланс ${bal != null ? formatRub(bal) : "—"}`
+      : "API-ключ сохранён, конфиги синхронизированы");
   });
   if (act === "save-sub-url") return run(async () => {
     const subscriptionUrl = document.querySelector("#suburl-acc")?.value || "";
