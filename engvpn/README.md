@@ -1,71 +1,113 @@
 # EngVPN — Asuswrt-Merlin addon
 
-Open Merlin installer/package modeled on StealthSurf’s `merlin.sh` + router tarball, without StealthSurf proprietary binaries or trademarks.
+Open-source Merlin VPN addon with a StealthSurf-comparable **install path** and runtime surface. Built from open components only (Node panel, downloadable Xray / sing-box / mihomo). Does **not** ship StealthSurf proprietary binaries or trademarks.
 
 | | |
 | --- | --- |
-| Version | see [`VERSION`](./VERSION) (0.2.0+) |
-| Panel | `http://<lan>:8790/` (password required) |
-| Prefix | `/jffs/addons/engvpn` or `/tmp/mnt/<drive>/engvpn` |
-| Transparent | `engvpnd transparent` — iptables REDIRECT / TPROXY, selective devices, kill-switch |
-| Runtime | Node.js panel (vendored from `alfa-addon`, EngVPN-branded) + downloadable open cores |
-| Does not touch | `/jffs/addons/stealthsurf` (`:8800`), `/jffs/addons/ssurf` (`:1131`), `/jffs/addons/alfa` (`:8788`) |
+| Version | **0.2.0** ([`VERSION`](./VERSION)) |
+| Panel | `http://<lan_ip>:8790/` (password required) |
+| Install prefix | `/jffs/addons/engvpn` or `/tmp/mnt/<USB>/engvpn` |
+| CLI | `engvpnd` |
+| Isolation | Leaves SurfGate `:1131`, official StealthSurf `:8800`, and alfa `:8788` alone |
 
-## Install on a router
+Release: [engvpn-0.2.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.2.0)
 
-Needs: Asuswrt-Merlin, JFFS custom scripts, root SSH, Entware Node (`opkg install node`), HTTPS curl.
+---
+
+## Requirements
+
+1. **Asuswrt-Merlin** with JFFS custom scripts enabled  
+2. **Entware** (`amtm`) and **Node.js**: `opkg update && opkg install node`  
+3. Root SSH and an HTTPS client (`curl`)  
+4. Enough free space on JFFS (or an ext2/3/4 USB drive)
+
+## Install
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Interactive install prompts for a panel password (8–128 chars). Non-interactive:
+The installer asks for a panel password (8–128 characters), downloads the package for your CPU (`merlin-aarch64` / `merlin-armv7`), verifies **SHA-256**, and starts the service.
+
+Non-interactive:
 
 ```sh
-ENGVPN_PASSWORD='your-password' curl -fsSL …/engvpn/merlin.sh | sh
+ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Override prefix: `ENGVPN_PREFIX=/tmp/mnt/USB/engvpn`.
+Optional:
 
-## Transparent / selective VPN
+| Variable | Meaning |
+| --- | --- |
+| `ENGVPN_PREFIX` | Install path (e.g. `/tmp/mnt/USB/engvpn`) |
+| `ENGVPN_LOCAL_PACKAGE` | Path to a local `.tar.gz` (skip download) |
+| `ENGVPN_FEED` | Override feed URL |
+
+Open the panel:
+
+```text
+http://192.168.50.1:8790/
+```
+
+(use your LAN IP). Sign in with the password you chose.
+
+## Everyday use
 
 ```sh
-# Edit /jffs/addons/engvpn/data/transparent.conf
-# mode=all|selected|exclude|off  method=redirect|tproxy  killswitch=0|1
-engvpnd transparent apply
+engvpnd status
 engvpnd transparent status
+engvpnd update-check
+engvpnd update                 # self-update from the feed (SHA-256)
 ```
 
-Panel: `POST /api/invoke/transparent` with `{"action":"apply","mode":"all"}`.  
-Xray gets a dokodemo inbound when mode ≠ `off`. No `stealthsurf-nfqws`.
-
-## Update
+Service:
 
 ```sh
-engvpnd update-check
-engvpnd update
+/jffs/addons/engvpn/share/engvpn/service.sh start|stop|restart|check
 ```
 
-Publish release assets: `./publish-release.sh` (dry-run) or `./publish-release.sh --push`.
+### Transparent / selective VPN
 
-## Package layout
+Edit `/jffs/addons/engvpn/data/transparent.conf`:
 
+```ini
+mode=all          # off | all | selected | exclude
+method=redirect   # redirect (default) | tproxy
+port=12345
+killswitch=0
 ```
-sbin/engvpnd
-share/engvpn/install.sh | service.sh | hook.sh
-share/engvpn/transparent.sh | netfilter.sh | update.sh
-share/engvpn/runtime/          # Node panel
-share/engvpn/files             # manifest
+
+Optional device list: `data/devices.select` (one IP or MAC per line). Then:
+
+```sh
+engvpnd transparent apply
 ```
 
-## Build & smoke (dev host)
+Uses open **iptables** REDIRECT (or TPROXY when available) plus a dokodemo inbound in Xray — not `stealthsurf-nfqws`.
+
+## Uninstall
+
+```sh
+sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
+```
+
+## Build / smoke (developers)
 
 ```sh
 cd engvpn
 ./build-package.sh
 ./smoke-test.sh
+./publish-release.sh          # dry-run
+./publish-release.sh --push   # GitHub Release engvpn-$VERSION
 ```
 
-## Parity vs remaining hard gaps
+## Gaps vs official StealthSurf
 
-See project report and PR description. Hard gaps: closed routerd/GRE/OpenFlux/Ferrum/nfqws; Minisign; Entware Node; pixel-perfect StealthSurf cloud UI.
+| Upstream | EngVPN |
+| --- | --- |
+| Closed `stealthsurf-routerd` / GRE / OpenFlux / Ferrum | Not shipped — open Node panel + public cores |
+| `stealthsurf-nfqws` | Not shipped — routing via iptables + dokodemo |
+| Minisign signatures | HTTPS + SHA-256 only |
+| Static daemon (no Entware) | Needs Entware **Node** |
+
+More detail: project report and [PR #152](https://github.com/Homavi88/Stealthsurf-Asus/pull/152).
