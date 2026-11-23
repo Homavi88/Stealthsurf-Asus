@@ -1,24 +1,24 @@
 {
-  "version": "0.5.3",
-  "notes": "EngVPN 0.5.3 — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI), panel + engvpnd privacy.",
+  "version": "0.5.4",
+  "notes": "EngVPN 0.5.4 — audit gap closure: fake-success fix, devices.select, DNS :53 hijack, SmartDNS→engines, DPI/GRE/MQTT honesty.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.4/engvpn_0.5.4_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "c30852417f114540774d47dd579976a6d4847b742fd09c653d654af2b4f89b4e",
-      "size": 128175
+      "sha256": "d2982fa847904db0866cb2da5cf0d0605364dd7ce98287a2e8f0c1b96ffaee0f",
+      "size": 130746
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.4/engvpn_0.5.4_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "c30852417f114540774d47dd579976a6d4847b742fd09c653d654af2b4f89b4e",
-      "size": 128175
+      "sha256": "d2982fa847904db0866cb2da5cf0d0605364dd7ce98287a2e8f0c1b96ffaee0f",
+      "size": 130746
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.4/engvpn_0.5.4_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "c30852417f114540774d47dd579976a6d4847b742fd09c653d654af2b4f89b4e",
-      "size": 128175
+      "sha256": "d2982fa847904db0866cb2da5cf0d0605364dd7ce98287a2e8f0c1b96ffaee0f",
+      "size": 130746
     }
   }
 }

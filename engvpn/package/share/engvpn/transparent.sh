@@ -13,6 +13,9 @@
 #   killswitch=0|1                    # block non-marked WAN forward when on
 #   lan_if=br0
 #   lan_cidr=192.168.50.0/24
+#   dns_hijack=0|1                    # REDIRECT LAN :53 → EngVPN DNS (dns_port)
+#   dns_port=5353                     # panel DNS relay (alfa dns.mjs)
+#   captive_open=0|1                  # hotel/café portal: passthrough (no redirect)
 #
 # Device list: $DATA_DIR/devices.select  (one IP or MAC per line; # comments)
 set -u
@@ -39,6 +42,9 @@ table=79
 killswitch=0
 lan_if=br0
 lan_cidr=""
+dns_hijack=0
+dns_port=5353
+captive_open=0
 
 load_conf() {
 	[ -f "$CONF" ] || return 0
@@ -50,7 +56,7 @@ load_conf() {
 			key=${line%%=*}
 			val=${line#*=}
 			case "$key" in
-			mode | method | port | mark | table | killswitch | lan_if | lan_cidr)
+			mode | method | port | mark | table | killswitch | lan_if | lan_cidr | dns_hijack | dns_port | captive_open)
 				# method: redirect | tproxy | auto | prefer-tproxy
 				eval "$key=\$val"
 				;;
@@ -240,6 +246,16 @@ write_state_file() {
 	} >"$STATE"
 }
 
+# LAN DNS :53 → EngVPN DNS relay (adblock / dnsViaVpn / dnsLock). Skip when captive portal is open.
+build_dns_hijack() {
+	[ "$dns_hijack" = 1 ] || return 0
+	[ "$captive_open" = 1 ] && return 0
+	dp=${dns_port:-5353}
+	# Allow DNS to router itself / private without forcing through relay first? Hijack all LAN :53.
+	ipt -t nat -A "$CHAIN" -i "$lan_if" -p udp --dport 53 -j REDIRECT --to-ports "$dp" 2>/dev/null || true
+	ipt -t nat -A "$CHAIN" -i "$lan_if" -p tcp --dport 53 -j REDIRECT --to-ports "$dp" 2>/dev/null || true
+}
+
 # Build redirect rules into ENGVPN (nat)
 build_redirect() {
 	ensure_chain nat "$CHAIN"
@@ -253,6 +269,15 @@ build_redirect() {
 	for p in "${ENGVPN_PORT:-8790}" 20808 20809 20828; do
 		ipt -t nat -A "$CHAIN" -i "$lan_if" -p tcp --dport "$p" -j RETURN
 	done
+
+	# Captive portal open: passthrough so hotel/café login pages work
+	if [ "$captive_open" = 1 ]; then
+		ipt -t nat -A "$CHAIN" -j RETURN
+		ipt -t nat -C PREROUTING -j "$CHAIN" 2>/dev/null || ipt -t nat -I PREROUTING 1 -j "$CHAIN"
+		return 0
+	fi
+
+	build_dns_hijack
 
 	case "$mode" in
 	selected)
@@ -287,6 +312,18 @@ build_tproxy() {
 	ipt -t mangle -A "$CHAIN" -i "$lan_if" -d 10.0.0.0/8 -j RETURN
 	ipt -t mangle -A "$CHAIN" -i "$lan_if" -d 172.16.0.0/12 -j RETURN
 	ipt -t mangle -A "$CHAIN" -i "$lan_if" -d 192.168.0.0/16 -j RETURN
+
+	# DNS hijack still uses nat REDIRECT → EngVPN :5353 (even when traffic is TPROXY)
+	ensure_chain nat "$CHAIN"
+	if [ "$captive_open" = 1 ]; then
+		ipt -t nat -A "$CHAIN" -j RETURN
+		ipt -t nat -C PREROUTING -j "$CHAIN" 2>/dev/null || ipt -t nat -I PREROUTING 1 -j "$CHAIN"
+		ipt -t mangle -A "$CHAIN" -j RETURN
+		ipt -t mangle -C PREROUTING -j "$CHAIN" 2>/dev/null || ipt -t mangle -I PREROUTING 1 -j "$CHAIN"
+		return 0
+	fi
+	build_dns_hijack
+	ipt -t nat -C PREROUTING -j "$CHAIN" 2>/dev/null || ipt -t nat -I PREROUTING 1 -j "$CHAIN"
 
 	add_tp() {
 		proto=$1
@@ -351,7 +388,8 @@ EOF
 apply_rules() {
 	load_conf
 	detect_lan
-	if [ "$mode" = off ]; then
+	# Fully off (no DNS hijack, no captive passthrough marker)
+	if [ "$mode" = off ] && [ "$dns_hijack" != 1 ] && [ "$captive_open" != 1 ]; then
 		stop_rules
 		echo "transparent: mode=off"
 		return 0
@@ -377,6 +415,16 @@ apply_rules() {
 	flush_chain filter "$KS_CHAIN"
 	clear_policy_route
 
+	# DNS-only (transparent VPN off): hijack :53 without TCP REDIRECT/TPROXY of LAN traffic
+	if [ "$mode" = off ] && [ "$captive_open" != 1 ]; then
+		ensure_chain nat "$CHAIN"
+		build_dns_hijack
+		ipt -t nat -C PREROUTING -j "$CHAIN" 2>/dev/null || ipt -t nat -I PREROUTING 1 -j "$CHAIN"
+		write_state_file
+		echo "transparent: dns_hijack-only port=$dns_port"
+		return 0
+	fi
+
 	if [ "$method" = tproxy ]; then
 		build_tproxy
 	else
@@ -389,7 +437,7 @@ apply_rules() {
 	if [ -x "$SHARE/smartdns.sh" ]; then
 		sh "$SHARE/smartdns.sh" apply >/dev/null 2>&1 || true
 	fi
-	echo "transparent: applied mode=$mode method=$method port=$port killswitch=$killswitch lan=$lan_cidr if=$lan_if"
+	echo "transparent: applied mode=$mode method=$method port=$port killswitch=$killswitch dns_hijack=$dns_hijack captive_open=$captive_open lan=$lan_cidr if=$lan_if"
 }
 
 dry_run() {

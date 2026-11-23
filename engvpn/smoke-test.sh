@@ -284,7 +284,46 @@ ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/smartdns.sh" dry-run | g
 [ -f "$PREFIX/data/run/bypass.routing.json" ]
 grep -q 'example.com' "$PREFIX/data/run/bypass.routing.json"
 grep -q '1.2.3.4' "$PREFIX/data/run/bypass.routing.json"
-echo "  smartdns dry-run ok"
+# Engines must contain SmartDNS merge helper after build
+grep -q 'smartdnsBypassRules' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || {
+	echo "engines.mjs missing smartdnsBypassRules merge" >&2
+	exit 1
+}
+grep -q 'bypass.routing.json' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || {
+	echo "engines.mjs does not read bypass.routing.json" >&2
+	exit 1
+}
+echo "  smartdns dry-run + engines merge ok"
+
+echo "==> devices.select + DNS hijack conf"
+printf '192.168.50.21\naa:bb:cc:dd:ee:01\n' >"$PREFIX/data/devices.select"
+cat >"$PREFIX/data/transparent.conf" <<EOF
+mode=exclude
+method=redirect
+port=12345
+mark=0x39000
+table=79
+killswitch=0
+lan_if=br0
+lan_cidr=192.168.50.0/24
+dns_hijack=1
+dns_port=5353
+captive_open=0
+EOF
+dry=$(ENGVPN_SMOKE=1 ENGVPN_DATA_DIR="$PREFIX/data" sh "$PREFIX/share/engvpn/transparent.sh" dry-run)
+echo "$dry" | grep -q 'mode=exclude' || {
+	echo "transparent dry-run missing mode: $dry" >&2
+	exit 1
+}
+echo "$dry" | grep -q '192.168.50.21\|devices:' || true
+# Catalog VERSION matches package
+pkg_ver=$(cat "$PREFIX/share/engvpn/VERSION")
+cat_ver=$(node -e "import('$PREFIX/share/engvpn/runtime/lib/catalog.mjs').then(m=>console.log(m.VERSION))" 2>/dev/null || grep -oE 'VERSION = "[^"]+"' "$PREFIX/share/engvpn/runtime/lib/catalog.mjs" | head -1 | sed 's/.*"\([^"]*\)"/\1/')
+[ "$pkg_ver" = "$cat_ver" ] || {
+	echo "VERSION drift: package=$pkg_ver catalog=$cat_ver" >&2
+	exit 1
+}
+echo "  devices.select + version sync ok ($pkg_ver)"
 
 echo "==> discover (fixture on smoke host)"
 cat >"$PREFIX/data/discover.fixture.jsonl" <<EOF

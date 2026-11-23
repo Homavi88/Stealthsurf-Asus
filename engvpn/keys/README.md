@@ -33,7 +33,9 @@ node share/engvpn/verify-minisign.mjs package.tar.gz package.tar.gz.minisig shar
 minisign -Sm dist/engvpn_${VERSION}_merlin-aarch64.tar.gz -s engvpn/keys/engvpn.minisign.key
 ```
 
-`publish-release.sh --push` подписывает все arch-пакеты, если секретный ключ доступен как `ENGVPN_MINISIGN_KEY` или `engvpn/keys/engvpn.minisign.key`.
+`build-package.sh` / `publish-release.sh --push` подписывают arch-пакеты, если секретный ключ доступен как `ENGVPN_MINISIGN_KEY` (путь к файлу) или `engvpn/keys/engvpn.minisign.key`.
+
+**Важно:** пустое поле `"minisig": ""` в feed значит пакет **не подписан** (только SHA-256). Это не «подпись есть, но пустая» — установщик честно пишет `no minisig (SHA-256 only)`.
 
 ## Ротация
 

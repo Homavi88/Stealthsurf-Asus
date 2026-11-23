@@ -185,8 +185,8 @@ EOF
 gre_up() {
 	load_conf
 	[ "$gre_enabled" = 1 ] || {
-		echo "gre: gre_enabled=0"
-		return 0
+		echo "gre: gre_enabled=0 — включите gre_enabled=1 и задайте gre_remote в $GRE_CONF" >&2
+		return 1
 	}
 	[ -n "$gre_remote" ] || {
 		echo "gre: set gre_remote in $GRE_CONF" >&2

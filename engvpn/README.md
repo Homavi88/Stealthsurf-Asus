@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.3** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.4** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.2](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.2) (пакет 0.5.3 — см. feed после публикации)
+Релиз: [engvpn-0.5.4](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.4) (после публикации feed)
 
 ---
 
@@ -64,17 +64,30 @@ ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Hom
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.3
+## Панель 0.5.4
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
 - **Главная** — статус, IP, нагрузка, скорость, локации  
-- **Роутер** — transparent, устройства из **ARP / ip neigh / dnsmasq leases** (не демо-список), DNS/QUIC/kill-switch  
-- **Сеть** — zapret/nfqws + **SmartDNS** (локальный список доменов/IP мимо VPN)  
-- **Подключение** — Cloudflare WARP + GRE  
-- **Движок** — Xray / Ferrum-слот (открытый Xray Reality) / sing-box / mihomo  
-- **Обновления** — интервал проверки feed + опциональное автообновление (Merlin `cru`)  
-- **Проверки скрытности** — живые пробы: exit IP (WAN vs туннель), DNS, IPv6, kill-switch, DPI/отпечаток, подсказка WebRTC для LAN  
+- **Роутер** — transparent (selected/exclude ↔ `devices.select`), **DNS hijack LAN :53 → :5353**, captive passthrough, DNS/QUIC/kill-switch, устройства из ARP/neigh/dnsmasq  
+- **Сеть** — zapret → реальный **dpi.sh/nfqws** + **SmartDNS** (IP в iptables + домены в routing ядер)  
+- **Подключение** — Cloudflare WARP + GRE (ошибка без `gre.conf`, без тихого ok)  
+- **Движок** — Xray / **Ferrum (Xray Reality)** / sing-box / mihomo  
+- **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
+- **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
+- **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что исправлено в 0.5.4 (реальность, не «зелёный UI»)
+
+- Ошибки SmartDNS / transparent / DPI / расписания обновлений **больше не маскируются** `ok: true` — UI показывает сбой и откатывает тумблер.  
+- Чекбоксы устройств пишут `data/devices.select` → iptables selected/exclude.  
+- DNS/adblock/dnsLock включают **REDIRECT :53** на EngVPN DNS (счётчики рекламы на реальном пути).  
+- Domain SmartDNS читается ядрами из `bypass.routing.json`.  
+- Captive «портал открыт» = passthrough iptables + политика direct.  
+
+### Чего нет (намеренно / проприетарно StealthSurf)
+
+- Закрытый Ferrum / WARP MASQUE / Amnezia SS / маскот / VKUI pixel / Gaming·Stream Deck — **MISSING**, не клонируем.
 
 ### Проверки скрытности
 
@@ -268,7 +281,7 @@ engvpnd smartdns apply
 engvpnd smartdns stop
 ```
 
-При `enabled=1`: IP/CIDR → `RETURN` в цепочке `ENGVPN`; домены → `data/run/bypass.routing.json`.
+При `enabled=1`: IP/CIDR → `RETURN` в цепочке `ENGVPN`; домены → `data/run/bypass.routing.json`, который **ядра** (Xray / sing-box / mihomo) мержат в routing как `direct`.
 
 ### Discover
 
