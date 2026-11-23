@@ -723,12 +723,12 @@ function screenOther() {
 function screenUpdates() {
   const u = S.updates;
   return `${backBar("Обновления")}<div class="drawer-body"><div class="group">
-    ${cell("Автоустановка ночью", `Окно ${String(u.windowStart).padStart(2, "0")}:00–${String(u.windowEnd).padStart(2, "0")}:00 · через engvpnd update`, sw("updates.auto", u.auto))}
+    ${cell("Автообновление", `По умолчанию выкл. При включении — engvpnd update в окне ${String(u.windowStart ?? 2).padStart(2, "0")}:00–${String(u.windowEnd ?? 5).padStart(2, "0")}:00 (SHA-256 + Minisign)`, sw("updates.auto", !!u.auto))}
     ${cell("Гео-базы раз в неделю", "", sw("updates.geoWeekly", u.geoWeekly))}
     ${cell("Качать ядра, когда их нет", "", sw("updates.coresWhenMissing", u.coresWhenMissing))}
-    ${cell("Проверка", "", sel("updates.interval", u.interval, [["6h", "Каждые 6 часов"], ["12h", "Каждые 12 часов"], ["1d", "Раз в сутки"], ["3d", "Раз в 3 дня"], ["7d", "Раз в неделю"]]))}
+    ${cell("Интервал проверки", "Merlin cru / cron · переживает перезагрузку", sel("updates.interval", u.interval || "1d", [["6h", "Каждые 6 часов"], ["12h", "Каждые 12 часов"], ["1d", "Раз в сутки"], ["3d", "Раз в 3 дня"], ["7d", "Раз в неделю"], ["off", "Выкл."]]))}
     <button class="primary" data-act="check-updates">Проверить сейчас</button>
-    <p class="muted">Текущая сборка ${esc(S.version)}. Feed EngVPN (SHA-256). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.note ? ` ${esc(u.note)}` : ""}</p>
+    <p class="muted">Текущая сборка ${esc(S.version)}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.lastResult ? ` · ${esc(u.lastResult)}` : ""}${u.note ? ` ${esc(u.note)}` : ""}</p>
   </div></div>`;
 }
 function screenFeedback() {

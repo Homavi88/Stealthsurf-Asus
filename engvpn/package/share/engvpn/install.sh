@@ -218,7 +218,7 @@ place() {
 	chmod 0755 "$PREFIX/sbin/engvpnd" \
 		"$SHARE/install.sh" "$SHARE/service.sh" "$SHARE/hook.sh" "$SHARE/netfilter.sh" \
 		"$SHARE/transparent.sh" "$SHARE/backup.sh" "$SHARE/discover-devices.sh" "$SHARE/smartdns.sh" \
-		"$SHARE/dpi.sh" "$SHARE/warp.sh" "$SHARE/update.sh" 2>/dev/null || true
+		"$SHARE/dpi.sh" "$SHARE/warp.sh" "$SHARE/update.sh" "$SHARE/schedule-update.sh" 2>/dev/null || true
 	if [ -f "$OLD_MANIFEST" ]; then
 		while IFS= read -r file; do
 			[ -n "$file" ] || continue
@@ -526,6 +526,10 @@ do_install() {
 		else
 			# Copy VERSION into share if present in stage
 			[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
+			# Seed updates.conf + Merlin cru / cron (survives reboot via services-start)
+			if [ -x "$SHARE/schedule-update.sh" ]; then
+				ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
+			fi
 			if [ "${ENGVPN_DEFER_START:-}" = 1 ]; then
 				: # merlin.sh starts after saving the panel password
 			else
@@ -564,6 +568,8 @@ do_upgrade() {
 	}
 	if place && add_hooks; then
 		[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
+		[ -x "$SHARE/schedule-update.sh" ] &&
+			ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
 		rm -rf "$STAGE"
 		start_service
 		waited=0
@@ -607,6 +613,7 @@ do_uninstall() {
 	if [ "${ENGVPN_SKIP_BACKUP:-}" != 1 ] && [ -x "$SHARE/backup.sh" ]; then
 		sh "$SHARE/backup.sh" create "$PREFIX" || complain "pre-uninstall backup failed"
 	fi
+	[ -x "$SHARE/schedule-update.sh" ] && sh "$SHARE/schedule-update.sh" remove-cru >/dev/null 2>&1 || true
 	remove_hooks
 	rm -rf "$PREFIX"
 	if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then

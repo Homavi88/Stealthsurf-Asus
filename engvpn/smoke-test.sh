@@ -116,6 +116,27 @@ echo "==> engvpnd status / version"
 ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
 echo "  version + update-check ok"
 
+echo "==> schedule-update (conf + run, auto off)"
+[ -x "$PREFIX/share/engvpn/schedule-update.sh" ]
+ENGVPN_DATA_DIR="$PREFIX/data" ENGVPN_FEED="file://$FEED_DIR/latest.json" \
+	"$PREFIX/sbin/engvpnd" schedule-update write-conf interval=1d auto=0 window_start=2 window_end=5
+grep -q 'auto=0' "$PREFIX/data/updates.conf"
+grep -q 'interval=1d' "$PREFIX/data/updates.conf"
+# Without cru on smoke host a marker file is enough
+ENGVPN_DATA_DIR="$PREFIX/data" ENGVPN_FEED="file://$FEED_DIR/latest.json" \
+	"$PREFIX/sbin/engvpnd" schedule-update install-cru >/dev/null
+ENGVPN_DATA_DIR="$PREFIX/data" ENGVPN_FEED="file://$FEED_DIR/latest.json" \
+	"$PREFIX/sbin/engvpnd" schedule-update run
+grep -q 'last_check=' "$PREFIX/data/updates.conf"
+# auto=0 must not apply even if feed differed
+grep -E 'last_result=(up-to-date|available)' "$PREFIX/data/updates.conf" || {
+	echo "unexpected last_result in updates.conf" >&2
+	cat "$PREFIX/data/updates.conf" >&2
+	exit 1
+}
+"$PREFIX/sbin/engvpnd" schedule-update status | grep -q 'conf='
+echo "  schedule-update ok"
+
 echo "==> transparent dry-run + dokodemo snippet"
 # Stop panel first so watchdog cannot race with dry-run iptables probes
 "$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true

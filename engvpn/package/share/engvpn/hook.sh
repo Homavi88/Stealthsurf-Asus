@@ -6,13 +6,20 @@ SERVICE=$SHARE/service.sh
 REPLAY=$SHARE/netfilter.sh
 STATE=$PREFIX/data/netfilter/rules
 
+SCHEDULE=$SHARE/schedule-update.sh
+
 case "${1:-}" in
 services-start)
+	# Re-install cru (RAM-only on Merlin) then start panel.
+	[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
 	[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
 	;;
 post-mount)
 	case "$PREFIX/" in
-	"${2:-/nonexistent}"/*) [ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 & ;;
+	"${2:-/nonexistent}"/*)
+		[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
+		[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
+		;;
 	esac
 	;;
 services-stop)

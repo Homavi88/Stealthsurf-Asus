@@ -160,7 +160,7 @@ do_restore() {
 	tar -xzf "$archive" -C "$PREFIX" || fail "backup: restore extract failed"
 	# Fix executables
 	chmod 0755 "$PREFIX/sbin/engvpnd" 2>/dev/null || true
-	for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh backup.sh discover-devices.sh smartdns.sh dpi.sh warp.sh; do
+	for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh backup.sh discover-devices.sh smartdns.sh dpi.sh warp.sh; do
 		[ -f "$PREFIX/share/engvpn/$f" ] && chmod 0755 "$PREFIX/share/engvpn/$f" 2>/dev/null || true
 	done
 	say "backup: restored $archive → $PREFIX"
