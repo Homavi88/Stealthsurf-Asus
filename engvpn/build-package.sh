@@ -47,6 +47,9 @@ table=79
 killswitch=0
 lan_if=br0
 lan_cidr=
+dns_hijack=0
+dns_port=5353
+captive_open=0
 EOF
 cat >"$STAGE/share/engvpn/dpi.conf.example" <<'EOF'
 enabled=0
@@ -214,8 +217,18 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from "./runtime-engvpn.mjs";',
     )
+elif "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
+        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from \"./runtime-engvpn.mjs\";",
+    )
+    if "engvpnPrivacyCheck" not in text:
+        text = text.replace(
+            "engvpnDpi, engvpnWarp,",
+            "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
+        )
 elif "engvpnPrivacyCheck" not in text and "engvpnDpi" in text:
     text = text.replace(
         "engvpnDpi, engvpnWarp,",
@@ -345,68 +358,84 @@ if "async function engvpnSyncTransparent()" not in text:
     text = text.replace(
         "async function invoke(command, body = {}) {",
         "async function engvpnSyncTransparent() {\n"
-        "    try {\n"
-        "      if (!state.router) return;\n"
-        "      const mode = modeFromRouter(state.router.mode);\n"
-        "      writeTransparentConf({ mode });\n"
-        "      if (mode !== \"off\") await engvpnTransparent(\"apply\", { mode });\n"
-        "      else await engvpnTransparent(\"stop\", {});\n"
-        "    } catch (e) {\n"
-        "      ctx.hooks.log(\"warn\", `transparent sync: ${e.message || e}`);\n"
+        "    if (!state.router) return { ok: true };\n"
+        "    const mode = modeFromRouter(state.router.mode);\n"
+        "    const dnsFlags = transparentDnsFlags(state);\n"
+        "    const devices = selectedDeviceIds(state);\n"
+        "    syncDevicesSelect(state);\n"
+        "    writeTransparentConf({\n"
+        "      mode,\n"
+        "      killswitch: state.router.blockWithoutVpn ? \"1\" : \"0\",\n"
+        "      method: state.router.transparentMethod || \"auto\",\n"
+        "      ...dnsFlags,\n"
+        "    });\n"
+        "    if (mode !== \"off\" || dnsFlags.dns_hijack === \"1\" || dnsFlags.captive_open === \"1\") {\n"
+        "      await engvpnTransparent(\"apply\", { mode, devices, ...dnsFlags });\n"
+        "    } else {\n"
+        "      await engvpnTransparent(\"stop\", {});\n"
         "    }\n"
+        "    return { ok: true };\n"
         "  }\n\n"
         "  async function invoke(command, body = {}) {",
         1,
     )
 
-# Hook router.mode patches → transparent.conf
+# Hook router.mode / DNS / captive / DPI / updates patches — propagate failures + revert UI state
 old_patch = '      case "patch":\n        return patch(body.path, body.value);'
 new_patch = (
     '      case "patch": {\n'
-    "        const result = patch(body.path, body.value);\n"
-    "        if (body?.path === \"router.mode\" || body?.path === \"router.transparentMethod\" || body?.path === \"router.blockWithoutVpn\") {\n"
-    "          if (body?.path === \"router.transparentMethod\") writeTransparentConf({ method: body.value || \"auto\" });\n"
-    "          if (body?.path === \"router.blockWithoutVpn\") writeTransparentConf({ killswitch: body.value ? \"1\" : \"0\" });\n"
-    "          await engvpnSyncTransparent();\n"
-    "        }\n"
-    "        if (body?.path === \"network.youtubeZapret\" || body?.path === \"network.discordZapret\") {\n"
-    "          try {\n"
+    "        const path = body.path;\n"
+    "        const parts = String(path || \"\").split(\".\").filter(Boolean);\n"
+    "        let prev;\n"
+    "        try {\n"
+    "          let cur = state;\n"
+    "          for (const p of parts) cur = cur?.[p];\n"
+    "          prev = cur;\n"
+    "        } catch { prev = undefined; }\n"
+    "        const result = await patch(path, body.value);\n"
+    "        const needsTransparent =\n"
+    "          path === \"router.mode\" || path === \"router.transparentMethod\" || path === \"router.blockWithoutVpn\" ||\n"
+    "          path === \"router.dnsViaVpn\" || path === \"router.dnsLock\" || path === \"router.adblock\" ||\n"
+    "          path === \"router.trips\" || path === \"router.captive\";\n"
+    "        try {\n"
+    "          if (needsTransparent) {\n"
+    "            if (path === \"router.transparentMethod\") writeTransparentConf({ method: body.value || \"auto\" });\n"
+    "            if (path === \"router.blockWithoutVpn\") writeTransparentConf({ killswitch: body.value ? \"1\" : \"0\" });\n"
+    "            await engvpnSyncTransparent();\n"
+    "          }\n"
+    "          if (path === \"network.youtubeZapret\" || path === \"network.discordZapret\") {\n"
     "            const want = !!(state.network?.youtubeZapret || state.network?.discordZapret);\n"
     "            await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n"
-    "          } catch (e) { ctx.hooks.log(\"warn\", `dpi toggle: ${e.message || e}`); }\n"
+    "          }\n"
+    "          if (typeof path === \"string\" && path.startsWith(\"updates.\")) {\n"
+    "            const sched = await syncUpdatesSchedule(state);\n"
+    "            if (sched && sched.ok === false) throw new Error(sched.error || \"Не удалось установить расписание обновлений\");\n"
+    "          }\n"
+    "        } catch (e) {\n"
+    "          setPath(state, path, prev);\n"
+    "          saveState(state);\n"
+    "          const err = new Error(e.message || String(e));\n"
+    "          err.status = 500;\n"
+    "          throw err;\n"
     "        }\n"
     "        return result;\n"
     "      }"
 )
-if old_patch in text and 'if (body?.path === "router.mode")' not in text:
+if old_patch in text and 'engvpnSyncTransparent()' not in text.split('case "patch"')[1][:800]:
     text = text.replace(old_patch, new_patch, 1)
-elif 'router.transparentMethod' not in text and 'if (body?.path === "router.mode")' in text:
-    text = text.replace(
-        '        if (body?.path === "router.mode") {\n'
-        '          await engvpnSyncTransparent();\n'
-        '        }',
-        '        if (body?.path === "router.mode" || body?.path === "router.transparentMethod" || body?.path === "router.blockWithoutVpn") {\n'
-        '          if (body?.path === "router.transparentMethod") writeTransparentConf({ method: body.value || "auto" });\n'
-        '          if (body?.path === "router.blockWithoutVpn") writeTransparentConf({ killswitch: body.value ? "1" : "0" });\n'
-        '          await engvpnSyncTransparent();\n'
-        '        }\n'
-        '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {\n'
-        '          try {\n'
-        '            const want = !!(state.network?.youtubeZapret || state.network?.discordZapret);\n'
-        '            await engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n'
-        '          } catch (e) { ctx.hooks.log("warn", `dpi toggle: ${e.message || e}`); }\n'
-        '        }',
-        1,
-    )
+elif old_patch in text and 'needsTransparent' not in text:
+    text = text.replace(old_patch, new_patch, 1)
 
-# Sync Updates screen → updates.conf + Merlin cru
-if "syncUpdatesSchedule" in text and 'path.startsWith("updates.")' not in text:
+# Sync Updates already folded into patch handler above when inserting fresh.
+# If an older dpi-only hook exists without updates., extend it:
+if "syncUpdatesSchedule" in text and 'path.startsWith("updates.")' not in text and "needsTransparent" not in text:
     needle_upd = '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {'
     if needle_upd in text:
         text = text.replace(
             needle_upd,
             '        if (typeof body?.path === "string" && body.path.startsWith("updates.")) {\n'
-            '          try { await syncUpdatesSchedule(state); } catch (e) { ctx.hooks.log("warn", `updates schedule: ${e.message || e}`); }\n'
+            '          const sched = await syncUpdatesSchedule(state);\n'
+            '          if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
             '        }\n'
             '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {',
             1,
@@ -482,7 +511,7 @@ if "engvpnParityInvoke(" not in text:
         "      if (parity && parity.alias === \"engvpnBackup\") return engvpnBackup(parity.action || \"create\", parity.prefix);\n"
         "      if (command === \"update_router_settings\") {\n"
         "        saveState(state);\n"
-        "        try { await engvpnSyncTransparent(); } catch { /* ignore */ }\n"
+        "        await engvpnSyncTransparent();\n"
         "        return snapshot();\n"
         "      }\n"
         "      if (parity && typeof parity.then === \"function\") return parity;\n"
@@ -544,7 +573,7 @@ if "engvpnWarp(\"create\")" not in text:
       }''',
         1,
     )
-# Hook zapret recheck → also apply open DPI when youtube/discord zapret enabled
+# Hook zapret recheck → also apply open DPI when youtube/discord zapret enabled (fail loudly)
 if "engvpnDpi(\"apply\"" not in text:
     text = text.replace(
         "    state.network.zapret.lastCheck = Date.now();\n"
@@ -556,18 +585,62 @@ if "engvpnDpi(\"apply\"" not in text:
         "  }",
         "    state.network.zapret.lastCheck = Date.now();\n"
         "    state.network.zapret.checking = false;\n"
-        "    try {\n"
-        "      const want = !!(state.network.youtubeZapret || state.network.discordZapret);\n"
-        "      await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network.youtubeZapret, discord: !!state.network.discordZapret });\n"
-        "      ctx.hooks.log(\"info\", want ? \"DPI nfqws: apply\" : \"DPI nfqws: stop\");\n"
-        "    } catch (e) {\n"
-        "      ctx.hooks.log(\"warn\", `dpi: ${e.message || e}`);\n"
-        "    }\n"
-        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена, сервисы возвращены из запасного VPN\" : \"Рабочие прямые пути подтверждены\");\n"
+        "    const want = !!(state.network.youtubeZapret || state.network.discordZapret);\n"
+        "    const dpiRes = await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network.youtubeZapret, discord: !!state.network.discordZapret });\n"
+        "    state.network.zapret.note = want ? (dpiRes?.output || \"DPI nfqws apply\") : \"DPI stop\";\n"
+        "    ctx.hooks.log(\"info\", want ? \"DPI nfqws: apply\" : \"DPI nfqws: stop\");\n"
+        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена + DPI\" : \"Прямые пути + DPI\");\n"
         "    if (state.vpn.connected) await connect();\n"
         "    else saveState(state);\n"
         "    return snapshot();\n"
         "  }",
+        1,
+    )
+# Honest zapret method note (open nfqws, not proprietary SS strategies)
+if "Подмена пакетов на этом стенде не выполняется" in text:
+    text = text.replace(
+        "Подмена пакетов на этом стенде не выполняется.",
+        "EngVPN: способ выбирает прямой/VPN; реальный mangling — open zapret/nfqws (dpi.sh), не стратегии StealthSurf.",
+    )
+# Wire deviceSet → devices.select + transparent re-apply for selected/exclude
+if "syncDevicesSelect(state)" not in text.split("function deviceSet")[1][:600] if "function deviceSet" in text else True:
+    old_ds = (
+        "  function deviceSet(body) {\n"
+        "    const device = ensureDevice(body);\n"
+        "    if (body.excluded != null) device.excluded = Boolean(body.excluded);\n"
+        "    if (body.route) device.route = body.route;\n"
+        "    if (body.configId) device.configId = body.configId;\n"
+        "    if (Array.isArray(body.bypass)) device.bypass = body.bypass;\n"
+        "    if (body.online != null) device.online = Boolean(body.online);\n"
+        "    saveState(state);\n"
+        "    return snapshot();\n"
+        "  }"
+    )
+    new_ds = (
+        "  async function deviceSet(body) {\n"
+        "    const device = ensureDevice(body);\n"
+        "    if (body.excluded != null) device.excluded = Boolean(body.excluded);\n"
+        "    if (body.route) device.route = body.route;\n"
+        "    if (body.configId) device.configId = body.configId;\n"
+        "    if (Array.isArray(body.bypass)) device.bypass = body.bypass;\n"
+        "    if (body.online != null) device.online = Boolean(body.online);\n"
+        "    saveState(state);\n"
+        "    syncDevicesSelect(state);\n"
+        "    const mode = modeFromRouter(state.router?.mode);\n"
+        "    if (mode === \"selected\" || mode === \"exclude\") {\n"
+        "      await engvpnTransparent(\"apply\", { mode, devices: selectedDeviceIds(state), ...transparentDnsFlags(state) });\n"
+        "    }\n"
+        "    return snapshot();\n"
+        "  }"
+    )
+    if old_ds in text:
+        text = text.replace(old_ds, new_ds, 1)
+        print("patched deviceSet → devices.select sync")
+# Ensure syncDevicesSelect imported even if primary import already existed
+if "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
+        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from \"./runtime-engvpn.mjs\";",
         1,
     )
 rtm.write_text(text)
@@ -665,6 +738,66 @@ if "engvpn-transparent" not in et:
                 'import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync, statSync, createWriteStream } from "node:fs";',
                 'import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync, statSync, createWriteStream } from "node:fs";',
             )
+# SmartDNS domain/IP bypass: merge data/run/bypass.routing.json into engine rules
+if "smartdnsBypassRules" not in et:
+    helper = r'''
+function smartdnsBypassRules() {
+  try {
+    const path = join(DATA, "run", "bypass.routing.json");
+    if (!existsSync(path)) return [];
+    const doc = JSON.parse(readFileSync(path, "utf8"));
+    if (!doc || doc.enabled === false) return [];
+    const domains = [];
+    const ips = [];
+    for (const r of doc.rules || []) {
+      for (const d of r.domain || []) {
+        const s = String(d).replace(/^domain:/, "").replace(/^full:/, "").trim();
+        if (s) domains.push(s);
+      }
+      for (const ip of r.ip || []) if (ip) ips.push(String(ip));
+    }
+    const domFile = join(DATA, "run", "bypass.domains");
+    const ipFile = join(DATA, "run", "bypass.ips");
+    if (existsSync(domFile)) {
+      for (const line of readFileSync(domFile, "utf8").split("\n")) {
+        const t = line.trim();
+        if (t && !t.startsWith("#")) domains.push(t);
+      }
+    }
+    if (existsSync(ipFile)) {
+      for (const line of readFileSync(ipFile, "utf8").split("\n")) {
+        const t = line.trim();
+        if (t && !t.startsWith("#")) ips.push(t);
+      }
+    }
+    const uniqDom = [...new Set(domains)];
+    const uniqIp = [...new Set(ips)];
+    if (!uniqDom.length && !uniqIp.length) return [];
+    return [{ id: "smartdns-bypass", action: "direct", reason: "SmartDNS bypass", match: { suffixes: uniqDom, cidrs: uniqIp } }];
+  } catch {
+    return [];
+  }
+}
+
+'''
+    if "function domainStrategy(state)" in et:
+        et = et.replace("function domainStrategy(state)", helper + "function domainStrategy(state)", 1)
+    et = et.replace(
+        "const rules = tunnelOnly ? [] : ruleList(state).map(xrayRule).filter(Boolean);",
+        "const rules = tunnelOnly ? [] : [...smartdnsBypassRules(), ...ruleList(state)].map(xrayRule).filter(Boolean);",
+        1,
+    )
+    et = et.replace(
+        "const rules = tunnelOnly || plan.reject ? [] : ruleList(state).map(singRule).filter(Boolean);",
+        "const rules = tunnelOnly || plan.reject ? [] : [...smartdnsBypassRules(), ...ruleList(state)].map(singRule).filter(Boolean);",
+        1,
+    )
+    et = et.replace(
+        'const rules = tunnelOnly ? ["  - MATCH,PROXY"] : ruleList(state).flatMap(mihomoRule);',
+        'const rules = tunnelOnly ? ["  - MATCH,PROXY"] : [...smartdnsBypassRules(), ...ruleList(state)].flatMap(mihomoRule);',
+        1,
+    )
+    print("patched engines.mjs SmartDNS bypass merge")
 eng.write_text(et)
 print("patched engines.mjs")
 PY
@@ -742,7 +875,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI), panel + engvpnd privacy.",
+  "notes": "EngVPN $VERSION — audit gap closure: fake-success fix, devices.select, DNS :53 hijack, SmartDNS→engines, DPI/GRE/MQTT honesty.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -770,7 +903,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI), panel + engvpnd privacy.",
+  "notes": "EngVPN $VERSION — audit gap closure: fake-success fix, devices.select, DNS :53 hijack, SmartDNS→engines, DPI/GRE/MQTT honesty.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

@@ -61,6 +61,9 @@ export function writeTransparentConf(partial = {}) {
     killswitch: "0",
     lan_if: "br0",
     lan_cidr: "",
+    dns_hijack: "0",
+    dns_port: "5353",
+    captive_open: "0",
     ...cur,
     ...partial,
   };
@@ -116,6 +119,46 @@ export function readTransparentConf() {
   return cur;
 }
 
+/**
+ * Write data/devices.select from panel device checkboxes (excluded=true).
+ * transparent.sh reads this file for selected/exclude modes (IP or MAC per line).
+ */
+export function syncDevicesSelect(state) {
+  mkdirSync(DATA, { recursive: true });
+  const lines = [];
+  for (const d of state?.devices || []) {
+    if (!d?.excluded) continue;
+    if (d.ip) lines.push(String(d.ip).trim());
+    if (d.mac) lines.push(String(d.mac).trim());
+  }
+  const uniq = [...new Set(lines.filter(Boolean))];
+  writeFileSync(join(DATA, "devices.select"), uniq.length ? `${uniq.join("\n")}\n` : "", { mode: 0o600 });
+  return uniq;
+}
+
+/** Collect IP/MAC identifiers for devices marked excluded in the UI. */
+export function selectedDeviceIds(state) {
+  const out = [];
+  for (const d of state?.devices || []) {
+    if (!d?.excluded) continue;
+    if (d.ip) out.push(String(d.ip).trim());
+    if (d.mac) out.push(String(d.mac).trim());
+  }
+  return [...new Set(out.filter(Boolean))];
+}
+
+/** Derive transparent.conf dns_hijack / captive_open from panel router toggles. */
+export function transparentDnsFlags(state) {
+  const r = state?.router || {};
+  const wantDns = !!(r.dnsViaVpn || r.dnsLock || r.adblock);
+  const captiveOpen = !!(r.trips && r.captive);
+  return {
+    dns_hijack: wantDns && !captiveOpen ? "1" : "0",
+    dns_port: "5353",
+    captive_open: captiveOpen ? "1" : "0",
+  };
+}
+
 export async function engvpnTransparent(command, body = {}) {
   if (body && typeof body === "object") {
     const patch = {};
@@ -123,12 +166,15 @@ export async function engvpnTransparent(command, body = {}) {
     if (body.method) patch.method = body.method;
     if (body.port) patch.port = String(body.port);
     if (body.killswitch != null) patch.killswitch = body.killswitch ? "1" : "0";
+    if (body.dns_hijack != null) patch.dns_hijack = body.dns_hijack ? "1" : "0";
+    if (body.dns_port != null) patch.dns_port = String(body.dns_port);
+    if (body.captive_open != null) patch.captive_open = body.captive_open ? "1" : "0";
     if (body.routerMode) patch.mode = modeFromRouter(body.routerMode);
     if (body.transparentMode) patch.mode = modeFromRouter(body.transparentMode);
     if (Object.keys(patch).length) writeTransparentConf(patch);
     if (Array.isArray(body.devices)) {
       mkdirSync(DATA, { recursive: true });
-      writeFileSync(join(DATA, "devices.select"), `${body.devices.join("\n")}\n`, { mode: 0o600 });
+      writeFileSync(join(DATA, "devices.select"), body.devices.length ? `${body.devices.join("\n")}\n` : "", { mode: 0o600 });
     }
   }
   const { stdout } = await shEngvpnd("transparent", command || "status");
@@ -199,26 +245,38 @@ export async function syncUpdatesSchedule(state) {
     lastCheck: u.lastCheck || null,
     lastResult: u.lastResult || u.note || "",
   });
+  const args = [
+    "schedule-update",
+    "write-conf",
+    `interval=${u.interval || "1d"}`,
+    `auto=${u.auto ? "1" : "0"}`,
+    `window_start=${u.windowStart ?? 2}`,
+    `window_end=${u.windowEnd ?? 5}`,
+    `geo_weekly=${u.geoWeekly !== false ? "1" : "0"}`,
+    `cores_when_missing=${u.coresWhenMissing !== false ? "1" : "0"}`,
+  ];
   try {
-    await shEngvpnd(
-      "schedule-update",
-      "write-conf",
-      `interval=${u.interval || "1d"}`,
-      `auto=${u.auto ? "1" : "0"}`,
-      `window_start=${u.windowStart ?? 2}`,
-      `window_end=${u.windowEnd ?? 5}`,
-      `geo_weekly=${u.geoWeekly !== false ? "1" : "0"}`,
-      `cores_when_missing=${u.coresWhenMissing !== false ? "1" : "0"}`,
-    );
-  } catch {
-    // Hosts without cru still keep updates.conf; services-start retries install-cru.
+    await shEngvpnd(...args);
+    return { ok: true };
+  } catch (e1) {
+    // Hosts without engvpnd wrapper: try script directly (write-conf also installs cru).
     try {
-      await shScript("schedule-update.sh", "install-cru");
-    } catch {
-      /* ignore */
+      await shScript(
+        "schedule-update.sh",
+        "write-conf",
+        `interval=${u.interval || "1d"}`,
+        `auto=${u.auto ? "1" : "0"}`,
+        `window_start=${u.windowStart ?? 2}`,
+        `window_end=${u.windowEnd ?? 5}`,
+        `geo_weekly=${u.geoWeekly !== false ? "1" : "0"}`,
+        `cores_when_missing=${u.coresWhenMissing !== false ? "1" : "0"}`,
+      );
+      return { ok: true };
+    } catch (e2) {
+      const error = String(e2.message || e2 || e1.message || e1);
+      return { ok: false, error };
     }
   }
-  return { ok: true };
 }
 
 export async function engvpnUpdateCheck(state) {
@@ -419,8 +477,13 @@ export async function engvpnWarp(command = "status", body = {}) {
     return { ok: true, output: stdout.trim() };
   }
   if (command === "gre-up" || command === "gre-down") {
-    const { stdout } = await shEngvpnd("warp", command);
-    return { ok: true, output: stdout.trim() };
+    try {
+      const { stdout } = await shEngvpnd("warp", command);
+      return { ok: true, output: stdout.trim() };
+    } catch (e) {
+      const error = String(e.message || e);
+      return { ok: false, error, output: error };
+    }
   }
   const { stdout } = await shEngvpnd("warp", command || "status");
   return { ok: true, output: stdout.trim() };
@@ -1061,7 +1124,9 @@ export async function engvpnSmartDns(command = "status", body = {}) {
     const { stdout } = await shEngvpnd("smartdns", action === "get" ? "status" : action);
     return { ok: true, ...readSmartDns(), output: stdout.trim() };
   } catch (e) {
-    return { ok: true, ...readSmartDns(), output: String(e.message || e) };
+    const error = String(e.message || e);
+    // Never fake success — UI must surface apply/status failures.
+    return { ok: false, error, ...readSmartDns(), output: error };
   }
 }
 
@@ -1156,10 +1221,13 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
           router: true,
           routerTransparent: true,
           routerUpdates: true,
+          // Adblock/DNS lock REAL when transparent DNS :53 → EngVPN :5353 hijack is on
           routerAdBlock: true,
+          routerDnsHijack: true,
           routerCaptivePortal: true,
           routerNewDevices: true,
           trafficGraph: true,
+          // Zapret UI drives open dpi.sh/nfqws (needs NFQUEUE); path-probe alone is not success
           zapret: true,
           dpi: true,
           privacyChecks: true,
@@ -1171,13 +1239,20 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
           backup: true,
           warp: true,
           gre: true,
+          // Proprietary StealthSurf desktop / Stream Deck — not on open stack
           gaming: false,
           tray: false,
+          streamDeck: false,
           cloudAccount: true,
           apiKeys: true,
+          // Support = docs/GitHub link from panel (not SS live chat)
+          supportLink: true,
+          // Ferrum closed binary MISSING — open Xray Reality slot only
+          ferrumProprietary: false,
+          ferrumOpenXray: true,
         },
         engines: ["auto", "xray", "ferrum", "sing-box", "mihomo"],
-        note: "Ferrum-слот = открытый Xray (Reality). DPI = open zapret/nfqws. WARP = Cloudflare API.",
+        note: "Ferrum = открытый Xray Reality (не проприетарный Ferrum SS). DPI = zapret/nfqws. WARP = Cloudflare API (не MASQUE). Gaming/Stream Deck — нет.",
       };
     case "get_settings":
       return snap;

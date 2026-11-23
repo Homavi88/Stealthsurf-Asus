@@ -54,14 +54,19 @@ function absorb(result) {
 }
 async function invoke(cmd, body, opts = {}) {
   const data = await api(`/api/invoke/${cmd}`, body || {});
-  absorb(data.result);
-  if (!opts.quiet && (data.result?.vpn || data.result?.state?.vpn)) render();
-  else if (!opts.quiet && !data.result?.vpn) {
+  const result = data.result;
+  // Nested ok:false (SmartDNS / GRE / schedule) must surface — never fake green
+  if (result && result.ok === false) {
+    throw new Error(result.error || result.message || result.output || "Ошибка применения");
+  }
+  absorb(result);
+  if (!opts.quiet && (result?.vpn || result?.state?.vpn)) render();
+  else if (!opts.quiet && !result?.vpn) {
     const snap = await api("/api/snapshot");
     S = snap;
     render();
   }
-  return data.result;
+  return result;
 }
 function toast(msg, ms = 3200) {
   ui.toast = msg;
@@ -279,9 +284,9 @@ function screenRouter() {
       ${cell("Статус", S.vpn.connected ? `Работает · через VPN ${fmtBytes((S.runtime.session.vpnDown || 0) + (S.runtime.session.vpnUp || 0))}` : "VPN выключен")}
       <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Устройства</div><div class="cell-desc">Отмечено ${marked} · режим «${esc(modeLabel)}»</div></div><span class="chev">›</span></button>
       <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Маршруты устройств</div><div class="cell-desc">Свой конфиг или сайты мимо VPN</div></div><span class="chev">›</span></button>
-      ${cell("DNS через VPN", "Запросы адресов сайтов тоже идут через VPN", sw("router.dnsViaVpn", r.dnsViaVpn))}
+      ${cell("DNS через VPN", "LAN :53 → EngVPN DNS :5353 (и через туннель при политике)", sw("router.dnsViaVpn", r.dnsViaVpn))}
       ${cell("Блокировать QUIC", "Браузеры уходят на TCP", sw("router.blockQuic", r.blockQuic))}
-      ${cell("Не давать обходить DNS роутера", "Private Relay, частный DNS и известные DoH", sw("router.dnsLock", r.dnsLock))}
+      ${cell("Не давать обходить DNS роутера", "DoH/Private Relay + hijack LAN :53 на EngVPN", sw("router.dnsLock", r.dnsLock))}
       ${cell("Игры с компьютеров — напрямую", "Списки Steam, Epic и других площадок", sw("router.gamesDirect", r.gamesDirect))}
       ${cell("Блокировать интернет без VPN", "Пока VPN выключен, наружу закрыто", sw("router.blockWithoutVpn", r.blockWithoutVpn))}
       ${cell("IPv6 устройств", "Через VPN, блокировать или напрямую", sel("router.ipv6", r.ipv6, [["vpn", "Через VPN"], ["block", "Блокировать"], ["direct", "Напрямую"]]))}
@@ -296,15 +301,16 @@ function screenRouter() {
     </div>
     <div class="h">ПОЕЗДКИ</div>
     <div class="group">
-      ${cell("Вход в сети отелей и кафе", "Если сеть просит портал, VPN гаснет", sw("router.trips", r.trips))}
-      ${r.trips ? cell("Портал сейчас открыт", "Устройства идут напрямую", sw("router.captive", r.captive)) : ""}
+      ${cell("Вход в сети отелей и кафе", "Режим «поездки»: можно открыть портал без VPN", sw("router.trips", r.trips))}
+      ${r.trips ? cell("Портал сейчас открыт", "Transparent passthrough + политика direct; DNS hijack выкл.", sw("router.captive", r.captive)) : ""}
+      ${r.trips ? `<p class="muted">Когда портал открыт, iptables EngVPN не редиректит LAN — страница отеля/кафе доступна. После входа выключите тумблер.</p>` : ""}
     </div>
     <div class="h">ДОМАШНИЕ УСТРОЙСТВА</div>
     <div class="group">${cell("Включение по сети", "Magic packet на MAC", `<button class="ghost" data-go="wol">Открыть</button>`)}</div>
     <div class="h">HOME ASSISTANT</div>
     <div class="group">
-      <p class="muted stub-inline">Опционально: MQTT публикуется локально, если указать брокер. Полный стек HA StealthSurf не требуется.</p>
-      ${cell("Показывать VPN в Home Assistant", "Переключатель и датчики через MQTT", sw("router.ha", r.ha))}
+      <p class="muted">MQTT: тема <code>engvpn/vpn</code> (connected, engine, ip). Нужен брокер (Mosquitto). Это не полный HA-стек StealthSurf.</p>
+      ${cell("Показывать VPN в Home Assistant", "Публикация состояния в MQTT", sw("router.ha", r.ha))}
       ${cell("Брокер MQTT", r.mqtt.host || "Не указан", `<button class="ghost" data-go="mqtt">Открыть</button>`)}
     </div>
     <div class="h">РАСПИСАНИЕ</div>
@@ -414,7 +420,7 @@ function screenMqtt() {
     <input class="text" data-input="router.mqtt.username" placeholder="пользователь" value="${esc(m.username || "")}">
     <input class="text" data-input="router.mqtt.password" placeholder="пароль" type="password" value="${esc(m.password || "")}">
     <button class="primary" data-act="mqtt">Проверить публикацию</button>
-    <p class="muted">${esc(m.status || "Нужны интеграция MQTT в Home Assistant и брокер, например Mosquitto.")}</p>
+    <p class="muted">Тема <code>engvpn/vpn</code>: JSON <code>{connected,engine,ip}</code>. ${esc(m.status || "Укажите хост брокера и нажмите «Проверить». Ошибка брокера покажется тостом — без ложного успеха.")}</p>
   </div>`;
 }
 function screenSchedule() {
@@ -556,7 +562,7 @@ function screenNetwork() {
   </div>
   <div class="h">SMARTDNS — МИМО VPN</div>
   <div class="group">
-    ${cell("Обход по списку", "Домены и IP идут напрямую (iptables RETURN + routing direct)", sw("smartdns.enabled", !!sd.enabled))}
+    ${cell("Обход по списку", "IP → iptables RETURN; домены → bypass.routing.json в ядре (Xray/sing-box/mihomo)", sw("smartdns.enabled", !!sd.enabled))}
     <div class="field-block">
       <div class="cell-title">Список доменов и IP</div>
       <div class="cell-desc">По одному на строку: example.com, 1.2.3.4, 10.0.0.0/8</div>
@@ -609,7 +615,7 @@ function screenConnection() {
   </div>
   <div class="h">GRE (РЕЗЕРВ)</div>
   <div class="group">
-    <p class="muted">Опциональный GRE-туннель: заполните <code>data/gre.conf</code> и поднимите через CLI.</p>
+    <p class="muted">Нужен <code>data/gre.conf</code> с <code>gre_enabled=1</code> и <code>gre_remote=…</code>. Без конфига кнопки вернут ошибку (не тихий no-op).</p>
     <button class="ghost" data-act="gre-up">GRE up</button>
     <button class="ghost" data-act="gre-down">GRE down</button>
   </div>
@@ -658,9 +664,9 @@ function screenEngine() {
   const cores = S.runtime.cores || {};
   const pref = e.preference;
   return `${backBar("Движок")}<div class="drawer-body">
-    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum</b> — открытый слот: скачивает Xray-core (Reality) как <code>data/cores/ferrum</code>. sing-box / mihomo — конвертация; mihomo умеет AmneziaWG.</p>
+    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum (Xray Reality)</b> — открытый слот: тот же Xray-core → <code>data/cores/ferrum</code> (не проприетарный Ferrum StealthSurf). sing-box / mihomo — конвертация; mihomo умеет AmneziaWG.</p>
     <div class="seg">
-      ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => `<button class="${pref === id ? "on" : ""}" data-engine="${id}">${id === "auto" ? "Авто" : id === "sing-box" ? "sing-box" : id[0].toUpperCase() + id.slice(1)}</button>`).join("")}
+      ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => `<button class="${pref === id ? "on" : ""}" data-engine="${id}">${id === "auto" ? "Авто" : id === "ferrum" ? "Ferrum (Xray Reality)" : id === "sing-box" ? "sing-box" : id[0].toUpperCase() + id.slice(1)}</button>`).join("")}
     </div>
     <p class="muted">${esc(S.runtime.engineMessage || e.activeReason || "Туннель ещё не поднимался")}</p>
     <div class="h">РАЗРЕШЕНИЕ ИМЁН</div>
@@ -1029,11 +1035,18 @@ document.addEventListener("click", (event) => {
     const on = !t.classList.contains("on");
     if (path === "smartdns.enabled") {
       S.smartdns = S.smartdns || { enabled: false, entries: [] };
+      const prev = !!S.smartdns.enabled;
       S.smartdns.enabled = on;
       run(async () => {
-        const text = (S.smartdns.entries || []).join("\n");
-        const result = await invoke("smartdns", { action: "apply", enabled: on, text });
-        if (result?.entries) S.smartdns = { enabled: !!result.enabled, entries: result.entries };
+        try {
+          const text = (S.smartdns.entries || []).join("\n");
+          const result = await invoke("smartdns", { action: "apply", enabled: on, text });
+          if (result?.entries) S.smartdns = { enabled: !!result.enabled, entries: result.entries };
+        } catch (e) {
+          S.smartdns.enabled = prev;
+          render();
+          throw e;
+        }
       });
       return;
     }
@@ -1115,7 +1128,7 @@ document.addEventListener("click", (event) => {
     const enabled = !!(S.smartdns?.enabled);
     const result = await invoke("smartdns", { action: "apply", enabled, text });
     if (result && result.entries) S.smartdns = { enabled: !!result.enabled, entries: result.entries };
-    toast("SmartDNS применён");
+    toast(result?.ok === false ? (result.error || "SmartDNS: ошибка") : "SmartDNS применён");
   });
   if (act === "why") return run(async () => {
     const host = document.querySelector("#why").value.trim();
@@ -1222,8 +1235,14 @@ document.addEventListener("click", (event) => {
     toast("Профиль WARP создан");
   });
   if (act === "warp-import") return run(() => invoke("warpImport", { text: document.querySelector("#warpini").value }));
-  if (act === "gre-up") return run(() => invoke("engvpnWarp", { action: "gre-up" }));
-  if (act === "gre-down") return run(() => invoke("engvpnWarp", { action: "gre-down" }));
+  if (act === "gre-up") return run(async () => {
+    const res = await invoke("engvpnWarp", { action: "gre-up" });
+    toast(res?.output || "GRE up");
+  });
+  if (act === "gre-down") return run(async () => {
+    const res = await invoke("engvpnWarp", { action: "gre-down" });
+    toast(res?.output || "GRE down");
+  });
   if (act === "add-bridge") return run(() => invoke("addBridge", { to: document.querySelector("[data-set=bridge-to]").value }));
   if (act === "del-bridge") return run(() => invoke("deleteBridge", { id: t.dataset.id }));
   if (act === "automode") return run(() => invoke("automode", {}));
@@ -1270,7 +1289,11 @@ document.addEventListener("click", (event) => {
     await invoke("feedback", { text: document.querySelector("#idea").value, files });
     toast("Записано локально");
   });
-  if (act === "support") { toast("Поддержка в EngVPN не подключена: идея остаётся на этом роутере"); return; }
+  if (act === "support") {
+    const url = S.other?.supportUrl || S.account?.consoleUrl || "https://github.com/Homavi88/Stealthsurf-Asus/blob/main/engvpn/README.md";
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  }
   if (act === "speedtest") return run(async () => { ui.result = await invoke("speedTest", {}, { quiet: true }); render(); });
   if (act === "leak" || act === "privacy-run") return run(async () => {
     toast("Проверяю скрытность…", 8000);
