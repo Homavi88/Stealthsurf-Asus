@@ -3,19 +3,19 @@
   "notes": "EngVPN Merlin open addon — panel :8790, Node runtime, downloadable Xray/sing-box/mihomo.",
   "packages": {
     "merlin-aarch64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.3.0_merlin-aarch64.tar.gz",
-      "sha256": "64d787233192e7e7811b17a695f153cd642543b2dc1a2a807ebc14dee72f172d",
-      "size": 92267
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.3.0/engvpn_0.3.0_merlin-aarch64.tar.gz",
+      "sha256": "87eb0bb160468abd677f65a8825a1f07a3e351d890e8d26352ab107fe5acaf60",
+      "size": 92231
     },
     "merlin-armv7": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.3.0_merlin-armv7.tar.gz",
-      "sha256": "64d787233192e7e7811b17a695f153cd642543b2dc1a2a807ebc14dee72f172d",
-      "size": 92267
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.3.0/engvpn_0.3.0_merlin-armv7.tar.gz",
+      "sha256": "87eb0bb160468abd677f65a8825a1f07a3e351d890e8d26352ab107fe5acaf60",
+      "size": 92231
     },
     "merlin-x86_64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.3.0_merlin-x86_64.tar.gz",
-      "sha256": "64d787233192e7e7811b17a695f153cd642543b2dc1a2a807ebc14dee72f172d",
-      "size": 92267
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.3.0/engvpn_0.3.0_merlin-x86_64.tar.gz",
+      "sha256": "87eb0bb160468abd677f65a8825a1f07a3e351d890e8d26352ab107fe5acaf60",
+      "size": 92231
     }
   }
 }
