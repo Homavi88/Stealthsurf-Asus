@@ -16,7 +16,7 @@ mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
 	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
 done
@@ -214,7 +214,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule } from "./runtime-engvpn.mjs";',
+    )
+elif "engvpnPrivacyCheck" not in text and "engvpnDpi" in text:
+    text = text.replace(
+        "engvpnDpi, engvpnWarp,",
+        "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
     )
 elif "syncUpdatesSchedule" not in text and "hydratePanelSnapshot" in text:
     text = text.replace(
@@ -486,6 +491,24 @@ if "engvpnParityInvoke(" not in text:
         "    switch (command) {",
         1,
     )
+# Override stub leakTest → real EngVPN privacy checks (+ aliases)
+if "engvpnPrivacyCheck(state" not in text:
+    text = text.replace(
+        '      case "leakTest":\n        return leakTest();',
+        '      case "leakTest":\n'
+        '      case "privacyCheck":\n'
+        '      case "stealthCheck":\n'
+        '      case "engvpnPrivacy":\n'
+        '        return engvpnPrivacyCheck(state, { httpPort: live.httpPort, socksPort: live.socksPort, action: body?.action || "all" });',
+        1,
+    )
+# Ensure import includes engvpnPrivacyCheck on rebuild
+if "engvpnPrivacyCheck" not in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "engvpnDpi, engvpnWarp,",
+        "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
+        1,
+    )
 # Override closed WARP stubs with open engvpnWarp
 if "engvpnWarp(\"create\")" not in text:
     text = text.replace(
@@ -719,7 +742,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
+  "notes": "EngVPN $VERSION — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI), panel + engvpnd privacy.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -747,7 +770,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
+  "notes": "EngVPN $VERSION — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI), panel + engvpnd privacy.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

@@ -1,24 +1,24 @@
 {
-  "version": "0.5.2",
-  "notes": "EngVPN 0.5.2 — scheduled update-check + optional auto-update (Merlin cru), Updates UI.",
+  "version": "0.5.3",
+  "notes": "EngVPN 0.5.3 — проверки скрытности (exit IP, DNS, IPv6, kill-switch, DPI/отпечаток) в панели и engvpnd privacy.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.2/engvpn_0.5.2_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "948ddccc30c3bee2a5622c3f69b75efe47511a35c1255037bf8b96c782bbb5f6",
-      "size": 120143
+      "sha256": "e30b60c50149694ade4e2f97c23fc59258b70ac50530d00e49a1acf257efca93",
+      "size": 128204
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.2/engvpn_0.5.2_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "948ddccc30c3bee2a5622c3f69b75efe47511a35c1255037bf8b96c782bbb5f6",
-      "size": 120143
+      "sha256": "e30b60c50149694ade4e2f97c23fc59258b70ac50530d00e49a1acf257efca93",
+      "size": 128204
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.2/engvpn_0.5.2_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.3/engvpn_0.5.3_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "948ddccc30c3bee2a5622c3f69b75efe47511a35c1255037bf8b96c782bbb5f6",
-      "size": 120143
+      "sha256": "e30b60c50149694ade4e2f97c23fc59258b70ac50530d00e49a1acf257efca93",
+      "size": 128204
     }
   }
 }

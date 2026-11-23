@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.2** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.3** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.2](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.2)
+Релиз: [engvpn-0.5.2](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.2) (пакет 0.5.3 — см. feed после публикации)
 
 ---
 
@@ -64,7 +64,7 @@ ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Hom
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.2
+## Панель 0.5.3
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -74,6 +74,19 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Подключение** — Cloudflare WARP + GRE  
 - **Движок** — Xray / Ferrum-слот (открытый Xray Reality) / sing-box / mihomo  
 - **Обновления** — интервал проверки feed + опциональное автообновление (Merlin `cru`)  
+- **Проверки скрытности** — живые пробы: exit IP (WAN vs туннель), DNS, IPv6, kill-switch, DPI/отпечаток, подсказка WebRTC для LAN  
+
+### Проверки скрытности
+
+В панели: **Настройки → Проверки скрытности** (и ссылка из Диагностики). CLI:
+
+```sh
+engvpnd privacy              # полный отчёт JSON
+engvpnd privacy dry-run
+engvpnd privacy exit         # только exit IP
+```
+
+Что реально измеряется с роутера: curl WAN vs через SOCKS/HTTP edge; resolv/NVRAM DNS; `ip -6` + curl -6; цепочка `ENGVPN_KS`; статус nfqws и method transparent (TPROXY/REDIRECT). WebRTC с роутера недоступен — в UI есть ссылка на проверку с клиента LAN. Это **сигналы**, не гарантия анонимности.
 
 ### Скриншоты
 
@@ -130,6 +143,7 @@ engvpnd --help
 | `schedule-update …` | Периодическая проверка (+ опц. автоустановка) через Merlin `cru` |
 | `transparent …` | Прозрачный / выборочный VPN |
 | `dpi …` | zapret/nfqws (NFQUEUE) |
+| `privacy …` | Проверки скрытности (exit/DNS/IPv6/kill-switch/DPI) |
 | `warp …` | Cloudflare WARP + GRE |
 | `backup …` | Снимок / откат |
 | `smartdns …` | Обход доменов/IP |
@@ -148,6 +162,7 @@ engvpnd transparent apply
 engvpnd discover
 engvpnd smartdns apply
 engvpnd dpi apply
+engvpnd privacy
 engvpnd warp create
 engvpnd backup create
 engvpnd update-check
@@ -177,7 +192,7 @@ engvpnd update 90                       # ждать старт сервиса �
 
 Переменные: `ENGVPN_FEED`, `ENGVPN_PACKAGE_PREFIX`, `ENGVPN_FORCE_UPDATE=1`.
 
-### Плановая проверка и автообновление (0.5.2)
+### Плановая проверка и автообновление
 
 Панель → **Обновления**: интервал проверки (`6h` / `12h` / `1d` / `3d` / `7d` / `off`) и тумблер **Автообновление** (по умолчанию **выкл.**).
 

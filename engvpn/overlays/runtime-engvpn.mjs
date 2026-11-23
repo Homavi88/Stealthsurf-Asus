@@ -281,6 +281,100 @@ export async function engvpnWatchdog() {
   return { ok: true, output: stdout.trim() };
 }
 
+/**
+ * Router-side privacy / stealth checks (exit IP, DNS, IPv6, kill-switch, DPI fingerprint).
+ * Prefer engvpnd privacy → privacy-check.sh; enrich with panel VPN context.
+ */
+export async function engvpnPrivacyCheck(state = {}, opts = {}) {
+  const conf = readTransparentConf();
+  const dpi = readDpiStatus();
+  let proto = "";
+  let security = "";
+  let engine = state?.engine?.preference || state?.engine?.active || "";
+  const selectedId = state?.vpn?.selectedId;
+  if (selectedId && Array.isArray(state?.subscriptions)) {
+    for (const sub of state.subscriptions) {
+      const node = (sub.nodes || []).find((n) => n.id === selectedId);
+      if (node) {
+        proto = node.protocol || node.type || "";
+        security = node.security || node.tls || node.reality || "";
+        if (typeof node.connection_url === "string") {
+          const m = node.connection_url.match(/^([a-z0-9+]+):/i);
+          if (m && !proto) proto = m[1];
+          if (/reality/i.test(node.connection_url)) security = security || "reality";
+        }
+        break;
+      }
+    }
+  }
+
+  const env = {
+    ...process.env,
+    ENGVPN_DATA_DIR: process.env.ENGVPN_DATA_DIR || DATA,
+    ENGVPN_VPN_CONNECTED: state?.vpn?.connected ? "1" : "0",
+    ENGVPN_IPV6_POLICY: state?.router?.ipv6 || "block",
+    ENGVPN_DNS_VIA_VPN: state?.router?.dnsViaVpn ? "1" : "0",
+    ENGVPN_PROTO_HINT: String(proto || ""),
+    ENGVPN_SECURITY_HINT: String(security || ""),
+    ENGVPN_ENGINE_HINT: String(engine || ""),
+    ENGVPN_HTTP_PORT: opts.httpPort != null ? String(opts.httpPort) : process.env.ENGVPN_HTTP_PORT || "",
+    ENGVPN_SOCKS_PORT: opts.socksPort != null ? String(opts.socksPort) : process.env.ENGVPN_SOCKS_PORT || String(state?.engine?.socksPort || ""),
+  };
+
+  let report;
+  try {
+    const script = join(SHARE, "privacy-check.sh");
+    const args = [script, opts.action || "all"];
+    const { stdout } = await exec("sh", args, { env, timeout: 90000 });
+    const text = String(stdout || "").trim();
+    const start = text.indexOf("{");
+    const jsonText = start >= 0 ? text.slice(start) : text;
+    report = JSON.parse(jsonText);
+  } catch (e) {
+    report = {
+      ok: false,
+      error: e.message || String(e),
+      disclaimer: "Не удалось выполнить privacy-check.sh",
+      kind: "error",
+    };
+  }
+
+  // Panel-known IPs as fallback when curl from shell had no proxy ports
+  if (report && report.exit) {
+    if (!report.exit.tunnel_ip && state?.runtime?.exitIp) report.exit.tunnel_ip = state.runtime.exitIp;
+    if (!report.exit.wan_ip && state?.runtime?.publicIp) report.exit.wan_ip = state.runtime.publicIp;
+    if (report.exit.tunnel_ip && report.exit.wan_ip) {
+      report.exit.ok = report.exit.tunnel_ip !== report.exit.wan_ip;
+      report.exit.leak = report.exit.tunnel_ip === report.exit.wan_ip && !!state?.vpn?.connected;
+    }
+  }
+
+  // Surface DPI from Node when shell smoke-skipped NFQUEUE
+  if (report && report.dpi) {
+    report.dpi.enabled = report.dpi.enabled || !!dpi.enabled;
+    report.dpi.panel = dpi;
+  }
+  if (report && report.transparent && conf) {
+    report.transparent.mode = report.transparent.mode || conf.mode || "off";
+    report.transparent.method = report.transparent.method || conf.method || "redirect";
+    report.transparent.killswitch_conf = conf.killswitch === "1";
+  }
+
+  report.ui = {
+    title: "Проверки скрытности",
+    labels: {
+      exit: "Выходной IP",
+      dns: "DNS",
+      ipv6: "IPv6",
+      killswitch: "Kill-switch",
+      dpi: "DPI / отпечаток",
+      webrtc: "WebRTC (клиент)",
+      path: "Путь / MTU / UDP",
+    },
+  };
+  return report;
+}
+
 export async function engvpnDpi(command = "status", body = {}) {
   if (body && typeof body === "object") {
     mkdirSync(DATA, { recursive: true });
@@ -1068,6 +1162,8 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
           trafficGraph: true,
           zapret: true,
           dpi: true,
+          privacyChecks: true,
+          leakTest: true,
           telegramDirect: true,
           smartDns: true,
           lanProxyServer: true,
@@ -1211,6 +1307,18 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
       return { ...(state.network?.zapret || {}), dpi: readDpiStatus() };
     case "get_dpi_status":
       return readDpiStatus();
+    case "get_privacy_status":
+    case "get_stealth_status":
+      return {
+        alias: "privacyCheck",
+        note: "Запустите privacyCheck / leakTest для живых проб",
+        transparent: readTransparentConf(),
+        dpi: readDpiStatus(),
+        ipv6: state.router?.ipv6 || "block",
+        dnsViaVpn: !!state.router?.dnsViaVpn,
+        killSwitch: !!state.router?.blockWithoutVpn,
+        webrtc_hint: "https://browserleaks.com/webrtc",
+      };
     case "get_telegram_direct_status":
       return { enabled: !!state.network?.telegramDirect, ready: !!state.network?.telegramDirect };
     case "get_smart_dns_bypass":

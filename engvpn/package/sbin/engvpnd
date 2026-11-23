@@ -39,6 +39,8 @@ Usage: engvpnd <command> [options]
                                Open iptables REDIRECT/TPROXY selective VPN
   dpi <start|stop|status|install|dry-run>
                                Open zapret/nfqws DPI (NFQUEUE packet mangling)
+  privacy [all|exit|dns|ipv6|killswitch|dpi|path|dry-run]
+                               Privacy / stealth probes (exit IP, DNS, IPv6, kill-switch, DPI)
   warp <create|status|import-file|gre-up|gre-down|dry-run>
                                Cloudflare WARP (open API) + optional GRE tunnel
   backup <create|restore|latest|list>
@@ -208,6 +210,15 @@ cmd_dpi() {
 	sh "$SHARE/dpi.sh" "$@"
 }
 
+cmd_privacy() {
+	[ -x "$SHARE/privacy-check.sh" ] || {
+		echo "engvpnd: missing privacy-check.sh" >&2
+		exit 1
+	}
+	ensure_data
+	sh "$SHARE/privacy-check.sh" "$@"
+}
+
 cmd_warp() {
 	[ -x "$SHARE/warp.sh" ] || {
 		echo "engvpnd: missing warp.sh" >&2
@@ -330,6 +341,7 @@ update) cmd_update "$@" ;;
 schedule-update) cmd_schedule_update "$@" ;;
 transparent) cmd_transparent "$@" ;;
 dpi) cmd_dpi "$@" ;;
+privacy) cmd_privacy "$@" ;;
 warp) cmd_warp "$@" ;;
 backup) cmd_backup "$@" ;;
 smartdns) cmd_smartdns "$@" ;;
