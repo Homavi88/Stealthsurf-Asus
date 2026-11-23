@@ -385,6 +385,10 @@ apply_rules() {
 	build_killswitch
 	dokodemo_hint
 	write_state_file
+	# Re-hook SmartDNS IP bypass into the fresh ENGVPN chain
+	if [ -x "$SHARE/smartdns.sh" ]; then
+		sh "$SHARE/smartdns.sh" apply >/dev/null 2>&1 || true
+	fi
 	echo "transparent: applied mode=$mode method=$method port=$port killswitch=$killswitch lan=$lan_cidr if=$lan_if"
 }
 

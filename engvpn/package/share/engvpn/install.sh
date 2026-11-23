@@ -194,7 +194,9 @@ place() {
 	done <"$STAGE/share/engvpn/files"
 	# Ensure executables
 	chmod 0755 "$PREFIX/sbin/engvpnd" \
-		"$SHARE/install.sh" "$SHARE/service.sh" "$SHARE/hook.sh" "$SHARE/netfilter.sh" 2>/dev/null || true
+		"$SHARE/install.sh" "$SHARE/service.sh" "$SHARE/hook.sh" "$SHARE/netfilter.sh" \
+		"$SHARE/transparent.sh" "$SHARE/backup.sh" "$SHARE/discover-devices.sh" "$SHARE/smartdns.sh" \
+		"$SHARE/dpi.sh" "$SHARE/warp.sh" "$SHARE/update.sh" 2>/dev/null || true
 	if [ -f "$OLD_MANIFEST" ]; then
 		while IFS= read -r file; do
 			[ -n "$file" ] || continue
@@ -427,6 +429,42 @@ check_parents() {
 	[ -d /jffs ] || fail "Asuswrt-Merlin with JFFS is required"
 }
 
+user_backup() {
+	# Persistent user-facing backup (data + package) — separate from /tmp rollback.
+	# Prefer already-installed backup.sh; else use the one from the archive stage.
+	script=""
+	if [ -f "$SHARE/backup.sh" ]; then
+		script=$SHARE/backup.sh
+	elif [ -n "${STAGE:-}" ] && [ -f "$STAGE/share/engvpn/backup.sh" ]; then
+		script=$STAGE/share/engvpn/backup.sh
+	fi
+	[ -n "$script" ] || return 0
+	sh "$script" create "$PREFIX" || complain "user backup failed (continuing)"
+}
+
+ask_restore() {
+	# Returns 0 if user wants restore. Honours ENGVPN_RESTORE=1|0.
+	case "${ENGVPN_RESTORE:-}" in
+	1 | yes | YES | y | Y) return 0 ;;
+	0 | no | NO | n | N) return 1 ;;
+	esac
+	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
+		# Smoke default: no restore unless ENGVPN_RESTORE set
+		return 1
+	fi
+	{ : </dev/tty; } 2>/dev/null || {
+		complain "no TTY for restore prompt; set ENGVPN_RESTORE=1|0 (default: no restore)"
+		return 1
+	}
+	printf "Восстановить EngVPN из резервной копии (откат)? [y/N]: " >/dev/tty
+	ans=""
+	IFS= read -r ans </dev/tty || ans=""
+	case "$ans" in
+	y | Y | yes | YES | да | Да | ДА) return 0 ;;
+	esac
+	return 1
+}
+
 do_install() {
 	archive=$1
 	[ -f "$archive" ] || fail "Missing archive $archive"
@@ -434,6 +472,8 @@ do_install() {
 	other=$(other_install)
 	[ -z "$other" ] || fail "EngVPN already installed at ${other%/share/engvpn}"
 	unpack "$archive" || fail "Archive unpack failed"
+	# Snapshot existing data/package before mutating (uses staged backup.sh on first install)
+	user_backup
 	clear_leftovers
 	enough_room || fail "Not enough space under $PREFIX for the new files"
 	had_manifest=""
@@ -477,6 +517,7 @@ do_upgrade() {
 	drive_plugged || fail "Drive not mounted; upgrade aborted"
 	[ -x "$DAEMON" ] || fail "No EngVPN at $PREFIX"
 	unpack "$archive" || fail "Archive unpack failed"
+	user_backup
 	clear_leftovers
 	enough_room || fail "Not enough space for upgrade"
 	back_up || {
@@ -517,6 +558,22 @@ do_upgrade() {
 do_uninstall() {
 	drive_plugged || fail "Drive not mounted; uninstall aborted"
 	stop_service || fail "Service did not stop; reboot and retry uninstall"
+	if ask_restore; then
+		# Roll back to the last pre-install/upgrade snapshot — do NOT overwrite it first.
+		bak=$SHARE/backup.sh
+		[ -x "$bak" ] || fail "backup.sh missing; cannot restore"
+		say "Restoring EngVPN from backup (uninstall cancelled → rollback)"
+		remove_hooks
+		sh "$bak" restore "$PREFIX" || fail "restore from backup failed"
+		add_hooks || complain "hooks restore incomplete"
+		start_service || complain "service did not start after restore"
+		say "EngVPN restored from backup at $PREFIX"
+		return 0
+	fi
+	# Clean remove: snapshot current state for a later manual restore, then delete.
+	if [ "${ENGVPN_SKIP_BACKUP:-}" != 1 ] && [ -x "$SHARE/backup.sh" ]; then
+		sh "$SHARE/backup.sh" create "$PREFIX" || complain "pre-uninstall backup failed"
+	fi
 	remove_hooks
 	rm -rf "$PREFIX"
 	if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
@@ -524,7 +581,7 @@ do_uninstall() {
 	fi
 	rm -rf "$VOLATILE_DIR"
 	rm -rf "$WORK"
-	say "EngVPN removed"
+	say "EngVPN removed (backup kept under sibling .engvpn-backup unless deleted manually)"
 }
 
 own_prefix() {
