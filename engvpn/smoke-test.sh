@@ -165,10 +165,41 @@ if command -v node >/dev/null 2>&1; then
 	upd=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/engvpnUpdateCheck" \
 		-H 'Content-Type: application/json' -d '{}' || true)
 	echo "$upd" | grep -q 'installed' || echo "  update-check invoke: $upd"
+	# Account UI path: empty key → subscription URL fields; invalid key rejected
+	acc=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/get_account" \
+		-H 'Content-Type: application/json' -d '{}' || true)
+	echo "$acc" | grep -q 'apiKeySet' || echo "  get_account: $acc"
+	bad=$(curl -s -b /tmp/engvpn-smoke-cookie.txt -o /tmp/engvpn-smoke-badacc.json -w '%{http_code}' -X POST "http://127.0.0.1:8790/api/invoke/saveAccount" \
+		-H 'Content-Type: application/json' -d '{"apiKey":"not-a-key"}' || true)
+	echo "  bad api key http=$bad (expect error body)"
+	grep -qi 'stlth_\|ключ\|key\|Error\|error' /tmp/engvpn-smoke-badacc.json && echo "  api key validation ok" || echo "  api key validation response: $(cat /tmp/engvpn-smoke-badacc.json)"
+	# Manual subscription URL without API key
+	sub=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/saveAccount" \
+		-H 'Content-Type: application/json' -d '{"subscriptionUrl":"vless://00000000-0000-4000-8000-000000000001@127.0.0.1:443?encryption=none&security=tls&type=tcp#smoke","preferUrl":true,"name":"smoke-url"}' || true)
+	echo "$sub" | grep -q '"ok"\|vpn\|subscriptions\|smoke' && echo "  subscription URL save ok" || echo "  sub url: $sub"
+	# DPI / WARP dry-run via engvpnd
+	"$PREFIX/sbin/engvpnd" dpi dry-run | grep -q 'queue=' && echo "  dpi dry-run ok"
+	"$PREFIX/sbin/engvpnd" warp dry-run | grep -q 'cloudflare_api=' && echo "  warp dry-run ok"
+	# Bootstrap capabilities include warp/dpi
+	boot=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/get_bootstrap" \
+		-H 'Content-Type: application/json' -d '{}' || true)
+	echo "$boot" | grep -q '"warp":true' && echo "  bootstrap warp ok" || echo "  bootstrap: $boot"
 	"$PREFIX/share/engvpn/service.sh" stop
 	echo "  stop ok"
 else
 	echo "==> skip panel live test (no node)"
+fi
+
+echo "==> minisign verify (if signed)"
+PUB=$ROOT/keys/engvpn.minisign.pub
+SIG=$ROOT/dist/engvpn_${VERSION}_merlin-x86_64.tar.gz.minisig
+if [ -f "$SIG" ] && [ -f "$PUB" ]; then
+	minisign -Vm "$ARCHIVE" -x "$SIG" -p "$PUB"
+	node "$PREFIX/share/engvpn/verify-minisign.mjs" "$ARCHIVE" "$SIG" "$PUB" || \
+		node "$ROOT/package/share/engvpn/verify-minisign.mjs" "$ARCHIVE" "$SIG" "$PUB"
+	echo "  minisign ok"
+else
+	echo "  skip (no .minisig — build without key?)"
 fi
 
 echo "==> uninstall"

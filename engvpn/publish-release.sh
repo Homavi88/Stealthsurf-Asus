@@ -16,7 +16,11 @@ sh ./build-package.sh
 cp -f feed/latest.release.json feed/latest.json
 
 echo "Built:"
-ls -la dist/engvpn_${VERSION}_merlin-*.tar.gz
+ls -la dist/engvpn_${VERSION}_merlin-*.tar.gz*
+SIGS=""
+for a in aarch64 armv7 x86_64; do
+	[ -f "dist/engvpn_${VERSION}_merlin-${a}.tar.gz.minisig" ] && SIGS="$SIGS dist/engvpn_${VERSION}_merlin-${a}.tar.gz.minisig"
+done
 
 if [ "$PUSH" -ne 1 ]; then
 	cat <<EOF
@@ -27,13 +31,14 @@ Dry-run. To publish:
     dist/engvpn_${VERSION}_merlin-aarch64.tar.gz \\
     dist/engvpn_${VERSION}_merlin-armv7.tar.gz \\
     dist/engvpn_${VERSION}_merlin-x86_64.tar.gz \\
+    $SIGS \\
     --title "EngVPN $VERSION" \\
     --notes-file - <<'NOTES'
-EngVPN Merlin open addon $VERSION.
+EngVPN Merlin open addon $VERSION (hard-parity).
 
 Install: curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 
-Feed: engvpn/feed/latest.json (SHA-256 verified).
+Feed: engvpn/feed/latest.json (SHA-256 + Minisign).
 NOTES
 
 Then commit updated engvpn/feed/latest.json if hashes changed.
@@ -46,20 +51,17 @@ command -v gh >/dev/null 2>&1 || {
 	exit 1
 }
 
+ASSETS="dist/engvpn_${VERSION}_merlin-aarch64.tar.gz dist/engvpn_${VERSION}_merlin-armv7.tar.gz dist/engvpn_${VERSION}_merlin-x86_64.tar.gz $SIGS"
+
 if gh release view "$TAG" >/dev/null 2>&1; then
 	echo "Updating existing release $TAG"
-	gh release upload "$TAG" \
-		"dist/engvpn_${VERSION}_merlin-aarch64.tar.gz" \
-		"dist/engvpn_${VERSION}_merlin-armv7.tar.gz" \
-		"dist/engvpn_${VERSION}_merlin-x86_64.tar.gz" \
-		--clobber
+	# shellcheck disable=SC2086
+	gh release upload "$TAG" $ASSETS --clobber
 else
-	gh release create "$TAG" \
-		"dist/engvpn_${VERSION}_merlin-aarch64.tar.gz" \
-		"dist/engvpn_${VERSION}_merlin-armv7.tar.gz" \
-		"dist/engvpn_${VERSION}_merlin-x86_64.tar.gz" \
+	# shellcheck disable=SC2086
+	gh release create "$TAG" $ASSETS \
 		--title "EngVPN $VERSION" \
-		--notes "EngVPN Merlin open addon ${VERSION}. Install via engvpn/merlin.sh (SHA-256 feed)."
+		--notes "EngVPN Merlin open addon ${VERSION}. Install via engvpn/merlin.sh (SHA-256 + Minisign feed)."
 fi
 
 echo "Published $TAG. Commit feed/latest.json if needed."

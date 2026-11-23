@@ -264,6 +264,32 @@ else
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
 	[ "$actual" = "$sha256" ] || fail "package checksum does not match the feed"
+	# Minisign (optional but preferred when feed publishes .minisig)
+	sig_url=$(field minisig)
+	[ -z "$sig_url" ] && sig_url="${url}.minisig"
+	sig=$WORK/engvpn.tar.gz.minisig
+	case "$sig_url" in
+	file://*) [ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true ;;
+	https://* | http://127.0.0.1/* | http://localhost/*)
+		curl -fsS --retry 2 -o "$sig" "$sig_url" 2>/dev/null || true
+		;;
+	esac
+	if [ -f "$sig" ]; then
+		# Extract pubkey from package for verify (bootstrap chicken/egg: use embedded feed pubkey via curl raw, or skip until after unpack)
+		# For first install we verify with known public key from the repo feed tree when available.
+		pub_url=${ENGVPN_MINISIGN_PUB:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/keys/engvpn.minisign.pub}
+		pub=$WORK/engvpn.minisign.pub
+		curl -fsS --retry 2 -o "$pub" "$pub_url" 2>/dev/null || true
+		if [ -f "$pub" ] && command -v minisign >/dev/null 2>&1; then
+			minisign -Vm "$archive" -x "$sig" -p "$pub" || fail "minisign verification failed"
+			echo "Minisign OK"
+		elif [ -f "$pub" ] && command -v node >/dev/null 2>&1; then
+			# Defer full Node verify until package has verify-minisign.mjs — SHA-256 already checked
+			echo "Minisign signature present (Node verify after install)"
+		else
+			echo "Note: minisig present but verifier unavailable; SHA-256 already checked"
+		fi
+	fi
 fi
 
 tar -xzOf "$archive" ./share/engvpn/install.sh >"$WORK/install.sh" ||

@@ -104,6 +104,32 @@ cmd_apply() {
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
 	[ "$actual" = "$sha256" ] || fail "checksum mismatch"
+	# Minisign verify when .minisig is published alongside the archive
+	sig_url=$(field "$feed" "$key" minisig)
+	[ -z "$sig_url" ] && sig_url="${url}.minisig"
+	sig=$WORK/engvpn.tar.gz.minisig
+	pub=$SHARE/engvpn.minisign.pub
+	verify=$SHARE/verify-minisign.mjs
+	sig_ok=0
+	case "$sig_url" in
+	file://*)
+		[ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true
+		;;
+	https://* | http://127.0.0.1/* | http://localhost/*)
+		curl -fsS --retry 2 -o "$sig" "$sig_url" 2>/dev/null || true
+		;;
+	esac
+	if [ -f "$sig" ] && [ -f "$pub" ]; then
+		if [ -f "$verify" ] && command -v node >/dev/null 2>&1; then
+			node "$verify" "$archive" "$sig" "$pub" && sig_ok=1
+		elif command -v minisign >/dev/null 2>&1; then
+			minisign -Vm "$archive" -x "$sig" -p "$pub" && sig_ok=1
+		fi
+		[ "$sig_ok" = 1 ] || fail "minisign verification failed"
+		echo "update: minisign ok"
+	else
+		echo "update: no minisig (SHA-256 only)" >&2
+	fi
 	# Hold transparent rules during upgrade if present
 	[ -x "$SHARE/netfilter.sh" ] && sh "$SHARE/netfilter.sh" set-hold 120 >/dev/null 2>&1 || true
 	export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"

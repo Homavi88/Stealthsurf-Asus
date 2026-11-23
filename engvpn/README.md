@@ -1,16 +1,16 @@
 # EngVPN — аддон для Asuswrt-Merlin
 
-Открытый VPN-аддон для Merlin с установкой и панелью, близкими к StealthSurf. Собран только из открытых компонентов (панель на Node, загружаемые Xray / sing-box / mihomo). **Не** содержит проприетарных бинарников и торговых марок StealthSurf.
+Открытый VPN-аддон для Merlin с панелью, близкой к StealthSurf. Только открытые компоненты (панель на Node / Entware, Xray · sing-box · mihomo, open zapret/nfqws, Cloudflare WARP API). **Не** содержит проприетарных бинарников и торговых марок StealthSurf.
 
 | | |
 | --- | --- |
-| Версия | **0.3.0** ([`VERSION`](./VERSION)) |
+| Версия | **0.4.0** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.3.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.3.0)
+Релиз: [engvpn-0.4.0](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.4.0) (после публикации)
 
 ---
 
@@ -27,7 +27,7 @@
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Установщик запросит пароль панели (8–128 символов), скачает пакет под ваш CPU (`merlin-aarch64` / `merlin-armv7`), проверит **SHA-256** и запустит сервис.
+Установщик запросит пароль панели (8–128 символов), скачает пакет под ваш CPU (`merlin-aarch64` / `merlin-armv7`), проверит **SHA-256** и при наличии — **Minisign**, затем запустит сервис.
 
 Без интерактива:
 
@@ -35,69 +35,67 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engv
 ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Опционально:
-
 | Переменная | Назначение |
 | --- | --- |
-| `ENGVPN_PREFIX` | Путь установки (например `/tmp/mnt/USB/engvpn`) |
-| `ENGVPN_LOCAL_PACKAGE` | Путь к локальному `.tar.gz` (без скачивания) |
-| `ENGVPN_FEED` | Другой URL ленты (feed) |
+| `ENGVPN_PREFIX` | Путь установки |
+| `ENGVPN_LOCAL_PACKAGE` | Локальный `.tar.gz` |
+| `ENGVPN_FEED` | Другой URL ленты |
 
-Откройте панель:
+Панель: `http://192.168.50.1:8790/` (подставьте LAN IP).
 
-```text
-http://192.168.50.1:8790/
-```
+## Аккаунт: API-ключ или URL подписки
 
-(подставьте IP роутера в LAN). Войдите с выбранным паролем.
+В **Настройки → Аккаунт** (одно меню):
 
-## Панель 0.3.0
+1. **Основной путь** — ключ StealthSurf HTTP API (`Authorization: Bearer stlth_…`). Документация: https://docs.stealthsurf.net/api  
+   EngVPN вызывает `GET /profile` и `GET /configs`, импортирует `connection_url` в локальный список.  
+2. **Если ключ пуст / неактивен** — на том же экране поля **URL подписки** или одиночный `vless://` / `trojan://` / `ss://`.
 
-UI повторяет карту экранов StealthSurf (логин, главная, боковые настройки), но брендирован как **EngVPN**:
+Ключ хранится только на роутере (`data/account.json`, mode 0600). Проприетарные бинарники StealthSurf не скачиваются.
 
-- **Главная** — статус, внешний IP, нагрузка ЦП/ОЗУ, скорость VPN/напрямую, локации/конфиги  
-- **Роутер** — режимы transparent (все / выбранные / кроме), устройства, DNS/QUIC/kill-switch/IPv6, реклама, captive, WOL, MQTT, расписание, failover, пароль панели, «О роутере»  
-- **Подписка / маршрутизация / сеть / подключение / авторежим / движок / оформление / обновления / диагностика / идея** — те же пункты меню  
+## Панель 0.4.0
 
-Транспорт: `GET /api/session`, `POST /api/login`, `POST /api/invoke/<команда>`, `GET /api/events` (SSE). Для совместимости доступны имена вроде `get_router_settings`, `get_router_devices`, `update_router_settings` — они мапятся на состояние EngVPN и `engvpnd`.
+UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
-**Заглушки (без облака StealthSurf):** баланс ₽ / консоль аккаунта, WARP-стек, SmartDNS «сервисы без VPN» из консоли SS. Подписки — локальные URL/`vless://` и т.п. Ferrum не скачивается (закрытое ядро).
+- **Главная** — статус, IP, нагрузка, скорость, локации  
+- **Роутер** — transparent (все / выбранные / кроме), метод **auto / TPROXY / REDIRECT**, устройства, DNS/QUIC/kill-switch/IPv6, реклама, «О роутере»  
+- **Сеть** — YouTube/Discord через **open zapret/nfqws** (DPI)  
+- **Подключение** — Cloudflare WARP (открытая регистрация) + GRE  
+- **Движок** — Xray / **Ferrum-слот (открытый Xray Reality)** / sing-box / mihomo  
 
-Подробнее о parity: см. прогресс-заметку в Project store `docs/engvpn-panel-clone.md`.
-
-## Повседневное использование
+## Повседневные команды
 
 ```sh
 engvpnd status
 engvpnd transparent status
+engvpnd transparent apply          # method=auto → TPROXY+UDP если xt_TPROXY есть
+engvpnd dpi apply                  # open nfqws
+engvpnd warp create                # Cloudflare WARP профиль
 engvpnd update-check
-engvpnd update                 # самообновление из feed (SHA-256)
+engvpnd update                     # SHA-256 + Minisign
 ```
 
-Сервис:
+### Transparent / UDP
 
-```sh
-/jffs/addons/engvpn/share/engvpn/service.sh start|stop|restart|check
-```
-
-### Прозрачный / выборочный VPN
-
-Правьте `/jffs/addons/engvpn/data/transparent.conf`:
+В `data/transparent.conf`:
 
 ```ini
-mode=all          # off | all | selected | exclude
-method=redirect   # redirect (по умолчанию) | tproxy
+mode=all
+method=auto        # auto | tproxy | redirect
 port=12345
 killswitch=0
 ```
 
-Список устройств (по желанию): `data/devices.select` (IP или MAC, по одному на строку). Затем:
+- **TPROXY** — TCP+UDP при наличии `xt_TPROXY` / `xt_socket`  
+- **REDIRECT** — только TCP (fallback на многих сборках Merlin)  
+- Dokodemo inbound с `followRedirect` / `tproxy` пишется в `data/run/dokodemo.inbound.json`
 
-```sh
-engvpnd transparent apply
-```
+Подробнее: документация hard-parity в Project store.
 
-Использует открытый **iptables** REDIRECT (или TPROXY, если доступен) и dokodemo inbound в Xray — не `stealthsurf-nfqws`. Режим также синхронизируется с панелью («Роутер» → VPN для всей сети).
+### Minisign
+
+Публичный ключ: [`keys/engvpn.minisign.pub`](./keys/engvpn.minisign.pub) и `keys/README.md`.  
+Проверка: `minisign -Vm package.tar.gz -p keys/engvpn.minisign.pub` или `verify-minisign.mjs` на роутере.
 
 ## Удаление
 
@@ -105,26 +103,21 @@ engvpnd transparent apply
 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
 ```
 
-## Сборка / smoke (для разработчиков)
+## Сборка / smoke
 
 ```sh
 cd engvpn
-./build-package.sh
+./build-package.sh      # подписывает пакеты, если есть keys/engvpn.minisign.key
 ./smoke-test.sh
-./publish-release.sh          # dry-run
-./publish-release.sh --push   # GitHub Release engvpn-$VERSION
+./publish-release.sh --push
 ```
-
-Панель UI лежит в `overlays/public/` и накладывается на runtime alfa при сборке. Демон-хелперы — `overlays/runtime-engvpn.mjs`.
 
 ## Отличия от официального StealthSurf
 
-| Upstream | EngVPN |
+| Upstream | EngVPN 0.4 |
 | --- | --- |
-| Закрытый `stealthsurf-routerd` / GRE / OpenFlux / Ferrum | Не поставляется — открытая панель Node + публичные ядра |
-| `stealthsurf-nfqws` | Не поставляется — маршрутизация через iptables + dokodemo |
-| Облако / баланс ₽ / консоль | Локальные подписки; аккаунт — заглушка |
-| Подписи Minisign | Только HTTPS + SHA-256 |
-| Статический демон (без Entware) | Нужен Entware **Node** |
-
-Подробнее: отчёт по проекту и [PR #152](https://github.com/Homavi88/Stealthsurf-Asus/pull/152).
+| Закрытый routerd / nfqws / Ferrum | Open Node + zapret/nfqws + Xray в слоте Ferrum |
+| Облако / баланс только в приложении | Публичный API с вашим ключом + URL подписки |
+| WARP закрытый стек | Cloudflare client API → WireGuard |
+| Только SHA в части сборок | SHA-256 + Minisign |
+| Статический демон без Entware | **Entware Node** (осознанно) |
