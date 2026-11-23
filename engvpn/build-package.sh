@@ -135,9 +135,36 @@ text = text.replace('theme: "dark"', 'theme: "light"')
 text = text.replace('accent: "stealth"', 'accent: "engvpn"')
 text = text.replace('oled: true', 'oled: false')
 text = text.replace(
-    'subscriptionName: "Основная подписка"',
-    'subscriptionName: "Локальные подписки",\n    apiKeySet: false,\n    apiKeyMasked: "",\n    balance: null,\n    cloud: false',
+    '''    account: {
+      email: "",
+      balance: 0,
+      subscriptionName: "Основная подписка",
+      nextCharge: "",
+      consoleUrl: "",
+      consoleConnected: false,
+      inviteCode: "",
+    },''',
+    '''    account: {
+      email: "",
+      balance: null,
+      subscriptionName: "Локальные подписки",
+      subscriptionUrl: "",
+      apiKeySet: false,
+      apiKeyMasked: "",
+      cloud: false,
+      nextCharge: "",
+      consoleUrl: "",
+      consoleConnected: false,
+      inviteCode: "",
+    },''',
 )
+# Transparent method default for panel selector
+if "transparentMethod" not in text:
+    text = text.replace(
+        '      mode: "except",\n      dnsViaVpn: true,',
+        '      mode: "except",\n      transparentMethod: "auto",\n      dnsViaVpn: true,',
+        1,
+    )
 text = text.replace(
     'note: "Альфа собрана локально и не ставится поверх прошивки сама."',
     'note: "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update."',
@@ -168,7 +195,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from "./runtime-engvpn.mjs";',
+    )
+elif "hydratePanelSnapshot" not in text and "engvpnParityInvoke" in text:
+    text = text.replace(
+        "engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
+        "engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
     )
 elif "readSmartDns" not in text and "engvpnSmartDns" in text:
     text = text.replace(
@@ -178,12 +210,12 @@ elif "readSmartDns" not in text and "engvpnSmartDns" in text:
 elif "engvpnSmartDns" not in text:
     text = text.replace(
         "writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
-        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
+        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
     )
 elif "engvpnSaveAccount" not in text:
     text = text.replace(
         "writeTransparentConf, modeFromRouter, engvpnParityInvoke } from \"./runtime-engvpn.mjs\";",
-        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
+        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
     )
 needle = '      case "autoSetup":'
 insert = '''      case "transparent":
@@ -331,15 +363,16 @@ elif 'router.transparentMethod' not in text and 'if (body?.path === "router.mode
         1,
     )
 
-# Enrich snapshot with smartdns + one-shot LAN discover when only demos/empty
+# Enrich snapshot with account/transparent/smartdns + one-shot LAN discover
 import re as _re
-if "__snap.smartdns" not in text:
+if "hydratePanelSnapshot(" not in text:
     m = _re.search(r"function snapshot\(\)\s*\{.*?^\s*(return publicState\([^;]+;)", text, _re.S | _re.M)
     if m:
         ret = m.group(1)
         replacement = (
             "const __snap = " + ret[len("return "):].rstrip(";") + ";\n"
-            "    try { __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n"
+            "    try { hydratePanelSnapshot(__snap, state); } catch { /* ignore */ }\n"
+            "    try { if (!__snap.smartdns) __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n"
             "    try {\n"
             "      const onlyDemo = !(state.devices || []).length || (state.devices || []).every((d) => d.demo);\n"
             "      if (onlyDemo) mergeDiscoveredDevices(state);\n"
@@ -347,7 +380,15 @@ if "__snap.smartdns" not in text:
             "    return __snap;"
         )
         text = text[: m.start(1)] + replacement + text[m.end(1) :]
-        print("patched snapshot() with smartdns + discover")
+        print("patched snapshot() with account hydrate + smartdns + discover")
+elif "__snap.smartdns" in text and "hydratePanelSnapshot(" not in text:
+    text = text.replace(
+        "    try { __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n",
+        "    try { hydratePanelSnapshot(__snap, state); } catch { /* ignore */ }\n"
+        "    try { if (!__snap.smartdns) __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n",
+        1,
+    )
+    print("patched snapshot() to hydrate account/transparent")
 
 if "engvpnSmartDns" in text and "alias === \"engvpnSmartDns\"" not in text and "engvpnParityInvoke(" in text:
     text = text.replace(

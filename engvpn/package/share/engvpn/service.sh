@@ -25,6 +25,8 @@ export ENGVPN_PIDFILE="$PIDFILE"
 export ENGVPN_DATA_DIR="$DATA_DIR"
 export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_LOCK_DIR="$SHARED_LOCK_DIR"
+# Optional override for StealthSurf HTTP API base (smoke / self-host)
+[ -n "${ENGVPN_SS_API:-}" ] && export ENGVPN_SS_API
 
 ACTION=${1:-}
 
