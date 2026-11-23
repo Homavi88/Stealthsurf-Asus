@@ -1,0 +1,267 @@
+#!/bin/sh
+# EngVPN Merlin daemon CLI — open reimplementation.
+# Surface closer to stealthsurf-routerd: serve | set-password | status | stop |
+# update-check | update | transparent | cleanup | reconnect | watchdog
+set -u
+
+SHARE=$(cd "${0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
+	echo "engvpnd: cannot resolve share/engvpn" >&2
+	exit 1
+}
+PREFIX=${SHARE%/share/engvpn}
+RUNTIME=$SHARE/runtime
+DATA_DIR=${ENGVPN_DATA_DIR:-$PREFIX/data}
+PORT=${ENGVPN_PORT:-8790}
+PIDFILE=${ENGVPN_PIDFILE:-/tmp/engvpn-panel.pid}
+LOGFILE=${ENGVPN_LOGFILE:-/tmp/engvpn-panel.log}
+VERSION_FILE=$SHARE/VERSION
+
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+export ENGVPN_PORT="$PORT"
+export ENGVPN_OPEN_PANEL="${ENGVPN_OPEN_PANEL:-0}"
+export ENGVPN_PID_FILE="$PIDFILE"
+export ENGVPN_DATA_DIR="$DATA_DIR"
+
+usage() {
+	cat <<EOF
+Usage: engvpnd <command> [options]
+
+  serve [--data-dir DIR]       Start the EngVPN panel (foreground)
+  set-password [--data-dir DIR]
+                               Read panel password from stdin; store pbkdf2 hash
+  status                       Print running / stopped and port
+  stop                         Stop the panel process
+  update-check                 Compare installed version to feed
+  update                       Download feed package and upgrade in place
+  transparent <start|stop|status|apply|dry-run>
+                               Open iptables REDIRECT/TPROXY selective VPN
+  reconnect                    Re-apply transparent rules + restart panel service
+  cleanup                      Tear down transparent rules and temp files
+  watchdog                     One-shot health: panel port + optional transparent restore
+  version                      Print package version
+EOF
+}
+
+resolve_node() {
+	if [ -n "${ENGVPN_NODE:-}" ] && [ -x "$ENGVPN_NODE" ]; then
+		echo "$ENGVPN_NODE"
+		return 0
+	fi
+	if [ -f "$PREFIX/.node-bin" ]; then
+		saved=$(cat "$PREFIX/.node-bin" 2>/dev/null)
+		[ -x "$saved" ] && echo "$saved" && return 0
+	fi
+	for c in /opt/bin/node /opt/bin/nodejs \
+		"$(command -v node 2>/dev/null)" \
+		/usr/bin/node /usr/local/bin/node; do
+		[ -n "$c" ] && [ -x "$c" ] && echo "$c" && return 0
+	done
+	return 1
+}
+
+remember_node() {
+	node=$1
+	[ -n "$node" ] || return 0
+	printf '%s\n' "$node" >"$PREFIX/.node-bin" 2>/dev/null || true
+}
+
+ensure_data() {
+	mkdir -p "$DATA_DIR" || return 1
+	chmod 700 "$DATA_DIR" 2>/dev/null || true
+	if [ ! -e "$RUNTIME/data" ]; then
+		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || mkdir -p "$RUNTIME/data"
+	fi
+}
+
+alive_pid() {
+	[ -n "$1" ] && [ -d "/proc/$1" ]
+}
+
+cmd_set_password() {
+	ensure_data || {
+		echo "engvpnd: cannot create $DATA_DIR" >&2
+		exit 1
+	}
+	node=$(resolve_node) || {
+		echo "engvpnd: Node.js required for set-password (Entware: opkg install node)" >&2
+		exit 1
+	}
+	remember_node "$node"
+	"$node" "$SHARE/set-password.mjs" --data-dir "$DATA_DIR"
+}
+
+cmd_serve() {
+	ensure_data || exit 1
+	node=$(resolve_node) || {
+		echo "engvpnd: Node.js required (Entware: opkg install node)" >&2
+		exit 1
+	}
+	remember_node "$node"
+	[ -f "$RUNTIME/run.mjs" ] || {
+		echo "engvpnd: missing runtime at $RUNTIME" >&2
+		exit 1
+	}
+	trap '' HUP
+	cd "$RUNTIME" || exit 1
+	if [ ! -d "$RUNTIME/data" ]; then
+		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || true
+	fi
+	# Record panel pid into transparent state for rule replay ownership
+	export ENGVPN_TRANSPARENT_PID=$$
+	printf '%s\n' "$$" >"$PIDFILE" 2>/dev/null || true
+	exec "$node" "$RUNTIME/run.mjs"
+}
+
+cmd_status() {
+	pid=""
+	[ -f "$PIDFILE" ] && read -r pid <"$PIDFILE" 2>/dev/null
+	panel=stopped
+	if alive_pid "$pid"; then
+		panel="running pid=$pid"
+	else
+		extra=$(ps w 2>/dev/null | awk -v rt="$RUNTIME" '/[r]un\.mjs/ && index($0, rt) { print $1; exit }')
+		[ -n "$extra" ] && panel="running pid=$extra"
+	fi
+	tp=inactive
+	[ -x "$SHARE/transparent.sh" ] && tp=$(sh "$SHARE/transparent.sh" status 2>/dev/null | head -n 1)
+	echo "panel=$panel port=$PORT prefix=$PREFIX"
+	echo "transparent=$tp"
+	[ "$panel" != stopped ] && return 0
+	return 1
+}
+
+cmd_stop() {
+	pid=""
+	[ -f "$PIDFILE" ] && read -r pid <"$PIDFILE" 2>/dev/null
+	if alive_pid "$pid"; then
+		kill "$pid" 2>/dev/null || true
+		i=0
+		while [ "$i" -lt 20 ] && alive_pid "$pid"; do
+			sleep 1
+			i=$((i + 1))
+		done
+		alive_pid "$pid" && kill -9 "$pid" 2>/dev/null || true
+	fi
+	rm -f "$PIDFILE"
+	echo "stopped"
+}
+
+cmd_update_check() {
+	if [ -x "$SHARE/update.sh" ]; then
+		export ENGVPN_FEED="${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
+		sh "$SHARE/update.sh" check
+		return $?
+	fi
+	ver=unknown
+	[ -f "$VERSION_FILE" ] && ver=$(cat "$VERSION_FILE")
+	echo "installed=$ver"
+	echo "feed=${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
+}
+
+cmd_update() {
+	[ -x "$SHARE/update.sh" ] || {
+		echo "engvpnd: missing update.sh" >&2
+		exit 1
+	}
+	export ENGVPN_FEED="${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
+	sh "$SHARE/update.sh" apply "$@"
+}
+
+cmd_transparent() {
+	[ -x "$SHARE/transparent.sh" ] || {
+		echo "engvpnd: missing transparent.sh" >&2
+		exit 1
+	}
+	ensure_data
+	export ENGVPN_TRANSPARENT_PID
+	ENGVPN_TRANSPARENT_PID=$(cat "$PIDFILE" 2>/dev/null || echo $$)
+	sh "$SHARE/transparent.sh" "$@"
+}
+
+cmd_reconnect() {
+	ensure_data
+	# Re-apply transparent rules if configured
+	if [ -f "$DATA_DIR/transparent.conf" ]; then
+		mode=$(awk -F= '$1=="mode"{print $2}' "$DATA_DIR/transparent.conf" 2>/dev/null)
+		[ "$mode" != off ] && [ -n "$mode" ] && sh "$SHARE/transparent.sh" apply || true
+	fi
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" restart
+	else
+		cmd_stop
+		cmd_serve &
+	fi
+	echo "reconnect: done"
+}
+
+cmd_cleanup() {
+	[ -x "$SHARE/transparent.sh" ] && sh "$SHARE/transparent.sh" stop || true
+	rm -rf /tmp/engvpn /tmp/engvpn-package /tmp/engvpn-update.* 2>/dev/null || true
+	echo "cleanup: done"
+}
+
+cmd_watchdog() {
+	# Panel listen check
+	ok=1
+	if ! cmd_status >/dev/null 2>&1; then
+		echo "watchdog: panel down — restarting"
+		[ -x "$SHARE/service.sh" ] && sh "$SHARE/service.sh" start || true
+		ok=0
+	fi
+	# Transparent restore if state says active but chains missing
+	if [ -f "$DATA_DIR/netfilter/rules" ] && [ -x "$SHARE/netfilter.sh" ]; then
+		if ! iptables -w -t nat -L ENGVPN -n >/dev/null 2>&1 &&
+			! iptables -w -t mangle -L ENGVPN -n >/dev/null 2>&1; then
+			mode=$(awk -F= '$1=="mode"{print $2}' "$DATA_DIR/transparent.conf" 2>/dev/null || true)
+			if [ -n "$mode" ] && [ "$mode" != off ]; then
+				echo "watchdog: restoring transparent rules"
+				sh "$SHARE/netfilter.sh" replay >/dev/null || true
+				ok=0
+			fi
+		fi
+	fi
+	[ "$ok" = 1 ] && echo "watchdog: ok" || echo "watchdog: repaired"
+}
+
+# Parse optional --data-dir
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--data-dir)
+		DATA_DIR=$2
+		export ENGVPN_DATA_DIR="$DATA_DIR"
+		shift 2
+		;;
+	--help | -h)
+		usage
+		exit 0
+		;;
+	*)
+		break
+		;;
+	esac
+done
+
+ACTION=${1:-}
+[ -n "$ACTION" ] && shift
+
+case "$ACTION" in
+serve) cmd_serve "$@" ;;
+set-password) cmd_set_password "$@" ;;
+status) cmd_status ;;
+stop) cmd_stop ;;
+update-check) cmd_update_check ;;
+update) cmd_update "$@" ;;
+transparent) cmd_transparent "$@" ;;
+reconnect) cmd_reconnect ;;
+cleanup) cmd_cleanup ;;
+watchdog) cmd_watchdog ;;
+version)
+	[ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "0.0.0"
+	;;
+"" | help | -h | --help) usage ;;
+*)
+	echo "engvpnd: unknown command: $ACTION" >&2
+	usage >&2
+	exit 2
+	;;
+esac
