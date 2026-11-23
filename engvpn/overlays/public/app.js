@@ -198,6 +198,7 @@ function screenMenu() {
     [
       ["updates", "Обновления", "↓"],
       ["feedback", "Предложить идею", "✦"],
+      ["privacy", "Проверки скрытности", "◎"],
       ["diagnostics", "Диагностика", "⌁"],
     ],
   ].map((g) => g.filter(([, title]) => match(title))).filter((g) => g.length);
@@ -741,13 +742,87 @@ function screenFeedback() {
     ${(S.feedback || []).slice(0, 5).map((f) => `<div class="cell-desc">${esc(f.text.slice(0, 140))}</div>`).join("")}
   </div>`;
 }
+function privacyBadge(ok, leak) {
+  if (leak) return `<span class="badge bad">утечка</span>`;
+  if (ok) return `<span class="badge ok">ок</span>`;
+  return `<span class="badge soft">—</span>`;
+}
+
+function screenPrivacy() {
+  const r = ui.privacy || ui.result;
+  const has = r && (r.exit || r.dns || r.fingerprint);
+  const exit = r?.exit || {};
+  const dns = r?.dns || {};
+  const ipv6 = r?.ipv6 || {};
+  const ks = r?.killswitch || {};
+  const dpi = r?.dpi || {};
+  const fp = r?.fingerprint || {};
+  const path = r?.path || {};
+  const tr = r?.transparent || {};
+  const webrtc = r?.webrtc || {};
+  return `${backBar("Проверки скрытности")}<div class="drawer-body">
+    <div class="card">
+      <b>Что проверяем</b>
+      <p class="muted">Живые пробы с роутера: выходной IP через туннель, DNS/IPv6, kill-switch, статус DPI и «что видит провайдер». Это не гарантия анонимности.</p>
+    </div>
+    <div class="group">
+      <button class="primary" data-act="privacy-run">Запустить проверки</button>
+      ${has && r.checked_at ? `<p class="muted">Последний запуск: ${new Date(r.checked_at).toLocaleString()}</p>` : ""}
+    </div>
+    <div class="h">ВЫХОДНОЙ IP</div>
+    <div class="group">
+      ${cell("WAN (провайдер)", exit.wan_ip || "—", privacyBadge(false, !!exit.leak))}
+      ${cell("Через туннель", exit.tunnel_ip || (S.vpn.connected ? "нет данных" : "VPN выключен"), privacyBadge(!!exit.ok, !!exit.leak))}
+      <p class="muted">${exit.leak ? "Одинаковый IP: трафик, похоже, идёт мимо VPN." : exit.ok ? "Exit IP отличается от WAN — туннель подменяет адрес." : "Подключите VPN и повторите, либо проверьте edge SOCKS/HTTP."}</p>
+    </div>
+    <div class="h">DNS</div>
+    <div class="group">
+      ${cell("Резолверы WAN/системы", dns.wan_resolvers || "—", privacyBadge(!dns.leak_risk, !!dns.leak_risk))}
+      ${cell("DNS через VPN", dns.dns_via_vpn ? "включён" : "выключен")}
+      <p class="muted">${dns.leak_risk ? "Риск: запросы могут уходить на DNS провайдера. Включите «DNS через VPN» в Роутере." : "Политика DNS выглядит согласованной с настройками."}</p>
+    </div>
+    <div class="h">IPv6</div>
+    <div class="group">
+      ${cell("Политика", ipv6.policy || S.router?.ipv6 || "—")}
+      ${cell("Глобальные адреса", ipv6.global_addrs || "нет")}
+      ${cell("Публичный IPv6", ipv6.exit_ip6 || "нет", privacyBadge(!ipv6.leak, !!ipv6.leak))}
+      <p class="muted">${ipv6.leak ? "При политике «блокировать» всё ещё есть публичный IPv6 — возможна утечка мимо туннеля." : "Жёсткой IPv6-утечки не видно."}</p>
+    </div>
+    <div class="h">KILL-SWITCH</div>
+    <div class="group">
+      ${cell("В конфиге", ks.configured ? "да" : "нет")}
+      ${cell("Цепочка iptables", ks.chain_active ? "активна" : "нет", privacyBadge(!!ks.ok, ks.configured && !ks.chain_active))}
+      <p class="muted">${ks.ok ? "При падении VPN лишний WAN-forward режется." : "Без kill-switch трафик может уйти в WAN, если туннель умрёт."}</p>
+    </div>
+    <div class="h">DPI / ОТПЕЧАТОК</div>
+    <div class="group">
+      ${cell("nfqws / zapret", dpi.nfqws_running ? "работает" : (dpi.enabled ? "включён, процесс нет" : "выкл."))}
+      ${cell("Transparent", `${tr.mode || "—"} · ${tr.method || "—"}${tr.tproxy_available ? " · TPROXY ок" : " · без xt_TPROXY"}`)}
+      ${cell("Протокол ноды", fp.protocol || "—")}
+      ${cell("Что видит ISP", fp.isp_sees || "—")}
+      <p class="muted">DPI (nfqws) обходит блокировки сайтов; Reality/WARP маскируют сам туннель. Сырой WireGuard провайдер часто узнаёт.</p>
+    </div>
+    <div class="h">ПУТЬ / MTU / UDP</div>
+    <div class="group">
+      ${cell("MTU WAN", path.mtu || "—")}
+      ${cell("UDP / TPROXY", path.udp || (tr.tproxy_available ? "tproxy_ok" : "—"))}
+    </div>
+    <div class="h">WEBRTC (КЛИЕНТ)</div>
+    <div class="group">
+      <p class="muted">${esc(webrtc.hint || "С роутера WebRTC не проверить. На телефоне/ПК в LAN откройте browserleaks.com/webrtc — не должно быть домашнего WAN IP при полном VPN.")}</p>
+      <a class="ghost" href="https://browserleaks.com/webrtc" target="_blank" rel="noopener">Открыть проверку WebRTC</a>
+    </div>
+    ${r?.disclaimer ? `<p class="muted">${esc(r.disclaimer)}</p>` : ""}
+    ${r?.note ? `<p class="muted">${esc(r.note)}</p>` : ""}
+  </div>`;
+}
+
 function screenDiag() {
   const d = S.diagnostics;
   return `${backBar("Диагностика")}<div class="drawer-body"><div class="group">
     ${cell("Тест скорости", "Пинг, загрузка через VPN и напрямую", `<button class="ghost" data-act="speedtest">Запустить</button>`)}
     ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${ui.result.direct.down || 0} Б/с. VPN: ${ui.result.vpn ? (ui.result.vpn.down || ui.result.vpn.error) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
-    ${cell("Проверка утечек", "DNS и IPv6", `<button class="ghost" data-act="leak">Проверить</button>`)}
-    ${ui.result?.dns ? `<p class="muted">${esc(JSON.stringify(ui.result.dns))} ${esc(ui.result.note || "")}</p>` : ""}
+    ${cell("Проверки скрытности", "Exit IP, DNS, IPv6, DPI, kill-switch", `<button class="ghost" data-go="privacy">Открыть</button>`)}
     ${cell("Нагрузка на роутер", "Пока панель открыта", sw("diagnostics.showLoad", d.showLoad))}
     ${cell("Режим разработчика", "Логи ядра и подробности", sw("diagnostics.devMode", d.devMode))}
     ${cell("Отправлять отчёты об ошибках", "В EngVPN отчёты остаются локально", sw("diagnostics.errorReports", d.errorReports))}
@@ -820,6 +895,7 @@ const screens = {
   other: screenOther,
   updates: screenUpdates,
   feedback: screenFeedback,
+  privacy: screenPrivacy,
   diagnostics: screenDiag,
   logs: screenLogs,
   xray: screenXray,
@@ -1196,7 +1272,14 @@ document.addEventListener("click", (event) => {
   });
   if (act === "support") { toast("Поддержка в EngVPN не подключена: идея остаётся на этом роутере"); return; }
   if (act === "speedtest") return run(async () => { ui.result = await invoke("speedTest", {}, { quiet: true }); render(); });
-  if (act === "leak") return run(async () => { ui.result = await invoke("leakTest", {}, { quiet: true }); render(); });
+  if (act === "leak" || act === "privacy-run") return run(async () => {
+    toast("Проверяю скрытность…", 8000);
+    const res = await invoke("privacyCheck", {}, { quiet: true }).catch(() => invoke("leakTest", {}, { quiet: true }));
+    ui.privacy = res;
+    ui.result = res;
+    toast(res?.exit?.leak || res?.ipv6?.leak ? "Есть признаки утечки" : "Проверки завершены");
+    render();
+  });
   if (act === "reset-net") return run(() => invoke("resetNetwork", {}));
   if (act === "clear-logs") return run(() => invoke("clearLogs", {}));
 });

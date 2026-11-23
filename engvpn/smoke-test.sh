@@ -233,10 +233,14 @@ if command -v node >/dev/null 2>&1; then
 	# DPI / WARP dry-run via engvpnd
 	"$PREFIX/sbin/engvpnd" dpi dry-run | grep -q 'queue=' && echo "  dpi dry-run ok"
 	"$PREFIX/sbin/engvpnd" warp dry-run | grep -q 'cloudflare_api=' && echo "  warp dry-run ok"
-	# Bootstrap capabilities include warp/dpi
+	"$PREFIX/sbin/engvpnd" privacy dry-run | grep -q 'privacy-check' && echo "  privacy dry-run ok"
+	priv=$("$PREFIX/sbin/engvpnd" privacy 2>/dev/null || true)
+	echo "$priv" | grep -q '"exit"' && echo "  privacy json ok" || echo "  privacy: $priv"
+	# Bootstrap capabilities include warp/dpi/privacy
 	boot=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/get_bootstrap" \
 		-H 'Content-Type: application/json' -d '{}' || true)
 	echo "$boot" | grep -q '"warp":true' && echo "  bootstrap warp ok" || echo "  bootstrap: $boot"
+	echo "$boot" | grep -q 'privacyChecks\|leakTest' && echo "  bootstrap privacy ok" || echo "  bootstrap privacy keys: (optional)"
 	"$PREFIX/share/engvpn/service.sh" stop
 	echo "  stop ok"
 else
@@ -410,6 +414,8 @@ if command -v node >/dev/null 2>&1; then
 	inv_ok "pingAll" pingAll '{}'
 	inv_ok "clearLogs" clearLogs '{}'
 	inv_ok "leakTest" leakTest '{}'
+	inv_ok "privacyCheck" privacyCheck '{}'
+	grep -q '"exit"\|"dns"\|"fingerprint"\|"killswitch"' /tmp/engvpn-inv-out.json && echo "  privacyCheck payload ok" || echo "  privacyCheck body: $(head -c 200 /tmp/engvpn-inv-out.json)"
 	# GRE may fail without gre.conf — accept 200 with error message or ok
 	FAILHARD=0
 	inv_ok "gre-up" engvpnWarp '{"action":"gre-up"}' || true

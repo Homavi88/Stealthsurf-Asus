@@ -371,6 +371,14 @@ textarea.text { min-height: 110px; resize: vertical; }
 pre.config {
   white-space: pre-wrap; word-break: break-word; background: var(--pre); border-radius: 14px; padding: 12px; font-size: 12px; max-height: 420px; overflow: auto;
 }
+.badge {
+  display: inline-flex; align-items: center; font-size: 12px; font-weight: 600;
+  padding: 4px 10px; border-radius: 10px; background: var(--chip); color: var(--muted);
+  white-space: nowrap;
+}
+.badge.ok { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--green); }
+.badge.bad { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.badge.soft { background: var(--chip); color: var(--faint); }
 .core-card .ghost.busy, .ghost:disabled { opacity: .65; pointer-events: none; }
 .modal {
   position: fixed; z-index: 30; left: 50%; top: 50%; transform: translate(-50%, -50%);
