@@ -39,6 +39,29 @@ ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Hom
 
 Переменные установщика (`merlin.sh`) и связанных скриптов — в разделе [CLI](#cli) ниже. Панель: `http://192.168.50.1:8790/` (подставьте LAN IP).
 
+## Как удалить
+
+Официальная точка входа — **`install.sh uninstall`** (не `merlin.sh` и не `engvpnd`: у них нет подкоманды uninstall). Скрипт останавливает сервис панели, снимает хуки Merlin и `cru`, удаляет префикс EngVPN и `/tmp/engvpn`. **Не трогает** StealthSurf `:8800` (`/jffs/addons/stealthsurf`) и SurfGate.
+
+JFFS (типичная установка):
+
+```sh
+# интерактивно: спросит, откатить из бэкапа или удалить полностью
+sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
+
+# чистое удаление без отката
+ENGVPN_RESTORE=0 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
+```
+
+USB (если ставили на флешку):
+
+```sh
+ENGVPN_RESTORE=0 sh /tmp/mnt/<USB>/engvpn/share/engvpn/install.sh uninstall
+# пример: ENGVPN_RESTORE=0 sh /tmp/mnt/sda1/engvpn/share/engvpn/install.sh uninstall
+```
+
+Что остаётся после чистого удаления: каталог-сосед `.engvpn-backup` (например `/jffs/addons/.engvpn-backup/`) — для ручного восстановления; его можно удалить вручную, если бэкап не нужен. Подробности бэкапа/отката — в разделе ниже и в [CLI → backup](#engvpnd-backup).
+
 ## Резервная копия и восстановление
 
 Перед **install** и **upgrade** EngVPN пишет снимок в каталог `.engvpn-backup` рядом с префиксом (например `/jffs/addons/.engvpn-backup/`):
@@ -362,14 +385,6 @@ sh …/share/engvpn/netfilter.sh set-hold 120
 | `ENGVPN_ZAPRET_URL` | dpi | URL архива zapret/nfqws |
 
 ---
-
-## Удаление
-
-```sh
-sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
-# или без вопросов:
-ENGVPN_RESTORE=0 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
-```
 
 ## Сборка / smoke
 
