@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.4** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.5** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.4](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.4) (после публикации feed)
+Релиз: [engvpn-0.5.5](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.5) (после публикации feed)
 
 ---
 
@@ -27,14 +27,25 @@
 curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 ```
 
-Установщик запросит пароль панели (8–128 символов), **создаст резервную копию** текущего состояния (если уже стоял EngVPN), скачает пакет, проверит **SHA-256** и при наличии — **Minisign**, затем запустит сервис.
+В интерактивном режиме установщик сначала спросит **куда ставить** (с остатком свободного места):
+
+```text
+Куда установить EngVPN?
+[1] Роутер (JFFS) — свободно ~XX МБ — /jffs/addons/engvpn
+[2] Флешка sda1 — свободно ~YY МБ — /tmp/mnt/sda1/engvpn
+Выбор [1]:
+```
+
+По умолчанию — JFFS, если хватает места; иначе первая подходящая USB (ext2/3/4). `ENGVPN_PREFIX` пропускает этот вопрос. Затем — пароль панели (8–128 символов), **резервная копия** (если EngVPN уже стоял), загрузка пакета, **SHA-256** / **Minisign**, запуск сервиса.
 
 Ход установки печатается по этапам `[n/9]` (проверки → загрузка → проверка → распаковка → бэкап → файлы → хуки → пароль → запуск). При сбое: `Ошибка на этапе «…»: …` и код выхода ≠ 0.
 
-Без интерактива:
+Без интерактива (автовыбор каталога как раньше — JFFS при достаточном месте, иначе USB; без запроса пароля):
 
 ```sh
 ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
+# или явно:
+ENGVPN_PREFIX=/tmp/mnt/sda1/engvpn ENGVPN_PASSWORD='…' curl -fsSL …/merlin.sh | sh
 ```
 
 Переменные установщика (`merlin.sh`) и связанных скриптов — в разделе [CLI](#cli) ниже. Панель: `http://192.168.50.1:8790/` (подставьте LAN IP).
@@ -87,7 +98,7 @@ ENGVPN_RESTORE=0 sh /tmp/mnt/<USB>/engvpn/share/engvpn/install.sh uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.4
+## Панель 0.5.5
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -99,6 +110,10 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.5
+
+- Интерактивный `merlin.sh`: выбор **JFFS или USB** со свободным местом; `ENGVPN_PREFIX` / `ENGVPN_PASSWORD` без лишних вопросов.
 
 ### Что исправлено в 0.5.4 (реальность, не «зелёный UI»)
 
@@ -368,8 +383,8 @@ sh …/share/engvpn/netfilter.sh set-hold 120
 
 | Переменная | Где | Назначение |
 | --- | --- | --- |
-| `ENGVPN_PASSWORD` | merlin.sh | Пароль панели без TTY |
-| `ENGVPN_PREFIX` | merlin.sh | Каталог установки |
+| `ENGVPN_PASSWORD` | merlin.sh | Пароль панели без TTY; также отключает вопрос «куда ставить» |
+| `ENGVPN_PREFIX` | merlin.sh | Каталог установки (пропускает вопрос JFFS/USB) |
 | `ENGVPN_LOCAL_PACKAGE` | merlin.sh | Локальный `.tar.gz` |
 | `ENGVPN_LOCAL_VERSION` | merlin.sh | Метка версии для локального пакета |
 | `ENGVPN_FEED` | merlin / update | URL `latest.json` |

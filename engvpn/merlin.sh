@@ -4,9 +4,10 @@
 #   curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 #
 # Reads the router feed, picks this router's package, checks SHA-256, runs the
-# package install.sh, then asks for the panel password. Installs to JFFS
-# (/jffs/addons/engvpn) or an ext USB drive when JFFS is full
-# (ENGVPN_PREFIX overrides).
+# package install.sh, then asks for the panel password. Interactive install
+# asks where to put files: JFFS (/jffs/addons/engvpn) or a mounted ext USB
+# (/tmp/mnt/<name>/engvpn), showing free space for each option.
+# ENGVPN_PREFIX skips the location prompt; ENGVPN_PASSWORD skips both prompts.
 #
 # Open reimplementation — does not ship StealthSurf proprietary binaries.
 # Requires Entware Node.js for the panel runtime (opkg install node).
@@ -114,6 +115,104 @@ drives() {
 	awk '$2 ~ "^/tmp/mnt/[A-Za-z0-9._-]+$" && $3 ~ "^ext[234]$" { print $2 }' /proc/mounts
 }
 
+# Effective free KB on filesystem for mount $1, counting leftover EngVPN files under $2.
+space_kb() {
+	avail=$(free_kb "$1")
+	[ -n "$avail" ] || {
+		echo 0
+		return
+	}
+	echo $((avail + $(leftovers_kb "$2")))
+}
+
+mb_of() {
+	echo $(($1 / 1024))
+}
+
+# Auto-pick: JFFS if enough space, else first USB with enough free space.
+auto_prefix() {
+	free=$(space_kb /jffs "$JFFS_PREFIX")
+	if [ "$free" -ge "$MIN_FREE_KB" ]; then
+		echo "$JFFS_PREFIX"
+		return
+	fi
+	for mount in $(drives); do
+		drive=$(space_kb "$mount" "$mount/engvpn")
+		if [ "$drive" -ge "$MIN_FREE_KB" ]; then
+			echo "$mount/engvpn"
+			return
+		fi
+	done
+	echo ""
+}
+
+# Interactive: list JFFS + USB candidates with free space; default JFFS when it fits.
+# UI goes to /dev/tty so `prefix=$(prompt_prefix)` only captures the path.
+prompt_prefix() {
+	jffs_free=$(space_kb /jffs "$JFFS_PREFIX")
+	{
+		echo "Куда установить EngVPN?"
+		echo "[1] Роутер (JFFS) — свободно ~$(mb_of "$jffs_free") МБ — $JFFS_PREFIX"
+	} >/dev/tty
+	n=1
+	default=1
+	# paths keyed by index via eval (BusyBox ash has no arrays)
+	eval "cand_path_1=\$JFFS_PREFIX"
+	eval "cand_free_1=\$jffs_free"
+	if [ "$jffs_free" -lt "$MIN_FREE_KB" ]; then
+		default=0
+	fi
+	for mount in $(drives); do
+		n=$((n + 1))
+		name=${mount##*/}
+		drive=$(space_kb "$mount" "$mount/engvpn")
+		echo "[$n] Флешка $name — свободно ~$(mb_of "$drive") МБ — $mount/engvpn" >/dev/tty
+		eval "cand_path_$n=\$mount/engvpn"
+		eval "cand_free_$n=\$drive"
+		if [ "$default" -eq 0 ] && [ "$drive" -ge "$MIN_FREE_KB" ]; then
+			default=$n
+		fi
+	done
+	if [ "$default" -eq 0 ]; then
+		default=1
+	fi
+	choice=""
+	printf "Выбор [%s]: " "$default" >/dev/tty
+	IFS= read -r choice </dev/tty || fail "не удалось прочитать выбор каталога"
+	[ -n "$choice" ] || choice=$default
+	case "$choice" in
+	*[!0-9]* | "") fail "неверный выбор каталога установки: $choice" ;;
+	esac
+	if [ "$choice" -lt 1 ] || [ "$choice" -gt "$n" ]; then
+		fail "неверный выбор каталога установки: $choice (1–$n)"
+	fi
+	eval "chosen=\$cand_path_$choice"
+	eval "free=\$cand_free_$choice"
+	if [ "${free:-0}" -lt "$MIN_FREE_KB" ]; then
+		fail "в ${chosen%/engvpn} свободно $(mb_of "$free") МБ; нужно не меньше $(mb_of "$MIN_FREE_KB") МБ"
+	fi
+	echo "$chosen"
+}
+
+validate_prefix_space() {
+	# $1 = prefix
+	p=$1
+	probe_dir=${p%/engvpn}
+	while [ ! -d "$probe_dir" ] && [ -n "$probe_dir" ] && [ "$probe_dir" != "/" ]; do
+		parent=${probe_dir%/*}
+		[ "$parent" = "$probe_dir" ] && break
+		probe_dir=$parent
+	done
+	free=$(space_kb "${probe_dir:-/}" "$p")
+	need=$MIN_FREE_KB
+	if installed "$p"; then
+		need=$MIN_UPDATE_FREE_KB
+	fi
+	if [ "$free" -lt "$need" ]; then
+		fail "в ${p%/engvpn} свободно $(mb_of "$free") МБ; нужно не меньше $(mb_of "$need") МБ"
+	fi
+}
+
 prefix=${ENGVPN_PREFIX:-}
 if [ -z "$prefix" ]; then
 	installed "$JFFS_PREFIX" && prefix=$JFFS_PREFIX
@@ -127,44 +226,27 @@ if [ -z "$prefix" ]; then
 	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
 		prefix=${ENGVPN_PREFIX_DEFAULT:-/tmp/engvpn-smoke/engvpn}
 	else
-		free=$(free_kb /jffs)
-		[ -n "$free" ] && free=$((free + $(leftovers_kb "$JFFS_PREFIX")))
-		if [ -n "$free" ] && [ "$free" -ge "$MIN_FREE_KB" ]; then
-			prefix=$JFFS_PREFIX
-		else
-			for mount in $(drives); do
-				drive=$(free_kb "$mount")
-				[ -n "$drive" ] && drive=$((drive + $(leftovers_kb "$mount/engvpn")))
-				if [ -n "$drive" ] && [ "$drive" -ge "$MIN_FREE_KB" ]; then
-					prefix=$mount/engvpn
-					break
-				fi
-			done
+		# Interactive location prompt when TTY is available and automation env is unset.
+		# ENGVPN_PREFIX already skips this block; ENGVPN_PASSWORD marks non-interactive.
+		can_prompt=0
+		if [ -z "${ENGVPN_PASSWORD:-}" ]; then
+			{ : </dev/tty; } 2>/dev/null && can_prompt=1
 		fi
-		[ -n "$prefix" ] ||
-			fail "на JFFS свободно $((${free:-0} / 1024)) МБ; нужно $((MIN_FREE_KB / 1024)) МБ. Освободите место или подключите USB с ext4"
+		if [ "$can_prompt" -eq 1 ]; then
+			prefix=$(prompt_prefix) || exit 1
+		else
+			prefix=$(auto_prefix)
+			free=$(space_kb /jffs "$JFFS_PREFIX")
+			[ -n "$prefix" ] ||
+				fail "на JFFS свободно $(mb_of "${free:-0}") МБ; нужно $(mb_of "$MIN_FREE_KB") МБ. Освободите место или подключите USB с ext4"
+		fi
 	fi
 else
 	case "$prefix" in
 	/*) ;;
 	*) fail "неверный каталог установки: $prefix" ;;
 	esac
-	probe_dir=${prefix%/engvpn}
-	while [ ! -d "$probe_dir" ] && [ -n "$probe_dir" ] && [ "$probe_dir" != "/" ]; do
-		parent=${probe_dir%/*}
-		[ "$parent" = "$probe_dir" ] && break
-		probe_dir=$parent
-	done
-	free=$(free_kb "${probe_dir:-/}")
-	[ -n "$free" ] && free=$((free + $(leftovers_kb "$prefix")))
-	need=$MIN_FREE_KB
-	room=$free
-	if installed "$prefix"; then
-		need=$MIN_UPDATE_FREE_KB
-	fi
-	if [ -n "$room" ] && [ "$room" -lt "$need" ]; then
-		fail "в ${prefix%/engvpn} свободно $((free / 1024)) МБ; нужно не меньше $((need / 1024)) МБ"
-	fi
+	validate_prefix_space "$prefix"
 fi
 
 # Panel password before any mutation (unless ENGVPN_PASSWORD is preset for automation).
