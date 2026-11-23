@@ -75,6 +75,22 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Движок** — Xray / Ferrum-слот (открытый Xray Reality) / sing-box / mihomo  
 - **Обновления** — интервал проверки feed + опциональное автообновление (Merlin `cru`)  
 
+### Скриншоты
+
+Сняты с локальной EngVPN-панели (smoke, порт `8790`), бренд EngVPN — не StealthSurf.
+
+| Логин | Главная |
+| --- | --- |
+| ![Логин EngVPN](docs/screenshots/login.png) | ![Главная EngVPN](docs/screenshots/home.png) |
+
+| Настройки | Роутер |
+| --- | --- |
+| ![Настройки EngVPN](docs/screenshots/settings.png) | ![Роутер EngVPN](docs/screenshots/router.png) |
+
+| Устройства |
+| --- |
+| ![Устройства EngVPN](docs/screenshots/devices.png) |
+
 Конфиги на диске (кратко):
 
 | Файл | Назначение |
