@@ -814,10 +814,17 @@ PY
 	find . -type f -o -type l | sed 's|^\./||' | sort
 ) >"$STAGE/share/engvpn/files"
 
+# Reproducible archives: fixed mtime + gzip -n so rebuild SHA matches the feed.
 pack_one() {
 	arch=$1
 	name="engvpn_${VERSION}_${arch}.tar.gz"
-	tar -C "$STAGE" -czf "$OUT/$name" .
+	# GNU tar: stable order/ownership; BusyBox fallback keeps gzip -n only.
+	if tar --help 2>&1 | grep -q -- '--mtime'; then
+		tar -C "$STAGE" --sort=name --mtime='UTC 2020-01-01' --owner=0 --group=0 --numeric-owner -cf - . |
+			gzip -n >"$OUT/$name"
+	else
+		tar -C "$STAGE" -cf - . | gzip -n >"$OUT/$name"
+	fi
 	sum=$(sha256sum "$OUT/$name" | awk '{ print $1 }')
 	size=$(wc -c <"$OUT/$name" | tr -d ' ')
 	echo "$arch $name $sum $size"
@@ -875,35 +882,35 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — short engvpnd lifecycle verbs (update/uninstall/reinstall/…) + JFFS/USB install target.",
-  "packages": {
-    "merlin-aarch64": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
-      $(minisig_field merlin-aarch64)
-      "sha256": "$sha64",
-      "size": $size64
-    },
-    "merlin-armv7": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
-      $(minisig_field merlin-armv7)
-      "sha256": "$sha7",
-      "size": $size7
-    },
-    "merlin-x86_64": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
-      $(minisig_field merlin-x86_64)
-      "sha256": "$shax",
-      "size": $sizex
-    }
-  }
+	"notes": "EngVPN $VERSION — install prompt shows required+free MB; reproducible package SHA.",
+	"packages": {
+		"merlin-aarch64": {
+			"url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
+			$(minisig_field merlin-aarch64)
+			"sha256": "$sha64",
+			"size": $size64
+		},
+		"merlin-armv7": {
+			"url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
+			$(minisig_field merlin-armv7)
+			"sha256": "$sha7",
+			"size": $size7
+		},
+		"merlin-x86_64": {
+			"url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
+			$(minisig_field merlin-x86_64)
+			"sha256": "$shax",
+			"size": $sizex
+		}
+	}
 }
 EOF
 
 # Release-oriented feed (URLs for GitHub Releases — update tag when publishing)
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
-  "version": "$VERSION",
-  "notes": "EngVPN $VERSION — short engvpnd lifecycle verbs (update/uninstall/reinstall/…) + JFFS/USB install target.",
+	"version": "$VERSION",
+	"notes": "EngVPN $VERSION — install prompt shows required+free MB; reproducible package SHA.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

@@ -6,7 +6,7 @@
 # Reads the router feed, picks this router's package, checks SHA-256, runs the
 # package install.sh, then asks for the panel password. Interactive install
 # asks where to put files: JFFS (/jffs/addons/engvpn) or a mounted ext USB
-# (/tmp/mnt/<name>/engvpn), showing free space for each option.
+# (/tmp/mnt/<name>/engvpn), showing required (≥ MIN_FREE_KB) and free space.
 # ENGVPN_PREFIX skips the location prompt; ENGVPN_PASSWORD skips both prompts.
 #
 # Open reimplementation — does not ship StealthSurf proprietary binaries.
@@ -146,13 +146,15 @@ auto_prefix() {
 	echo ""
 }
 
-# Interactive: list JFFS + USB candidates with free space; default JFFS when it fits.
+# Interactive: list JFFS + USB candidates with required + free space; default JFFS when it fits.
 # UI goes to /dev/tty so `prefix=$(prompt_prefix)` only captures the path.
 prompt_prefix() {
+	need_mb=$(mb_of "$MIN_FREE_KB")
 	jffs_free=$(space_kb /jffs "$JFFS_PREFIX")
 	{
 		echo "Куда установить EngVPN?"
-		echo "[1] Роутер (JFFS) — свободно ~$(mb_of "$jffs_free") МБ — $JFFS_PREFIX"
+		echo "Нужно ≥${need_mb} МБ на выбранном носителе (новая установка)."
+		echo "[1] Роутер (JFFS) — нужно ~${need_mb} МБ, свободно ~$(mb_of "$jffs_free") МБ — $JFFS_PREFIX"
 	} >/dev/tty
 	n=1
 	default=1
@@ -166,7 +168,7 @@ prompt_prefix() {
 		n=$((n + 1))
 		name=${mount##*/}
 		drive=$(space_kb "$mount" "$mount/engvpn")
-		echo "[$n] Флешка $name — свободно ~$(mb_of "$drive") МБ — $mount/engvpn" >/dev/tty
+		echo "[$n] Флешка $name — нужно ~${need_mb} МБ, свободно ~$(mb_of "$drive") МБ — $mount/engvpn" >/dev/tty
 		eval "cand_path_$n=\$mount/engvpn"
 		eval "cand_free_$n=\$drive"
 		if [ "$default" -eq 0 ] && [ "$drive" -ge "$MIN_FREE_KB" ]; then
@@ -369,7 +371,8 @@ else
 	else
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
-	[ "$actual" = "$sha256" ] || fail "контрольная сумма пакета не совпадает с лентой"
+	[ "$actual" = "$sha256" ] ||
+		fail "контрольная сумма пакета не совпадает с лентой (ожидалось $sha256, получено $actual)"
 	# Minisign (optional but preferred when feed publishes .minisig)
 	sig_url=$(field minisig)
 	[ -z "$sig_url" ] && sig_url="${url}.minisig"
