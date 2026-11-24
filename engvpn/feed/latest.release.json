@@ -1,24 +1,24 @@
 {
-  "version": "0.5.10",
-  "notes": "EngVPN 0.5.10 — feed parse tolerates minified JSON and flexible whitespace.",
+  "version": "0.5.11",
+  "notes": "EngVPN 0.5.11 — clear panel URL banner after install (http://LAN:PORT).",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.10/engvpn_0.5.10_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "74f9898cb066cb49fdd3265abdba532da3aded3fffd7583523f1a16a14115171",
-      "size": 133645
+      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
+      "size": 133780
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.10/engvpn_0.5.10_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "74f9898cb066cb49fdd3265abdba532da3aded3fffd7583523f1a16a14115171",
-      "size": 133645
+      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
+      "size": 133780
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.10/engvpn_0.5.10_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "74f9898cb066cb49fdd3265abdba532da3aded3fffd7583523f1a16a14115171",
-      "size": 133645
+      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
+      "size": 133780
     }
   }
 }

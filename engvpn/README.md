@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.10** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.11** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.10](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.10) (после публикации feed)
+Релиз: [engvpn-0.5.11](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.11) (после публикации feed)
 
 ---
 
@@ -111,7 +111,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.10
+## Панель 0.5.11
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -123,6 +123,10 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.11
+
+- После установки — явный баннер: «Откройте панель», полный URL `http://LAN:PORT` одной строкой (удобно копировать), отдельно адрес и порт; порт из `ENGVPN_PORT` (по умолчанию `8790`).
 
 ### Что нового в 0.5.10
 
