@@ -1,24 +1,24 @@
 {
-  "version": "0.5.19",
-  "notes": "EngVPN 0.5.19 — desktop settings ≥900px; VERSION SSoT; core/geo progress; install downloads cores; Locations flags/ping; Mbps; router VPN mode selector.",
+  "version": "0.5.20",
+  "notes": "EngVPN 0.5.20 — BusyBox/USB backup finalize: sort via redirect (no sort -o / missing files.sorted mv); keep unsorted list instead of hard-fail when backup optional.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.20/engvpn_0.5.20_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "2680aac108610c79b58011c23ea946cf3742bddb6074989b8c683c0fb4342cbe",
-      "size": 156456
+      "sha256": "1ee03906ac641e530b4c15384058d9e7cd8f115d0ae94caa32be116b12d722a6",
+      "size": 156745
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.20/engvpn_0.5.20_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "2680aac108610c79b58011c23ea946cf3742bddb6074989b8c683c0fb4342cbe",
-      "size": 156456
+      "sha256": "1ee03906ac641e530b4c15384058d9e7cd8f115d0ae94caa32be116b12d722a6",
+      "size": 156745
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.20/engvpn_0.5.20_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "2680aac108610c79b58011c23ea946cf3742bddb6074989b8c683c0fb4342cbe",
-      "size": 156456
+      "sha256": "1ee03906ac641e530b4c15384058d9e7cd8f115d0ae94caa32be116b12d722a6",
+      "size": 156745
     }
   }
 }

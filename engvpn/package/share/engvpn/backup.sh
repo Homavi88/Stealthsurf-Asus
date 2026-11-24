@@ -69,16 +69,27 @@ collect_list() {
 	for f in share/engvpn/VERSION share/engvpn/files sbin/engvpnd; do
 		[ -e "$PREFIX/$f" ] && echo "$f" >>"$list"
 	done
-	# Deduplicate. BusyBox sort only accepts -o before FILE args; putting
-	# `sort -u "$list" -o "$list.tmp"` treats -o as another input → files.tmp
-	# never created and `mv` fails with "No such file or directory".
+	# Deduplicate. Do NOT use `sort -o`:
+	#   - BusyBox: `sort -u list -o out` treats trailing -o as an input → out never created
+	#   - Some Merlin/USB builds: `sort -u -o out list` exits 0 but still leaves out missing
+	#     (broken -o / tmp-rename on vfat) → `mv` then prints "No such file or directory"
+	# Redirect to a sidecar, then replace only when the sidecar exists and is non-empty.
+	# On any sort/mv failure keep the unsorted list (duplicates are fine for tar -T).
+	# Never hard-fail here: install/upgrade backup is best-effort (user_backup complains).
 	if [ -s "$list" ]; then
 		sorted=$list.sorted
-		if ! sort -u -o "$sorted" "$list"; then
+		rm -f "$sorted"
+		if sort -u "$list" >"$sorted" 2>/dev/null && [ -s "$sorted" ]; then
+			if ! mv -f "$sorted" "$list" 2>/dev/null; then
+				# Race / USB: sorted vanished between write and mv — keep original list
+				rm -f "$sorted"
+				echo "backup: keeping unsorted file list (finalize skipped)" >&2
+			fi
+		else
+			# sort failed, wrote nothing, or empty — keep unsorted; do not mv a missing file
 			rm -f "$sorted"
-			fail "backup: sort file list failed"
+			echo "backup: keeping unsorted file list (sort skipped)" >&2
 		fi
-		mv -f "$sorted" "$list" || fail "backup: cannot finalize file list"
 	fi
 }
 

@@ -1269,7 +1269,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — desktop settings fill viewport (≥900px); VERSION file is installed-version source of truth; core/geo download progress in panel; install downloads Xray/Ferrum/sing-box/mihomo + geo by default."
+RELEASE_NOTES="EngVPN $VERSION — BusyBox/USB backup finalize: sort via redirect (no sort -o / missing files.sorted mv); keep unsorted list instead of hard-fail when backup optional."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
