@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.13** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.14** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.13](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.13) (после публикации feed)
+Релиз: [engvpn-0.5.14](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.14) (после публикации feed)
 
 ---
 
@@ -117,7 +117,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.13
+## Панель 0.5.14
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -129,6 +129,14 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.14
+
+- Тёмная тема по умолчанию (StealthSurf-like home): dual VPN / напрямую скорости + sparkline и экран «Скорость».
+- iPhone Safari: paste/focus (не крадём фокус у `#q`), zoom (`maximum-scale=1`, inputs 16px), вертикальный текст в списках, аккуратный тёмный drawer настроек.
+- Zapret YouTube/Discord: optimistic UI + `engvpnd dpi` в фоне (без Safari «Load failed» на долгий nfqws).
+- Сломанные ядра (sing-box без `libresolv.so.2`, mihomo) — soft-hide в движке/диагностике.
+- Пустой connect: CTA «Добавьте профиль» → Аккаунт; скорости с семплингом WAN/iptables ENGVPN.
 
 ### Что нового в 0.5.13
 

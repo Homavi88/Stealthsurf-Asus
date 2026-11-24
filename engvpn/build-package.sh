@@ -144,7 +144,8 @@ print("patched server.mjs cookies/brand")
 st = rt / "lib/state.mjs"
 text = st.read_text()
 text = text.replace('export const DEFAULT_PANEL_PASSWORD = "alfa";', 'export const DEFAULT_PANEL_PASSWORD = "changeme";')
-text = text.replace('theme: "dark"', 'theme: "light"')
+# Keep dark default (StealthSurf-like home on Merlin / iPhone Safari)
+text = text.replace('theme: "light"', 'theme: "dark"')
 text = text.replace('accent: "stealth"', 'accent: "engvpn"')
 text = text.replace('oled: true', 'oled: false')
 text = text.replace(
@@ -217,12 +218,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
     )
 elif "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
         "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
-        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from \"./runtime-engvpn.mjs\";",
+        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
     )
     if "engvpnPrivacyCheck" not in text:
         text = text.replace(
@@ -640,15 +641,87 @@ if "syncDevicesSelect(state)" not in text.split("function deviceSet")[1][:600] i
 if "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
         "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
-        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags } from \"./runtime-engvpn.mjs\";",
+        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
         1,
     )
+if "sampleRouterTraffic" not in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        '} from "./runtime-engvpn.mjs";',
+        ', sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
+        1,
+    )
+    # avoid double-comma if replace landed oddly
+    text = text.replace(",, sampleRouterTraffic", ", sampleRouterTraffic")
+    text = text.replace("{, sampleRouterTraffic", "{ sampleRouterTraffic")
+
+# Zapret toggles: persist immediately; apply DPI in background (Safari "Load failed" on long nfqws install)
+text = text.replace(
+    '            await engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n',
+    '            engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret }).catch((e) => {\n'
+    '              try { appendLog(state, "warn", `dpi: ${e.message || e}`); } catch { /* ignore */ }\n'
+    '            });\n',
+)
+
+# Tick: merge iptables/WAN sampling so home speed is not stuck at 0 B/s under transparent mode
+if "sampleRouterTraffic(live)" not in text and "function tick()" in text:
+    old_tick_rates = "    live.rates = { ...live.window };\n    live.history.push({ t: Date.now(), ...live.rates });"
+    new_tick_rates = (
+        "    try {\n"
+        "      const sampled = sampleRouterTraffic(live);\n"
+        "      const proxySum = (live.window.vpnDown + live.window.vpnUp + live.window.directDown + live.window.directUp) || 0;\n"
+        "      if (sampled && proxySum === 0) {\n"
+        "        live.window.vpnDown += sampled.vpnDown;\n"
+        "        live.window.vpnUp += sampled.vpnUp;\n"
+        "        live.window.directDown += sampled.directDown;\n"
+        "        live.window.directUp += sampled.directUp;\n"
+        "        live.session.vpnDown += sampled.vpnDown;\n"
+        "        live.session.vpnUp += sampled.vpnUp;\n"
+        "        live.session.directDown += sampled.directDown;\n"
+        "        live.session.directUp += sampled.directUp;\n"
+        "      } else if (sampled) {\n"
+        "        live.window.directDown = Math.max(live.window.directDown, sampled.directDown);\n"
+        "        live.window.directUp = Math.max(live.window.directUp, sampled.directUp);\n"
+        "      }\n"
+        "    } catch { /* traffic sample best-effort */ }\n"
+        "    live.rates = { ...live.window };\n"
+        "    live.history.push({ t: Date.now(), ...live.rates });"
+    )
+    if old_tick_rates in text:
+        text = text.replace(old_tick_rates, new_tick_rates, 1)
+        print("patched tick() → sampleRouterTraffic")
+
+# Soft-probe cores after boot (libresolv / missing) without toasting Load failed
+if "probeCoresHealth" not in text.split("async function boot()")[1][:800]:
+    boot_needle = "    refreshPublicIp().catch(() => {});\n"
+    if boot_needle in text and "probeCoresHealth(state)" not in text:
+        text = text.replace(
+            boot_needle,
+            "    refreshPublicIp().catch(() => {});\n"
+            "    probeCoresHealth(state).catch(() => {});\n",
+            1,
+        )
+        print("patched boot() → probeCoresHealth")
+
 rtm.write_text(text)
 print("patched runtime.mjs EngVPN commands")
 # dokodemo inbound injection into xray plan when transparent mode != off
 eng = rt / "lib/engines.mjs"
 et = eng.read_text()
 et = et.replace("stealthsurf-alfa", "engvpn")
+# Expose softHidden / broken from probeCoresHealth in panel snapshot
+if "softHidden:" not in et:
+    et = et.replace(
+        '''      note: state.engine.cores?.[id]?.note || "",
+      version: state.engine.cores?.[id]?.version || "",
+    };''',
+        '''      note: state.engine.cores?.[id]?.note || "",
+      version: state.engine.cores?.[id]?.version || "",
+      broken: !!state.engine.cores?.[id]?.broken,
+      softHidden: !!state.engine.cores?.[id]?.softHidden,
+      brokenReason: state.engine.cores?.[id]?.brokenReason || "",
+    };''',
+        1,
+    )
 # Ferrum open slot: download Xray-core as ferrum binary
 if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
     et = et.replace(
@@ -883,7 +956,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — iOS login keyboard fix; optional skip panel password on install.",
+  "notes": "EngVPN $VERSION — Merlin panel mobile UX: dark home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide cores.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -911,7 +984,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — iOS login keyboard fix; optional skip panel password on install.",
+  "notes": "EngVPN $VERSION — Merlin panel mobile UX: dark home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide cores.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
