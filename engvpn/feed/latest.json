@@ -1,24 +1,24 @@
 {
-	"version": "0.5.8",
-	"notes": "EngVPN 0.5.8 — curl -fL package download (follow GitHub 302); reject empty file before SHA.",
+  "version": "0.5.9",
+  "notes": "EngVPN 0.5.9 — feed parse tolerates tab/space indent; diagnose missing arch.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.8/engvpn_0.5.8_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.9/engvpn_0.5.9_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "66b5abbf839bdc5886cfa58df703ad2435eb020c77e6a36f4e9e5d73861601f1",
-      "size": 132822
+      "sha256": "08b09113ba2d09eee5aaf0742f8f8dcd52a5feaf8b02e2eabe0b1794725b6852",
+      "size": 133030
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.8/engvpn_0.5.8_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.9/engvpn_0.5.9_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "66b5abbf839bdc5886cfa58df703ad2435eb020c77e6a36f4e9e5d73861601f1",
-      "size": 132822
+      "sha256": "08b09113ba2d09eee5aaf0742f8f8dcd52a5feaf8b02e2eabe0b1794725b6852",
+      "size": 133030
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.8/engvpn_0.5.8_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.9/engvpn_0.5.9_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "66b5abbf839bdc5886cfa58df703ad2435eb020c77e6a36f4e9e5d73861601f1",
-      "size": 132822
+      "sha256": "08b09113ba2d09eee5aaf0742f8f8dcd52a5feaf8b02e2eabe0b1794725b6852",
+      "size": 133030
     }
   }
 }

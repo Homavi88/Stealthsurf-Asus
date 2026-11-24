@@ -122,18 +122,42 @@ field() {
 	name=$3
 	printf '%s\n' "$feed" | awk -v key="\"$key\": {" -v name="\"$name\":" '
 		index($0, key) { inside = 1; next }
-		inside && /^ *}/ { exit }
+		inside && /^[[:space:]]*}/ { exit }
 		inside && index($0, name) {
 			value = substr($0, index($0, name) + length(name))
-			gsub(/^[ \t]*"|",?[ \t]*$/, "", value)
+			gsub(/^[ \t"]+/, "", value)
+			gsub(/[", \t\r]*$/, "", value)
 			print value
 			exit
 		}'
 }
 
+feed_version() {
+	printf '%s\n' "$1" | awk '
+		match($0, /"version"[[:space:]]*:[[:space:]]*"/) {
+			s = substr($0, RSTART + RLENGTH)
+			sub(/".*/, "", s)
+			print s
+			exit
+		}'
+}
+
+feed_diag() {
+	feed=$1
+	key=$2
+	ver=$3
+	url=$4
+	sha=$5
+	echo "update: feed=$FEED" >&2
+	echo "update: first lines:" >&2
+	printf '%s\n' "$feed" | head -n 8 | sed 's/^/  /' >&2
+	echo "update: version=[$ver] keys=[$(printf '%s\n' "$feed" | sed -n 's/^[[:space:]]*"\(merlin-[^"]*\)".*/\1/p' | tr '\n' ' ')]" >&2
+	echo "update: url=[$url] sha256=[$sha] arch=$key" >&2
+}
+
 cmd_check() {
 	feed=$(fetch_feed)
-	ver=$(printf '%s\n' "$feed" | sed -n 's/^  "version": "\([^"]*\)",*$/\1/p' | head -n 1)
+	ver=$(feed_version "$feed")
 	cur=$(installed_version)
 	key=$(arch_key)
 	url=$(field "$feed" "$key" url)
@@ -152,10 +176,13 @@ cmd_apply() {
 	wait=${1:-60}
 	key=$(arch_key)
 	feed=$(fetch_feed)
-	ver=$(printf '%s\n' "$feed" | sed -n 's/^  "version": "\([^"]*\)",*$/\1/p' | head -n 1)
+	ver=$(feed_version "$feed")
 	url=$(field "$feed" "$key" url)
 	sha256=$(field "$feed" "$key" sha256)
-	[ -n "$ver" ] && [ -n "$url" ] && [ -n "$sha256" ] || fail "incomplete feed for $key"
+	if [ -z "$ver" ] || [ -z "$url" ] || [ -z "$sha256" ]; then
+		feed_diag "$feed" "$key" "$ver" "$url" "$sha256"
+		fail "incomplete feed for $key (need version+url+sha256; see diagnostics above)"
+	fi
 	cur=$(installed_version)
 	if [ "$ver" = "$cur" ] && [ "${ENGVPN_FORCE_UPDATE:-}" != 1 ]; then
 		echo "update: already on $cur"
