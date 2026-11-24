@@ -364,6 +364,13 @@ if command -v node >/dev/null 2>&1; then
 		&& ! grep -q 'mode-picks\|data-router-mode\|mode-pick' "$_ui_js" \
 		&& echo "  router mode dropdown UI ok" \
 		|| { echo "router mode must be a single <select> (no stacked picks)" >&2; exit 1; }
+	# Custom rules: add-rule must use data-input (sel()) / null-safe ctrl(), never bare data-set only
+	grep -q 'function ctrl(\|isEphemeralCtrl\|ctrl("draft-action")' "$_ui_js" \
+		&& echo "  custom-rules draft-action ctrl ok" \
+		|| { echo "missing draft-action ctrl() fix in app.js" >&2; exit 1; }
+	grep -q 'data-set=draft-action' "$_ui_js" \
+		&& { echo "stale data-set=draft-action query left in app.js" >&2; exit 1; } \
+		|| echo "  no stale data-set=draft-action query ok"
 	! grep -q 'mode-picks\|mode-pick\|mode-select-wrap' "$_ui_css" \
 		&& echo "  router mode stacked-picks CSS removed ok" \
 		|| { echo "leftover mode-picks CSS in app.css" >&2; exit 1; }
