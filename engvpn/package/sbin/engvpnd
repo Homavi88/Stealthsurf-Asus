@@ -1,7 +1,8 @@
 #!/bin/sh
 # EngVPN Merlin daemon CLI — open reimplementation.
 # Surface closer to stealthsurf-routerd: serve | set-password | status | stop |
-# update-check | update | schedule-update | transparent | dpi | warp | cleanup | reconnect | watchdog
+# update-check | update | uninstall | reinstall | schedule-update | transparent |
+# dpi | warp | cleanup | reconnect | watchdog + short aliases (up, remove, …)
 set -u
 
 SHARE=$(cd "${0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
@@ -15,6 +16,7 @@ PORT=${ENGVPN_PORT:-8790}
 PIDFILE=${ENGVPN_PIDFILE:-/tmp/engvpn-panel.pid}
 LOGFILE=${ENGVPN_LOGFILE:-/tmp/engvpn-panel.log}
 VERSION_FILE=$SHARE/VERSION
+INSTALL=$SHARE/install.sh
 
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 export ENGVPN_PORT="$PORT"
@@ -29,17 +31,24 @@ Usage: engvpnd <command> [options]
   serve [--data-dir DIR]       Start the EngVPN panel (foreground)
   set-password [--data-dir DIR]
                                Read panel password from stdin; store pbkdf2 hash
-  status                       Print running / stopped and port
+  status | st                  Print running / stopped and port
   stop                         Stop the panel process
-  update-check                 Compare installed version to feed
-  update                       Download feed package and upgrade in place
+  restart                      Restart panel via service.sh
+  update-check | check         Compare installed version to feed
+  update | up                  Download feed package and upgrade in place
+  uninstall | remove | удалить
+                               Real uninstall (install.sh); ENGVPN_RESTORE prompt/env
+  reinstall | переустановить [--wipe]
+                               Re-fetch from feed into same prefix (keeps data).
+                               --wipe: wipe data then reinstall (needs confirm /
+                               ENGVPN_REINSTALL_WIPE=1)
   schedule-update <run|install-cru|remove-cru|status|write-conf…>
                                Periodic feed check (+ optional auto-apply); Merlin cru
   transparent <start|stop|status|apply|dry-run>
                                Open iptables REDIRECT/TPROXY selective VPN
   dpi <start|stop|status|install|dry-run>
                                Open zapret/nfqws DPI (NFQUEUE packet mangling)
-  privacy [all|exit|dns|ipv6|killswitch|dpi|path|dry-run]
+  privacy | priv [all|exit|dns|ipv6|killswitch|dpi|path|dry-run]
                                Privacy / stealth probes (exit IP, DNS, IPv6, kill-switch, DPI)
   warp <create|status|import-file|gre-up|gre-down|dry-run>
                                Cloudflare WARP (open API) + optional GRE tunnel
@@ -48,10 +57,12 @@ Usage: engvpnd <command> [options]
   smartdns <status|apply|stop|dry-run>
                                Domain/IP bypass list → routing + iptables RETURN
   discover                     LAN devices from ARP/neigh/dnsmasq (JSONL)
-  reconnect                    Re-apply transparent rules + restart panel service
-  cleanup                      Tear down transparent/dpi/smartdns rules and temp files
+  reconnect | fix              Re-apply transparent rules + restart panel service
+  cleanup | clean              Tear down transparent/dpi/smartdns rules and temp files
   watchdog                     One-shot health: panel port + optional transparent restore
-  version                      Print package version
+  version | ver                Print package version
+
+Быстрые команды: up | check | remove | reinstall | st | restart | clean | priv | fix | ver
 EOF
 }
 
@@ -178,6 +189,103 @@ cmd_update() {
 	}
 	export ENGVPN_FEED="${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
 	sh "$SHARE/update.sh" apply "$@"
+}
+
+cmd_uninstall() {
+	[ -x "$INSTALL" ] || {
+		echo "engvpnd: missing install.sh" >&2
+		exit 1
+	}
+	# Real uninstall — same path as install.sh uninstall (ENGVPN_RESTORE prompt/env).
+	# Optional prefix override: engvpnd uninstall [<prefix>]
+	if [ $# -ge 1 ]; then
+		sh "$INSTALL" uninstall "$1"
+	else
+		sh "$INSTALL" uninstall "$PREFIX"
+	fi
+}
+
+ask_reinstall_wipe() {
+	case "${ENGVPN_REINSTALL_WIPE:-}" in
+	1 | yes | YES | y | Y) return 0 ;;
+	0 | no | NO | n | N) return 1 ;;
+	esac
+	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
+		return 1
+	fi
+	{ : </dev/tty; } 2>/dev/null || {
+		echo "engvpnd: wipe reinstall needs TTY or ENGVPN_REINSTALL_WIPE=1" >&2
+		return 1
+	}
+	printf "Стереть data/ (пароль, аккаунт, настройки) и переустановить пакет? [y/N]: " >/dev/tty
+	ans=""
+	IFS= read -r ans </dev/tty || ans=""
+	case "$ans" in
+	y | Y | yes | YES | да | Да | ДА) return 0 ;;
+	esac
+	return 1
+}
+
+cmd_reinstall() {
+	wipe=0
+	wait=60
+	while [ $# -gt 0 ]; do
+		case "$1" in
+		--wipe | wipe)
+			wipe=1
+			shift
+			;;
+		[0-9]*)
+			wait=$1
+			shift
+			;;
+		*)
+			echo "engvpnd: reinstall: unknown option: $1 (use --wipe)" >&2
+			exit 2
+			;;
+		esac
+	done
+	[ -x "$SHARE/update.sh" ] || {
+		echo "engvpnd: missing update.sh" >&2
+		exit 1
+	}
+	export ENGVPN_FEED="${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
+	if [ "$wipe" = 1 ]; then
+		ask_reinstall_wipe || {
+			echo "engvpnd: wipe reinstall cancelled (set ENGVPN_REINSTALL_WIPE=1 to confirm)" >&2
+			exit 1
+		}
+		echo "reinstall: wiping data at $DATA_DIR (package files re-fetched from feed)"
+		if [ -x "$SHARE/service.sh" ]; then
+			sh "$SHARE/service.sh" stop 2>/dev/null || true
+		else
+			cmd_stop >/dev/null 2>&1 || true
+		fi
+		# Drop user state (password, account, …); package re-fetched from feed below.
+		rm -rf "$DATA_DIR"
+		mkdir -p "$DATA_DIR"
+		chmod 700 "$DATA_DIR" 2>/dev/null || true
+	else
+		echo "reinstall: keeping data/; force-refresh package from feed"
+		if [ -x "$SHARE/service.sh" ]; then
+			sh "$SHARE/service.sh" stop 2>/dev/null || true
+		else
+			cmd_stop >/dev/null 2>&1 || true
+		fi
+	fi
+	export ENGVPN_FORCE_UPDATE=1
+	sh "$SHARE/update.sh" apply "$wait"
+}
+
+cmd_restart() {
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" restart
+		return $?
+	fi
+	cmd_stop
+	# Background start without exec — service.sh preferred on Merlin
+	cmd_serve >/dev/null 2>&1 &
+	echo "restarted"
 }
 
 cmd_schedule_update() {
@@ -334,25 +442,28 @@ ACTION=${1:-}
 case "$ACTION" in
 serve) cmd_serve "$@" ;;
 set-password) cmd_set_password "$@" ;;
-status) cmd_status ;;
+status | st) cmd_status ;;
 stop) cmd_stop ;;
-update-check) cmd_update_check ;;
-update) cmd_update "$@" ;;
+restart) cmd_restart ;;
+update-check | check) cmd_update_check ;;
+update | up) cmd_update "$@" ;;
+uninstall | remove | удалить) cmd_uninstall "$@" ;;
+reinstall | переустановить) cmd_reinstall "$@" ;;
 schedule-update) cmd_schedule_update "$@" ;;
 transparent) cmd_transparent "$@" ;;
 dpi) cmd_dpi "$@" ;;
-privacy) cmd_privacy "$@" ;;
+privacy | priv) cmd_privacy "$@" ;;
 warp) cmd_warp "$@" ;;
 backup) cmd_backup "$@" ;;
 smartdns) cmd_smartdns "$@" ;;
 discover) cmd_discover "$@" ;;
-reconnect) cmd_reconnect ;;
-cleanup) cmd_cleanup ;;
+reconnect | fix) cmd_reconnect ;;
+cleanup | clean) cmd_cleanup ;;
 watchdog) cmd_watchdog ;;
-version)
+version | ver)
 	[ -f "$VERSION_FILE" ] && cat "$VERSION_FILE" || echo "0.0.0"
 	;;
-"" | help | -h | --help) usage ;;
+"" | help | -h | --help | помощь) usage ;;
 *)
 	echo "engvpnd: unknown command: $ACTION" >&2
 	usage >&2

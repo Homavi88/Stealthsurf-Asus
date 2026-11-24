@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.5** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.6** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.5](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.5) (после публикации feed)
+Релиз: [engvpn-0.5.6](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.6) (после публикации feed)
 
 ---
 
@@ -62,23 +62,25 @@ ENGVPN_PREFIX=/tmp/mnt/sda1/engvpn ENGVPN_PASSWORD='…' curl -fsSL …/merlin.s
 
 ## Как удалить
 
-Официальная точка входа — **`install.sh uninstall`** (не `merlin.sh` и не `engvpnd`: у них нет подкоманды uninstall). Скрипт останавливает сервис панели, снимает хуки Merlin и `cru`, удаляет префикс EngVPN и `/tmp/engvpn`. **Не трогает** StealthSurf `:8800` (`/jffs/addons/stealthsurf`) и SurfGate.
+После установки удобнее всего: **`engvpnd uninstall`** (синонимы `remove`, `удалить`) — вызывает тот же `install.sh uninstall`. Скрипт останавливает сервис панели, снимает хуки Merlin и `cru`, удаляет префикс EngVPN и `/tmp/engvpn`. **Не трогает** StealthSurf `:8800` (`/jffs/addons/stealthsurf`) и SurfGate.
 
 JFFS (типичная установка):
 
 ```sh
 # интерактивно: спросит, откатить из бэкапа или удалить полностью
+engvpnd uninstall
+# или полный путь к install.sh:
 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
 
 # чистое удаление без отката
-ENGVPN_RESTORE=0 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
+ENGVPN_RESTORE=0 engvpnd uninstall
 ```
 
 USB (если ставили на флешку):
 
 ```sh
-ENGVPN_RESTORE=0 sh /tmp/mnt/<USB>/engvpn/share/engvpn/install.sh uninstall
-# пример: ENGVPN_RESTORE=0 sh /tmp/mnt/sda1/engvpn/share/engvpn/install.sh uninstall
+ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
+# пример: ENGVPN_RESTORE=0 /tmp/mnt/sda1/engvpn/sbin/engvpnd uninstall
 ```
 
 Что остаётся после чистого удаления: каталог-сосед `.engvpn-backup` (например `/jffs/addons/.engvpn-backup/`) — для ручного восстановления; его можно удалить вручную, если бэкап не нужен. Подробности бэкапа/отката — в разделе ниже и в [CLI → backup](#engvpnd-backup).
@@ -108,7 +110,7 @@ ENGVPN_RESTORE=0 sh /tmp/mnt/<USB>/engvpn/share/engvpn/install.sh uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.5
+## Панель 0.5.6
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -120,6 +122,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.6
+
+- Короткие lifecycle-команды в `engvpnd`: `up`, `check`, `uninstall`/`remove`, `reinstall`, `restart`, `st`, `clean`, `priv`, `fix`, `ver` (см. [быстрые команды](#быстрые-команды)).
+- `uninstall` / `remove` вызывают реальный `install.sh uninstall` (`ENGVPN_RESTORE`).
+- `reinstall` — stop → принудительное обновление из feed в тот же prefix (данные сохраняются); `reinstall --wipe` стирает `data/` (нужно подтверждение / `ENGVPN_REINSTALL_WIPE=1`).
 
 ### Что нового в 0.5.5
 
@@ -198,41 +206,58 @@ engvpnd --help
 | --- | --- |
 | `serve` | Панель в foreground (`node …/run.mjs`) |
 | `set-password` | Пароль панели со stdin → pbkdf2 в `data/` |
-| `status` | Панель + transparent |
+| `status` / `st` | Панель + transparent |
 | `stop` | Остановить процесс панели |
-| `version` | Версия пакета |
-| `update-check` / `update` | Сверка / самообновление из feed |
+| `restart` | Перезапуск панели через `service.sh` |
+| `version` / `ver` | Версия пакета |
+| `update-check` / `check` | Сверка с feed |
+| `update` / `up` | Самообновление из feed |
+| `uninstall` / `remove` / `удалить` | Удаление (`install.sh uninstall`, `ENGVPN_RESTORE`) |
+| `reinstall` / `переустановить` | Stop → force-update из feed (данные сохраняются); `--wipe` стирает `data/` |
 | `schedule-update …` | Периодическая проверка (+ опц. автоустановка) через Merlin `cru` |
 | `transparent …` | Прозрачный / выборочный VPN |
 | `dpi …` | zapret/nfqws (NFQUEUE) |
-| `privacy …` | Проверки скрытности (exit/DNS/IPv6/kill-switch/DPI) |
+| `privacy` / `priv` … | Проверки скрытности (exit/DNS/IPv6/kill-switch/DPI) |
 | `warp …` | Cloudflare WARP + GRE |
 | `backup …` | Снимок / откат |
 | `smartdns …` | Обход доменов/IP |
 | `discover` | Устройства LAN (JSONL) |
-| `reconnect` | Transparent (+dpi/smartdns) + restart сервиса |
-| `cleanup` | Снять transparent/dpi/smartdns/GRE и `/tmp/engvpn*` |
+| `reconnect` / `fix` | Transparent (+dpi/smartdns) + restart сервиса |
+| `cleanup` / `clean` | Снять transparent/dpi/smartdns/GRE и `/tmp/engvpn*` |
 | `watchdog` | Проверка панели и восстановление правил |
+
+### Быстрые команды
+
+| Команда | Эквивалент | Что делает |
+| --- | --- | --- |
+| `engvpnd up` | `update` | Обновление из feed |
+| `engvpnd check` | `update-check` | Есть ли новая версия |
+| `engvpnd remove` | `uninstall` | Удаление (или откат по `ENGVPN_RESTORE`) |
+| `engvpnd reinstall` | — | Переустановка пакета, **data/ сохраняется** |
+| `engvpnd reinstall --wipe` | — | Стереть data/ + пакет из feed (`ENGVPN_REINSTALL_WIPE=1`) |
+| `engvpnd st` | `status` | Статус панели |
+| `engvpnd restart` | `service.sh restart` | Перезапуск панели |
+| `engvpnd clean` | `cleanup` | Снять правила / tmp |
+| `engvpnd priv` | `privacy` | Проверки скрытности |
+| `engvpnd fix` | `reconnect` | Переприменить правила + restart |
+| `engvpnd ver` | `version` | Версия |
 
 Примеры повседневного использования:
 
 ```sh
-engvpnd status
-engvpnd version
+engvpnd st
+engvpnd ver
+engvpnd check
+engvpnd up
 engvpnd transparent status
-engvpnd transparent apply
 engvpnd discover
-engvpnd smartdns apply
-engvpnd dpi apply
-engvpnd privacy
-engvpnd warp create
+engvpnd priv
 engvpnd backup create
-engvpnd update-check
-engvpnd update
-engvpnd schedule-update status
-engvpnd reconnect
-engvpnd cleanup
-engvpnd watchdog
+engvpnd reinstall                 # пакет заново, пароль/данные на месте
+ENGVPN_RESTORE=0 engvpnd remove   # полное удаление
+engvpnd fix
+engvpnd clean
+engvpnd restart
 ```
 
 ### Панель и пароль
@@ -244,15 +269,17 @@ engvpnd status
 engvpnd stop
 ```
 
-### Обновление
+### Обновление и переустановка
 
 ```sh
-engvpnd update-check                    # installed=… feed=… update_available=0|1
-engvpnd update                          # скачать feed, SHA-256 (+ minisig), upgrade
+engvpnd check                           # = update-check: installed=… feed=… update_available=0|1
+engvpnd up                              # = update: скачать feed, SHA-256 (+ minisig), upgrade
 engvpnd update 90                       # ждать старт сервиса до 90 с (по умолчанию 60)
+engvpnd reinstall                       # stop + ENGVPN_FORCE_UPDATE=1 (data/ сохраняется)
+ENGVPN_REINSTALL_WIPE=1 engvpnd reinstall --wipe   # стереть data/, затем пакет из feed
 ```
 
-Переменные: `ENGVPN_FEED`, `ENGVPN_PACKAGE_PREFIX`, `ENGVPN_FORCE_UPDATE=1`.
+Переменные: `ENGVPN_FEED`, `ENGVPN_PACKAGE_PREFIX`, `ENGVPN_FORCE_UPDATE=1`, `ENGVPN_REINSTALL_WIPE=1`.
 
 ### Плановая проверка и автообновление
 
@@ -362,12 +389,14 @@ sh …/share/engvpn/install.sh upgrade <archive> <version> <wait> <prefix>
 sh …/share/engvpn/install.sh uninstall [<prefix>]
 ```
 
-Удаление:
+Удаление (предпочтительно через `engvpnd`):
 
 ```sh
+engvpnd uninstall                       # = remove / удалить → install.sh uninstall
+ENGVPN_RESTORE=0 engvpnd remove         # без отката
+ENGVPN_RESTORE=1 engvpnd uninstall       # откат из бэкапа
+# прямой вызов по-прежнему работает:
 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
-ENGVPN_RESTORE=0 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall   # без отката
-ENGVPN_RESTORE=1 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall   # откат из бэкапа
 ```
 
 ### Установщик с роутера (`merlin.sh`)
@@ -407,7 +436,8 @@ sh …/share/engvpn/netfilter.sh set-hold 120
 | `ENGVPN_PORT` | engvpnd / service | Порт панели (8790) |
 | `ENGVPN_DATA_DIR` | engvpnd / скрипты | Каталог `data/` |
 | `ENGVPN_NODE` | engvpnd | Явный путь к Node |
-| `ENGVPN_FORCE_UPDATE` | update | Обновить даже при той же версии |
+| `ENGVPN_FORCE_UPDATE` | update / reinstall | Обновить даже при той же версии |
+| `ENGVPN_REINSTALL_WIPE` | reinstall --wipe | `1` подтвердить стирание `data/` |
 | `ENGVPN_ZAPRET_URL` | dpi | URL архива zapret/nfqws |
 
 ---

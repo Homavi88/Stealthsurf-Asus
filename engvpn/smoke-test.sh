@@ -113,8 +113,39 @@ echo "  hooks ok"
 
 echo "==> engvpnd status / version"
 "$PREFIX/sbin/engvpnd" version | grep -q "$VERSION"
+"$PREFIX/sbin/engvpnd" ver | grep -q "$VERSION"
 ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
+ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" check | grep -q "installed="
 echo "  version + update-check ok"
+
+echo "==> engvpnd short verbs (help + dispatch)"
+help_out=$("$PREFIX/sbin/engvpnd" --help)
+printf '%s\n' "$help_out" | grep -q 'uninstall | remove'
+printf '%s\n' "$help_out" | grep -q 'reinstall'
+printf '%s\n' "$help_out" | grep -q 'update | up'
+printf '%s\n' "$help_out" | grep -q 'Быстрые команды'
+# Dispatch aliases without side effects
+"$PREFIX/sbin/engvpnd" st >/dev/null 2>&1 || true
+"$PREFIX/sbin/engvpnd" priv dry-run | grep -q 'privacy-check'
+# Wipe without confirm must refuse (ENGVPN_SMOKE + unset REINSTALL_WIPE)
+if ENGVPN_SMOKE=1 "$PREFIX/sbin/engvpnd" reinstall --wipe >/tmp/engvpn-smoke-wipe.out 2>&1; then
+	echo "reinstall --wipe should refuse without ENGVPN_REINSTALL_WIPE=1" >&2
+	cat /tmp/engvpn-smoke-wipe.out >&2
+	exit 1
+fi
+grep -qi 'cancelled\|ENGVPN_REINSTALL_WIPE' /tmp/engvpn-smoke-wipe.out
+# Force reinstall (same version) via local feed — preserves data marker.
+# Redirect to a file (not a pipe): service supervisor would keep a pipe open.
+echo "smoke-reinstall=keep-me" >"$PREFIX/data/smoke.reinstall"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" \
+	ENGVPN_FEED="file://$FEED_DIR/latest.json" \
+	"$PREFIX/sbin/engvpnd" reinstall 30 >/tmp/engvpn-smoke-reinstall.out 2>&1
+grep -q 'keep-me' "$PREFIX/data/smoke.reinstall"
+grep -q 'reinstall: keeping data' /tmp/engvpn-smoke-reinstall.out
+# Stop panel started by reinstall so later smoke steps stay deterministic
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" \
+	"$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
+echo "  short verbs + reinstall (keep data) ok"
 
 echo "==> schedule-update (conf + run, auto off)"
 [ -x "$PREFIX/share/engvpn/schedule-update.sh" ]
@@ -563,13 +594,13 @@ console.log("  mock sync ok nodes="+vpn.length+" balance="+s.account.balance);
 	echo "  UI invoke matrix done"
 fi
 
-echo "==> uninstall with ENGVPN_RESTORE=1 (rollback from backup)"
+echo "==> engvpnd uninstall with ENGVPN_RESTORE=1 (rollback from backup)"
 echo "smoke-marker=restore-me" >"$PREFIX/data/smoke.marker"
 ENGVPN_SMOKE=1 "$PREFIX/sbin/engvpnd" backup create "$PREFIX" >/dev/null
 # Mutate after backup — restore must bring back restore-me
 echo "smoke-marker=changed" >"$PREFIX/data/smoke.marker"
 ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=1 \
-	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
+	"$PREFIX/sbin/engvpnd" uninstall "$PREFIX"
 [ -d "$PREFIX" ] || {
 	echo "expected prefix after RESTORE=1" >&2
 	exit 1
@@ -579,13 +610,13 @@ grep -q 'restore-me' "$PREFIX/data/smoke.marker" || {
 	cat "$PREFIX/data/smoke.marker" >&2 || true
 	exit 1
 }
-echo "  restore-on-uninstall ok"
+echo "  restore-on-uninstall (engvpnd) ok"
 
-echo "==> uninstall with ENGVPN_RESTORE=0 (clean remove)"
+echo "==> engvpnd remove with ENGVPN_RESTORE=0 (clean remove)"
 ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 \
-	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
+	"$PREFIX/sbin/engvpnd" remove "$PREFIX"
 [ ! -e "$PREFIX" ]
-echo "  clean uninstall ok"
+echo "  clean remove (engvpnd) ok"
 
 echo "==> ENGVPN_SKIP_BACKUP on re-install"
 export ENGVPN_SMOKE=1

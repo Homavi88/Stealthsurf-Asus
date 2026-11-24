@@ -132,6 +132,7 @@ do_start() {
 		fi
 	fi
 	# Supervisor: restart panel if it exits; periodic watchdog for rules.
+	# Redirect the whole subshell so callers that pipe engvpnd/install are not held open.
 	(
 		trap '' HUP
 		mkdir -p "$VOLATILE_DIR" 2>/dev/null || true
@@ -160,7 +161,7 @@ do_start() {
 			sleep 3
 		done
 		rm -f "$SUPERVISOR_PIDFILE"
-	) &
+	) >>"$LOG" 2>&1 &
 	# Wait briefly for listen
 	i=0
 	while [ "$i" -lt 15 ]; do
