@@ -1,24 +1,24 @@
 {
-  "version": "0.5.6",
-  "notes": "EngVPN 0.5.6 — short engvpnd lifecycle verbs (update/uninstall/reinstall/…) + JFFS/USB install target.",
+  "version": "0.5.7",
+  "notes": "EngVPN 0.5.7 — install prompt shows required+free MB; reproducible package SHA.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.6/engvpn_0.5.6_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.7/engvpn_0.5.7_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "f413c1e9d5a79516366242a91c6addfb1509a83abbdaa989dacf6fca11265d48",
-      "size": 131561
+      "sha256": "2a26203c1fb06e0051c724a13e46bd0c0b11b6524fdf4a4d28f8fe56b8feb1be",
+      "size": 132268
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.6/engvpn_0.5.6_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.7/engvpn_0.5.7_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "f413c1e9d5a79516366242a91c6addfb1509a83abbdaa989dacf6fca11265d48",
-      "size": 131561
+      "sha256": "2a26203c1fb06e0051c724a13e46bd0c0b11b6524fdf4a4d28f8fe56b8feb1be",
+      "size": 132268
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.6/engvpn_0.5.6_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.7/engvpn_0.5.7_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "f413c1e9d5a79516366242a91c6addfb1509a83abbdaa989dacf6fca11265d48",
-      "size": 131561
+      "sha256": "2a26203c1fb06e0051c724a13e46bd0c0b11b6524fdf4a4d28f8fe56b8feb1be",
+      "size": 132268
     }
   }
 }
