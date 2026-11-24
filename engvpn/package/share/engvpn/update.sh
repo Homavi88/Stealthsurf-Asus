@@ -72,16 +72,27 @@ download_https() {
 	rm -f "$_out"
 	case "$_bin" in
 	*curl)
-		"$_bin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || return 1
+		"$_bin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || {
+			rm -f "$_out"
+			return 1
+		}
 		;;
 	*wget)
-		"$_bin" -q --timeout=30 -O "$_out" "$_url" || return 1
+		# GNU/Entware wget follows redirects; non-zero on HTTP errors (may leave 0-byte file).
+		"$_bin" -q --timeout=30 --tries=3 -O "$_out" "$_url" || {
+			rm -f "$_out"
+			return 1
+		}
 		;;
 	*)
 		return 1
 		;;
 	esac
-	[ -f "$_out" ] && [ -s "$_out" ]
+	if [ -f "$_out" ] && [ -s "$_out" ]; then
+		return 0
+	fi
+	rm -f "$_out"
+	return 1
 }
 
 download_https_mirrored() {
@@ -112,23 +123,80 @@ download_https_mirrored() {
 fetch_feed() {
 	tmp=/tmp/engvpn-feed.$$.json
 	download_https_mirrored "$FEED" "$tmp" || fail "could not fetch $FEED"
+	bytes=$(file_bytes "$tmp")
+	if [ -n "$bytes" ] && [ "$bytes" -lt 100 ]; then
+		echo "update: feed too small (${bytes} bytes): $FEED" >&2
+		head -n 8 "$tmp" | sed 's/^/  /' >&2
+		rm -f "$tmp"
+		fail "feed too small (${bytes} bytes)"
+	fi
 	cat "$tmp"
 	rm -f "$tmp"
 }
 
+# Flexible whitespace; minified or pretty; quoted/bare; brace-depth (no cross-arch leak).
 field() {
 	feed=$1
 	key=$2
 	name=$3
-	printf '%s\n' "$feed" | awk -v key="\"$key\": {" -v name="\"$name\":" '
-		index($0, key) { inside = 1; next }
-		inside && /^[[:space:]]*}/ { exit }
-		inside && index($0, name) {
-			value = substr($0, index($0, name) + length(name))
-			gsub(/^[ \t"]+/, "", value)
-			gsub(/[", \t\r]*$/, "", value)
+	printf '%s\n' "$feed" | awk -v arch="$key" -v name="$name" '
+		function extract_from(s, name,    value) {
+			if (!match(s, "\"" name "\"[[:space:]]*:")) return 0
+			value = substr(s, RSTART + RLENGTH)
+			sub(/^[[:space:]]+/, "", value)
+			if (substr(value, 1, 1) == "\"") {
+				value = substr(value, 2)
+				if (match(value, /"/)) value = substr(value, 1, RSTART - 1)
+				else value = ""
+			} else {
+				sub(/[[:space:],}].*/, "", value)
+			}
 			print value
-			exit
+			return 1
+		}
+		function scan(s, name,    i, c, n, chunk) {
+			n = length(s)
+			i = 1
+			while (i <= n) {
+				c = substr(s, i, 1)
+				if (c == "{") { depth++; i++; continue }
+				if (c == "}") {
+					depth--
+					if (depth <= 0) return 0
+					i++
+					continue
+				}
+				if (c == "\"") {
+					chunk = substr(s, i)
+					if (match(chunk, "^\"" name "\"[[:space:]]*:")) {
+						if (extract_from(chunk, name)) return 1
+					}
+					i++
+					while (i <= n) {
+						c = substr(s, i, 1)
+						if (c == "\\") { i += 2; continue }
+						if (c == "\"") { i++; break }
+						i++
+					}
+					continue
+				}
+				i++
+			}
+			return 0
+		}
+		BEGIN { depth = 0; inside = 0 }
+		{
+			if (!inside) {
+				if (match($0, "\"" arch "\"[[:space:]]*:[[:space:]]*\\{")) {
+					inside = 1
+					depth = 1
+					rest = substr($0, RSTART + RLENGTH)
+					if (scan(rest, name)) exit
+				}
+				next
+			}
+			if (scan($0, name)) exit
+			if (depth <= 0) exit
 		}'
 }
 
@@ -208,6 +276,10 @@ cmd_apply() {
 	[ -n "$got_bytes" ] && [ "$got_bytes" -gt 0 ] ||
 		fail "downloaded package is empty (0 bytes)"
 	echo "update: downloaded ${got_bytes} bytes"
+	expect_size=$(field "$feed" "$key" size)
+	if [ -n "$expect_size" ] && [ "$expect_size" != "0" ] && [ "$got_bytes" -ne "$expect_size" ]; then
+		echo "update: warning: feed size $expect_size, got $got_bytes" >&2
+	fi
 	if type sha256sum >/dev/null 2>&1; then
 		actual=$(sha256sum "$archive" | awk '{ print $1 }')
 	else
