@@ -175,8 +175,11 @@ grep -q 'Хуки' "$install_log"
 grep -q 'Загрузка ядер и гео-баз\|ядра пропущены' "$install_log"
 grep -q 'Сохранение пароля' "$install_log"
 grep -q 'Запуск сервиса' "$install_log"
-grep -qE 'ожидание панели|запуск \(таймаут|EngVPN started' "$install_log" \
+grep -qE 'ожидание панели|запуск одного supervisor|EngVPN started' "$install_log" \
 	|| grep -q 'EngVPN started' "$install_log"
+# 0.5.29: must NOT hang on pre-start kill-strays
+! grep -q 'остановка лишних процессов' "$install_log" \
+	|| { echo "install still prints hangy «остановка лишних процессов»:" >&2; grep -n 'остановка' "$install_log" >&2; exit 1; }
 echo "  progress [1/10]…[10/10] ok"
 
 echo "==> verify layout"
@@ -328,6 +331,23 @@ echo "  after 18× parallel start: panels=$n_panels supervisors≈$n_sup"
 	done
 	exit 1
 }
+# 0.5.29: one-shot purge on start must leave ≤1 supervisor (no orphan storm)
+"$PREFIX/share/engvpn/service.sh" start >/dev/null
+sleep 1
+n_sup=$(count_supervisors)
+n_panels=$(count_panels)
+echo "  after purge start: panels=$n_panels supervisors=$n_sup"
+[ "$n_panels" -eq 1 ] && [ "$n_sup" -le 1 ] || {
+	echo "one-shot purge failed: panels=$n_panels supervisors=$n_sup (want 1 panel, ≤1 supervisor)" >&2
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*run.mjs* | *"$PREFIX"*service.sh*) echo "  pid ${e#/proc/}: $cmd" >&2 ;;
+		esac
+	done
+	exit 1
+}
+echo "  one-shot orphan purge → single supervisor ok"
 # Serial restart once — still one panel
 "$PREFIX/share/engvpn/service.sh" restart >/dev/null
 sleep 2
@@ -506,10 +526,12 @@ if command -v node >/dev/null 2>&1; then
 		&& ! grep -qE 'tr .*<"/proc/.*/cmdline"' "$PREFIX/share/engvpn/service.sh" \
 		&& echo "  quiet cmdline (-r + cat) ok" \
 		|| { echo "service.sh must use -r + cat for cmdline (no shell <redir)" >&2; exit 1; }
-	grep -q 'kill_orphan_helpers\|enforce_single_on_start\|supervisor_sleep\|brute_kill_prefix\|wait_for_panel' "$PREFIX/share/engvpn/service.sh" \
+	grep -q 'purge_orphans_oneshot\|enforce_single_on_start\|supervisor_sleep\|brute_kill_prefix\|wait_for_panel' "$PREFIX/share/engvpn/service.sh" \
 		&& grep -q 'kill_strays 2>/dev/null' "$PREFIX/share/engvpn/service.sh" \
-		&& echo "  hard-enforce single + start timeout/progress ok" \
-		|| { echo "missing enforce_single / brute_kill / wait_for_panel" >&2; exit 1; }
+		&& grep -q 'запуск одного supervisor' "$ROOT/merlin.sh" \
+		&& ! grep -q 'остановка лишних процессов' "$ROOT/merlin.sh" \
+		&& echo "  hard-enforce single + one-shot purge + fast [10/10] ok" \
+		|| { echo "missing purge_orphans_oneshot / fast start path" >&2; exit 1; }
 	grep -q 'id === "ferrum" ? "xray"\|member = id === "ferrum"' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& echo "  Ferrum unpack → xray member ok" \
 		|| { echo "missing Ferrum→xray unpack mapping in engines.mjs" >&2; exit 1; }

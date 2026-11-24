@@ -1857,11 +1857,24 @@ function shortCmdName(cmd, fallback) {
   return (base || fallback || "").slice(0, 48);
 }
 
-/** Tag EngVPN panel / Node / open cores so Diagnostics can highlight CPU suspects. */
+/** Tag EngVPN panel / supervisor / Node / open cores so Diagnostics can highlight CPU suspects. */
 function classifyEngvpnProcess(name, cmdline) {
   const s = `${name || ""} ${cmdline || ""}`.toLowerCase();
-  if (/engvpnd|\/engvpn\/|share\/engvpn|runtime\/run\.mjs|engvpn-panel/.test(s)) {
+  // Distinguish supervisor shells + orphan sleeps from the panel — avoids false «несколько engvpnd».
+  if (/share\/engvpn\/service\.sh|\/engvpn\/share\/engvpn\/service\.sh/.test(s)) {
+    return { kind: "supervisor", label: "service" };
+  }
+  if (/(?:^|\s|\/)sleep(?:\s|$)/.test(s) && /engvpn|ENGVPN_/.test(s)) {
+    return { kind: "orphan", label: "sleep" };
+  }
+  if (/runtime\/run\.mjs|engvpn-panel/.test(s)) {
+    return { kind: "node", label: "panel" };
+  }
+  if (/engvpnd/.test(s)) {
     return { kind: "engvpn", label: "engvpnd" };
+  }
+  if (/\/engvpn\//.test(s) || /share\/engvpn/.test(s)) {
+    return { kind: "engvpn", label: "engvpn" };
   }
   if (/\bxray\b/.test(s) || /\/cores\/xray\b/.test(s) || /\/ferrum\b/.test(s)) {
     return { kind: "core", label: /ferrum/.test(s) ? "ferrum" : "xray" };
@@ -2038,23 +2051,20 @@ export function enrichProcessHints(processes, state) {
       }
     }
   }
-  // Dual run.mjs was the confirmed Merlin CPU leak (~25%+25%).
-  const panelNodes = out.flagged.filter(
-    (r) => r.kind === "engvpn" || (r.kind === "node" && /run\.mjs|engvpn/i.test(String(r.name || ""))),
+  // Dual run.mjs / multi service.sh was the Merlin CPU leak. Healthy = 1 panel + 1 supervisor.
+  const panels = out.flagged.filter(
+    (r) => r.label === "panel" || (r.kind === "node" && /run\.mjs|engvpn-panel/i.test(`${r.name || ""}`)),
   );
-  const engvpnLike = out.flagged.filter((r) => r.kind === "engvpn" || r.label === "engvpnd");
-  if (engvpnLike.length + panelNodes.filter((r) => r.kind === "node").length >= 2 || engvpnLike.length >= 2) {
+  const supervisors = out.flagged.filter((r) => r.kind === "supervisor" || r.label === "service");
+  const orphans = out.flagged.filter((r) => r.kind === "orphan" || r.label === "sleep");
+  if (panels.length > 1) {
     const msg =
-      "Обнаружено несколько процессов панели EngVPN (node …/run.mjs). Два экземпляра жрут ЦП — оставьте один: engvpnd stop && engvpnd restart (или service.sh kill-strays).";
+      "Обнаружено несколько процессов панели EngVPN (node …/run.mjs). Два экземпляра жрут ЦП — оставьте один: engvpnd stop && engvpnd restart.";
     if (!out.hints.some((h) => /несколько процессов панели|два экземпляр/i.test(h))) out.hints.push(msg);
-  } else {
-    // Count all node procs under engvpn path via name/label heuristics already in flagged
-    const nodes = out.flagged.filter((r) => r.kind === "engvpn" || r.kind === "node");
-    if (nodes.length >= 2) {
-      const msg =
-        "Несколько node/engvpnd в топе — проверьте, что панель одна (service.sh kill-strays / restart).";
-      if (!out.hints.some((h) => /Несколько node/i.test(h))) out.hints.push(msg);
-    }
+  } else if (supervisors.length > 1 || orphans.length > 0) {
+    const msg =
+      "Лишние service.sh/sleep EngVPN в топе — перезапустите панель (engvpnd restart); start чистит orphans одним проходом.";
+    if (!out.hints.some((h) => /Лишние service\.sh|orphans/i.test(h))) out.hints.push(msg);
   }
   const log = readEngvpnLogTail();
   if (log) {
