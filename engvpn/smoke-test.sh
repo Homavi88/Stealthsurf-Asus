@@ -341,6 +341,13 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'settings-split\|drawer-settings' "$_ui_css" \
 		&& echo "  settings CSS ok" \
 		|| { echo "missing settings CSS" >&2; exit 1; }
+	grep -q 'has-pane .settings-nav { display: none' "$_ui_css" \
+		&& grep -q 'min-width: 900px' "$_ui_css" \
+		&& echo "  settings mobile list→detail + desktop ≥900 split ok" \
+		|| { echo "missing mobile list/detail or desktop split CSS" >&2; exit 1; }
+	! grep -q '@media (max-width: 899px)' "$_ui_css" \
+		&& echo "  settings CSS is mobile-first (no max-width:899 override) ok" \
+		|| { echo "settings CSS should be mobile-first, not max-width:899 override" >&2; exit 1; }
 	grep -q 'Установить обновление\|install-update\|updateAvailable\|feedNewer' "$_ui_js" \
 		&& echo "  updates install button UI ok" \
 		|| { echo "missing install-update button in app.js" >&2; exit 1; }
@@ -353,12 +360,13 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'ping-good\|flag\.de\|loc-main' "$_ui_css" \
 		&& echo "  locations ping/flag CSS ok" \
 		|| { echo "missing locations ping/flag CSS" >&2; exit 1; }
-	grep -q 'data-router-mode\|ROUTER_MODES\|mode-select\|VPN для всей сети' "$_ui_js" \
-		&& echo "  router mode selector UI ok" \
-		|| { echo "missing router mode selector in app.js" >&2; exit 1; }
-	grep -q 'mode-pick\|mode-select' "$_ui_css" \
-		&& echo "  router mode selector CSS ok" \
-		|| { echo "missing router mode CSS" >&2; exit 1; }
+	grep -q 'ROUTER_MODES\|sel("router.mode"\|VPN для всей сети' "$_ui_js" \
+		&& ! grep -q 'mode-picks\|data-router-mode\|mode-pick' "$_ui_js" \
+		&& echo "  router mode dropdown UI ok" \
+		|| { echo "router mode must be a single <select> (no stacked picks)" >&2; exit 1; }
+	! grep -q 'mode-picks\|mode-pick\|mode-select-wrap' "$_ui_css" \
+		&& echo "  router mode stacked-picks CSS removed ok" \
+		|| { echo "leftover mode-picks CSS in app.css" >&2; exit 1; }
 	grep -q 'min-width: 900px\|drawer-settings' "$_ui_css" \
 		&& echo "  desktop settings ≥900px CSS ok" \
 		|| { echo "missing desktop settings width CSS" >&2; exit 1; }

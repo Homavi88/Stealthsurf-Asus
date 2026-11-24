@@ -517,19 +517,7 @@ function screenRouter() {
   const modeText = (ROUTER_MODES.find(([id]) => id === mode) || ROUTER_MODES[0])[2];
   return `${backBar("Роутер")}<div class="drawer-body">
     <div class="group">
-      <div class="mode-block">
-        <div class="cell-title">VPN для всей сети</div>
-        <label class="mode-select-wrap">
-          <span class="sr-only">Режим VPN для сети</span>
-          <select class="ctrl full mode-select" data-input="router.mode" aria-label="VPN для всей сети">
-            ${ROUTER_MODES.map(([id, label]) => `<option value="${esc(id)}" ${id === mode ? "selected" : ""}>${esc(label)}</option>`).join("")}
-          </select>
-        </label>
-        <div class="mode-picks" role="listbox" aria-label="VPN для всей сети">
-          ${ROUTER_MODES.map(([id, label]) => `<button type="button" class="mode-pick${id === mode ? " on" : ""}" data-router-mode="${id}" role="option" aria-selected="${id === mode ? "true" : "false"}">${esc(label)}</button>`).join("")}
-        </div>
-        <p class="muted">${esc(modeText)}</p>
-      </div>
+      ${cell("VPN для всей сети", modeText, sel("router.mode", mode, ROUTER_MODES.map(([id, label]) => [id, label])))}
       ${cell("Статус", S.vpn.connected ? `Работает · через VPN ${fmtBytes((S.runtime.session.vpnDown || 0) + (S.runtime.session.vpnUp || 0))}` : "VPN выключен")}
       <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Устройства</div><div class="cell-desc">Отмечено ${marked} · режим «${esc(modeLabel)}»</div></div><span class="chev">›</span></button>
       <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Маршруты устройств</div><div class="cell-desc">Свой конфиг или сайты мимо VPN</div></div><span class="chev">›</span></button>
@@ -1488,25 +1476,6 @@ function open(id) {
 }
 
 document.addEventListener("click", (event) => {
-  const modeBtn = event.target.closest("[data-router-mode]");
-  if (modeBtn && S) {
-    const value = modeBtn.dataset.routerMode;
-    if (!value || value === S.router?.mode) return;
-    const prev = S.router.mode;
-    S.router.mode = value;
-    render();
-    run(async () => {
-      try {
-        await invoke("patch", { path: "router.mode", value });
-        toast(`Режим: ${(ROUTER_MODES.find(([id]) => id === value) || [])[1] || value}`);
-      } catch (e) {
-        S.router.mode = prev;
-        render();
-        throw e;
-      }
-    });
-    return;
-  }
   const t = event.target.closest("[data-act],[data-go],[data-go-top],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]");
   if (!t || (!S && t.dataset.act !== "eye" && ui.auth !== false)) return;
   const act = t.dataset.act;

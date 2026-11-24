@@ -1269,7 +1269,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — BusyBox/USB backup finalize: sort via redirect (no sort -o / missing files.sorted mv); keep unsorted list instead of hard-fail when backup optional."
+RELEASE_NOTES="EngVPN $VERSION — router VPN mode is a single <select> (desktop+mobile); settings CSS mobile-first (list→detail on phone, nav+pane split ≥900px)."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
