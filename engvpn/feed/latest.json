@@ -1,24 +1,24 @@
 {
-  "version": "0.5.22",
-  "notes": "EngVPN 0.5.22 — fix «Свои правила» add-rule null draft-action (sel data-input vs data-set); ephemeral form selects skip patch; null-safe ctrl() for draft/cr/zkind/bridge.",
+  "version": "0.5.24",
+  "notes": "EngVPN 0.5.24 — harden sing-box :20828 wait (alive-aware, free-after-stop, orphan kill via /proc); fixes false fail under dual run.mjs race (EV-64; EV-62 owns single-instance).",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.24/engvpn_0.5.24_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
-      "size": 156661
+      "sha256": "c1c2059f0e53dabe027f7b4f37b2b6619b1d1170723b7db5db3fe6ba294dee9d",
+      "size": 158287
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.24/engvpn_0.5.24_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
-      "size": 156661
+      "sha256": "c1c2059f0e53dabe027f7b4f37b2b6619b1d1170723b7db5db3fe6ba294dee9d",
+      "size": 158287
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.24/engvpn_0.5.24_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
-      "size": 156661
+      "sha256": "c1c2059f0e53dabe027f7b4f37b2b6619b1d1170723b7db5db3fe6ba294dee9d",
+      "size": 158287
     }
   }
 }

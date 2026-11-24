@@ -297,15 +297,27 @@ export function createRuntime() {
     await stopEngine();
     live.tunnel = "off";
     if (node.protocol !== "direct") {
-      const started = startEngine(engineId, written.activePath, (line) => ctx.hooks.log("debug", line));
+      let started = startEngine(engineId, written.activePath, (line) => ctx.hooks.log("debug", line));
       if (started.started) {
-        const up = await waitForPort(ENGINE_PORT);
+        // Alive-aware wait: refuse stale :20828 from another run.mjs; retry once after free.
+        let up = await waitForPort(ENGINE_PORT, "127.0.0.1", 10000, { child: started.child });
+        if (!up && started.child && (started.child.killed || started.child.exitCode !== null)) {
+          ctx.hooks.log("warning", `${ENGINES[engineId].title} вышел до listen на ${ENGINE_PORT} — повтор после освобождения порта`);
+          await stopEngine();
+          started = startEngine(engineId, written.activePath, (line) => ctx.hooks.log("debug", line));
+          if (started.started) {
+            up = await waitForPort(ENGINE_PORT, "127.0.0.1", 10000, { child: started.child });
+          }
+        }
         if (up) {
           live.tunnel = "engine";
           live.engineMessage = `${ENGINES[engineId].title} запущен, pid ${started.pid}`;
         } else {
           await stopEngine();
-          live.engineMessage = `${ENGINES[engineId].title} не открыл порт ${ENGINE_PORT}`;
+          const died = started.child && (started.child.killed || started.child.exitCode !== null);
+          live.engineMessage = died
+            ? `${ENGINES[engineId].title} завершился до открытия порта ${ENGINE_PORT}`
+            : `${ENGINES[engineId].title} не открыл порт ${ENGINE_PORT}`;
           if (!node.alpha) throw new Error(live.engineMessage);
           live.tunnel = "alpha-direct";
         }
