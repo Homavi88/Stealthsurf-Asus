@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.20** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.21** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.20](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.20) (после публикации feed)
+Релиз: [engvpn-0.5.21](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.21) (после публикации feed)
 
 ---
 
@@ -130,6 +130,11 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.21
+
+- Роутер «VPN для всей сети»: один `<select>` на desktop и mobile (как «Метод transparent»), без стека кнопок. Режимы и persist без изменений.
+- Настройки: CSS mobile-first — телефон list → detail; ≥900px nav + pane split (StealthSurf-style, без регрессии в «полный список без drill-down»).
 
 ### Что нового в 0.5.20
 
