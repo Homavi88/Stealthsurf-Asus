@@ -882,7 +882,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-	"notes": "EngVPN $VERSION — install prompt shows required+free MB; reproducible package SHA.",
+	"notes": "EngVPN $VERSION — curl -fL package download (follow GitHub 302); reject empty file before SHA.",
 	"packages": {
 		"merlin-aarch64": {
 			"url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -910,7 +910,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
 	"version": "$VERSION",
-	"notes": "EngVPN $VERSION — install prompt shows required+free MB; reproducible package SHA.",
+	"notes": "EngVPN $VERSION — curl -fL package download (follow GitHub 302); reject empty file before SHA.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

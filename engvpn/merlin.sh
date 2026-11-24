@@ -17,6 +17,9 @@
 
 set -u
 
+# Entware first — firmware BusyBox wget cannot fetch HTTPS (GitHub releases).
+export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
+
 # Default feed: GitHub raw of this repo's feed (override for CDN).
 FEED=${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}
 PACKAGE_PREFIX=${ENGVPN_PACKAGE_PREFIX:-https://github.com/Homavi88/Stealthsurf-Asus/releases/download/}
@@ -52,6 +55,85 @@ trap '{ type stty >/dev/null 2>&1 && stty echo </dev/tty; } 2>/dev/null; exit 1'
 
 free_kb() {
 	df -k "$1" 2>/dev/null | awk 'NR > 1 && NF >= 5 { value = $(NF - 2) } END { print value }'
+}
+
+# HTTPS downloader: prefer Entware curl. Must use -L — GitHub release URLs 302
+# to release-assets.githubusercontent.com; without -L curl writes a 0-byte file
+# and exits 0 (SHA-256 e3b0c442… = empty).
+find_https_fetch() {
+	if [ -x /opt/bin/curl ]; then
+		echo /opt/bin/curl
+		return 0
+	fi
+	if [ -x /usr/sbin/curl ]; then
+		echo /usr/sbin/curl
+		return 0
+	fi
+	if command -v curl >/dev/null 2>&1; then
+		command -v curl
+		return 0
+	fi
+	if [ -x /opt/bin/wget ]; then
+		echo /opt/bin/wget
+		return 0
+	fi
+	return 1
+}
+
+file_bytes() {
+	# BusyBox-friendly size; prefer wc -c, fall back to ls.
+	if bytes=$(wc -c <"$1" 2>/dev/null); then
+		echo "$bytes" | tr -d ' '
+		return 0
+	fi
+	# shellcheck disable=SC2012
+	ls -ln "$1" 2>/dev/null | awk '{ print $5 }'
+}
+
+download_https() {
+	# $1=url $2=out — returns 0 only when out is non-empty.
+	_url=$1
+	_out=$2
+	_bin=$(find_https_fetch) || return 1
+	rm -f "$_out"
+	case "$_bin" in
+	*curl)
+		"$_bin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || return 1
+		;;
+	*wget)
+		"$_bin" -q --timeout=30 -O "$_out" "$_url" || return 1
+		;;
+	*)
+		return 1
+		;;
+	esac
+	[ -f "$_out" ] && [ -s "$_out" ]
+}
+
+# Retry GitHub via public mirrors when direct fetch yields empty/HTTP error.
+download_https_mirrored() {
+	_url=$1
+	_out=$2
+	if download_https "$_url" "$_out"; then
+		return 0
+	fi
+	case "$_url" in
+	https://github.com/* | https://raw.githubusercontent.com/* | https://release-assets.githubusercontent.com/*) ;;
+	*)
+		return 1
+		;;
+	esac
+	for _mirror in \
+		'https://ghfast.top/' \
+		'https://gh-proxy.com/' \
+		'https://cdn.gh-proxy.org/' \
+		'https://gitproxy.click/'; do
+		echo "  → повтор через $_mirror" >&2
+		if download_https "${_mirror}${_url}" "$_out"; then
+			return 0
+		fi
+	done
+	return 1
 }
 
 stage "Проверки" "Проверки окружения…"
@@ -325,7 +407,12 @@ if [ -n "${ENGVPN_LOCAL_PACKAGE:-}" ] && [ -f "$ENGVPN_LOCAL_PACKAGE" ]; then
 	stage "Проверка" "Проверка (локальный пакет — SHA-256 ленты не применяется)…"
 else
 	stage "Загрузка" "Загрузка ленты и пакета…"
-	feed=$(curl -fsS --retry 3 "$FEED") || fail "не удалось скачать $FEED"
+	find_https_fetch >/dev/null 2>&1 ||
+		fail "нужен curl с HTTPS (Entware: opkg update && opkg install curl)"
+	feed_tmp=$WORK/latest.json
+	download_https_mirrored "$FEED" "$feed_tmp" || fail "не удалось скачать ленту $FEED"
+	feed=$(cat "$feed_tmp")
+	[ -n "$feed" ] || fail "лента пустая ($FEED)"
 	field() {
 		printf '%s\n' "$feed" | awk -v key="\"$key\": {" -v name="\"$1\":" '
 			index($0, key) { inside = 1; next }
@@ -340,6 +427,7 @@ else
 	version=$(printf '%s\n' "$feed" | sed -n 's/^  "version": "\([^"]*\)",*$/\1/p' | head -n 1)
 	url=$(field url)
 	sha256=$(field sha256)
+	expect_size=$(field size)
 	[ -n "$version" ] && [ -n "$url" ] && [ -n "$sha256" ] ||
 		fail "в ленте нет пакета для $key"
 	# Allow GitHub release URLs or configured prefix
@@ -354,6 +442,7 @@ else
 		;;
 	esac
 	echo "  → EngVPN $version ($key)"
+	echo "  → $url"
 	archive=$WORK/engvpn.tar.gz
 	case "$url" in
 	file://*)
@@ -361,9 +450,17 @@ else
 		cp -f "$src" "$archive" || fail "не удалось скопировать $src"
 		;;
 	*)
-		curl -fsS --retry 3 -o "$archive" "$url" || fail "не удалось скачать пакет"
+		download_https_mirrored "$url" "$archive" ||
+			fail "не удалось скачать пакет (HTTP/пусто; проверьте curl -fL и доступ к GitHub)"
 		;;
 	esac
+	got_bytes=$(file_bytes "$archive")
+	[ -n "$got_bytes" ] && [ "$got_bytes" -gt 0 ] ||
+		fail "пакет пустой (0 байт) после загрузки — нужен curl с -L (редирект GitHub)"
+	echo "  → скачано ${got_bytes} байт"
+	if [ -n "$expect_size" ] && [ "$expect_size" != "0" ] && [ "$got_bytes" -ne "$expect_size" ]; then
+		echo "  → предупреждение: размер ленты $expect_size, получено $got_bytes" >&2
+	fi
 
 	stage "Проверка" "Проверка SHA-256 и подписи…"
 	if type sha256sum >/dev/null 2>&1; then
@@ -372,7 +469,7 @@ else
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
 	[ "$actual" = "$sha256" ] ||
-		fail "контрольная сумма пакета не совпадает с лентой (ожидалось $sha256, получено $actual)"
+		fail "контрольная сумма пакета не совпадает с лентой (ожидалось $sha256, получено $actual, размер $got_bytes)"
 	# Minisign (optional but preferred when feed publishes .minisig)
 	sig_url=$(field minisig)
 	[ -z "$sig_url" ] && sig_url="${url}.minisig"
@@ -380,17 +477,17 @@ else
 	case "$sig_url" in
 	file://*) [ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true ;;
 	https://* | http://127.0.0.1/* | http://localhost/*)
-		curl -fsS --retry 2 -o "$sig" "$sig_url" 2>/dev/null || true
+		download_https "$sig_url" "$sig" 2>/dev/null || true
 		;;
 	esac
-	if [ -f "$sig" ]; then
+	if [ -f "$sig" ] && [ -s "$sig" ]; then
 		pub_url=${ENGVPN_MINISIGN_PUB:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/keys/engvpn.minisign.pub}
 		pub=$WORK/engvpn.minisign.pub
-		curl -fsS --retry 2 -o "$pub" "$pub_url" 2>/dev/null || true
-		if [ -f "$pub" ] && command -v minisign >/dev/null 2>&1; then
+		download_https "$pub_url" "$pub" 2>/dev/null || true
+		if [ -f "$pub" ] && [ -s "$pub" ] && command -v minisign >/dev/null 2>&1; then
 			minisign -Vm "$archive" -x "$sig" -p "$pub" || fail "проверка Minisign не прошла"
 			echo "  → Minisign OK"
-		elif [ -f "$pub" ] && command -v node >/dev/null 2>&1; then
+		elif [ -f "$pub" ] && [ -s "$pub" ] && command -v node >/dev/null 2>&1; then
 			echo "  → подпись Minisign есть (полная проверка Node — после установки); SHA-256 уже сверен"
 		else
 			echo "  → .minisig есть, но верификатор недоступен; SHA-256 уже сверен"
