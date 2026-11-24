@@ -9,16 +9,48 @@ SHARE=$(cd "${0%/*}" 2>/dev/null && pwd -P) || exit 1
 PREFIX=${SHARE%/share/engvpn}
 VERSION_FILE=$SHARE/VERSION
 INSTALL=$SHARE/install.sh
+DATA_DIR=${ENGVPN_DATA_DIR:-$PREFIX/data}
 FEED=${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}
 PACKAGE_PREFIX=${ENGVPN_PACKAGE_PREFIX:-https://github.com/Homavi88/Stealthsurf-Asus/releases/download/}
 WORK=/tmp/engvpn-update.$$
+ACTION_LOG=${ENGVPN_UPDATE_LOG:-$DATA_DIR/update-action.log}
+ACTION_STATUS=${ENGVPN_UPDATE_STATUS:-$DATA_DIR/update-action.status}
 PATH=/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}
 export PATH
 
 fail() {
+	ulog "ошибка: $*"
 	echo "update: $*" >&2
+	action_status fail
 	rm -rf "$WORK"
 	exit 1
+}
+
+ulog() {
+	_msg=$1
+	echo "update: $_msg"
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	# shellcheck disable=SC2039
+	_ts=$(date '+%H:%M:%S' 2>/dev/null || true)
+	printf '%s\n' "${_ts:+[$_ts] }$_msg" >>"$ACTION_LOG" 2>/dev/null || true
+}
+
+action_status() {
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	printf '%s\n' "$1" >"$ACTION_STATUS" 2>/dev/null || true
+}
+
+clear_storm() {
+	ulog "очистка лишних процессов (kill-strays)…"
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" kill-strays 2>/dev/null ||
+			sh "$SHARE/service.sh" stop 2>/dev/null || true
+	fi
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/sbin/engvpnd serve" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/share/engvpn/service.sh" 2>/dev/null || true
+	fi
 }
 
 installed_version() {
@@ -210,6 +242,33 @@ feed_version() {
 		}'
 }
 
+feed_notes() {
+	printf '%s\n' "$1" | awk '
+		match($0, /"notes"[[:space:]]*:[[:space:]]*"/) {
+			s = substr($0, RSTART + RLENGTH)
+			# Unescape common JSON sequences; stop at unescaped "
+			out = ""
+			n = length(s)
+			for (i = 1; i <= n; i++) {
+				c = substr(s, i, 1)
+				if (c == "\\") {
+					i++
+					n2 = substr(s, i, 1)
+					if (n2 == "n") out = out " "
+					else if (n2 == "u") {
+						# skip \\uXXXX
+						i += 4
+					} else out = out n2
+					continue
+				}
+				if (c == "\"") break
+				out = out c
+			}
+			print out
+			exit
+		}'
+}
+
 feed_diag() {
 	feed=$1
 	key=$2
@@ -294,6 +353,7 @@ fetch_package() {
 cmd_check() {
 	feed=$(fetch_feed)
 	ver=$(feed_version "$feed")
+	notes=$(feed_notes "$feed")
 	cur=$(installed_version)
 	key=$(arch_key)
 	url=$(field "$feed" "$key" url)
@@ -303,6 +363,7 @@ cmd_check() {
 	echo "feed=$ver"
 	echo "arch=$key"
 	echo "url=$resolved"
+	[ -n "$notes" ] && echo "notes=$notes"
 	if [ -n "$url" ] && [ "$url" != "$resolved" ]; then
 		echo "feed_url=$url"
 	fi
@@ -315,7 +376,15 @@ cmd_check() {
 
 cmd_apply() {
 	wait=${1:-60}
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	: >"$ACTION_LOG" 2>/dev/null || true
+	action_status running
+	# Skip second kill if engvpnd already cleared (ENGVPN_STORM_CLEARED=1).
+	if [ "${ENGVPN_STORM_CLEARED:-}" != 1 ]; then
+		clear_storm
+	fi
 	key=$(arch_key)
+	ulog "загрузка ленты…"
 	feed=$(fetch_feed)
 	ver=$(feed_version "$feed")
 	url=$(field "$feed" "$key" url)
@@ -330,7 +399,8 @@ cmd_apply() {
 	}
 	cur=$(installed_version)
 	if [ "$ver" = "$cur" ] && [ "${ENGVPN_FORCE_UPDATE:-}" != 1 ]; then
-		echo "update: already on $cur"
+		ulog "уже на $cur"
+		action_status ok
 		exit 0
 	fi
 	case "$url" in
@@ -340,17 +410,18 @@ cmd_apply() {
 	rm -rf "$WORK"
 	mkdir -m 700 "$WORK" || fail "mkdir $WORK"
 	archive=$WORK/engvpn.tar.gz
-	echo "update: fetching $url"
+	ulog "скачивание $ver…"
 	fetch_package "$url" "$archive" ||
 		fail "download/copy failed (HTTP/empty or missing file; need curl -fL for GitHub redirects)"
 	got_bytes=$(file_bytes "$archive")
 	[ -n "$got_bytes" ] && [ "$got_bytes" -gt 0 ] ||
 		fail "downloaded package is empty (0 bytes)"
-	echo "update: downloaded ${got_bytes} bytes"
+	ulog "скачано ${got_bytes} байт"
 	expect_size=$(field "$feed" "$key" size)
 	if [ -n "$expect_size" ] && [ "$expect_size" != "0" ] && [ "$got_bytes" -ne "$expect_size" ]; then
-		echo "update: warning: feed size $expect_size, got $got_bytes" >&2
+		ulog "предупреждение: размер ленты $expect_size, получено $got_bytes"
 	fi
+	ulog "проверка SHA-256…"
 	if type sha256sum >/dev/null 2>&1; then
 		actual=$(sha256sum "$archive" | awk '{ print $1 }')
 	else
@@ -386,18 +457,21 @@ cmd_apply() {
 			minisign -Vm "$archive" -x "$sig" -p "$pub" && sig_ok=1
 		fi
 		[ "$sig_ok" = 1 ] || fail "minisign verification failed"
-		echo "update: minisign ok"
+		ulog "Minisign OK"
 	else
-		echo "update: no minisig (SHA-256 only)" >&2
+		ulog "без Minisign (только SHA-256)"
 	fi
 	# Hold transparent rules during upgrade if present
 	[ -x "$SHARE/netfilter.sh" ] && sh "$SHARE/netfilter.sh" set-hold 120 >/dev/null 2>&1 || true
 	export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 	export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
 	export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
+	ulog "установка $ver (остановка сервиса → распаковка → запуск)…"
 	sh "$INSTALL" upgrade "$archive" "$ver" "$wait" "$PREFIX" || fail "upgrade failed"
 	rm -rf "$WORK"
-	echo "update: now on $(installed_version)"
+	now=$(installed_version)
+	ulog "готово — версия $now"
+	action_status ok
 }
 
 case "${1:-check}" in

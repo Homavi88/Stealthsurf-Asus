@@ -265,16 +265,21 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from "./runtime-engvpn.mjs";',
+    )
+elif "getUpdateActionLog" not in text and "getDownloadProgress" in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
+        "getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
     )
 elif "getDownloadProgress" not in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
         "sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-        "sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
+        "sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
     )
     text = text.replace(
         "probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-        "probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
+        "probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
     )
 elif "engvpnUpdateApply" not in text and "engvpnUpdateCheck" in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
@@ -1024,6 +1029,26 @@ if 'case "downloadProgress":' not in text:
     )
     print("patched invoke → downloadProgress")
 
+# Live update action log (panel polls while engvpnd update runs detached)
+if 'case "updateActionLog":' not in text:
+    text = text.replace(
+        '      case "downloadProgress":\n',
+        '      case "updateActionLog":\n'
+        '      case "engvpnUpdateActionLog":\n'
+        '        return getUpdateActionLog();\n'
+        '      case "downloadProgress":\n',
+        1,
+    )
+    print("patched invoke → updateActionLog")
+elif 'case "engvpnUpdateActionLog":' not in text and 'case "updateActionLog":' in text:
+    text = text.replace(
+        '      case "updateActionLog":\n',
+        '      case "updateActionLog":\n'
+        '      case "engvpnUpdateActionLog":\n',
+        1,
+    )
+
+
 rtm.write_text(text)
 print("patched runtime.mjs EngVPN commands")
 # dokodemo inbound injection into xray plan when transparent mode != off
@@ -1365,7 +1390,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — fix supervisor restart storm: lifetime flock on .supervisor.lock; single run.mjs; kill-strays; idle tick; diagnostics process load."
+RELEASE_NOTES="EngVPN $VERSION — storm-safe update (kill-strays before engvpnd update/merlin); Updates action log; home chip «Доступна версия» + Обновить; uninstall asks to delete .engvpn-backup (default keep)."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

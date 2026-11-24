@@ -276,6 +276,55 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center;
   background: color-mix(in srgb, var(--blue) 18%, transparent); color: var(--blue-2); flex: 0 0 auto;
 }
+/* StealthSurf home update banner parity: blue arrow ico + title + changelog link + Обновить */
+.update-banner { padding: 12px; }
+.update-banner-in {
+  display: flex; flex-flow: row nowrap; align-items: center; gap: 12px;
+}
+.update-banner-ico {
+  width: 28px; height: 28px; border-radius: 999px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--blue); color: #fff;
+}
+.update-banner-arrow { display: block; }
+.update-banner-body { flex: 1 1 auto; min-width: 0; }
+.update-banner-title {
+  margin: 0; font-size: 15px; font-weight: 650; line-height: 1.25; color: var(--text);
+}
+.update-banner-sub { margin: 2px 0 0; font-size: 13px; }
+.update-banner-link {
+  display: inline; margin: 2px 0 0; padding: 0; border: 0; background: none;
+  color: var(--blue-2); font: inherit; font-size: 13px; line-height: 1.35;
+  text-align: left; cursor: pointer;
+}
+.update-banner-link:hover { text-decoration: underline; }
+.update-banner-btn {
+  flex: 0 0 auto; width: auto; padding: 8px 14px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+}
+.update-banner-spin {
+  width: 18px; height: 18px; border-radius: 999px; flex: 0 0 auto;
+  border: 2px solid color-mix(in srgb, var(--blue) 35%, transparent);
+  border-top-color: var(--blue);
+  animation: update-spin .7s linear infinite;
+}
+@keyframes update-spin { to { transform: rotate(360deg); } }
+.update-action-log {
+  margin-top: 12px; padding: 10px 12px; border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 70%, #000);
+  border: 1px solid var(--line);
+}
+.update-action-log-head { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.update-action-log-body {
+  margin: 0; max-height: 180px; overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;
+  color: var(--text);
+}
+.update-notes-body {
+  margin: 10px 0 14px; font-size: 13px; line-height: 1.4; color: var(--muted);
+  white-space: pre-wrap; max-height: 40vh; overflow: auto;
+}
 .card h3 { margin: 0; font-size: 16px; }
 .card p, .muted { color: var(--muted); margin: 4px 0 0; font-size: 13px; line-height: 1.35; }
 .speed-grid { display: grid; grid-template-columns: 1fr auto; gap: 8px; width: 100%; align-items: center; }
