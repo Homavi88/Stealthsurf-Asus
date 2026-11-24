@@ -1069,7 +1069,7 @@ if "softHidden:" not in et:
     };''',
         1,
     )
-# Ferrum open slot: download Xray-core as ferrum binary
+# Ferrum open slot: download Xray-core as ferrum binary (musl/libresolv-aware loop)
 if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
     et = et.replace(
         '''export async function downloadCore(id, onProgress) {
@@ -1080,7 +1080,9 @@ if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
   if (!spec?.repo) throw new Error("Неизвестное ядро");
   onProgress?.(`смотрю релиз ${spec.repo}`);
   const release = await githubLatest(spec.repo);
-  const asset = pickCoreAsset(id, release);''',
+  const assets = id === "sing-box"
+    ? pickSingBoxAssets(release)
+    : [pickCoreAsset(id, release)].filter(Boolean);''',
         '''export async function downloadCore(id, onProgress) {
   const spec = ENGINES[id];
   if (!spec?.repo) throw new Error("Неизвестное ядро");
@@ -1088,13 +1090,17 @@ if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
   const assetId = id === "ferrum" ? "xray" : id;
   onProgress?.(id === "ferrum" ? `Ferrum-слот: скачиваю открытый Xray (${spec.repo})` : `смотрю релиз ${spec.repo}`);
   const release = await githubLatest(spec.repo);
-  const asset = pickCoreAsset(assetId, release);''',
+  const assets = assetId === "sing-box"
+    ? pickSingBoxAssets(release)
+    : [pickCoreAsset(assetId, release)].filter(Boolean);''',
     )
+    print("patched downloadCore → open Ferrum + musl candidates")
 # Stream core downloads with byte/% progress (panel + install terminal)
 if "response.body.getReader" not in et and "async function downloadToFile" in et:
     et = et.replace(
         '''async function downloadToFile(url, dest, onProgress) {
   let last = "";
+  mkdirSync(dirname(dest), { recursive: true });
   for (const candidate of mirrorUrls(url)) {
     try {
       onProgress?.(`скачиваю ${candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую"}…`);
@@ -1124,6 +1130,7 @@ if "response.body.getReader" not in et and "async function downloadToFile" in et
 }''',
         '''async function downloadToFile(url, dest, onProgress) {
   let last = "";
+  mkdirSync(dirname(dest), { recursive: true });
   for (const candidate of mirrorUrls(url)) {
     try {
       const via = candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую";
@@ -1174,12 +1181,6 @@ if "response.body.getReader" not in et and "async function downloadToFile" in et
   }
   throw new Error(`не удалось скачать файл: ${last}`);
 }''',
-        1,
-    )
-    # Also emit object progress for unpack phase
-    et = et.replace(
-        '    onProgress?.("распаковываю…");',
-        '    onProgress?.({ phase: "install", label: "распаковываю…", percent: 100 });',
         1,
     )
     print("patched downloadToFile → streamed progress")
@@ -1390,7 +1391,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — storm-safe update (kill-strays before engvpnd update/merlin); Updates action log; home chip «Доступна версия» + Обновить; uninstall asks to delete .engvpn-backup (default keep)."
+RELEASE_NOTES="EngVPN $VERSION — clean-install: musl sing-box (libresolv fallback), geosite mkdir, quiet /proc cmdline, orphan sleep reap + start cleanup, curl progress bar."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

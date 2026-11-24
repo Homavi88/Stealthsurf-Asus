@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.26** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.27** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.26](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.26) (после публикации feed)
+Релиз: [engvpn-0.5.27](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.27) (после публикации feed)
 
 ---
 
@@ -133,7 +133,7 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
 
-### Что нового в 0.5.26
+### Что нового в 0.5.27
 
 - **Storm-safe update:** `engvpnd update` и `merlin.sh` сначала делают kill-strays (и path-scoped pkill), чтобы шторм `service.sh`/`run.mjs` не мешал обновлению с 0.5.19.
 - Панель: обновление запускается **detached** (журнал в `data/update-action.log`); экран **Обновления** показывает живой журнал шагов.

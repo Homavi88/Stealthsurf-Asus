@@ -39,6 +39,11 @@ mkdirSync(join(dataDir, "geo"), { recursive: true });
 const enginesUrl = pathToFileURL(join(SHARE, "runtime/lib/engines.mjs")).href;
 const { downloadCore, GEO_DIR, CORE_DIR } = await import(enginesUrl);
 
+// GEO_DIR comes from engines (runtime/data/geo) — may differ from dataDir/geo above.
+const geoDir = GEO_DIR || join(dataDir, "geo");
+mkdirSync(geoDir, { recursive: true });
+if (CORE_DIR) mkdirSync(CORE_DIR, { recursive: true });
+
 const CORES = ["xray", "ferrum", "sing-box", "mihomo"];
 const GEO_BASE = "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
 
@@ -66,7 +71,8 @@ function progressLine(info) {
 
 async function downloadGeo(name) {
   const url = `${GEO_BASE}/${name}`;
-  const dest = join(GEO_DIR || join(dataDir, "geo"), name);
+  const dest = join(geoDir, name);
+  mkdirSync(dirname(dest), { recursive: true });
   console.log(`  → geo ${name}…`);
   const response = await fetch(url, {
     signal: AbortSignal.timeout(120_000),

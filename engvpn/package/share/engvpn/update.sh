@@ -97,6 +97,72 @@ file_bytes() {
 	ls -ln "$1" 2>/dev/null | awk '{ print $5 }'
 }
 
+fmt_size() {
+	awk -v b="${1:-0}" 'BEGIN {
+		if (b < 1024) printf "%d Б", b
+		else if (b < 1048576) printf "%.1f КБ", b / 1024
+		else printf "%.1f МБ", b / 1048576
+	}'
+}
+
+progress_bar() {
+	_pct=${1:-0}
+	[ "$_pct" -gt 100 ] 2>/dev/null && _pct=100
+	[ "$_pct" -lt 0 ] 2>/dev/null && _pct=0
+	_filled=$((_pct * 20 / 100))
+	_i=0
+	_bar="["
+	while [ "$_i" -lt 20 ]; do
+		if [ "$_i" -lt "$_filled" ]; then
+			_bar="${_bar}#"
+		else
+			_bar="${_bar}-"
+		fi
+		_i=$((_i + 1))
+	done
+	printf '%s]' "$_bar"
+}
+
+download_curl_progress() {
+	_cbin=$1
+	_curl_url=$2
+	_cout=$3
+	_cl=0
+	_hdr=$("$_cbin" -sSIL --connect-timeout 15 --max-time 45 "$_curl_url" 2>/dev/null || true)
+	_cl=$(printf '%s\n' "$_hdr" | awk 'BEGIN{IGNORECASE=1} /^content-length:/ {v=$2} END{gsub(/\r/,"",v); print v+0}')
+	"$_cbin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_cout" "$_curl_url" >/dev/null 2>&1 &
+	_cpid=$!
+	_start=$(date +%s 2>/dev/null || echo 0)
+	while kill -0 "$_cpid" 2>/dev/null; do
+		_now=$(file_bytes "$_cout" 2>/dev/null || echo 0)
+		[ -n "$_now" ] || _now=0
+		_now=${_now:-0}
+		_elapsed=$(($(date +%s 2>/dev/null || echo "$_start") - _start))
+		[ "$_elapsed" -lt 1 ] && _elapsed=1
+		_speed=$((_now / _elapsed))
+		if [ "${_cl:-0}" -gt 0 ] 2>/dev/null; then
+			_pct=$((_now * 100 / _cl))
+			[ "$_pct" -gt 99 ] && _pct=99
+			printf '\r  %s %3d%%  %s / %s  %s/с   ' \
+				"$(progress_bar "$_pct")" "$_pct" \
+				"$(fmt_size "$_now")" "$(fmt_size "$_cl")" "$(fmt_size "$_speed")" >&2
+		else
+			printf '\r  %s  %s  %s/с   ' \
+				"$(progress_bar 0)" "$(fmt_size "$_now")" "$(fmt_size "$_speed")" >&2
+		fi
+		sleep 1
+	done
+	wait "$_cpid"
+	_rc=$?
+	_now=$(file_bytes "$_cout" 2>/dev/null || echo 0)
+	if [ "$_rc" -eq 0 ] && [ -f "$_cout" ] && [ -s "$_cout" ]; then
+		printf '\r  %s 100%%  %s                \n' "$(progress_bar 100)" "$(fmt_size "${_now:-0}")" >&2
+		return 0
+	fi
+	printf '\n' >&2
+	return 1
+}
+
 download_https() {
 	_url=$1
 	_out=$2
@@ -104,10 +170,17 @@ download_https() {
 	rm -f "$_out"
 	case "$_bin" in
 	*curl)
-		"$_bin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || {
-			rm -f "$_out"
-			return 1
-		}
+		if [ -t 2 ] && [ -z "${ENGVPN_QUIET:-}" ] && [ -z "${ENGVPN_SMOKE:-}" ]; then
+			download_curl_progress "$_bin" "$_url" "$_out" || {
+				rm -f "$_out"
+				return 1
+			}
+		else
+			"$_bin" -fsSL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || {
+				rm -f "$_out"
+				return 1
+			}
+		fi
 		;;
 	*wget)
 		# GNU/Entware wget follows redirects; non-zero on HTTP errors (may leave 0-byte file).

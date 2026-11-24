@@ -1,24 +1,24 @@
 {
-  "version": "0.5.26",
-  "notes": "EngVPN 0.5.26 — storm-safe update (kill-strays before engvpnd update/merlin); Updates action log; home chip «Доступна версия» + Обновить; uninstall asks to delete .engvpn-backup (default keep).",
+  "version": "0.5.27",
+  "notes": "EngVPN 0.5.27 — clean-install: musl sing-box (libresolv fallback), geosite mkdir, quiet /proc cmdline, orphan sleep reap + start cleanup, curl progress bar.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
-      "size": 169994
+      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
+      "size": 172588
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
-      "size": 169994
+      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
+      "size": 172588
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
-      "size": 169994
+      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
+      "size": 172588
     }
   }
 }

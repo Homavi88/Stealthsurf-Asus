@@ -738,6 +738,17 @@ function hostArch() {
   return "amd64";
 }
 
+/** Merlin firmware often lacks libresolv.so.2 — prefer musl, then plain, then glibc. */
+function pickSingBoxAssets(release) {
+  const arch = hostArch();
+  const needle = arch === "arm64" ? "linux-arm64" : arch === "arm" ? "linux-armv7" : "linux-amd64";
+  const all = (release.assets || []).filter((a) => a.name.includes(needle) && a.name.endsWith(".tar.gz"));
+  const musl = all.find((a) => a.name.includes("musl"));
+  const plain = all.find((a) => !a.name.includes("musl") && !a.name.includes("glibc"));
+  const glibc = all.find((a) => a.name.includes("glibc"));
+  return [musl, plain, glibc].filter(Boolean);
+}
+
 function pickCoreAsset(id, release) {
   const arch = hostArch();
   const tag = release.tag_name;
@@ -747,8 +758,7 @@ function pickCoreAsset(id, release) {
     return pickAsset(release, (name) => name === "Xray-linux-64.zip");
   }
   if (id === "sing-box") {
-    const needle = arch === "arm64" ? "linux-arm64" : arch === "arm" ? "linux-armv7" : "linux-amd64";
-    return pickAsset(release, (name) => name.includes(needle) && name.endsWith(".tar.gz") && !name.includes("musl"));
+    return pickSingBoxAssets(release)[0] || null;
   }
   if (id === "mihomo") {
     const needle = arch === "arm64" ? "arm64" : arch === "arm" ? "armv7" : "amd64";
@@ -760,8 +770,23 @@ function pickCoreAsset(id, release) {
   return null;
 }
 
+function loaderIncompatible(output) {
+  return /libresolv\.so|cannot open shared object|error while loading shared libraries|Exec format error/i.test(output || "");
+}
+
+async function probeCoreBinary(dest) {
+  try {
+    const { stdout, stderr } = await execFile(dest, ["version"], { timeout: 8000, encoding: "utf8" });
+    return { ok: true, out: `${stdout || ""}${stderr || ""}` };
+  } catch (error) {
+    const out = `${error.message || ""}\n${error.stderr || ""}\n${error.stdout || ""}`;
+    return { ok: false, out };
+  }
+}
+
 async function downloadToFile(url, dest, onProgress) {
   let last = "";
+  mkdirSync(dirname(dest), { recursive: true });
   for (const candidate of mirrorUrls(url)) {
     try {
       onProgress?.(`скачиваю ${candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую"}…`);
@@ -889,24 +914,47 @@ export async function downloadCore(id, onProgress) {
   if (!spec?.repo) throw new Error("Неизвестное ядро");
   onProgress?.(`смотрю релиз ${spec.repo}`);
   const release = await githubLatest(spec.repo);
-  const asset = pickCoreAsset(id, release);
-  if (!asset) throw new Error(`В релизе ${release.tag_name} нет файла для linux-${hostArch()}`);
-  onProgress?.(`скачиваю ${asset.name}`);
+  const assets = id === "sing-box"
+    ? pickSingBoxAssets(release)
+    : [pickCoreAsset(id, release)].filter(Boolean);
+  if (!assets.length) throw new Error(`В релизе ${release.tag_name} нет файла для linux-${hostArch()}`);
   mkdirSync(CORE_DIR, { recursive: true });
-  const tmp = join(CORE_DIR, `.${asset.name}.part`);
   const dest = corePath(id);
-  try {
-    await downloadToFile(asset.browser_download_url, tmp, onProgress);
-    if (existsSync(dest)) rmSync(dest, { force: true });
-    onProgress?.("распаковываю…");
-    await unpackCore(id, asset.name, tmp, dest);
-    if (!existsSync(dest)) throw new Error("архив распаковался без бинарника");
-    try { await execFile("chmod", ["755", dest]); }
-    catch { chmodSync(dest, 0o755); }
-  } finally {
-    rmSync(tmp, { force: true });
+  let lastErr = "";
+  for (const asset of assets) {
+    const tmp = join(CORE_DIR, `.${asset.name}.part`);
+    try {
+      onProgress?.(`скачиваю ${asset.name}`);
+      await downloadToFile(asset.browser_download_url, tmp, onProgress);
+      if (existsSync(dest)) rmSync(dest, { force: true });
+      onProgress?.({ phase: "install", label: "распаковываю…", percent: 100 });
+      await unpackCore(id, asset.name, tmp, dest);
+      if (!existsSync(dest)) throw new Error("архив распаковался без бинарника");
+      try { await execFile("chmod", ["755", dest]); }
+      catch { chmodSync(dest, 0o755); }
+      const probe = await probeCoreBinary(dest);
+      if (!probe.ok && loaderIncompatible(probe.out)) {
+        const tip = (probe.out.match(/libresolv\.so[^\s]*/i) || ["несовместимый loader"])[0];
+        onProgress?.(`${asset.name}: не запускается (${tip}), пробую другой бинарник…`);
+        lastErr = tip;
+        rmSync(dest, { force: true });
+        continue;
+      }
+      const version = await detectVersion(id);
+      return { version: version || release.tag_name, bytes: statSync(dest).size, tag: release.tag_name };
+    } catch (error) {
+      lastErr = error.message || String(error);
+      try { rmSync(dest, { force: true }); } catch { /* ignore */ }
+    } finally {
+      rmSync(tmp, { force: true });
+    }
   }
-  const version = await detectVersion(id);
-  return { version: version || release.tag_name, bytes: statSync(dest).size, tag: release.tag_name };
+  if (id === "sing-box") {
+    throw new Error(
+      `sing-box: нет совместимого бинарника для этой прошивки (${lastErr || "libresolv/loader"}). `
+      + "Пропуск — используйте Xray или mihomo, либо положите musl-сборку в data/cores/sing-box",
+    );
+  }
+  throw new Error(lastErr || "не удалось скачать ядро");
 }
 

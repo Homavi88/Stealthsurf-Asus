@@ -499,6 +499,26 @@ if command -v node >/dev/null 2>&1; then
 		&& grep -q 'clear_engvpn_storm\|Очистка лишних процессов' "$ROOT/merlin.sh" \
 		&& echo "  storm-safe update path ok" \
 		|| { echo "missing kill-strays before update in engvpnd/merlin" >&2; exit 1; }
+	# 0.5.27: quiet /proc cmdline, orphan sleep reap, musl sing-box, curl progress bar
+	grep -q 'read_cmdline\|\[ -r "/proc/\$1/cmdline" \]' "$PREFIX/share/engvpn/service.sh" \
+		&& ! grep -qE 'tr .*<"/proc/.*/cmdline"' "$PREFIX/share/engvpn/service.sh" \
+		&& echo "  quiet cmdline (-r + cat) ok" \
+		|| { echo "service.sh must use -r + cat for cmdline (no shell <redir)" >&2; exit 1; }
+	grep -q 'kill_orphan_helpers\|reap_orphans_on_start\|supervisor_sleep' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q 'kill_strays 2>/dev/null' "$PREFIX/share/engvpn/service.sh" \
+		&& echo "  orphan sleep reap + quiet kill-strays ok" \
+		|| { echo "missing orphan reap / quiet kill-strays" >&2; exit 1; }
+	grep -q 'pickSingBoxAssets\|musl' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
+		&& grep -q 'loaderIncompatible\|libresolv' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
+		&& echo "  sing-box musl/libresolv fallback ok" \
+		|| { echo "missing sing-box musl preference in engines.mjs" >&2; exit 1; }
+	grep -q 'mkdirSync(geoDir\|mkdirSync(dirname(dest)' "$PREFIX/share/engvpn/download-cores.mjs" \
+		&& echo "  geosite mkdir -p ok" \
+		|| { echo "missing geoDir mkdir in download-cores.mjs" >&2; exit 1; }
+	grep -q 'download_curl_progress\|progress_bar' "$ROOT/merlin.sh" \
+		&& grep -q 'download_curl_progress\|progress_bar' "$PREFIX/share/engvpn/update.sh" \
+		&& echo "  curl progress bar (merlin+update) ok" \
+		|| { echo "missing download progress bar in merlin.sh/update.sh" >&2; exit 1; }
 	grep -q 'ask_delete_backup\|ENGVPN_DELETE_BACKUP\|Удалить каталог резервных копий' "$PREFIX/share/engvpn/install.sh" \
 		&& echo "  uninstall backup-delete prompt ok" \
 		|| { echo "missing ask_delete_backup in install.sh" >&2; exit 1; }
