@@ -805,12 +805,11 @@ export ENGVPN_START_TIMEOUT="${ENGVPN_START_TIMEOUT:-45}"
 if [ "$skip_password" -eq 1 ]; then
 	export ENGVPN_OPEN_PANEL=1
 fi
-echo "  остановка лишних процессов…"
-sh "$prefix/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
-echo "  запуск (таймаут ${ENGVPN_START_TIMEOUT} с)…"
+# Do NOT pre-start kill-strays here (that step hung on routers).
+# service.sh start one-shot-purges orphan service.sh/sleep, then starts ONE supervisor.
+echo "  запуск одного supervisor (таймаут ${ENGVPN_START_TIMEOUT} с)…"
 if ! sh "$prefix/share/engvpn/service.sh" start; then
 	echo "  повторный запуск…"
-	sh "$prefix/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
 	sleep 1
 	sh "$prefix/share/engvpn/service.sh" start || fail "сервис EngVPN не запустился (таймаут ${ENGVPN_START_TIMEOUT} с)"
 fi

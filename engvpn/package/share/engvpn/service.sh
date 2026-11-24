@@ -283,60 +283,176 @@ supervisor_lock_busy() {
 	return 1
 }
 
-# Hard single-instance on start.
-# Returns 0 if panel already healthy (caller returns success), 1 if must spawn fresh.
-# Note: supervisor_count includes transient `service.sh start` callers — do NOT wipe
-# just because many starts race; key on panel_count + supervisor lock/pidfile.
-enforce_single_on_start() {
+# Pick one live supervisor to keep (pidfile first, else lowest PID). Excludes $$.
+pick_keep_supervisor() {
+	k=$(supervisor_pid 2>/dev/null || true)
+	if [ -n "$k" ] && [ "$k" != "$$" ] && own_service_script "$k" 2>/dev/null; then
+		echo "$k"
+		return 0
+	fi
+	best=
+	for entry in /proc/[0-9]*; do
+		p=${entry#/proc/}
+		[ "$p" = "$$" ] && continue
+		own_service_script "$p" || continue
+		case $best in
+		'') best=$p ;;
+		*) [ "$p" -lt "$best" ] 2>/dev/null && best=$p ;;
+		esac
+	done
+	[ -n "$best" ] && echo "$best" && return 0
+	return 1
+}
+
+# Kill extra service.sh, keep exactly one (keep_sup). Never touches $$.
+cull_extra_supervisors() {
+	keep_sup=$1
+	for entry in /proc/[0-9]*; do
+		p=${entry#/proc/}
+		[ "$p" = "$$" ] && continue
+		[ -n "$keep_sup" ] && [ "$p" = "$keep_sup" ] && continue
+		own_service_script "$p" || continue
+		kill_children_of "$p"
+		kill -9 "$p" 2>/dev/null || true
+	done
+	kill_orphan_helpers
+	[ -n "$keep_sup" ] && printf '%s\n' "$keep_sup" >"$SUPERVISOR_PIDFILE" 2>/dev/null || true
+}
+
+# Force-clear every supervisor for this PREFIX (no panel / stuck lock takeover).
+# Only call when lock is free OR after a brief stuck-wait — never from a flock loser mid-race.
+wipe_all_supervisors() {
+	sup=$(read_pid "$SUPERVISOR_PIDFILE" 2>/dev/null || true)
+	[ -n "${sup:-}" ] && [ "$sup" != "$$" ] && {
+		kill_children_of "$sup"
+		kill -9 "$sup" 2>/dev/null || true
+	}
+	for entry in /proc/[0-9]*; do
+		p=${entry#/proc/}
+		[ "$p" = "$$" ] && continue
+		own_service_script "$p" || continue
+		kill_children_of "$p"
+		kill -9 "$p" 2>/dev/null || true
+	done
+	kill_orphan_helpers
+	rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE" 2>/dev/null || true
+	rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true
+	if type flock >/dev/null 2>&1; then
+		(
+			flock -n 9 || exit 0
+			:
+		) 9>>"$SUPERVISOR_LOCK" 2>/dev/null || true
+	fi
+}
+
+# One-shot purge: orphan sleep/watchdog + extra service.sh when a healthy panel exists.
+# SAFE for parallel start: never murders a racing lock-holder while panel is still booting.
+# mode=force → wipe all supervisors (stuck lock / explicit takeover).
+purge_orphans_oneshot() {
+	_mode=${1:-}
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
-	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	kill_dead_prefix_supervisors
 	kill_orphan_helpers
 
 	n=$(panel_count)
+	[ "$n" -gt 1 ] && cull_extra_panels
+	n=$(panel_count)
 
-	# Multi run.mjs storm — wipe everything, caller respawns one
-	if [ "$n" -gt 1 ]; then
-		echo "EngVPN: hard-enforce — $n panels → kill-strays" >>"$LOG" 2>/dev/null || true
-		kill_strays
-		brute_kill_prefix
-		return 1
+	if [ "$n" -ge 1 ]; then
+		keep_sup=$(pick_keep_supervisor 2>/dev/null || true)
+		cull_extra_supervisors "$keep_sup"
+		return 0
 	fi
 
-	# Exactly one panel — keep it; cull orphan helpers only
-	if [ "$n" -eq 1 ]; then
+	# No panel yet.
+	if [ "$_mode" = force ]; then
+		wipe_all_supervisors
+		return 0
+	fi
+	# Lock busy → another start owns spawn; only reap sleeps, do NOT kill service.sh.
+	if supervisor_pid >/dev/null || supervisor_lock_busy; then
 		kill_orphan_helpers
+		return 0
+	fi
+	# Lock free, no panel — clear stale leftovers then caller spawns one.
+	wipe_all_supervisors
+}
+
+# Hard single-instance on start.
+# Returns 0 if panel already healthy (caller returns success), 1 if must spawn fresh.
+# One-shot purge orphans; never wait 45s; never kill a racing winner mid-boot.
+enforce_single_on_start() {
+	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
+	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
+	: >>"$LOG" 2>/dev/null || true
+
+	purge_orphans_oneshot
+
+	n=$(panel_count)
+
+	if [ "$n" -gt 1 ]; then
+		echo "EngVPN: hard-enforce — $n panels → one-shot wipe" >>"$LOG" 2>/dev/null || true
+		cull_extra_panels
+		brute_kill_prefix
+		purge_orphans_oneshot force
+		n=$(panel_count)
+		[ "$n" -le 1 ] || {
+			kill_strays
+			return 1
+		}
+	fi
+
+	if [ "$n" -eq 1 ]; then
 		echo "EngVPN: single panel present — keep" >>"$LOG" 2>/dev/null || true
 		return 0
 	fi
 
-	# No panel: if a supervisor already holds the lock, wait for its panel (parallel start).
-	# IMPORTANT: do NOT kill-strays here — a losing/stuck start caller would murder the
-	# winner's panel (exit 143). Leave wipe to explicit kill-strays / restart / multi-panel.
-	if supervisor_pid >/dev/null || supervisor_lock_busy; then
-		echo "EngVPN: supervisor lock busy — waiting for panel" >>"$LOG" 2>/dev/null || true
+	# No panel: another start may own the lock — wait for its panel, do NOT murder it.
+	if supervisor_lock_busy || supervisor_pid >/dev/null; then
+		# Settle: winner may still be writing SUPERVISOR_PIDFILE after flock.
 		_w=0
-		_wait_max=${ENGVPN_START_TIMEOUT:-45}
-		case $_wait_max in
-		'' | *[!0-9]*) _wait_max=45 ;;
-		esac
-		while [ "$_w" -lt "$_wait_max" ]; do
+		while [ "$_w" -lt 2 ]; do
+			supervisor_pid >/dev/null && break
 			n=$(panel_count)
-			if [ "$n" -ge 1 ]; then
-				[ "$n" -gt 1 ] && cull_extra_panels
-				return 0
-			fi
-			# Lock released with no panel — we should spawn
-			supervisor_pid >/dev/null || supervisor_lock_busy || return 1
+			[ "$n" -ge 1 ] && break
+			supervisor_lock_busy || break
 			sleep 1
 			_w=$((_w + 1))
 		done
-		echo "EngVPN: supervisor lock busy but no panel after ${_wait_max}s — yield" >>"$LOG" 2>/dev/null || true
-		return 1
+		n=$(panel_count)
+		if [ "$n" -ge 1 ]; then
+			[ "$n" -gt 1 ] && cull_extra_panels
+			purge_orphans_oneshot
+			return 0
+		fi
+		if supervisor_pid >/dev/null; then
+			# Live supervisor racing us — wait up to 8s for panel, then yield.
+			echo "EngVPN: live supervisor — waiting for panel" >>"$LOG" 2>/dev/null || true
+			_w=0
+			while [ "$_w" -lt 8 ]; do
+				n=$(panel_count)
+				if [ "$n" -ge 1 ]; then
+					[ "$n" -gt 1 ] && cull_extra_panels
+					purge_orphans_oneshot
+					return 0
+				fi
+				supervisor_pid >/dev/null || break
+				sleep 1
+				_w=$((_w + 1))
+			done
+			# Spawn path will flock-lose and wait_for_panel; no wipe of winner.
+			echo "EngVPN: yield to live supervisor" >>"$LOG" 2>/dev/null || true
+			return 1
+		fi
+		# Lock busy, no pidfile, no panel → orphan sleep/stale lock; one-shot takeover.
+		if supervisor_lock_busy; then
+			echo "EngVPN: orphan lock without supervisor — force purge and spawn one" >>"$LOG" 2>/dev/null || true
+			purge_orphans_oneshot force
+			return 1
+		fi
 	fi
 
-	# Clean slate — spawn
-	kill_orphan_helpers
+	# Clean slate — spawn one supervisor
 	return 1
 }
 
@@ -380,8 +496,9 @@ kill_strays() {
 	# Path-scoped brute force — catches argv variants own_* missed
 	brute_kill_prefix
 
+	# Bounded reap (≤3s) — never hang install/update on «остановка лишних процессов».
 	i=0
-	while [ "$i" -lt 8 ]; do
+	while [ "$i" -lt 3 ]; do
 		left=0
 		for entry in /proc/[0-9]*; do
 			p=${entry#/proc/}
@@ -414,10 +531,10 @@ kill_strays() {
 	rm -f "$PIDFILE" "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE" "$DATA_DIR/.stop-requested"
 	rm -rf "$PANEL_LOCK.d" "$SUPERVISOR_LOCK.d" 2>/dev/null || true
 
-	# Wait until .supervisor.lock is free (orphan sleep used to hold it after kill)
+	# Best-effort free .supervisor.lock (orphan sleep used to hold it). Max 2s, flock -n only.
 	if type flock >/dev/null 2>&1; then
 		w=0
-		while [ "$w" -lt 8 ]; do
+		while [ "$w" -lt 2 ]; do
 			if (
 				flock -n 9 || exit 1
 				exit 0
@@ -505,10 +622,12 @@ do_start() {
 	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	rm -f "$DATA_DIR/.stop-requested" 2>/dev/null || true
 
-	# Hard single-instance: wipe storm / orphans; keep only healthy 1+1
+	# Hard single-instance: one-shot purge orphans, keep healthy 1 panel or spawn one.
 	if enforce_single_on_start; then
 		ensure_firewall
 		open_panel_port_hook
+		# Final cull — never leave extra service.sh/sleep after "already running"
+		purge_orphans_oneshot
 		echo "EngVPN started (port $PORT)"
 		return 0
 	fi
@@ -661,12 +780,11 @@ do_start() {
 		) >>"$LOG" 2>&1 &
 	fi
 
-	# Progress + hard timeout (default 45s). Losers of flock also wait for the winner's panel.
-	# Do NOT cull other service.sh here — supervisor_count includes transient `start`
-	# callers and killing the flock holder orphans the panel (exit 143).
+	# Progress + hard timeout (default 45s). After panel is up, one-shot purge extras.
 	if wait_for_panel; then
 		n=$(panel_count)
 		[ "$n" -gt 1 ] && cull_extra_panels
+		purge_orphans_oneshot
 		echo "EngVPN started (port $PORT)"
 		return 0
 	fi

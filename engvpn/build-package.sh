@@ -1462,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — install start timeout+progress; Ferrum extracts Xray zip member as data/cores/ferrum; hard-enforce single supervisor/panel (kill-strays wipes all extras)."
+RELEASE_NOTES="EngVPN $VERSION — fast [10/10] start: one-shot purge orphan service.sh/sleep, single supervisor (no hang on «остановка лишних процессов»); diagnostics distinguish panel vs supervisor."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
