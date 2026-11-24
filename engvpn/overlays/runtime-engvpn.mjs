@@ -288,11 +288,13 @@ export async function engvpnUpdateCheck(state) {
     if (i > 0) out[line.slice(0, i)] = line.slice(i + 1);
   }
   const now = Date.now();
+  const available = out.update === "1" || out.available === "1" || out.update_available === "1";
+  const feedVer = out.feed || out.latest || "";
   if (state?.updates) {
     state.updates.lastCheck = now;
-    if (out.feed || out.latest) state.updates.latest = out.feed || out.latest;
-    const available = out.update === "1" || out.available === "1" || out.update_available === "1";
-    state.updates.lastResult = available ? `available:${out.feed || out.latest || ""}` : `up-to-date:${out.feed || ""}`;
+    if (feedVer) state.updates.latest = feedVer;
+    state.updates.available = available;
+    state.updates.lastResult = available ? `available:${feedVer}` : `up-to-date:${feedVer}`;
   }
   try {
     writeUpdatesConf({
@@ -315,13 +317,62 @@ export async function engvpnUpdateCheck(state) {
   if (!out.message) {
     const parts = [];
     if (out.current || out.version || out.installed) parts.push(`текущая ${out.current || out.version || out.installed}`);
-    if (out.latest || out.feed) parts.push(`в feed ${out.latest || out.feed}`);
-    if (out.update === "1" || out.available === "1" || out.update_available === "1") parts.push("доступно обновление");
+    if (feedVer) parts.push(`в feed ${feedVer}`);
+    if (available) parts.push("доступно обновление");
     out.message = parts.length ? parts.join(" · ") : "Проверка feed EngVPN завершена";
   }
   out.ok = true;
+  out.available = available;
+  out.update_available = available ? "1" : "0";
+  out.latest = feedVer || out.latest;
+  out.version = feedVer || out.version;
   out.lastCheck = now;
   return out;
+}
+
+/** Apply feed package via engvpnd update (SHA-256 + Minisign). */
+export async function engvpnUpdateApply(state, body = {}) {
+  const wait = String(body.wait || body.timeout || "90");
+  let stdout = "";
+  let stderr = "";
+  try {
+    const res = await shEngvpnd("update", wait);
+    stdout = res.stdout || "";
+    stderr = res.stderr || "";
+  } catch (e) {
+    stdout = String(e?.stdout || "");
+    stderr = String(e?.stderr || e?.message || e);
+    const err = new Error(stderr.trim() || stdout.trim() || "Не удалось установить обновление");
+    err.status = 500;
+    throw err;
+  }
+  const combined = `${stdout}\n${stderr}`;
+  if (state?.updates) {
+    state.updates.available = false;
+    state.updates.lastResult = `applied:${state.updates.latest || ""}`;
+    state.updates.lastCheck = Date.now();
+    try {
+      writeUpdatesConf({
+        interval: state.updates.interval,
+        auto: !!state.updates.auto,
+        windowStart: state.updates.windowStart,
+        windowEnd: state.updates.windowEnd,
+        geoWeekly: state.updates.geoWeekly,
+        coresWhenMissing: state.updates.coresWhenMissing,
+        lastCheck: state.updates.lastCheck,
+        lastResult: state.updates.lastResult,
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+  return {
+    ok: true,
+    output: combined.trim(),
+    message: /already on|уже/i.test(combined)
+      ? "Уже актуальная версия"
+      : "Обновление установлено — перезагрузите панель при необходимости",
+  };
 }
 
 export async function engvpnScheduleUpdate(command = "status", ...extra) {
@@ -1237,21 +1288,59 @@ export function hydratePanelSnapshot(snap, state) {
   try {
     const uc = readUpdatesConf();
     if (!snap.updates) snap.updates = {};
-    snap.updates.interval = uc.interval || snap.updates.interval || "1d";
-    if (typeof snap.updates.auto !== "boolean") snap.updates.auto = !!uc.auto;
-    // Prefer conf file as source of truth after schedule sync
-    if (existsSync(join(DATA, "updates.conf"))) {
-      snap.updates.auto = !!uc.auto;
-      snap.updates.interval = uc.interval || "1d";
-      snap.updates.windowStart = uc.windowStart;
-      snap.updates.windowEnd = uc.windowEnd;
-      snap.updates.geoWeekly = uc.geoWeekly;
-      snap.updates.coresWhenMissing = uc.coresWhenMissing;
-      if (uc.lastCheck) snap.updates.lastCheck = uc.lastCheck;
-      if (uc.lastResult) snap.updates.lastResult = uc.lastResult;
+    const mem = state?.updates && typeof state.updates === "object" ? state.updates : null;
+    const confExists = existsSync(join(DATA, "updates.conf"));
+    // In-memory wins during patch-in-flight (conf is written by syncUpdatesSchedule after).
+    // Conf fills gaps / cold hydrate. Never clobber a just-patched auto/interval back to stale conf.
+    if (typeof mem?.auto === "boolean") snap.updates.auto = !!mem.auto;
+    else if (confExists) snap.updates.auto = !!uc.auto;
+    else if (typeof snap.updates.auto !== "boolean") snap.updates.auto = !!uc.auto;
+
+    snap.updates.interval = mem?.interval || (confExists ? uc.interval : null) || snap.updates.interval || "1d";
+    snap.updates.windowStart = mem?.windowStart ?? (confExists ? uc.windowStart : snap.updates.windowStart) ?? 2;
+    snap.updates.windowEnd = mem?.windowEnd ?? (confExists ? uc.windowEnd : snap.updates.windowEnd) ?? 5;
+    snap.updates.geoWeekly = typeof mem?.geoWeekly === "boolean"
+      ? mem.geoWeekly
+      : (confExists ? uc.geoWeekly : snap.updates.geoWeekly !== false);
+    snap.updates.coresWhenMissing = typeof mem?.coresWhenMissing === "boolean"
+      ? mem.coresWhenMissing
+      : (confExists ? uc.coresWhenMissing : snap.updates.coresWhenMissing !== false);
+    if (mem?.lastCheck != null) snap.updates.lastCheck = mem.lastCheck;
+    else if (uc.lastCheck) snap.updates.lastCheck = uc.lastCheck;
+    if (mem?.lastResult) snap.updates.lastResult = mem.lastResult;
+    else if (uc.lastResult) snap.updates.lastResult = uc.lastResult;
+    if (typeof mem?.available === "boolean") snap.updates.available = mem.available;
+    else if (typeof snap.updates.lastResult === "string") {
+      snap.updates.available = /^(available|available-wait-window):/.test(snap.updates.lastResult);
+    }
+    if (mem?.latest) snap.updates.latest = mem.latest;
+    else if (typeof snap.updates.lastResult === "string") {
+      const m = snap.updates.lastResult.match(/^(?:available|available-wait-window|up-to-date|applied):(.+)$/);
+      if (m?.[1]) snap.updates.latest = m[1];
     }
     if (state) {
-      state.updates = { ...(state.updates || {}), ...snap.updates };
+      // Merge into state without letting stale conf wipe in-memory schedule toggles
+      state.updates = { ...(uc && confExists ? {
+        interval: uc.interval,
+        auto: !!uc.auto,
+        windowStart: uc.windowStart,
+        windowEnd: uc.windowEnd,
+        geoWeekly: uc.geoWeekly,
+        coresWhenMissing: uc.coresWhenMissing,
+        lastCheck: uc.lastCheck,
+        lastResult: uc.lastResult,
+      } : {}), ...(state.updates || {}), ...{
+        auto: snap.updates.auto,
+        interval: snap.updates.interval,
+        windowStart: snap.updates.windowStart,
+        windowEnd: snap.updates.windowEnd,
+        geoWeekly: snap.updates.geoWeekly,
+        coresWhenMissing: snap.updates.coresWhenMissing,
+        lastCheck: snap.updates.lastCheck,
+        lastResult: snap.updates.lastResult,
+        available: snap.updates.available,
+        latest: snap.updates.latest,
+      } };
     }
   } catch {
     /* ignore */
@@ -1473,7 +1562,10 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
       };
     case "get_router_update":
     case "check_router_update":
-      return engvpnUpdateCheck();
+      return engvpnUpdateCheck(state);
+    case "apply_router_update":
+    case "install_router_update":
+      return { alias: "engvpnUpdateApply", ...body };
     case "update_router_settings": {
       const patch = body?.patch || body || {};
       if (!state.router) state.router = {};

@@ -876,15 +876,47 @@ function screenOther() {
     </div>
   </div>`;
 }
+function verParts(v) {
+  return String(v || "").replace(/^v/i, "").split(/[.+-]/).map((p) => {
+    const n = parseInt(p, 10);
+    return Number.isFinite(n) ? n : 0;
+  });
+}
+/** true when feed version is strictly newer than installed */
+function feedNewer(feed, installed) {
+  if (!feed || !installed) return false;
+  if (String(feed) === String(installed)) return false;
+  const a = verParts(feed);
+  const b = verParts(installed);
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+function updateAvailable(u = S?.updates || {}) {
+  if (u.available === true) return true;
+  if (u.available === false && !u.latest) return false;
+  if (typeof u.lastResult === "string" && /^(available|available-wait-window):/.test(u.lastResult)) return true;
+  return feedNewer(u.latest, S?.version);
+}
 function screenUpdates() {
-  const u = S.updates;
+  const u = S.updates || {};
+  const avail = updateAvailable(u);
+  const feedLabel = u.latest || (typeof u.lastResult === "string" ? (u.lastResult.split(":")[1] || "") : "");
   return `${backBar("Обновления")}<div class="drawer-body"><div class="group">
     ${cell("Автообновление", `По умолчанию выкл. При включении — engvpnd update в окне ${String(u.windowStart ?? 2).padStart(2, "0")}:00–${String(u.windowEnd ?? 5).padStart(2, "0")}:00 (SHA-256 + Minisign)`, sw("updates.auto", !!u.auto))}
     ${cell("Гео-базы раз в неделю", "", sw("updates.geoWeekly", u.geoWeekly))}
     ${cell("Качать ядра, когда их нет", "", sw("updates.coresWhenMissing", u.coresWhenMissing))}
     ${cell("Интервал проверки", "Merlin cru / cron · переживает перезагрузку", sel("updates.interval", u.interval || "1d", [["6h", "Каждые 6 часов"], ["12h", "Каждые 12 часов"], ["1d", "Раз в сутки"], ["3d", "Раз в 3 дня"], ["7d", "Раз в неделю"], ["off", "Выкл."]]))}
-    <button class="primary" data-act="check-updates">Проверить сейчас</button>
-    <p class="muted">Текущая сборка ${esc(S.version)}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.lastResult ? ` · ${esc(u.lastResult)}` : ""}${u.note ? ` ${esc(u.note)}` : ""}</p>
+    <div class="row-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+      <button class="primary" data-act="check-updates">Проверить сейчас</button>
+      ${avail ? `<button class="primary" data-act="install-update">Установить обновление${feedLabel ? ` ${esc(feedLabel)}` : ""}</button>` : ""}
+    </div>
+    <p class="muted">Текущая сборка ${esc(S.version)}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.lastResult ? ` · ${esc(u.lastResult)}` : ""}${u.note ? ` ${esc(u.note)}` : ""}</p>
   </div></div>`;
 }
 function screenFeedback() {
@@ -1300,6 +1332,11 @@ document.addEventListener("click", (event) => {
       if (!S.network) S.network = {};
       S.network[path.split(".").pop()] = on;
     }
+    if (path.startsWith("updates.")) {
+      if (!S.updates) S.updates = {};
+      const key = path.slice("updates.".length);
+      S.updates[key] = on;
+    }
     if (path === "smartdns.enabled") {
       S.smartdns = S.smartdns || { enabled: false, entries: [] };
       const prev = !!S.smartdns.enabled;
@@ -1574,8 +1611,30 @@ document.addEventListener("click", (event) => {
     let res;
     try { res = await invoke("engvpnUpdateCheck", {}, { quiet: true }); }
     catch { res = await invoke("checkUpdates", {}, { quiet: true }); }
-    const msg = res.message || (res.version ? `Доступно: ${res.version}` : null) || (res.current ? `Текущая: ${res.current}` : null) || "Проверено";
+    if (!S.updates) S.updates = {};
+    if (res.latest || res.feed || res.version) S.updates.latest = res.latest || res.feed || res.version;
+    if (res.available != null) S.updates.available = !!res.available || res.update_available === "1" || res.update_available === 1;
+    else if (res.update_available != null) S.updates.available = res.update_available === "1" || res.update_available === 1 || res.update_available === true;
+    if (res.lastCheck) S.updates.lastCheck = res.lastCheck;
+    if (res.lastResult) S.updates.lastResult = res.lastResult;
+    else if (S.updates.available) S.updates.lastResult = `available:${S.updates.latest || ""}`;
+    else if (S.updates.latest) S.updates.lastResult = `up-to-date:${S.updates.latest}`;
+    render();
+    const msg = res.message || (S.updates.available ? `Доступно: ${S.updates.latest}` : null) || (res.current || res.installed ? `Текущая: ${res.current || res.installed}` : null) || "Проверено";
     toast(typeof msg === "string" ? msg : JSON.stringify(res));
+  });
+  if (act === "install-update") return run(async () => {
+    const ver = S.updates?.latest || "";
+    toast(ver ? `Устанавливаю ${ver}…` : "Устанавливаю обновление…", 12000);
+    let res;
+    try { res = await invoke("engvpnUpdateApply", { wait: "90" }, { quiet: true }); }
+    catch { res = await invoke("installUpdate", { wait: "90" }, { quiet: true }); }
+    if (S.updates) {
+      S.updates.available = false;
+      if (ver) S.updates.lastResult = `applied:${ver}`;
+    }
+    toast(res?.message || res?.output || "Обновление установлено");
+    render();
   });
   if (act === "feedback") return run(async () => {
     const files = [];

@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.16** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.17** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.16](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.16) (после публикации feed)
+Релиз: [engvpn-0.5.17](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.17) (после публикации feed)
 
 ---
 
@@ -130,6 +130,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.17
+
+- Обновления: кнопка **«Установить обновление»**, когда feed новее текущей сборки (`engvpnd update` / `engvpnUpdateApply`).
+- Тумблер **Автообновление** сохраняется в `data/updates.conf` и ставит Merlin `cru` (исправлен сброс после hydrate из устаревшего conf).
+- Плановая проверка по-прежнему через интервал; ручная установка — сразу, без ночного окна.
 
 ### Что нового в 0.5.16
 
@@ -349,10 +355,11 @@ ENGVPN_REINSTALL_WIPE=1 engvpnd reinstall --wipe   # стереть data/, за�
 
 ### Плановая проверка и автообновление
 
-Панель → **Обновления**: интервал проверки (`6h` / `12h` / `1d` / `3d` / `7d` / `off`) и тумблер **Автообновление** (по умолчанию **выкл.**).
+Панель → **Обновления**: интервал проверки (`6h` / `12h` / `1d` / `3d` / `7d` / `off`), тумблер **Автообновление** (по умолчанию **выкл.**) и кнопка **«Установить обновление»**, когда feed новее текущей версии.
 
-- Проверка ходит в GitHub feed (`latest.json`), как `engvpnd update-check`.
-- Если автообновление включено и в feed новее — в ночном окне (`window_start`–`window_end`, по умолчанию 02:00–05:00) вызывается `engvpnd update` (SHA-256 + Minisign).
+- Проверка ходит в GitHub feed (`latest.json`), как `engvpnd update-check` / `Проверить сейчас`.
+- **Установить обновление** сразу вызывает `engvpnd update` (SHA-256 + Minisign), без ожидания ночного окна.
+- Если автообновление включено и в feed новее — в ночном окне (`window_start`–`window_end`, по умолчанию 02:00–05:00) тоже вызывается `engvpnd update`.
 - Расписание хранится в `data/updates.conf` и ставится в Merlin **`cru`** (или `crontab`). После перезагрузки `services-start` / `post-mount` снова вызывает `schedule-update.sh install-cru` — job не теряется.
 
 ```sh
