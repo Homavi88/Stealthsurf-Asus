@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.14** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.15** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.14](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.14) (после публикации feed)
+Релиз: [engvpn-0.5.15](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.15) (после публикации feed)
 
 ---
 
@@ -68,7 +68,7 @@ ENGVPN_OPEN_PANEL=1 ENGVPN_PREFIX=/jffs/addons/engvpn curl -fsSL …/merlin.sh |
 
 ## Как удалить
 
-После установки удобнее всего: **`engvpnd uninstall`** (синонимы `remove`, `удалить`) — вызывает тот же `install.sh uninstall`. Скрипт останавливает сервис панели, снимает хуки Merlin и `cru`, удаляет префикс EngVPN и `/tmp/engvpn`. **Не трогает** StealthSurf `:8800` (`/jffs/addons/stealthsurf`) и SurfGate.
+После установки удобнее всего: **`engvpnd uninstall`** (синонимы `remove`, `удалить`) — вызывает тот же `install.sh uninstall`. Скрипт печатает этапы `[n/N]` (остановка → расписание → хуки → файлы), останавливает сервис панели, снимает хуки Merlin и `cru`, удаляет префикс EngVPN и `/tmp/engvpn`. **Не трогает** StealthSurf `:8800` (`/jffs/addons/stealthsurf`) и SurfGate.
 
 JFFS (типичная установка):
 
@@ -78,8 +78,9 @@ engvpnd uninstall
 # или полный путь к install.sh:
 sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
 
-# чистое удаление без отката
+# чистое удаление без отката и без нового бэкапа
 ENGVPN_RESTORE=0 engvpnd uninstall
+# то же + явный skip: ENGVPN_SKIP_BACKUP=1 ENGVPN_RESTORE=0 engvpnd remove
 ```
 
 USB (если ставили на флешку): после 0.5.12 достаточно `engvpnd uninstall` (через `/opt/bin` или новый SSH-логин с `profile.add`). Полный путь:
@@ -90,7 +91,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 # workaround до обновления / без PATH: тот же полный путь
 ```
 
-Что остаётся после чистого удаления: каталог-сосед `.engvpn-backup` (например `/jffs/addons/.engvpn-backup/`) — для ручного восстановления; его можно удалить вручную, если бэкап не нужен. Подробности бэкапа/отката — в разделе ниже и в [CLI → backup](#engvpnd-backup).
+После **чистого** удаления новый снимок **не** пишется. Если раньше были бэкапы от install/upgrade, соседний каталог `.engvpn-backup` может остаться — удалите вручную. Подробности — ниже и в [CLI → backup](#engvpnd-backup).
 
 ## Резервная копия и восстановление
 
@@ -101,10 +102,10 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 На **uninstall**:
 
-1. Останавливается сервис, снимается свежий бэкап (если не `ENGVPN_SKIP_BACKUP=1`).  
+1. Останавливается сервис; этапы печатаются как `[1/N] …`.  
 2. Скрипт спрашивает: *«Восстановить EngVPN из резервной копии (откат)?»*  
    - **да** (`ENGVPN_RESTORE=1`) — распаковать последний бэкап в prefix, вернуть хуки, запустить сервис (uninstall отменяется → откат);  
-   - **нет** (`ENGVPN_RESTORE=0`) — удалить prefix; каталог `.engvpn-backup` остаётся для ручного восстановления.
+   - **нет** (`ENGVPN_RESTORE=0` / ответ `n` / `ENGVPN_SKIP_BACKUP=1`) — удалить prefix **без** создания нового `.engvpn-backup` (старые снимки от install/upgrade не трогаются).
 
 Команды: `engvpnd backup …` — см. [CLI → backup](#engvpnd-backup).
 
@@ -117,7 +118,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.14
+## Панель
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -129,6 +130,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.15
+
+- `engvpnd remove` / `uninstall`: ответ `n`, `ENGVPN_RESTORE=0` и `ENGVPN_SKIP_BACKUP=1` **не** создают новый `.engvpn-backup`.
+- Удаление печатает этапы `[1/4]…[4/4]` (остановка → расписание → хуки → файлы), без долгой тишины.
+- Исправлена гонка BusyBox `sort`/`files.tmp` при создании бэкапа (`sort -o` до имени файла).
 
 ### Что нового в 0.5.14
 
@@ -484,8 +491,8 @@ sh …/share/engvpn/netfilter.sh set-hold 120
 | `ENGVPN_FEED` | merlin / update | URL `latest.json` |
 | `ENGVPN_PACKAGE_PREFIX` | merlin / update | Префикс URL релизов |
 | `ENGVPN_MINISIGN_PUB` | merlin.sh | URL/путь публичного ключа |
-| `ENGVPN_SKIP_BACKUP` | install / backup | `1` — не писать бэкап |
-| `ENGVPN_RESTORE` | uninstall | `1` откат / `0` чистое удаление |
+| `ENGVPN_SKIP_BACKUP` | install / backup / uninstall | `1` — не писать бэкап (в т.ч. при удалении) |
+| `ENGVPN_RESTORE` | uninstall | `1` откат / `0` чистое удаление без нового бэкапа |
 | `ENGVPN_BACKUP_DIR` | backup | Каталог снимков |
 | `ENGVPN_PORT` | engvpnd / service | Порт панели (8790) |
 | `ENGVPN_DATA_DIR` | engvpnd / скрипты | Каталог `data/` |

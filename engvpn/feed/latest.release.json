@@ -1,24 +1,24 @@
 {
-  "version": "0.5.14",
-  "notes": "EngVPN 0.5.14 — Merlin panel mobile UX: dark StealthSurf-like home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide broken cores.",
+  "version": "0.5.15",
+  "notes": "EngVPN 0.5.15 — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
-      "size": 140717
+      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
+      "size": 141366
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
-      "size": 140717
+      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
+      "size": 141366
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
-      "size": 140717
+      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
+      "size": 141366
     }
   }
 }

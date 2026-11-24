@@ -564,6 +564,7 @@ user_backup() {
 
 ask_restore() {
 	# Returns 0 if user wants restore. Honours ENGVPN_RESTORE=1|0.
+	# "n" / RESTORE=0 means clean remove — do NOT write a farewell backup.
 	case "${ENGVPN_RESTORE:-}" in
 	1 | yes | YES | y | Y) return 0 ;;
 	0 | no | NO | n | N) return 1 ;;
@@ -583,6 +584,16 @@ ask_restore() {
 	y | Y | yes | YES | да | Да | ДА) return 0 ;;
 	esac
 	return 1
+}
+
+begin_uninstall_stages() {
+	# Standalone uninstall (engvpnd remove/uninstall) — numbered RU stages
+	# so long runs are not silent. Outer install (merlin.sh) keeps its total.
+	if [ "${STAGE_TOTAL:-0}" -gt 0 ] 2>/dev/null; then
+		return 0
+	fi
+	STAGE_TOTAL=${1:-4}
+	STAGE_NUM=0
 }
 
 do_install() {
@@ -711,34 +722,64 @@ do_upgrade() {
 
 do_uninstall() {
 	drive_plugged || fail "Drive not mounted; uninstall aborted"
-	stop_service || fail "Service did not stop; reboot and retry uninstall"
+
+	# Prompt first so [n/N] totals match the chosen path (no silent wait).
+	# Restore: stop → hooks off → restore → hooks on → start (5).
+	# Clean remove: stop → schedule → hooks → files (4). No farewell backup —
+	# ENGVPN_RESTORE=0 / interactive «n» / ENGVPN_SKIP_BACKUP=1 all mean wipe
+	# without creating sibling .engvpn-backup (prior install/upgrade snapshots stay).
 	if ask_restore; then
-		# Roll back to the last pre-install/upgrade snapshot — do NOT overwrite it first.
 		bak=$SHARE/backup.sh
-		[ -x "$bak" ] || fail "backup.sh missing; cannot restore"
-		say "Restoring EngVPN from backup (uninstall cancelled → rollback)"
+		[ -x "$bak" ] || fail "backup.sh отсутствует; откат невозможен"
+		begin_uninstall_stages 5
+		stage "Остановка сервиса" "Остановка сервиса…"
+		stop_service || fail "сервис не остановился; перезагрузите роутер и повторите удаление"
+		stage "Хуки" "Снятие хуков…"
 		remove_hooks
-		sh "$bak" restore "$PREFIX" || fail "restore from backup failed"
-		add_hooks || complain "hooks restore incomplete"
+		stage "Восстановление" "Восстановление из резервной копии…"
+		sh "$bak" restore "$PREFIX" || fail "восстановление из бэкапа не удалось"
+		stage "Хуки" "Возврат хуков…"
+		add_hooks || complain "хуки восстановлены не полностью"
 		install_cli_path || true
-		start_service || complain "service did not start after restore"
-		say "EngVPN restored from backup at $PREFIX"
+		stage "Запуск" "Запуск сервиса…"
+		start_service || complain "сервис не запустился после отката"
+		say "EngVPN восстановлен из резервной копии: $PREFIX"
 		return 0
 	fi
-	# Clean remove: snapshot current state for a later manual restore, then delete.
-	if [ "${ENGVPN_SKIP_BACKUP:-}" != 1 ] && [ -x "$SHARE/backup.sh" ]; then
-		sh "$SHARE/backup.sh" create "$PREFIX" || complain "pre-uninstall backup failed"
-	fi
+
+	begin_uninstall_stages 4
+	case "${ENGVPN_SKIP_BACKUP:-}" in
+	1 | yes | YES | y | Y) say "резервная копия пропущена (ENGVPN_SKIP_BACKUP)" ;;
+	*) say "резервная копия при удалении не создаётся (чистое удаление)" ;;
+	esac
+
+	stage "Остановка сервиса" "Остановка сервиса…"
+	stop_service || fail "сервис не остановился; перезагрузите роутер и повторите удаление"
+
+	stage "Расписание" "Снятие расписания обновлений…"
 	[ -x "$SHARE/schedule-update.sh" ] && sh "$SHARE/schedule-update.sh" remove-cru >/dev/null 2>&1 || true
+
+	stage "Хуки" "Снятие хуков…"
 	remove_hooks
 	remove_cli_path || true
+
+	stage "Удаление файлов" "Удаление файлов…"
 	rm -rf "$PREFIX"
 	if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
-		fail "Could not remove $PREFIX completely"
+		fail "не удалось полностью удалить $PREFIX"
 	fi
 	rm -rf "$VOLATILE_DIR"
 	rm -rf "$WORK"
-	say "EngVPN removed (backup kept under sibling .engvpn-backup unless deleted manually)"
+
+	bak_root=$(dirname "$PREFIX")/.engvpn-backup
+	case "$PREFIX" in
+	*/addons/engvpn) bak_root=${PREFIX%/engvpn}/.engvpn-backup ;;
+	esac
+	if [ -d "$bak_root" ]; then
+		say "EngVPN удалён (старые бэкапы: $bak_root — удалите вручную при необходимости)"
+	else
+		say "EngVPN удалён"
+	fi
 }
 
 own_prefix() {
