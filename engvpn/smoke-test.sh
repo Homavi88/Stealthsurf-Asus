@@ -440,6 +440,52 @@ grep -q 'backup: created\|backup_path=' /tmp/engvpn-smoke-backup.out || {
 	exit 1
 }
 ENGVPN_SKIP_BACKUP=0 "$PREFIX/sbin/engvpnd" backup latest "$PREFIX" | grep -q 'timestamp=\|archive='
+# BusyBox finalize must not rely on sort -o / mv of a missing files.sorted
+# (comments may mention -o; only fail on real code lines)
+if grep -v '^[[:space:]]*#' "$PREFIX/share/engvpn/backup.sh" | grep -E 'sort[[:space:]].*-o[[:space:]]'; then
+	echo "backup.sh still uses fragile sort -o" >&2
+	exit 1
+fi
+grep -q 'sort -u "$list" >"$sorted"' "$PREFIX/share/engvpn/backup.sh" || {
+	echo "backup.sh missing redirect-based sort finalize" >&2
+	exit 1
+}
+# Simulate missing sidecar: create still succeeds (unsorted keep / no hard fail)
+_bak_root=$(dirname "$PREFIX")/.engvpn-backup
+case "$PREFIX" in
+*/addons/engvpn) _bak_root=${PREFIX%/engvpn}/.engvpn-backup ;;
+esac
+_work=$(mktemp -d "${_bak_root}/work.smoke.XXXXXX" 2>/dev/null || mktemp -d)
+_list=$_work/files
+: >"$_list"
+echo "data/smoke.marker" >>"$_list"
+echo "share/engvpn/VERSION" >>"$_list"
+# empty/missing .sorted path must not be required — exercise redirect sort like backup.sh
+_sorted=$_list.sorted
+rm -f "$_sorted"
+sort -u "$_list" >"$_sorted" 2>/dev/null || true
+if [ -s "$_sorted" ]; then
+	mv -f "$_sorted" "$_list" 2>/dev/null || rm -f "$_sorted"
+else
+	rm -f "$_sorted"
+fi
+[ -s "$_list" ] || {
+	echo "redirect sort finalize left empty list" >&2
+	rm -rf "$_work"
+	exit 1
+}
+rm -rf "$_work"
+# create must not emit hard-fail finalize strings
+ENGVPN_SMOKE=1 ENGVPN_SKIP_BACKUP=0 "$PREFIX/sbin/engvpnd" backup create "$PREFIX" >/tmp/engvpn-smoke-backup2.out 2>/tmp/engvpn-smoke-backup2.err || {
+	echo "second backup create failed" >&2
+	cat /tmp/engvpn-smoke-backup2.out /tmp/engvpn-smoke-backup2.err >&2
+	exit 1
+}
+grep -E 'cannot finalize file list|sort file list failed' /tmp/engvpn-smoke-backup2.out /tmp/engvpn-smoke-backup2.err && {
+	echo "backup still hard-fails finalize:" >&2
+	cat /tmp/engvpn-smoke-backup2.out /tmp/engvpn-smoke-backup2.err >&2
+	exit 1
+}
 echo "  backup create/latest ok"
 
 echo "==> smartdns dry-run + apply (write routing)"
