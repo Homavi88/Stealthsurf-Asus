@@ -37,6 +37,22 @@ ARCHIVE=$ROOT/dist/engvpn_${VERSION}_merlin-x86_64.tar.gz
 	exit 1
 }
 
+echo "==> feed must be GitHub HTTPS (never file:// /agent paths)"
+grep -qE 'file://|/agent/repos/' "$ROOT/feed/latest.json" && {
+	echo "latest.json contains local/file paths — refuse" >&2
+	cat "$ROOT/feed/latest.json" >&2
+	exit 1
+}
+grep -q "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-${VERSION}/" "$ROOT/feed/latest.json" || {
+	echo "latest.json missing GitHub release URL for $VERSION" >&2
+	exit 1
+}
+grep -q "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-${VERSION}/" "$ROOT/feed/latest.release.json" || {
+	echo "latest.release.json missing GitHub release URL" >&2
+	exit 1
+}
+echo "  feed HTTPS ok"
+
 mkdir -p "$SCRIPTS" "$LOCK_DIR" "$FEED_DIR"
 # Point feed at local archive
 sum=$(sha256sum "$ARCHIVE" | awk '{ print $1 }')
@@ -60,6 +76,47 @@ for f in merlin.sh package/sbin/engvpnd package/share/engvpn/*.sh; do
 	sh -n "$f"
 	echo "  ok $f"
 done
+
+echo "==> updater rewrites foreign file:// to GitHub"
+# Extract resolve_package_url from packaged update.sh and assert rewrite.
+_upd=$ROOT/package/share/engvpn/update.sh
+grep -q 'resolve_package_url' "$_upd" || {
+	echo "missing resolve_package_url in update.sh" >&2
+	exit 1
+}
+grep -q 'resolve_package_url' "$ROOT/merlin.sh" || {
+	echo "missing resolve_package_url in merlin.sh" >&2
+	exit 1
+}
+# Simulate: foreign agent path must become GitHub URL when smoke/local allow is off.
+_resolved=$(
+	unset ENGVPN_SMOKE ENGVPN_ALLOW_LOCAL || true
+	PREFIX=/tmp/engvpn-fake
+	PACKAGE_PREFIX=https://github.com/Homavi88/Stealthsurf-Asus/releases/download/
+	# shellcheck disable=SC1091
+	eval "$(sed -n '/^github_release_url()/,/^}/p; /^resolve_package_url()/,/^}/p' "$_upd")"
+	resolve_package_url \
+		"file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_${VERSION}_merlin-x86_64.tar.gz" \
+		"$VERSION" merlin-x86_64
+)
+_expect="https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-${VERSION}/engvpn_${VERSION}_merlin-x86_64.tar.gz"
+[ "$_resolved" = "$_expect" ] || {
+	echo "resolve_package_url rewrite failed: got [$_resolved] expect [$_expect]" >&2
+	exit 1
+}
+# With ENGVPN_SMOKE=1 and an existing local archive, keep file://
+_smoke_resolved=$(
+	ENGVPN_SMOKE=1
+	PREFIX=/tmp/engvpn-fake
+	PACKAGE_PREFIX=https://github.com/Homavi88/Stealthsurf-Asus/releases/download/
+	eval "$(sed -n '/^github_release_url()/,/^}/p; /^resolve_package_url()/,/^}/p' "$_upd")"
+	resolve_package_url "file://$ARCHIVE" "$VERSION" merlin-x86_64
+)
+[ "$_smoke_resolved" = "file://$ARCHIVE" ] || {
+	echo "smoke local allow failed: got [$_smoke_resolved]" >&2
+	exit 1
+}
+echo "  resolve_package_url rewrite ok"
 
 echo "==> install via merlin.sh (local package + password env)"
 export ENGVPN_SMOKE=1
@@ -138,8 +195,8 @@ echo "  PATH symlink + profile.add + banner ok"
 echo "==> engvpnd status / version"
 "$PREFIX/sbin/engvpnd" version | grep -q "$VERSION"
 "$PREFIX/sbin/engvpnd" ver | grep -q "$VERSION"
-ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
-ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" check | grep -q "installed="
+ENGVPN_SMOKE=1 ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" update-check | grep -q "installed="
+ENGVPN_SMOKE=1 ENGVPN_FEED="file://$FEED_DIR/latest.json" "$PREFIX/sbin/engvpnd" check | grep -q "installed="
 echo "  version + update-check ok"
 
 echo "==> engvpnd short verbs (help + dispatch)"

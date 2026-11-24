@@ -539,20 +539,58 @@ else
 	url=$(field url)
 	sha256=$(field sha256)
 	expect_size=$(field size)
-	if [ -z "$version" ] || [ -z "$url" ] || [ -z "$sha256" ]; then
+	if [ -z "$version" ] || [ -z "$sha256" ]; then
 		feed_diag
-		fail "в ленте нет пакета для $key (нужны version+url+sha256; смотрите диагностику выше)"
+		fail "в ленте нет пакета для $key (нужны version+sha256; смотрите диагностику выше)"
 	fi
-	# Allow GitHub release URLs or configured prefix
+	# Rewrite file:// / build-host absolute paths to GitHub release HTTPS.
+	# Smoke may keep a local file:// when ENGVPN_SMOKE / ENGVPN_ALLOW_LOCAL is set.
+	github_release_url() {
+		echo "${PACKAGE_PREFIX}engvpn-${1}/engvpn_${1}_${2}.tar.gz"
+	}
+	resolve_package_url() {
+		_raw=$1
+		_ver=$2
+		_arch=$3
+		_src=""
+		case "$_raw" in
+		https://github.com/*/releases/download/* | https://raw.githubusercontent.com/* | "$PACKAGE_PREFIX"* | http://127.0.0.1/* | http://localhost/*)
+			echo "$_raw"
+			return 0
+			;;
+		file://*)
+			_src=${_raw#file://}
+			;;
+		/*)
+			_src=$_raw
+			;;
+		"")
+			echo "  → пустой URL пакета — берём GitHub release" >&2
+			github_release_url "$_ver" "$_arch"
+			return 0
+			;;
+		*)
+			fail "URL пакета должен быть с разрешённого HTTPS-хоста (получено $_raw)"
+			;;
+		esac
+		# Smoke/local override first (build hosts often use /agent/… paths).
+		if [ -n "${ENGVPN_SMOKE:-}${ENGVPN_ALLOW_LOCAL:-}" ] && [ -f "$_src" ]; then
+			echo "file://$_src"
+			return 0
+		fi
+		echo "  → отклоняем локальный путь $_src — GitHub release" >&2
+		github_release_url "$_ver" "$_arch"
+		return 0
+	}
+	url=$(resolve_package_url "$url" "$version" "$key")
+	# Allow GitHub release URLs or configured prefix (local only after resolve)
 	case "$url" in
 	https://github.com/* | https://raw.githubusercontent.com/* | "$PACKAGE_PREFIX"* | http://127.0.0.1/* | http://localhost/*) ;;
-	*)
-		# Also allow file:// for smoke
-		case "$url" in
-		file://*) ;;
-		*) fail "URL пакета должен быть с разрешённого HTTPS-хоста (получено $url)" ;;
-		esac
+	file://*)
+		[ -n "${ENGVPN_SMOKE:-}${ENGVPN_ALLOW_LOCAL:-}" ] ||
+			fail "URL пакета должен быть с разрешённого HTTPS-хоста (получено $url)"
 		;;
+	*) fail "URL пакета должен быть с разрешённого HTTPS-хоста (получено $url)" ;;
 	esac
 	echo "  → EngVPN $version ($key)"
 	echo "  → $url"
@@ -585,10 +623,16 @@ else
 		fail "контрольная сумма пакета не совпадает с лентой (ожидалось $sha256, получено $actual, размер $got_bytes)"
 	# Minisign (optional but preferred when feed publishes .minisig)
 	sig_url=$(field minisig)
-	[ -z "$sig_url" ] && sig_url="${url}.minisig"
+	case "$sig_url" in
+	file://* | /*) sig_url="" ;;
+	esac
+	[ -z "$sig_url" ] && case "$url" in https://*) sig_url="${url}.minisig" ;; esac
 	sig=$WORK/engvpn.tar.gz.minisig
 	case "$sig_url" in
-	file://*) [ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true ;;
+	file://*)
+		[ -n "${ENGVPN_SMOKE:-}${ENGVPN_ALLOW_LOCAL:-}" ] &&
+			[ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true
+		;;
 	https://* | http://127.0.0.1/* | http://localhost/*)
 		download_https "$sig_url" "$sig" 2>/dev/null || true
 		;;

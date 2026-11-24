@@ -223,16 +223,88 @@ feed_diag() {
 	echo "update: url=[$url] sha256=[$sha] arch=$key" >&2
 }
 
+# Canonical GitHub release asset for this arch (never a build-host path).
+github_release_url() {
+	_ver=$1
+	_arch=$2
+	echo "${PACKAGE_PREFIX}engvpn-${_ver}/engvpn_${_ver}_${_arch}.tar.gz"
+}
+
+# Allow file:// / absolute paths only for smoke or under the install prefix.
+# Foreign build paths (/agent/repos/…) → rewrite to GitHub release URL.
+resolve_package_url() {
+	_raw=$1
+	_ver=$2
+	_arch=$3
+	_src=""
+	case "$_raw" in
+	https://github.com/*/releases/download/* | https://raw.githubusercontent.com/* | "$PACKAGE_PREFIX"* | http://127.0.0.1/* | http://localhost/*)
+		echo "$_raw"
+		return 0
+		;;
+	file://*)
+		_src=${_raw#file://}
+		;;
+	/*)
+		_src=$_raw
+		;;
+	"")
+		echo "update: empty package url — using GitHub release" >&2
+		github_release_url "$_ver" "$_arch"
+		return 0
+		;;
+	*)
+		echo "update: refusing URL $_raw" >&2
+		return 1
+		;;
+	esac
+	# Explicit smoke/local allow first (dev hosts often live under /agent/…).
+	if [ -n "${ENGVPN_SMOKE:-}${ENGVPN_ALLOW_LOCAL:-}" ] && [ -f "$_src" ]; then
+		echo "file://$_src"
+		return 0
+	fi
+	case "$_src" in
+	"$PREFIX"/* | "$PREFIX")
+		if [ -f "$_src" ]; then
+			echo "file://$_src"
+			return 0
+		fi
+		;;
+	esac
+	# Absolute / file:// paths outside the install root are never used for remote updates.
+	echo "update: rejecting local path $_src — using GitHub release" >&2
+	github_release_url "$_ver" "$_arch"
+	return 0
+}
+
+fetch_package() {
+	_url=$1
+	_archive=$2
+	case "$_url" in
+	file://*)
+		cp -f "${_url#file://}" "$_archive" || return 1
+		;;
+	*)
+		download_https_mirrored "$_url" "$_archive" || return 1
+		;;
+	esac
+	return 0
+}
+
 cmd_check() {
 	feed=$(fetch_feed)
 	ver=$(feed_version "$feed")
 	cur=$(installed_version)
 	key=$(arch_key)
 	url=$(field "$feed" "$key" url)
+	resolved=$(resolve_package_url "$url" "$ver" "$key") || resolved=""
 	echo "installed=$cur"
 	echo "feed=$ver"
 	echo "arch=$key"
-	echo "url=$url"
+	echo "url=$resolved"
+	if [ -n "$url" ] && [ "$url" != "$resolved" ]; then
+		echo "feed_url=$url"
+	fi
 	if [ -n "$ver" ] && [ "$ver" != "$cur" ]; then
 		echo "update_available=1"
 		return 0
@@ -247,10 +319,14 @@ cmd_apply() {
 	ver=$(feed_version "$feed")
 	url=$(field "$feed" "$key" url)
 	sha256=$(field "$feed" "$key" sha256)
-	if [ -z "$ver" ] || [ -z "$url" ] || [ -z "$sha256" ]; then
+	if [ -z "$ver" ] || [ -z "$sha256" ]; then
 		feed_diag "$feed" "$key" "$ver" "$url" "$sha256"
-		fail "incomplete feed for $key (need version+url+sha256; see diagnostics above)"
+		fail "incomplete feed for $key (need version+sha256; see diagnostics above)"
 	fi
+	url=$(resolve_package_url "$url" "$ver" "$key") || {
+		feed_diag "$feed" "$key" "$ver" "$url" "$sha256"
+		fail "could not resolve package URL for $key"
+	}
 	cur=$(installed_version)
 	if [ "$ver" = "$cur" ] && [ "${ENGVPN_FORCE_UPDATE:-}" != 1 ]; then
 		echo "update: already on $cur"
@@ -263,15 +339,9 @@ cmd_apply() {
 	rm -rf "$WORK"
 	mkdir -m 700 "$WORK" || fail "mkdir $WORK"
 	archive=$WORK/engvpn.tar.gz
-	case "$url" in
-	file://*)
-		cp -f "${url#file://}" "$archive" || fail "copy failed"
-		;;
-	*)
-		download_https_mirrored "$url" "$archive" ||
-			fail "download failed (HTTP/empty; need curl -fL for GitHub redirects)"
-		;;
-	esac
+	echo "update: fetching $url"
+	fetch_package "$url" "$archive" ||
+		fail "download/copy failed (HTTP/empty or missing file; need curl -fL for GitHub redirects)"
 	got_bytes=$(file_bytes "$archive")
 	[ -n "$got_bytes" ] && [ "$got_bytes" -gt 0 ] ||
 		fail "downloaded package is empty (0 bytes)"
@@ -288,14 +358,21 @@ cmd_apply() {
 	[ "$actual" = "$sha256" ] || fail "checksum mismatch (expected $sha256 got $actual size $got_bytes)"
 	# Minisign verify when .minisig is published alongside the archive
 	sig_url=$(field "$feed" "$key" minisig)
-	[ -z "$sig_url" ] && sig_url="${url}.minisig"
+	case "$sig_url" in
+	file://* | /*)
+		# Never require a build-host minisig for remote updates
+		sig_url=""
+		;;
+	esac
+	[ -z "$sig_url" ] && case "$url" in https://*) sig_url="${url}.minisig" ;; esac
 	sig=$WORK/engvpn.tar.gz.minisig
 	pub=$SHARE/engvpn.minisign.pub
 	verify=$SHARE/verify-minisign.mjs
 	sig_ok=0
 	case "$sig_url" in
 	file://*)
-		[ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true
+		[ -n "${ENGVPN_SMOKE:-}${ENGVPN_ALLOW_LOCAL:-}" ] &&
+			[ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true
 		;;
 	https://* | http://127.0.0.1/* | http://localhost/*)
 		download_https "$sig_url" "$sig" 2>/dev/null || true

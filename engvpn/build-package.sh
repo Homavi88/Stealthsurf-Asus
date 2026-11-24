@@ -979,7 +979,7 @@ sign_one merlin-aarch64
 sign_one merlin-armv7
 sign_one merlin-x86_64
 
-minisig_field() {
+minisig_local() {
 	arch=$1
 	sig="$OUT/engvpn_${VERSION}_${arch}.tar.gz.minisig"
 	if [ -f "$sig" ]; then
@@ -998,41 +998,17 @@ minisig_release() {
 	fi
 }
 
-# Local file:// feed for smoke; also write relative GitHub-style URLs for docs.
-# Use spaces only (no tabs): older merlin.sh/update.sh sed matched /^  "version"/.
-FEED=$ROOT/feed/latest.json
-cat >"$FEED" <<EOF
-{
-  "version": "$VERSION",
-  "notes": "EngVPN $VERSION — Updates install button; auto-update toggle persists + Merlin cru; engvpnUpdateApply.",
-  "packages": {
-    "merlin-aarch64": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
-      $(minisig_field merlin-aarch64)
-      "sha256": "$sha64",
-      "size": $size64
-    },
-    "merlin-armv7": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
-      $(minisig_field merlin-armv7)
-      "sha256": "$sha7",
-      "size": $size7
-    },
-    "merlin-x86_64": {
-      "url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
-      $(minisig_field merlin-x86_64)
-      "sha256": "$shax",
-      "size": $sizex
-    }
-  }
-}
-EOF
+RELEASE_NOTES="EngVPN $VERSION — feed always GitHub HTTPS URLs; updater rejects agent/local paths and falls back to release tarball."
 
-# Release-oriented feed (URLs for GitHub Releases — update tag when publishing)
-cat >"$ROOT/feed/latest.release.json" <<EOF
+# Committed / published feed MUST use GitHub release HTTPS URLs only.
+# Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
+# Use spaces only (no tabs): older merlin.sh/update.sh sed matched /^  "version"/.
+write_release_feed() {
+	_dest=$1
+	cat >"$_dest" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — Updates install button; auto-update toggle persists + Merlin cru; engvpnUpdateApply.",
+  "notes": "$RELEASE_NOTES",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -1055,7 +1031,55 @@ cat >"$ROOT/feed/latest.release.json" <<EOF
   }
 }
 EOF
+}
 
-echo "Wrote $FEED"
+FEED=$ROOT/feed/latest.json
+write_release_feed "$FEED"
+write_release_feed "$ROOT/feed/latest.release.json"
+
+# Optional local smoke feed (gitignored) — never commit this file.
+LOCAL_FEED=$ROOT/feed/latest.local.json
+cat >"$LOCAL_FEED" <<EOF
+{
+  "version": "$VERSION",
+  "notes": "local smoke — do not commit",
+  "packages": {
+    "merlin-aarch64": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
+      $(minisig_local merlin-aarch64)
+      "sha256": "$sha64",
+      "size": $size64
+    },
+    "merlin-armv7": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
+      $(minisig_local merlin-armv7)
+      "sha256": "$sha7",
+      "size": $size7
+    },
+    "merlin-x86_64": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
+      $(minisig_local merlin-x86_64)
+      "sha256": "$shax",
+      "size": $sizex
+    }
+  }
+}
+EOF
+
+# Guard: committed feed must never ship build-machine paths.
+if grep -E 'file://|/agent/repos/|"url":[[:space:]]*"/' "$FEED" >/dev/null 2>&1; then
+	echo "build-package: REFUSING to leave local/file paths in $FEED" >&2
+	grep -nE 'file://|/agent/repos/|"url":' "$FEED" >&2 || true
+	exit 1
+fi
+case "$(grep -oE '"url":[[:space:]]*"[^"]+"' "$FEED" | head -1)" in
+*https://github.com/Homavi88/Stealthsurf-Asus/releases/download/*) ;;
+*)
+	echo "build-package: latest.json url must be a GitHub release download URL" >&2
+	exit 1
+	;;
+esac
+
+echo "Wrote $FEED (+ latest.release.json; local smoke → $LOCAL_FEED)"
 ls -la "$OUT"
 echo "Done."
