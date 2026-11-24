@@ -5,7 +5,29 @@
 # dpi | warp | cleanup | reconnect | watchdog + short aliases (up, remove, …)
 set -u
 
-SHARE=$(cd "${0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
+# Resolve real binary path even when invoked as /opt/bin/engvpnd (symlink) or bare "engvpnd" from PATH.
+# Package layout is always $PREFIX/sbin/engvpnd → ../share/engvpn (never $PREFIX/bin).
+argv0=$0
+case "$argv0" in
+*/*) ;;
+*)
+	found=$(command -v -- "$argv0" 2>/dev/null) || found=
+	[ -n "$found" ] && argv0=$found
+	;;
+esac
+if [ -L "$argv0" ]; then
+	resolved=$(readlink -f "$argv0" 2>/dev/null || true)
+	if [ -z "$resolved" ]; then
+		# BusyBox without -f: one-level absolute or relative link
+		link=$(readlink "$argv0" 2>/dev/null || true)
+		case "$link" in
+		/*) resolved=$link ;;
+		?*) resolved="${argv0%/*}/$link" ;;
+		esac
+	fi
+	[ -n "${resolved:-}" ] && argv0=$resolved
+fi
+SHARE=$(cd "${argv0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
 	echo "engvpnd: cannot resolve share/engvpn" >&2
 	exit 1
 }

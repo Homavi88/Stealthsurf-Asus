@@ -1,24 +1,24 @@
 {
-  "version": "0.5.11",
-  "notes": "EngVPN 0.5.11 — clear panel URL banner after install (http://LAN:PORT).",
+  "version": "0.5.12",
+  "notes": "EngVPN 0.5.12 — put engvpnd on PATH (/opt/bin symlink + profile.add); print CLI path in install banner.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
-      "size": 133780
+      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
+      "size": 134877
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
-      "size": 133780
+      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
+      "size": 134877
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.11/engvpn_0.5.11_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "ca7d541e70142914e33b50713c5743dcf4e48f2a006a535c08667175b6edc623",
-      "size": 133780
+      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
+      "size": 134877
     }
   }
 }
