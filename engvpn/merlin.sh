@@ -800,10 +800,20 @@ stage "Запуск" "Запуск сервиса…"
 export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
 export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
+# Hard timeout for panel boot (service.sh prints «ожидание панели…»)
+export ENGVPN_START_TIMEOUT="${ENGVPN_START_TIMEOUT:-45}"
 if [ "$skip_password" -eq 1 ]; then
 	export ENGVPN_OPEN_PANEL=1
 fi
-"$prefix/share/engvpn/service.sh" restart || fail "сервис EngVPN не запустился"
+echo "  остановка лишних процессов…"
+sh "$prefix/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
+echo "  запуск (таймаут ${ENGVPN_START_TIMEOUT} с)…"
+if ! sh "$prefix/share/engvpn/service.sh" start; then
+	echo "  повторный запуск…"
+	sh "$prefix/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
+	sleep 1
+	sh "$prefix/share/engvpn/service.sh" start || fail "сервис EngVPN не запустился (таймаут ${ENGVPN_START_TIMEOUT} с)"
+fi
 
 lan=""
 type nvram >/dev/null 2>&1 && lan=$(nvram get lan_ipaddr 2>/dev/null)

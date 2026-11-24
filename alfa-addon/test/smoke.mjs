@@ -86,6 +86,13 @@ test("extractZipMember reads stored and deflated members without unzip", () => {
   assert.equal(extractZipMember(zipDef, "xray").toString(), "stealthsurf-core-bin");
 });
 
+test("Ferrum open slot unpacks xray zip member (not ferrum)", async () => {
+  // Mirror EngVPN mapping: archive member "xray" → dest cores/ferrum
+  const src = readFileSync(join(ROOT, "lib/engines.mjs"), "utf8");
+  assert.match(src, /id === "ferrum" \? "xray"/);
+  assert.match(src, /const member = id === "ferrum"/);
+});
+
 test("UI select uses data-input and cell CSS avoids full-width crush", () => {
   const js = readFileSync(join(ROOT, "public/app.js"), "utf8");
   assert.match(js, /function sel\(/);

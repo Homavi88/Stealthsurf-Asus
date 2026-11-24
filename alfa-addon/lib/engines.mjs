@@ -871,27 +871,32 @@ function moveIntoPlace(found, dest) {
 
 async function unpackCore(id, assetName, tmp, dest) {
   const spec = ENGINES[id];
+  // Ferrum open slot downloads Xray zip (member "xray") but installs as data/cores/ferrum.
+  const member = id === "ferrum" ? "xray" : (spec?.bin || id);
   if (assetName.endsWith(".zip")) {
     let unzipped = false;
     try {
-      await execFile("unzip", ["-o", "-j", tmp, spec.bin, "-d", CORE_DIR], { timeout: 60000 });
+      await execFile("unzip", ["-o", "-j", tmp, member, "-d", CORE_DIR], { timeout: 60000 });
       unzipped = true;
     } catch {
-      writeFileSync(dest, extractZipMember(readFileSync(tmp), spec.bin));
+      writeFileSync(dest, extractZipMember(readFileSync(tmp), member));
       return;
     }
-    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+    if (unzipped && !existsSync(dest)) {
+      // unzip extracted "xray" (or member) into CORE_DIR — rename to dest (ferrum/xray/…)
+      moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
+    }
     return;
   }
   if (assetName.endsWith(".tar.gz")) {
     let last = "";
     for (const args of [
-      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${spec.bin}`],
+      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${member}`],
       ["-xzf", tmp, "-C", CORE_DIR],
     ]) {
       try {
         await execFile("tar", args, { timeout: 60000 });
-        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
         if (existsSync(dest)) return;
       } catch (error) {
         last = error.message || String(error);

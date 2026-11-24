@@ -1,24 +1,24 @@
 {
-  "version": "0.5.27",
-  "notes": "EngVPN 0.5.27 — clean-install: musl sing-box (libresolv fallback), geosite mkdir, quiet /proc cmdline, orphan sleep reap + start cleanup, curl progress bar.",
+  "version": "0.5.28",
+  "notes": "EngVPN 0.5.28 — install start timeout+progress; Ferrum extracts Xray zip member as data/cores/ferrum; hard-enforce single supervisor/panel (kill-strays wipes all extras).",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.28/engvpn_0.5.28_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
-      "size": 172588
+      "sha256": "98e4db4fc87cdc1ae3a2fe3c1707334313b98b1bf5bab35a04caf4a1251849e5",
+      "size": 174025
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.28/engvpn_0.5.28_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
-      "size": 172588
+      "sha256": "98e4db4fc87cdc1ae3a2fe3c1707334313b98b1bf5bab35a04caf4a1251849e5",
+      "size": 174025
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.27/engvpn_0.5.27_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.28/engvpn_0.5.28_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "152ebc3012aa386ab5ee7008347a8d9b1800719cd620912215152e580d31370e",
-      "size": 172588
+      "sha256": "98e4db4fc87cdc1ae3a2fe3c1707334313b98b1bf5bab35a04caf4a1251849e5",
+      "size": 174025
     }
   }
 }
