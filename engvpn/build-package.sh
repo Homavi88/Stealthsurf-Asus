@@ -229,7 +229,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
+    )
+elif "engvpnUpdateApply" not in text and "engvpnUpdateCheck" in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "engvpnUpdateCheck, engvpnScheduleUpdate,",
+        "engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate,",
     )
 elif "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
@@ -280,6 +285,14 @@ insert = '''      case "transparent":
       case "checkEngvpnUpdates":
         {
           const res = await engvpnUpdateCheck(state);
+          saveState(state);
+          return res;
+        }
+      case "engvpnUpdateApply":
+      case "applyEngvpnUpdate":
+      case "installUpdate":
+        {
+          const res = await engvpnUpdateApply(state, body || {});
           saveState(state);
           return res;
         }
@@ -420,8 +433,13 @@ new_patch = (
     "            await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n"
     "          }\n"
     "          if (typeof path === \"string\" && path.startsWith(\"updates.\")) {\n"
+    "            // Re-apply after snapshot hydrate (stale updates.conf must not wipe the toggle),\n"
+    "            // then persist conf + Merlin cru and return a fresh snapshot.\n"
+    "            setPath(state, path, body.value);\n"
     "            const sched = await syncUpdatesSchedule(state);\n"
     "            if (sched && sched.ok === false) throw new Error(sched.error || \"Не удалось установить расписание обновлений\");\n"
+    "            saveState(state);\n"
+    "            return snapshot();\n"
     "          }\n"
     "        } catch (e) {\n"
     "          setPath(state, path, prev);\n"
@@ -446,12 +464,31 @@ if "syncUpdatesSchedule" in text and 'path.startsWith("updates.")' not in text a
         text = text.replace(
             needle_upd,
             '        if (typeof body?.path === "string" && body.path.startsWith("updates.")) {\n'
+            '          setPath(state, body.path, body.value);\n'
             '          const sched = await syncUpdatesSchedule(state);\n'
             '          if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
+            '          saveState(state);\n'
+            '          return snapshot();\n'
             '        }\n'
             '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {',
             1,
         )
+# Harden older builds that synced updates.conf without re-applying the toggle after hydrate
+if 'path.startsWith("updates.")' in text and "setPath(state, path, body.value)" not in text.split('path.startsWith("updates.")')[1][:400]:
+    text = text.replace(
+        '          if (typeof path === "string" && path.startsWith("updates.")) {\n'
+        '            const sched = await syncUpdatesSchedule(state);\n'
+        '            if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
+        '          }',
+        '          if (typeof path === "string" && path.startsWith("updates.")) {\n'
+        '            setPath(state, path, body.value);\n'
+        '            const sched = await syncUpdatesSchedule(state);\n'
+        '            if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
+        '            saveState(state);\n'
+        '            return snapshot();\n'
+        '          }',
+        1,
+    )
 
 # Override alfa checkUpdates stub → real feed check + schedule stamp
 if 'return await engvpnUpdateCheck(state)' not in text and 'case "checkUpdates":' in text:
@@ -967,7 +1004,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — settings master-detail; empty home without API key/URL; scrub alpha demo locations.",
+  "notes": "EngVPN $VERSION — Updates install button; auto-update toggle persists + Merlin cru; engvpnUpdateApply.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -995,7 +1032,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — settings master-detail; empty home without API key/URL; scrub alpha demo locations.",
+  "notes": "EngVPN $VERSION — Updates install button; auto-update toggle persists + Merlin cru; engvpnUpdateApply.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

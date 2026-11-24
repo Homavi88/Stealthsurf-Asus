@@ -283,6 +283,12 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'settings-split\|drawer-settings' "$_ui_css" \
 		&& echo "  settings CSS ok" \
 		|| { echo "missing settings CSS" >&2; exit 1; }
+	grep -q 'Установить обновление\|install-update\|updateAvailable\|feedNewer' "$_ui_js" \
+		&& echo "  updates install button UI ok" \
+		|| { echo "missing install-update button in app.js" >&2; exit 1; }
+	grep -q 'engvpnUpdateApply\|export async function engvpnUpdateApply' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& echo "  engvpnUpdateApply ok" \
+		|| { echo "missing engvpnUpdateApply in runtime-engvpn.mjs" >&2; exit 1; }
 	grep -q 'scrubAlphaDemoNodes' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
 		&& echo "  scrubAlphaDemoNodes ok" \
 		|| { echo "missing scrubAlphaDemoNodes in runtime-engvpn.mjs" >&2; exit 1; }
@@ -521,6 +527,25 @@ if command -v node >/dev/null 2>&1; then
 	inv_ok "patch.transparentMethod" patch '{"path":"router.transparentMethod","value":"redirect"}'
 	inv_ok "get_router_settings" get_router_settings '{}'
 	inv_ok "engvpnUpdateCheck" engvpnUpdateCheck '{}'
+	# Auto-update toggle must persist to updates.conf + schedule (not bounce off after hydrate)
+	inv_ok "patch.updates.auto" patch '{"path":"updates.auto","value":true}'
+	grep -q '"auto":true\|"auto": true' /tmp/engvpn-inv-out.json || {
+		echo "patch updates.auto did not return auto:true" >&2
+		head -c 800 /tmp/engvpn-inv-out.json >&2
+		exit 1
+	}
+	grep -q 'auto=1' "$PREFIX/data/updates.conf" || {
+		echo "updates.conf missing auto=1 after patch" >&2
+		cat "$PREFIX/data/updates.conf" >&2
+		exit 1
+	}
+	echo "  updates.auto persist ok"
+	inv_ok "patch.updates.auto.off" patch '{"path":"updates.auto","value":false}'
+	grep -q 'auto=0' "$PREFIX/data/updates.conf" || {
+		echo "updates.conf missing auto=0 after toggle off" >&2
+		cat "$PREFIX/data/updates.conf" >&2
+		exit 1
+	}
 	inv_ok "dpi.status" dpi '{"action":"status"}'
 	inv_ok "engvpnWarp.status" engvpnWarp '{"action":"status"}'
 	inv_ok "get_zapret_status" get_zapret_status '{}'
