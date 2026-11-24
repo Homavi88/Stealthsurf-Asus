@@ -1373,7 +1373,14 @@ export function hydratePanelSnapshot(snap, state) {
     const conf = readTransparentConf();
     if (snap.router) {
       snap.router.transparentMethod = conf.method || snap.router.transparentMethod || "auto";
-      if (state?.router) state.router.transparentMethod = snap.router.transparentMethod;
+      // Prefer on-disk transparent.conf mode so «VPN для всей сети» matches applied state
+      if (conf.mode) {
+        snap.router.mode = routerModeFromTransparent(conf.mode);
+      }
+      if (state?.router) {
+        state.router.transparentMethod = snap.router.transparentMethod;
+        if (conf.mode) state.router.mode = snap.router.mode;
+      }
     }
   } catch {
     /* ignore */

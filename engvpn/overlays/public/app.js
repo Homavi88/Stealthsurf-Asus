@@ -25,11 +25,15 @@ let ui = {
 let es;
 let progressPoll = null;
 
+/** Rate in bytes/s → Мбит/с (Mbps). */
 const fmt = (n) => {
   const v = Number(n) || 0;
-  if (v < 1024) return `${Math.round(v)} Б/с`;
-  if (v < 1024 * 1024) return `${(v / 1024).toFixed(v < 10240 ? 1 : 0)} КБ/с`;
-  return `${(v / 1024 / 1024).toFixed(1)} МБ/с`;
+  const mbps = (v * 8) / 1e6;
+  if (mbps <= 0) return "0 Мбит/с";
+  if (mbps < 0.1) return `${mbps.toFixed(3)} Мбит/с`;
+  if (mbps < 10) return `${mbps.toFixed(2)} Мбит/с`;
+  if (mbps < 100) return `${mbps.toFixed(1)} Мбит/с`;
+  return `${Math.round(mbps)} Мбит/с`;
 };
 const fmtBytes = (n) => {
   const v = Number(n) || 0;
@@ -135,10 +139,102 @@ function formatRub(v) {
   return `${n.toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ₽`;
 }
 function pingOf(id) { return S.pings?.[id]?.ms; }
+function pingTone(ms) {
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n < 0) return "soft";
+  if (n < 80) return "good";
+  if (n < 150) return "ok";
+  return "bad";
+}
+function pingHtml(id, { always = false } = {}) {
+  if (!S?.other?.showPing && !always) return "";
+  const ms = pingOf(id);
+  if (ms == null) return always ? `<span class="ping ping-soft">—</span>` : "";
+  if (!ms && ms !== 0) return `<span class="ping ping-soft">—</span>`;
+  return `<span class="ping ping-${pingTone(ms)}">${Math.round(ms)} мс</span>`;
+}
+
+/** ISO2 / country tokens → flag class. Empty = no country (caller may use globe). */
+const COUNTRY_ALIASES = {
+  nl: ["nl", "netherlands", "holland", "нидерланд", "голланди"],
+  de: ["de", "germany", "deutschland", "германи", "немц"],
+  fi: ["fi", "finland", "suomi", "финлянд"],
+  us: ["us", "usa", "united states", "america", "сша", "америк"],
+  gb: ["gb", "uk", "united kingdom", "britain", "england", "britain", "великобритан", "англи"],
+  fr: ["fr", "france", "франци"],
+  se: ["se", "sweden", "sverige", "швеци"],
+  no: ["no", "norway", "norge", "норвеги"],
+  pl: ["pl", "poland", "польш"],
+  lt: ["lt", "lithuania", "литв"],
+  lv: ["lv", "latvia", "латви"],
+  ee: ["ee", "estonia", "эстони"],
+  cz: ["cz", "czech", "чехи"],
+  at: ["at", "austria", "австри"],
+  ch: ["ch", "switzerland", "schweiz", "швейцари"],
+  it: ["it", "italy", "italia", "итали"],
+  es: ["es", "spain", "españa", "испани"],
+  pt: ["pt", "portugal", "португали"],
+  tr: ["tr", "turkey", "türkiye", "турци"],
+  jp: ["jp", "japan", "япони"],
+  kr: ["kr", "korea", "коре"],
+  sg: ["sg", "singapore", "сингапур"],
+  hk: ["hk", "hong kong", "гонконг"],
+  tw: ["tw", "taiwan", "тайван"],
+  ca: ["ca", "canada", "канад"],
+  au: ["au", "australia", "австрали"],
+  in: ["in", "india", "инди"],
+  ua: ["ua", "ukraine", "украин"],
+  ru: ["ru", "russia", "росси"],
+  kz: ["kz", "kazakhstan", "казахстан"],
+  ge: ["ge", "georgia", "грузи"],
+  md: ["md", "moldova", "молдов"],
+  ro: ["ro", "romania", "румыни"],
+  bg: ["bg", "bulgaria", "болгари"],
+  ie: ["ie", "ireland", "ирланд"],
+  be: ["be", "belgium", "бельги"],
+  dk: ["dk", "denmark", "дани"],
+  is: ["is", "iceland", "исланди"],
+  mx: ["mx", "mexico", "мексик"],
+  br: ["br", "brazil", "бразили"],
+  ae: ["ae", "uae", "emirates", "эмират", "оаэ"],
+  il: ["il", "israel", "израил"],
+  za: ["za", "south africa", "юар", "африка"],
+};
+const ISO2_SET = new Set(Object.keys(COUNTRY_ALIASES));
+
+function flagFromName(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  // Leading ISO2: "DE VLESS", "fi-wg", "NL-Trojan", "[DE] …"
+  const m = raw.match(/^\s*[\[(]?([A-Za-z]{2})[\])]?(?:[\s\-_|:/]|$)/);
+  if (m && ISO2_SET.has(m[1].toLowerCase())) return m[1].toLowerCase();
+  // Token somewhere: "… DE …" / country word
+  for (const [code, aliases] of Object.entries(COUNTRY_ALIASES)) {
+    for (const a of aliases) {
+      if (a.length === 2) {
+        if (new RegExp(`(^|[^a-z])${a}([^a-z]|$)`, "i").test(lower)) return code;
+      } else if (lower.includes(a)) return code;
+    }
+  }
+  return "";
+}
+
+function nodeFlagKind(n) {
+  if (!n) return "auto";
+  if (n.protocol === "direct") return "direct";
+  const known = String(n.flag || n.country || "").toLowerCase();
+  if (known && known !== "auto" && known !== "direct" && ISO2_SET.has(known)) return known;
+  const fromName = flagFromName(n.name);
+  if (fromName) return fromName;
+  // Smart / generic / no country in name → globe
+  return "auto";
+}
 
 function flag(kind) {
-  const cls = kind === "nl" ? "nl" : kind === "direct" ? "direct" : "auto";
-  return `<i class="flag ${cls}"></i>`;
+  const k = String(kind || "auto").toLowerCase();
+  const cls = k === "direct" ? "direct" : (ISO2_SET.has(k) ? k : "auto");
+  return `<i class="flag ${cls}" aria-hidden="true"></i>`;
 }
 function hero(shape) {
   const head = shape === "diamond"
@@ -406,22 +502,33 @@ function screenAccount() {
   </div>`;
 }
 
+const ROUTER_MODES = [
+  ["off", "Выключено", "Домашняя сеть идёт напрямую."],
+  ["all", "Все устройства", "Через VPN идут все. PPTP и IPsec — напрямую (только TCP/UDP в VPN)."],
+  ["selected", "Только выбранные", "Через VPN идут только отмеченные устройства."],
+  ["except", "Все, кроме выбранных", "Через VPN все, кроме отмеченных. PPTP и IPsec — напрямую."],
+];
+
 function screenRouter() {
   const r = S.router;
   const marked = S.devices.filter((d) => d.excluded).length;
-  const modeLabel = { off: "Выключено", all: "Все устройства", selected: "Только выбранные", except: "Все, кроме выбранных" }[r.mode];
-  const modeText = {
-    off: "Домашняя сеть идёт напрямую.",
-    all: "Через VPN идут все устройства. PPTP и IPsec роутер отправляет напрямую: VPN несёт только TCP и UDP.",
-    selected: "Через VPN идут только отмеченные устройства.",
-    except: "Через VPN идут все устройства, кроме отмеченных. PPTP и IPsec идут напрямую.",
-  }[r.mode];
+  const mode = ROUTER_MODES.some(([id]) => id === r.mode) ? r.mode : "off";
+  const modeLabel = (ROUTER_MODES.find(([id]) => id === mode) || ROUTER_MODES[0])[1];
+  const modeText = (ROUTER_MODES.find(([id]) => id === mode) || ROUTER_MODES[0])[2];
   return `${backBar("Роутер")}<div class="drawer-body">
     <div class="group">
       <div class="mode-block">
         <div class="cell-title">VPN для всей сети</div>
-        ${sel("router.mode", r.mode, [["off", "Выключено"], ["all", "Все устройства"], ["selected", "Только выбранные"], ["except", "Все, кроме выбранных"]], true)}
-        <p class="muted">${modeText}</p>
+        <label class="mode-select-wrap">
+          <span class="sr-only">Режим VPN для сети</span>
+          <select class="ctrl full mode-select" data-input="router.mode" aria-label="VPN для всей сети">
+            ${ROUTER_MODES.map(([id, label]) => `<option value="${esc(id)}" ${id === mode ? "selected" : ""}>${esc(label)}</option>`).join("")}
+          </select>
+        </label>
+        <div class="mode-picks" role="listbox" aria-label="VPN для всей сети">
+          ${ROUTER_MODES.map(([id, label]) => `<button type="button" class="mode-pick${id === mode ? " on" : ""}" data-router-mode="${id}" role="option" aria-selected="${id === mode ? "true" : "false"}">${esc(label)}</button>`).join("")}
+        </div>
+        <p class="muted">${esc(modeText)}</p>
       </div>
       ${cell("Статус", S.vpn.connected ? `Работает · через VPN ${fmtBytes((S.runtime.session.vpnDown || 0) + (S.runtime.session.vpnUp || 0))}` : "VPN выключен")}
       <button type="button" class="cell" data-go="devices"><div class="cell-text"><div class="cell-title">Устройства</div><div class="cell-desc">Отмечено ${marked} · режим «${esc(modeLabel)}»</div></div><span class="chev">›</span></button>
@@ -1079,7 +1186,7 @@ function screenDiag() {
   const d = S.diagnostics;
   return `${backBar("Диагностика")}<div class="drawer-body"><div class="group">
     ${cell("Тест скорости", "Пинг, загрузка через VPN и напрямую", `<button class="ghost" data-act="speedtest">Запустить</button>`)}
-    ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${ui.result.direct.down || 0} Б/с. VPN: ${ui.result.vpn ? (ui.result.vpn.down || ui.result.vpn.error) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
+    ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${fmt(ui.result.direct.down || 0)}. VPN: ${ui.result.vpn ? (typeof ui.result.vpn.down === "number" ? fmt(ui.result.vpn.down) : esc(ui.result.vpn.error || ui.result.vpn.down || "—")) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
     ${cell("Проверки скрытности", "Exit IP, DNS, IPv6, DPI, kill-switch", `<button class="ghost" data-go="privacy">Открыть</button>`)}
     ${cell("Нагрузка на роутер", "Пока панель открыта", sw("diagnostics.showLoad", d.showLoad))}
     ${cell("Режим разработчика", "Логи ядра и подробности", sw("diagnostics.devMode", d.devMode))}
@@ -1214,7 +1321,7 @@ function home() {
     : showNode?.protocol === "direct" && !connected
       ? (hasProfiles ? showNode.name : "Нет активного профиля")
       : (showNode?.name || (hasProfiles ? "Выберите локацию" : "Нет конфига"));
-  const flagKind = needsSetup ? "auto" : (showNode?.flag || (hasProfiles ? "auto" : "direct"));
+  const flagKind = needsSetup ? "auto" : (hasProfiles ? nodeFlagKind(showNode) : "direct");
   const locList = hasProfiles
     ? nodes().filter((n) => n.id !== showNode?.id && (n.protocol === "direct" || !n.alpha))
     : [];
@@ -1246,7 +1353,7 @@ function home() {
             <div class="online">${needsSetup || !hasProfiles
               ? "Добавьте ключ или URL"
               : locStatusLine(showNode)}</div></div>
-            ${S.other.showPing && hasProfiles ? `<div class="ping">${pingOf(showNode?.id) == null ? "" : pingOf(showNode?.id) ? `${pingOf(showNode.id)} мс` : "—"}</div>` : ""}</div>
+            ${hasProfiles ? pingHtml(showNode?.id) : ""}</div>
           ${hasProfiles && S.other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", S.other.autoSetup)}</div>` : ""}
           ${hasProfiles ? `<button class="linkish" data-act="pop">Настройки конфига</button>` : `<button class="linkish" data-go-root="account">Настроить аккаунт</button>`}
           ${ui.pop ? `<div class="menu-pop">
@@ -1261,7 +1368,7 @@ function home() {
             ? `<p class="muted empty-locs">${needsSetup
               ? "Список пуст — добавьте ключ или URL в аккаунте. Пока ничего не синхронизировано."
               : "Список пуст. После синхронизации API или URL здесь появятся серверы."}</p>`
-            : locList.map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(n.flag)}<span><strong>${esc(n.name)}</strong><small>${locStatusLine(n)}${S.other.showPing && pingOf(n.id) ? ` · ${pingOf(n.id)} мс` : ""}</small></span></button>`).join("")}
+            : locList.map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(nodeFlagKind(n))}<span class="loc-main"><strong>${esc(n.name)}</strong><small>${locStatusLine(n)}</small></span>${pingHtml(n.id)}</button>`).join("")}
         </div>
       </div>
     </div>
@@ -1381,6 +1488,25 @@ function open(id) {
 }
 
 document.addEventListener("click", (event) => {
+  const modeBtn = event.target.closest("[data-router-mode]");
+  if (modeBtn && S) {
+    const value = modeBtn.dataset.routerMode;
+    if (!value || value === S.router?.mode) return;
+    const prev = S.router.mode;
+    S.router.mode = value;
+    render();
+    run(async () => {
+      try {
+        await invoke("patch", { path: "router.mode", value });
+        toast(`Режим: ${(ROUTER_MODES.find(([id]) => id === value) || [])[1] || value}`);
+      } catch (e) {
+        S.router.mode = prev;
+        render();
+        throw e;
+      }
+    });
+    return;
+  }
   const t = event.target.closest("[data-act],[data-go],[data-go-top],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]");
   if (!t || (!S && t.dataset.act !== "eye" && ui.auth !== false)) return;
   const act = t.dataset.act;
@@ -1813,6 +1939,22 @@ document.addEventListener("change", (event) => {
   if (path) {
     let value = event.target.value;
     if (/port|Concurrency|window/.test(path)) value = Number(value);
+    if (path === "router.mode" && S?.router) {
+      const prev = S.router.mode;
+      S.router.mode = value;
+      render();
+      run(async () => {
+        try {
+          await invoke("patch", { path, value });
+          toast(`Режим: ${(ROUTER_MODES.find(([id]) => id === value) || [])[1] || value}`);
+        } catch (e) {
+          S.router.mode = prev;
+          render();
+          throw e;
+        }
+      });
+      return;
+    }
     run(() => invoke("patch", { path, value }));
   }
   if (event.target.dataset.rename) run(() => invoke("deviceRename", { id: event.target.dataset.rename, name: event.target.value }));

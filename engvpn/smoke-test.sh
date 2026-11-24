@@ -347,6 +347,18 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'dl-progress\|downloadProgress\|paintDownloadProgress' "$_ui_js" \
 		&& echo "  core/geo download progress UI ok" \
 		|| { echo "missing download progress UI in app.js" >&2; exit 1; }
+	grep -q 'Мбит/с\|mbps\|flagFromName\|ping-good\|nodeFlagKind' "$_ui_js" \
+		&& echo "  Mbps + locations flag/ping UI ok" \
+		|| { echo "missing Mbps / locations UX in app.js" >&2; exit 1; }
+	grep -q 'ping-good\|flag\.de\|loc-main' "$_ui_css" \
+		&& echo "  locations ping/flag CSS ok" \
+		|| { echo "missing locations ping/flag CSS" >&2; exit 1; }
+	grep -q 'data-router-mode\|ROUTER_MODES\|mode-select\|VPN для всей сети' "$_ui_js" \
+		&& echo "  router mode selector UI ok" \
+		|| { echo "missing router mode selector in app.js" >&2; exit 1; }
+	grep -q 'mode-pick\|mode-select' "$_ui_css" \
+		&& echo "  router mode selector CSS ok" \
+		|| { echo "missing router mode CSS" >&2; exit 1; }
 	grep -q 'min-width: 900px\|drawer-settings' "$_ui_css" \
 		&& echo "  desktop settings ≥900px CSS ok" \
 		|| { echo "missing desktop settings width CSS" >&2; exit 1; }
