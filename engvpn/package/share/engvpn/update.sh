@@ -34,8 +34,86 @@ arch_key() {
 	esac
 }
 
+# Must follow redirects (-L): GitHub release URLs 302 to CDN; without -L
+# curl writes 0 bytes and exits 0 (empty-file SHA e3b0c442…).
+find_https_fetch() {
+	if [ -x /opt/bin/curl ]; then
+		echo /opt/bin/curl
+		return 0
+	fi
+	if [ -x /usr/sbin/curl ]; then
+		echo /usr/sbin/curl
+		return 0
+	fi
+	if command -v curl >/dev/null 2>&1; then
+		command -v curl
+		return 0
+	fi
+	if [ -x /opt/bin/wget ]; then
+		echo /opt/bin/wget
+		return 0
+	fi
+	return 1
+}
+
+file_bytes() {
+	if bytes=$(wc -c <"$1" 2>/dev/null); then
+		echo "$bytes" | tr -d ' '
+		return 0
+	fi
+	# shellcheck disable=SC2012
+	ls -ln "$1" 2>/dev/null | awk '{ print $5 }'
+}
+
+download_https() {
+	_url=$1
+	_out=$2
+	_bin=$(find_https_fetch) || return 1
+	rm -f "$_out"
+	case "$_bin" in
+	*curl)
+		"$_bin" -fL --connect-timeout 30 --retry 3 --retry-delay 2 -o "$_out" "$_url" || return 1
+		;;
+	*wget)
+		"$_bin" -q --timeout=30 -O "$_out" "$_url" || return 1
+		;;
+	*)
+		return 1
+		;;
+	esac
+	[ -f "$_out" ] && [ -s "$_out" ]
+}
+
+download_https_mirrored() {
+	_url=$1
+	_out=$2
+	if download_https "$_url" "$_out"; then
+		return 0
+	fi
+	case "$_url" in
+	https://github.com/* | https://raw.githubusercontent.com/* | https://release-assets.githubusercontent.com/*) ;;
+	*)
+		return 1
+		;;
+	esac
+	for _mirror in \
+		'https://ghfast.top/' \
+		'https://gh-proxy.com/' \
+		'https://cdn.gh-proxy.org/' \
+		'https://gitproxy.click/'; do
+		echo "update: retry via $_mirror" >&2
+		if download_https "${_mirror}${_url}" "$_out"; then
+			return 0
+		fi
+	done
+	return 1
+}
+
 fetch_feed() {
-	curl -fsS --retry 3 "$FEED" || fail "could not fetch $FEED"
+	tmp=/tmp/engvpn-feed.$$.json
+	download_https_mirrored "$FEED" "$tmp" || fail "could not fetch $FEED"
+	cat "$tmp"
+	rm -f "$tmp"
 }
 
 field() {
@@ -95,15 +173,20 @@ cmd_apply() {
 		cp -f "${url#file://}" "$archive" || fail "copy failed"
 		;;
 	*)
-		curl -fsS --retry 3 -o "$archive" "$url" || fail "download failed"
+		download_https_mirrored "$url" "$archive" ||
+			fail "download failed (HTTP/empty; need curl -fL for GitHub redirects)"
 		;;
 	esac
+	got_bytes=$(file_bytes "$archive")
+	[ -n "$got_bytes" ] && [ "$got_bytes" -gt 0 ] ||
+		fail "downloaded package is empty (0 bytes)"
+	echo "update: downloaded ${got_bytes} bytes"
 	if type sha256sum >/dev/null 2>&1; then
 		actual=$(sha256sum "$archive" | awk '{ print $1 }')
 	else
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
-	[ "$actual" = "$sha256" ] || fail "checksum mismatch"
+	[ "$actual" = "$sha256" ] || fail "checksum mismatch (expected $sha256 got $actual size $got_bytes)"
 	# Minisign verify when .minisig is published alongside the archive
 	sig_url=$(field "$feed" "$key" minisig)
 	[ -z "$sig_url" ] && sig_url="${url}.minisig"
@@ -116,7 +199,7 @@ cmd_apply() {
 		[ -f "${sig_url#file://}" ] && cp -f "${sig_url#file://}" "$sig" || true
 		;;
 	https://* | http://127.0.0.1/* | http://localhost/*)
-		curl -fsS --retry 2 -o "$sig" "$sig_url" 2>/dev/null || true
+		download_https "$sig_url" "$sig" 2>/dev/null || true
 		;;
 	esac
 	if [ -f "$sig" ] && [ -f "$pub" ]; then
