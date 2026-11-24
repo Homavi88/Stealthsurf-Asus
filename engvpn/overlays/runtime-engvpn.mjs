@@ -6,7 +6,7 @@
 import { execFile, execFileSync } from "node:child_process";
 // execFileSync used by sampleRouterTraffic (iptables /proc tick)
 import { promisify } from "node:util";
-import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -1556,12 +1556,19 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     }
     case "get_router_load":
     case "get_load_monitor":
+    case "get_top_processes":
+    case "get_router_processes": {
+      const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
+      // Keep latest sample on runtime for optional UI reuse
+      if (state.runtime?.load) state.runtime.load.processes = processes;
       return {
         cpu: state.runtime?.load?.cpu ?? loadAvgCpuPct(),
         ramUsed: state.runtime?.load?.ramUsed ?? totalmem() - freemem(),
         ramTotal: state.runtime?.load?.ramTotal ?? totalmem(),
         proc: state.runtime?.load?.proc ?? 0,
+        processes,
       };
+    }
     case "get_router_traffic_history":
     case "get_traffic_graph":
       return { history: state.runtime?.history || [], rates: state.runtime?.rates || {} };
@@ -1716,6 +1723,349 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
   }
 }
 
+
+/* ─── Top processes (Merlin BusyBox: /proc, optional ps/top) ─── */
+
+let _procSnap = null; // { at, totalJiffies, byPid: Map<number,number> }
+
+function readTotalCpuJiffies() {
+  try {
+    const line = String(readFileSync("/proc/stat", "utf8") || "").split("\n")[0] || "";
+    const parts = line.trim().split(/\s+/).slice(1);
+    let sum = 0;
+    for (const p of parts) sum += Number(p) || 0;
+    return sum;
+  } catch {
+    return 0;
+  }
+}
+
+function parsePidStat(pid) {
+  try {
+    const text = readFileSync(`/proc/${pid}/stat`, "utf8");
+    const open = text.indexOf("(");
+    const close = text.lastIndexOf(")");
+    if (open < 0 || close < open) return null;
+    const name = text.slice(open + 1, close);
+    const rest = text.slice(close + 2).trim().split(/\s+/);
+    // after ")": state=3 → rest[0]; utime=14 → rest[11]; stime=15 → rest[12]
+    const utime = Number(rest[11]) || 0;
+    const stime = Number(rest[12]) || 0;
+    return { pid: Number(pid), name, ticks: utime + stime };
+  } catch {
+    return null;
+  }
+}
+
+function readPidRssKb(pid) {
+  try {
+    const text = readFileSync(`/proc/${pid}/status`, "utf8");
+    const m = text.match(/^VmRSS:\s+(\d+)/m);
+    return m ? Number(m[1]) || 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function readPidCmdline(pid) {
+  try {
+    return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0+/g, " ").trim();
+  } catch {
+    return "";
+  }
+}
+
+function shortCmdName(cmd, fallback) {
+  if (!cmd) return String(fallback || "").slice(0, 48);
+  const first = cmd.split(/\s+/)[0] || fallback || "";
+  const base = first.includes("/") ? first.slice(first.lastIndexOf("/") + 1) : first;
+  return (base || fallback || "").slice(0, 48);
+}
+
+/** Tag EngVPN panel / Node / open cores so Diagnostics can highlight CPU suspects. */
+function classifyEngvpnProcess(name, cmdline) {
+  const s = `${name || ""} ${cmdline || ""}`.toLowerCase();
+  if (/engvpnd|\/engvpn\/|share\/engvpn|runtime\/run\.mjs|engvpn-panel/.test(s)) {
+    return { kind: "engvpn", label: "engvpnd" };
+  }
+  if (/\bxray\b/.test(s) || /\/cores\/xray\b/.test(s) || /\/ferrum\b/.test(s)) {
+    return { kind: "core", label: /ferrum/.test(s) ? "ferrum" : "xray" };
+  }
+  if (/sing-box|singbox/.test(s)) return { kind: "core", label: "sing-box" };
+  if (/\bmihomo\b|\bclash\b/.test(s)) return { kind: "core", label: "mihomo" };
+  if (/\bnode\b/.test(s) || /\/node\b/.test(s)) return { kind: "node", label: "node" };
+  return { kind: "", label: "" };
+}
+
+/**
+ * Top processes by CPU% and RSS. Primary path: /proc (works on Merlin BusyBox
+ * without GNU ps/top). CPU% needs two samples — first call may show 0% CPU.
+ * Always pins engvpnd / node / xray / sing-box / mihomo into `flagged`.
+ */
+export function sampleTopProcesses(opts = {}) {
+  const limit = Math.min(30, Math.max(1, Number(opts.limit) || 8));
+  const at = Date.now();
+  const totalNow = readTotalCpuJiffies();
+  let entries = [];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return { byCpu: [], byRam: [], flagged: [], source: "none", at, count: 0 };
+  }
+  const prev = _procSnap;
+  const nextMap = new Map();
+  const rows = [];
+  for (const ent of entries) {
+    if (!/^\d+$/.test(ent)) continue;
+    const st = parsePidStat(ent);
+    if (!st) continue;
+    const rssKb = readPidRssKb(ent);
+    // Skip kernel threads with no userspace RSS and no CPU ticks
+    if (rssKb <= 0 && st.ticks <= 0) continue;
+    nextMap.set(st.pid, st.ticks);
+    let cpu = 0;
+    if (prev && prev.totalJiffies > 0 && totalNow > prev.totalJiffies) {
+      const prevTicks = prev.byPid.get(st.pid);
+      if (prevTicks != null) {
+        const dProc = Math.max(0, st.ticks - prevTicks);
+        const dTot = totalNow - prev.totalJiffies;
+        if (dTot > 0) cpu = Math.min(100, (dProc / dTot) * 100);
+      }
+    }
+    const cmdline = readPidCmdline(ent);
+    const name = shortCmdName(cmdline, st.name) || st.name || String(st.pid);
+    const cls = classifyEngvpnProcess(name, cmdline || st.name);
+    rows.push({
+      pid: st.pid,
+      name,
+      cpu: Math.round(cpu * 10) / 10,
+      rss: rssKb * 1024,
+      rssKb,
+      kind: cls.kind || undefined,
+      label: cls.label || undefined,
+      flag: !!cls.kind,
+    });
+  }
+  _procSnap = { at, totalJiffies: totalNow || prev?.totalJiffies || 0, byPid: nextMap };
+
+  // Optional BusyBox fallback when /proc yielded nothing (rare)
+  if (!rows.length) {
+    const fb = sampleTopProcessesViaPs(limit);
+    if (fb.count) return fb;
+  }
+
+  const flagged = rows
+    .filter((r) => r.flag)
+    .sort((a, b) => b.cpu - a.cpu || b.rss - a.rss);
+  const pinFlagged = (list) => {
+    const seen = new Set(list.map((r) => r.pid));
+    const out = [...list];
+    for (const f of flagged) {
+      if (seen.has(f.pid)) continue;
+      out.push(f);
+      seen.add(f.pid);
+    }
+    return out.slice(0, Math.max(limit, Math.min(limit + flagged.length, 16)));
+  };
+  const byCpu = pinFlagged([...rows].sort((a, b) => b.cpu - a.cpu || b.rss - a.rss).slice(0, limit));
+  const byRam = pinFlagged([...rows].sort((a, b) => b.rss - a.rss || b.cpu - a.cpu).slice(0, limit));
+  return { byCpu, byRam, flagged, hints: [], source: "proc", at, count: rows.length };
+}
+
+/** Recent core PIDs — churn ⇒ crash-loop (e.g. sing-box failing to bind 20828). */
+let _corePidHist = Object.create(null);
+
+function readEngvpnLogTail(maxBytes = 24 * 1024) {
+  const candidates = [
+    "/tmp/engvpn/engvpnd.log",
+    "/tmp/engvpn-panel.log",
+    join(DATA, "..", "..", "tmp", "engvpn", "engvpnd.log"),
+  ];
+  for (const path of candidates) {
+    try {
+      if (!existsSync(path)) continue;
+      const buf = readFileSync(path);
+      const slice = buf.length > maxBytes ? buf.subarray(buf.length - maxBytes) : buf;
+      return slice.toString("utf8");
+    } catch {
+      /* try next */
+    }
+  }
+  return "";
+}
+
+/**
+ * Annotate process sample with core missing / crash-loop hints.
+ * Separate worker may fix sing-box :20828 bind — we only surface the symptom.
+ */
+export function enrichProcessHints(processes, state) {
+  const out = processes && typeof processes === "object"
+    ? { ...processes, hints: [...(processes.hints || [])], flagged: [...(processes.flagged || [])] }
+    : { byCpu: [], byRam: [], flagged: [], hints: [], source: "none", at: Date.now(), count: 0 };
+  const now = Date.now();
+  const engineRaw = String(state?.runtime?.engineId || state?.engine?.preference || state?.engine?.id || "").toLowerCase();
+  const connected = !!state?.vpn?.connected;
+  const wantCore = (() => {
+    if (/sing-?box/.test(engineRaw)) return "sing-box";
+    if (/mihomo|clash/.test(engineRaw)) return "mihomo";
+    if (/ferrum/.test(engineRaw)) return "ferrum";
+    if (/xray/.test(engineRaw)) return "xray";
+    return "";
+  })();
+  const coreLabels = ["sing-box", "xray", "mihomo", "ferrum"];
+  for (const label of coreLabels) {
+    const rows = out.flagged.filter((r) => r.label === label);
+    const pid = rows[0]?.pid || 0;
+    const hist = _corePidHist[label] || { pid: 0, changes: [], missingStreak: 0 };
+    if (pid && hist.pid && pid !== hist.pid) {
+      hist.changes = [...(hist.changes || []), now].filter((t) => now - t < 60000);
+    }
+    if (pid) {
+      hist.pid = pid;
+      hist.missingStreak = 0;
+    } else if (wantCore === label && connected) {
+      hist.missingStreak = (hist.missingStreak || 0) + 1;
+    }
+    _corePidHist[label] = hist;
+    const churn = (hist.changes || []).length;
+    if (churn >= 2) {
+      const msg = label === "sing-box"
+        ? `Похоже на crash-loop ${label}: PID меняется часто. Часто причина — порт 20828 (mixed/SOCKS) занят или не открывается.`
+        : `Похоже на crash-loop ${label}: PID меняется часто за последнюю минуту.`;
+      if (!out.hints.some((h) => h.includes(label) && /crash-loop/i.test(h))) out.hints.push(msg);
+      // Mark live rows
+      for (const r of out.flagged) {
+        if (r.label === label) {
+          r.crashLoop = true;
+          r.hint = msg;
+        }
+      }
+    }
+    if (wantCore === label && connected && !pid && (hist.missingStreak || 0) >= 1) {
+      const msg = label === "sing-box"
+        ? `Ядро sing-box не в списке процессов при подключённом VPN — возможен crash-loop или сбой listen :20828.`
+        : `Ядро ${label} не в списке процессов при подключённом VPN — возможен crash-loop.`;
+      if (!out.hints.includes(msg)) out.hints.push(msg);
+      if (!out.flagged.some((r) => r.label === label && r.missing)) {
+        out.flagged.unshift({
+          pid: 0,
+          name: label,
+          cpu: 0,
+          rss: 0,
+          rssKb: 0,
+          kind: "core",
+          label,
+          flag: true,
+          missing: true,
+          crashLoop: true,
+          hint: msg,
+        });
+      }
+    }
+  }
+  // Dual run.mjs was the confirmed Merlin CPU leak (~25%+25%).
+  const panelNodes = out.flagged.filter(
+    (r) => r.kind === "engvpn" || (r.kind === "node" && /run\.mjs|engvpn/i.test(String(r.name || ""))),
+  );
+  const engvpnLike = out.flagged.filter((r) => r.kind === "engvpn" || r.label === "engvpnd");
+  if (engvpnLike.length + panelNodes.filter((r) => r.kind === "node").length >= 2 || engvpnLike.length >= 2) {
+    const msg =
+      "Обнаружено несколько процессов панели EngVPN (node …/run.mjs). Два экземпляра жрут ЦП — оставьте один: engvpnd stop && engvpnd restart (или service.sh kill-strays).";
+    if (!out.hints.some((h) => /несколько процессов панели|два экземпляр/i.test(h))) out.hints.push(msg);
+  } else {
+    // Count all node procs under engvpn path via name/label heuristics already in flagged
+    const nodes = out.flagged.filter((r) => r.kind === "engvpn" || r.kind === "node");
+    if (nodes.length >= 2) {
+      const msg =
+        "Несколько node/engvpnd в топе — проверьте, что панель одна (service.sh kill-strays / restart).";
+      if (!out.hints.some((h) => /Несколько node/i.test(h))) out.hints.push(msg);
+    }
+  }
+  const log = readEngvpnLogTail();
+  if (log) {
+    if (/20828/.test(log) && /(?:failed|error|cannot|already in use|bind|listen|address)/i.test(log)) {
+      const msg = "В логе engvpnd есть ошибки вокруг порта 20828 (listen/bind) — типичный crash-loop sing-box.";
+      if (!out.hints.some((h) => h.includes("20828"))) out.hints.push(msg);
+    }
+    if (/sing-?box/i.test(log) && /(?:restart|exited|crash|failed to start|killed)/i.test(log)) {
+      const msg = "В логе engvpnd видны перезапуски/сбои sing-box.";
+      if (!out.hints.some((h) => /перезапуск|сбо/i.test(h))) out.hints.push(msg);
+    }
+  }
+  return out;
+}
+
+/** Best-effort BusyBox `ps` / `top -bn1` parse when /proc scan is empty. */
+function sampleTopProcessesViaPs(limit) {
+  const at = Date.now();
+  const rows = [];
+  const tryCmd = (bin, args) => {
+    try {
+      return execFileSync(bin, args, { encoding: "utf8", timeout: 2000, maxBuffer: 512 * 1024 });
+    } catch {
+      return "";
+    }
+  };
+  // BusyBox ps w: PID … VSZ STAT COMMAND — RSS often missing; still useful for names
+  let out = tryCmd("ps", ["w"]);
+  if (!out) out = tryCmd("ps", []);
+  if (out) {
+    for (const line of out.split("\n").slice(1)) {
+      const m = line.trim().match(/^(\d+)\s+\S+\s+(\d+)\s+\S+\s+(.*)$/);
+      // pid user vsz stat command  OR busybox: pid … 
+      if (!m) {
+        const parts = line.trim().split(/\s+/);
+        if (parts.length < 2 || !/^\d+$/.test(parts[0])) continue;
+        const pid = Number(parts[0]);
+        const cmd = parts[parts.length - 1] || String(pid);
+        const rssKb = readPidRssKb(pid);
+        rows.push({ pid, name: String(cmd).slice(0, 48), cpu: 0, rss: rssKb * 1024, rssKb });
+        continue;
+      }
+      const pid = Number(m[1]);
+      const rssKb = readPidRssKb(pid);
+      rows.push({
+        pid,
+        name: String(m[3] || pid).slice(0, 48),
+        cpu: 0,
+        rss: rssKb * 1024,
+        rssKb,
+      });
+    }
+  }
+  if (!rows.length) {
+    out = tryCmd("top", ["-bn1"]);
+    // Prefer /proc over fragile top format; only take COMMAND column if present
+    if (out) {
+      for (const line of out.split("\n")) {
+        const m = line.match(/^\s*(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+(\d+)\s+\S+\s+\S+\s+([\d.]+)\s+([\d.]+)\s+\S+\s+(.*)$/);
+        if (!m) continue;
+        const pid = Number(m[1]);
+        const rssKb = Number(m[2]) || readPidRssKb(pid);
+        rows.push({
+          pid,
+          name: String(m[5] || pid).slice(0, 48),
+          cpu: Number(m[3]) || 0,
+          rss: rssKb * 1024,
+          rssKb,
+        });
+      }
+    }
+  }
+  for (const r of rows) {
+    const cls = classifyEngvpnProcess(r.name, r.name);
+    if (cls.kind) {
+      r.kind = cls.kind;
+      r.label = cls.label;
+      r.flag = true;
+    }
+  }
+  const flagged = rows.filter((r) => r.flag).sort((a, b) => b.rss - a.rss);
+  const byCpu = [...rows].sort((a, b) => b.cpu - a.cpu || b.rss - a.rss).slice(0, limit);
+  const byRam = [...rows].sort((a, b) => b.rss - a.rss || b.cpu - a.cpu).slice(0, limit);
+  return { byCpu, byRam, flagged, source: rows.length ? "ps" : "none", at, count: rows.length };
+}
+
 /* ─── Live speed: WAN + ENGVPN iptables counters (transparent path bypasses Node proxy hooks) ─── */
 
 function readProcNetDev() {
@@ -1763,7 +2113,17 @@ function sumIptablesChainBytes(table, chain) {
   }
 }
 
-/** Bytes/sec estimates for VPN vs direct — used when proxy hooks see no LAN transparent traffic. */
+/**
+ * Bytes/sec estimates for VPN vs direct — used when proxy hooks see no LAN transparent traffic.
+ *
+ * IMPORTANT (Merlin CPU): do NOT fork `iptables -L -nvx` on every 1s tick.
+ * Four sync iptables listings/sec were a prime suspect for 60–80% idle-router CPU
+ * at ~KB/s traffic. Refresh iptables counters at most every IPTABLES_MIN_MS;
+ * /proc/net/dev stays per-tick (cheap). Between iptables refreshes reuse vpnShare.
+ */
+/** Merlin: iptables -L is expensive; never more often than this when a client is watching. */
+const IPTABLES_SAMPLE_MIN_MS = 10000;
+
 export function sampleRouterTraffic(live) {
   const now = Date.now();
   const ifaces = readProcNetDev();
@@ -1774,29 +2134,53 @@ export function sampleRouterTraffic(live) {
     wanRx += ifaces[n]?.rx || 0;
     wanTx += ifaces[n]?.tx || 0;
   }
-  const vpnBytes =
-    sumIptablesChainBytes("mangle", "ENGVPN") +
-    sumIptablesChainBytes("nat", "ENGVPN") +
-    sumIptablesChainBytes("mangle", "ENGVPN_SEL") +
-    sumIptablesChainBytes("nat", "ENGVPN_SEL");
-
-  if (!live.engvpnTraffic) live.engvpnTraffic = { last: null, lastAt: 0 };
+  if (!live.engvpnTraffic) {
+    live.engvpnTraffic = { last: null, lastAt: 0, iptablesAt: 0, vpnBytes: 0, vpnShare: 0 };
+  }
+  const tr = live.engvpnTraffic;
+  const due = !tr.iptablesAt || now - tr.iptablesAt >= IPTABLES_SAMPLE_MIN_MS;
+  if (due) {
+    tr.vpnBytes =
+      sumIptablesChainBytes("mangle", "ENGVPN") +
+      sumIptablesChainBytes("nat", "ENGVPN") +
+      sumIptablesChainBytes("mangle", "ENGVPN_SEL") +
+      sumIptablesChainBytes("nat", "ENGVPN_SEL");
+    tr.iptablesAt = now;
+  }
+  const vpnBytes = tr.vpnBytes || 0;
   const cur = { wanRx, wanTx, vpnBytes };
-  const prev = live.engvpnTraffic.last;
-  const prevAt = live.engvpnTraffic.lastAt;
-  live.engvpnTraffic.last = cur;
-  live.engvpnTraffic.lastAt = now;
+  const prev = tr.last;
+  const prevAt = tr.lastAt;
+  tr.last = cur;
+  tr.lastAt = now;
   if (!prev || !prevAt) {
     return { vpnDown: 0, vpnUp: 0, directDown: 0, directUp: 0 };
   }
   const dt = Math.max(0.25, (now - prevAt) / 1000);
   const wanDown = Math.max(0, (cur.wanRx - prev.wanRx) / dt);
   const wanUp = Math.max(0, (cur.wanTx - prev.wanTx) / dt);
-  const vpnDelta = Math.max(0, (cur.vpnBytes - prev.vpnBytes) / dt);
-  // ENGVPN counters are mostly LAN→tunnel (upload); split WAN with vpn share.
-  const vpnShare = wanDown + wanUp > 0 ? Math.min(1, vpnDelta / Math.max(wanDown + wanUp, 1)) : (vpnDelta > 0 ? 0.7 : 0);
+  let vpnShare = tr.vpnShare || 0;
+  if (due) {
+    const vpnDelta = Math.max(0, (cur.vpnBytes - prev.vpnBytes) / dt);
+    vpnShare =
+      wanDown + wanUp > 0
+        ? Math.min(1, vpnDelta / Math.max(wanDown + wanUp, 1))
+        : vpnDelta > 0
+          ? 0.7
+          : vpnShare;
+    tr.vpnShare = vpnShare;
+    const vpnDown = wanDown * vpnShare;
+    const vpnUp = Math.max(vpnDelta * 0.5, wanUp * vpnShare);
+    return {
+      vpnDown,
+      vpnUp,
+      directDown: Math.max(0, wanDown - vpnDown),
+      directUp: Math.max(0, wanUp - vpnUp),
+    };
+  }
+  // Between iptables samples: split WAN with last known vpnShare (no fork).
   const vpnDown = wanDown * vpnShare;
-  const vpnUp = Math.max(vpnDelta * 0.5, wanUp * vpnShare);
+  const vpnUp = wanUp * vpnShare;
   return {
     vpnDown,
     vpnUp,
