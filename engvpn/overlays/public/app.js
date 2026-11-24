@@ -16,6 +16,9 @@ let ui = {
   auth: null, // null=loading, false=login, true=ok
   loginErr: "",
   loginBusy: false,
+  loginPass: "",
+  /** After eye toggle, re-focus under the same user gesture (iOS keyboard). */
+  focusPassAfterRender: false,
 };
 let es;
 
@@ -973,19 +976,58 @@ function bootSplash() {
 
 function loginScreen() {
   const type = ui.showPass ? "text" : "password";
+  const val = esc(ui.loginPass || "");
+  // No autofocus: iOS Safari only shows the keyboard on a real tap, not on
+  // programmatic focus after a full re-render (error / busy / eye toggle).
   return `<div class="login"><div class="login-card">
     <svg class="globe" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="2"><circle cx="32" cy="32" r="18"/><path d="M14 32h36M32 14c6 6 6 30 0 36M32 14c-6 6-6 30 0 36"/></svg>
     <h1>EngVPN</h1>
     <p>Введите пароль панели, заданный при установке на роутер</p>
-    <form id="login-form" autocomplete="current-password">
+    <form id="login-form" autocomplete="on" action="#" method="post">
       <div class="field">
-        <input id="panel-pass" name="password" type="${type}" placeholder="Пароль панели" autofocus>
-        <button type="button" class="eye" data-act="eye" aria-label="Показать пароль">${ui.showPass ? "🙈" : "👁"}</button>
+        <input id="panel-pass" name="password" type="${type}" value="${val}"
+          placeholder="Пароль панели"
+          autocomplete="current-password"
+          autocapitalize="off" autocorrect="off" spellcheck="false"
+          inputmode="text" enterkeyhint="go"
+          ${ui.loginBusy ? "disabled" : ""}>
+        <button type="button" class="eye" data-act="eye" tabindex="-1" aria-label="Показать пароль">${ui.showPass ? "🙈" : "👁"}</button>
       </div>
-      <div class="err">${esc(ui.loginErr || "")}</div>
+      <div class="err" role="alert">${esc(ui.loginErr || "")}</div>
       <button class="primary" type="submit" ${ui.loginBusy ? "disabled" : ""}>${ui.loginBusy ? "Вхожу…" : "Войти"}</button>
     </form>
   </div></div>`;
+}
+
+function bindLoginForm() {
+  const form = document.querySelector("#login-form");
+  const input = document.querySelector("#panel-pass");
+  if (!form || !input) return;
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    ui.loginPass = input.value || "";
+    doLogin(ui.loginPass);
+  });
+  // Keep value across re-renders without reading the DOM in doLogin only.
+  input.addEventListener("input", () => { ui.loginPass = input.value; });
+  // Ensure tap focuses the real control (eye is tabindex=-1 so it won't steal).
+  const focusPass = (ev) => {
+    if (ui.loginBusy) return;
+    if (ev.target.closest?.(".eye")) return;
+    if (document.activeElement !== input) input.focus();
+  };
+  input.addEventListener("touchend", focusPass, { passive: true });
+  input.addEventListener("click", focusPass);
+  if (ui.focusPassAfterRender) {
+    ui.focusPassAfterRender = false;
+    try {
+      input.focus({ preventScroll: true });
+      const len = input.value.length;
+      input.setSelectionRange(len, len);
+    } catch {
+      try { input.focus(); } catch { /* ignore */ }
+    }
+  }
 }
 
 function render() {
@@ -997,14 +1039,9 @@ function render() {
   const body = document.querySelector(".drawer-body");
   if (body) body.scrollTop = scroll;
   const q = document.querySelector("#q");
-  if (q) q.focus();
-  const form = document.querySelector("#login-form");
-  if (form) {
-    form.addEventListener("submit", (ev) => {
-      ev.preventDefault();
-      doLogin(document.querySelector("#panel-pass")?.value || "");
-    });
-  }
+  // Never steal focus while the login field should keep the keyboard.
+  if (q && ui.auth !== false) q.focus();
+  if (ui.auth === false) bindLoginForm();
 }
 
 function paintLive() {
@@ -1066,7 +1103,15 @@ document.addEventListener("click", (event) => {
   if (t.dataset.source) return run(() => invoke("setRoutingSource", { source: t.dataset.source }));
   if (t.dataset.geo) return run(() => invoke("patch", { path: "engine.geoSource", value: t.dataset.geo }));
   if (t.dataset.copy != null) { navigator.clipboard?.writeText(t.dataset.copy); toast("Скопировано"); return; }
-  if (act === "eye") { ui.showPass = !ui.showPass; render(); return; }
+  if (act === "eye") {
+    const live = document.querySelector("#panel-pass");
+    if (live) ui.loginPass = live.value;
+    ui.showPass = !ui.showPass;
+    // Same tap that hit the eye — safe to re-focus so iOS keeps the keyboard.
+    ui.focusPassAfterRender = ui.auth === false;
+    render();
+    return;
+  }
   if (act === "settings") { ui.stack = ["menu"]; render(); return; }
   if (act === "close") { ui.stack = []; ui.pop = false; render(); return; }
   if (act === "back") { ui.stack.pop(); if (!ui.stack.length) ui.stack = ["menu"]; render(); return; }
@@ -1391,14 +1436,20 @@ async function afterAuth() {
 async function doLogin(password) {
   ui.loginBusy = true;
   ui.loginErr = "";
+  ui.loginPass = String(password || "");
+  ui.focusPassAfterRender = false;
   render();
   try {
     await api("/api/login", { password: String(password || "").trim() });
+    ui.loginPass = "";
     await afterAuth();
   } catch (err) {
     ui.loginErr = err.message || "Неверный пароль";
     ui.loginBusy = false;
     ui.auth = false;
+    // Do not autofocus after error — iOS would "focus" without a keyboard and
+    // the next tap can appear dead until the user dismisses the ghost focus.
+    ui.focusPassAfterRender = false;
     render();
   }
 }

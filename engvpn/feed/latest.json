@@ -1,24 +1,24 @@
 {
-  "version": "0.5.12",
-  "notes": "EngVPN 0.5.12 — put engvpnd on PATH (/opt/bin symlink + profile.add); print CLI path in install banner.",
+  "version": "0.5.13",
+  "notes": "EngVPN 0.5.13 — iOS login keyboard fix; optional skip panel password on install.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
-      "size": 134877
+      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
+      "size": 135947
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
-      "size": 134877
+      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
+      "size": 135947
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.12/engvpn_0.5.12_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "7e6539f7dff389dd018dc93dee54e2b27e317ffbb9d2345cbed718cf9aea8eb9",
-      "size": 134877
+      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
+      "size": 135947
     }
   }
 }

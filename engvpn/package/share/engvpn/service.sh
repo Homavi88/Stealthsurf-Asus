@@ -25,6 +25,10 @@ export ENGVPN_PIDFILE="$PIDFILE"
 export ENGVPN_DATA_DIR="$DATA_DIR"
 export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_LOCK_DIR="$SHARED_LOCK_DIR"
+# Honor skip-password install flag unless caller already set ENGVPN_OPEN_PANEL.
+if [ -z "${ENGVPN_OPEN_PANEL:-}" ] && [ -f "$DATA_DIR/open-panel" ]; then
+	export ENGVPN_OPEN_PANEL=1
+fi
 # Optional override for StealthSurf HTTP API base (smoke / self-host)
 [ -n "${ENGVPN_SS_API:-}" ] && export ENGVPN_SS_API
 

@@ -174,9 +174,24 @@ button { cursor: pointer; }
   padding: 14px 44px 14px 16px;
   outline: none;
 }
+/* iOS Safari: ≥16px avoids zoom; allow text selection/focus for password keyboard */
+.login .field input {
+  font-size: 16px;
+  line-height: 1.25;
+  -webkit-appearance: none;
+  appearance: none;
+  -webkit-user-select: text;
+  user-select: text;
+  touch-action: manipulation;
+  pointer-events: auto;
+}
 .eye {
   position: absolute; right: 8px; top: 8px; bottom: 8px; width: 36px;
   border: 0; background: transparent; color: var(--muted);
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+  z-index: 1;
 }
 .primary, .ghost, .danger {
   border: 0; border-radius: 14px; padding: 12px 16px; width: 100%; margin-top: 12px;

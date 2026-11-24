@@ -3,7 +3,7 @@
  * Read a panel password from stdin and write pbkdf2-sha256 into data/state.json.
  * Password never appears on argv.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, renameSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { pbkdf2Sync, randomBytes } from "node:crypto";
 import { createInterface } from "node:readline";
@@ -91,4 +91,10 @@ state.openAccess = false;
 const tmp = `${statePath}.new`;
 writeFileSync(tmp, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 });
 renameSync(tmp, statePath);
+// Clear skip-password install flag if present (engvpnd also rm's it).
+try {
+  unlinkSync(join(dataDir, "open-panel"));
+} catch {
+  /* ignore missing flag */
+}
 console.log("panel password saved");
