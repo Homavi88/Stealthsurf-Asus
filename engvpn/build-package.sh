@@ -877,40 +877,41 @@ minisig_release() {
 	fi
 }
 
-# Local file:// feed for smoke; also write relative GitHub-style URLs for docs
+# Local file:// feed for smoke; also write relative GitHub-style URLs for docs.
+# Use spaces only (no tabs): older merlin.sh/update.sh sed matched /^  "version"/.
 FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-	"notes": "EngVPN $VERSION — curl -fL package download (follow GitHub 302); reject empty file before SHA.",
-	"packages": {
-		"merlin-aarch64": {
-			"url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
-			$(minisig_field merlin-aarch64)
-			"sha256": "$sha64",
-			"size": $size64
-		},
-		"merlin-armv7": {
-			"url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
-			$(minisig_field merlin-armv7)
-			"sha256": "$sha7",
-			"size": $size7
-		},
-		"merlin-x86_64": {
-			"url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
-			$(minisig_field merlin-x86_64)
-			"sha256": "$shax",
-			"size": $sizex
-		}
-	}
+  "notes": "EngVPN $VERSION — feed parse tolerates tab/space indent; diagnose missing arch.",
+  "packages": {
+    "merlin-aarch64": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
+      $(minisig_field merlin-aarch64)
+      "sha256": "$sha64",
+      "size": $size64
+    },
+    "merlin-armv7": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-armv7.tar.gz",
+      $(minisig_field merlin-armv7)
+      "sha256": "$sha7",
+      "size": $size7
+    },
+    "merlin-x86_64": {
+      "url": "file://$OUT/engvpn_${VERSION}_merlin-x86_64.tar.gz",
+      $(minisig_field merlin-x86_64)
+      "sha256": "$shax",
+      "size": $sizex
+    }
+  }
 }
 EOF
 
 # Release-oriented feed (URLs for GitHub Releases — update tag when publishing)
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
-	"version": "$VERSION",
-	"notes": "EngVPN $VERSION — curl -fL package download (follow GitHub 302); reject empty file before SHA.",
+  "version": "$VERSION",
+  "notes": "EngVPN $VERSION — feed parse tolerates tab/space indent; diagnose missing arch.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",

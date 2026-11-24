@@ -412,24 +412,50 @@ else
 	feed_tmp=$WORK/latest.json
 	download_https_mirrored "$FEED" "$feed_tmp" || fail "не удалось скачать ленту $FEED"
 	feed=$(cat "$feed_tmp")
+	feed_bytes=$(file_bytes "$feed_tmp")
 	[ -n "$feed" ] || fail "лента пустая ($FEED)"
+	# BusyBox/entware: accept tab or space indent; quoted or bare JSON values.
 	field() {
 		printf '%s\n' "$feed" | awk -v key="\"$key\": {" -v name="\"$1\":" '
 			index($0, key) { inside = 1; next }
-			inside && /^ *}/ { exit }
+			inside && /^[[:space:]]*}/ { exit }
 			inside && index($0, name) {
 				value = substr($0, index($0, name) + length(name))
-				gsub(/^[ \t]*"|",?[ \t]*$/, "", value)
+				gsub(/^[ \t"]+/, "", value)
+				gsub(/[", \t\r]*$/, "", value)
 				print value
 				exit
 			}'
 	}
-	version=$(printf '%s\n' "$feed" | sed -n 's/^  "version": "\([^"]*\)",*$/\1/p' | head -n 1)
+	feed_version() {
+		printf '%s\n' "$feed" | awk '
+			match($0, /"version"[[:space:]]*:[[:space:]]*"/) {
+				s = substr($0, RSTART + RLENGTH)
+				sub(/".*/, "", s)
+				print s
+				exit
+			}'
+	}
+	feed_diag() {
+		echo "  → лента: $FEED (${feed_bytes:-?} байт)" >&2
+		echo "  → первые строки ленты:" >&2
+		printf '%s\n' "$feed" | head -n 8 | sed 's/^/    /' >&2
+		echo "  → version=[${version:-}] keys=[$(printf '%s\n' "$feed" | sed -n 's/^[[:space:]]*"\(merlin-[^"]*\)".*/\1/p' | tr '\n' ' ')]" >&2
+		echo "  → url=[${url:-}] sha256=[${sha256:-}]" >&2
+	}
+	# Suspiciously small: real latest.json is ~1 KiB; HTML/error pages are often tiny or huge.
+	if [ -n "$feed_bytes" ] && [ "$feed_bytes" -lt 100 ]; then
+		feed_diag
+		fail "лента слишком маленькая (${feed_bytes} байт) — проверьте $FEED"
+	fi
+	version=$(feed_version)
 	url=$(field url)
 	sha256=$(field sha256)
 	expect_size=$(field size)
-	[ -n "$version" ] && [ -n "$url" ] && [ -n "$sha256" ] ||
-		fail "в ленте нет пакета для $key"
+	if [ -z "$version" ] || [ -z "$url" ] || [ -z "$sha256" ]; then
+		feed_diag
+		fail "в ленте нет пакета для $key (нужны version+url+sha256; смотрите диагностику выше)"
+	fi
 	# Allow GitHub release URLs or configured prefix
 	case "$url" in
 	https://github.com/* | https://raw.githubusercontent.com/* | "$PACKAGE_PREFIX"* | http://127.0.0.1/* | http://localhost/*) ;;
