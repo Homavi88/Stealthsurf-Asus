@@ -545,6 +545,19 @@ do_install() {
 	fi
 	rm -rf "$ROLLBACK" "$STAGE"
 	say "EngVPN установлен в $PREFIX"
+	# When merlin.sh defers start, it prints the full panel banner after password + restart.
+	if [ "${ENGVPN_DEFER_START:-}" != 1 ]; then
+		lan=""
+		type nvram >/dev/null 2>&1 && lan=$(nvram get lan_ipaddr 2>/dev/null)
+		lan=${lan:-192.168.50.1}
+		port=${ENGVPN_PORT:-8790}
+		echo
+		echo "Откройте панель:"
+		echo "http://${lan}:${port}"
+		echo
+		echo "Адрес: $lan"
+		echo "Порт:  $port"
+	fi
 }
 
 do_upgrade() {

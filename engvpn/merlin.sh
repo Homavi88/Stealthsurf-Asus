@@ -622,7 +622,16 @@ export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
 
 lan=""
 type nvram >/dev/null 2>&1 && lan=$(nvram get lan_ipaddr 2>/dev/null)
+lan=${lan:-192.168.50.1}
+port=${ENGVPN_PORT:-8790}
 echo
 echo "EngVPN $version установлен в $prefix."
-echo "Панель: http://${lan:-192.168.50.1}:8790 — войдите с выбранным паролем"
+echo
+echo "Откройте панель:"
+echo "http://${lan}:${port}"
+echo
+echo "Адрес: $lan"
+echo "Порт:  $port"
+echo "Войдите с выбранным паролем."
+echo
 echo "Пути: не трогает /jffs/addons/stealthsurf (:8800) и /jffs/addons/ssurf (:1131)"
