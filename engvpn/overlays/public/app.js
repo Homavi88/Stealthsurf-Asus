@@ -378,6 +378,14 @@ function navRow(id, title, ico, active = false) {
 function sel(path, value, options, full = false) {
   return `<select class="ctrl${full ? " full" : ""}" data-input="${esc(path)}">${options.map(([v, label]) => `<option value="${esc(v)}" ${String(v) === String(value) ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
 }
+/** Form/control lookup: sel() emits data-input; legacy markup used data-set. */
+function ctrl(name) {
+  return document.querySelector(`[data-input="${CSS.escape(name)}"],[data-set="${CSS.escape(name)}"]`);
+}
+/** Ephemeral UI selects (not state paths) — must not invoke patch. */
+function isEphemeralCtrl(path) {
+  return !path || path.startsWith("draft") || path.startsWith("cr-") || path === "bridge-to" || path === "zkind";
+}
 function backBar(title, { hideBack = false } = {}) {
   const back = hideBack
     ? `<span class="icon-btn spacer-btn" aria-hidden="true"></span>`
@@ -1640,7 +1648,19 @@ document.addEventListener("click", (event) => {
   if (act === "add-sub") return run(() => invoke("addSubscription", { name: document.querySelector("#subname").value, url: document.querySelector("#suburl").value }));
   if (act === "del-sub") return run(() => invoke("removeSubscription", { id: t.dataset.id }));
   if (act === "apply-routing") return run(() => invoke("applyRouting", {}));
-  if (act === "add-rule") return run(() => invoke("addRule", { action: document.querySelector("[data-set=draft-action]").value, conditions: [{ kind: document.querySelector("[data-set=draft-kind]").value, value: document.querySelector("#ruleval").value }] }));
+  if (act === "add-rule") return run(() => {
+    const actionEl = ctrl("draft-action");
+    const kindEl = ctrl("draft-kind");
+    const valEl = document.querySelector("#ruleval");
+    if (!actionEl || !kindEl) throw new Error("Форма правила не загружена");
+    const value = String(valEl?.value || "").trim();
+    if (!value) throw new Error("Укажите значение правила");
+    const action = actionEl.value || ui.form.action || "direct";
+    const kind = kindEl.value || ui.form.kind || "domain";
+    ui.form.action = action;
+    ui.form.kind = kind;
+    return invoke("addRule", { action, conditions: [{ kind, value }] });
+  });
   if (act === "del-rule") return run(() => invoke("deleteRule", { id: t.dataset.id }));
   if (act === "add-bal") return run(() => invoke("saveBalancer", { name: document.querySelector("#balname").value, servers: [...document.querySelectorAll(".bal:checked")].map((n) => n.value) }));
   if (act === "del-bal") return run(() => invoke("deleteBalancer", { id: t.dataset.id }));
@@ -1659,7 +1679,10 @@ document.addEventListener("click", (event) => {
   if (act === "del-profile") return run(() => invoke("deleteProfile", { id: t.dataset.id }));
   if (act === "add-cr") {
     const pack = (S.configRoutes || {})[S.vpn.selectedId] || { rules: [] };
-    pack.rules = [...(pack.rules || []), { id: Date.now().toString(36), tag: document.querySelector("[data-set=cr-tag]").value, protocol: document.querySelector("[data-set=cr-proto]").value, domains: [document.querySelector("#crdom").value].filter(Boolean), ips: [] }];
+    const tagEl = ctrl("cr-tag");
+    const protoEl = ctrl("cr-proto");
+    if (!tagEl || !protoEl) { toast("Форма правила конфига не загружена"); return; }
+    pack.rules = [...(pack.rules || []), { id: Date.now().toString(36), tag: tagEl.value, protocol: protoEl.value, domains: [document.querySelector("#crdom")?.value].filter(Boolean), ips: [] }];
     S.configRoutes = { ...S.configRoutes, [S.vpn.selectedId]: pack };
     render();
     return;
@@ -1694,7 +1717,11 @@ document.addEventListener("click", (event) => {
   }
   if (act === "zapret") return run(() => invoke("zapretRecheck", { all: t.dataset.all === "1" }));
   if (act === "zapret-list") return run(() => invoke("zapretList", { name: document.querySelector("#zname").value, domains: document.querySelector("#zdom").value }));
-  if (act === "zapret-method") return run(() => invoke("zapretMethod", { name: document.querySelector("#zmethod").value, kind: document.querySelector("[data-set=zkind]").value }));
+  if (act === "zapret-method") return run(() => {
+    const kindEl = ctrl("zkind");
+    if (!kindEl) throw new Error("Форма Zapret не загружена");
+    return invoke("zapretMethod", { name: document.querySelector("#zmethod")?.value, kind: kindEl.value });
+  });
   if (act === "zapret-reset") return run(() => invoke("patch", { path: "network.zapret.serviceWays", value: {} }));
   if (act === "save-api-key") return run(async () => {
     const apiKey = document.querySelector("#apikey")?.value || "";
@@ -1733,7 +1760,11 @@ document.addEventListener("click", (event) => {
     const res = await invoke("engvpnWarp", { action: "gre-down" });
     toast(res?.output || "GRE down");
   });
-  if (act === "add-bridge") return run(() => invoke("addBridge", { to: document.querySelector("[data-set=bridge-to]").value }));
+  if (act === "add-bridge") return run(() => {
+    const toEl = ctrl("bridge-to");
+    if (!toEl) throw new Error("Форма моста не загружена");
+    return invoke("addBridge", { to: toEl.value });
+  });
   if (act === "del-bridge") return run(() => invoke("deleteBridge", { id: t.dataset.id }));
   if (act === "automode") return run(() => invoke("automode", {}));
   if (act === "detect-net") return run(() => invoke("detectNetwork", {}));
@@ -1906,6 +1937,12 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const path = event.target.dataset.input || event.target.dataset.set;
   if (path) {
+    // draft-*/cr-*/zkind/bridge-to are form-only (sel → data-input); never patch state
+    if (isEphemeralCtrl(path)) {
+      if (path === "draft-action") ui.form.action = event.target.value;
+      if (path === "draft-kind") ui.form.kind = event.target.value;
+      return;
+    }
     let value = event.target.value;
     if (/port|Concurrency|window/.test(path)) value = Number(value);
     if (path === "router.mode" && S?.router) {

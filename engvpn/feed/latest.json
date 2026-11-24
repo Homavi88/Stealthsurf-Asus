@@ -1,24 +1,24 @@
 {
-  "version": "0.5.21",
-  "notes": "EngVPN 0.5.21 — router VPN mode is a single <select> (desktop+mobile); settings CSS mobile-first (list→detail on phone, nav+pane split ≥900px).",
+  "version": "0.5.22",
+  "notes": "EngVPN 0.5.22 — fix «Свои правила» add-rule null draft-action (sel data-input vs data-set); ephemeral form selects skip patch; null-safe ctrl() for draft/cr/zkind/bridge.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.21/engvpn_0.5.21_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "1966ae8bb32fa633935c75656c0d7d5b98fa71c371bb758174dd617c8006daa4",
-      "size": 156146
+      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
+      "size": 156661
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.21/engvpn_0.5.21_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "1966ae8bb32fa633935c75656c0d7d5b98fa71c371bb758174dd617c8006daa4",
-      "size": 156146
+      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
+      "size": 156661
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.21/engvpn_0.5.21_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.22/engvpn_0.5.22_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "1966ae8bb32fa633935c75656c0d7d5b98fa71c371bb758174dd617c8006daa4",
-      "size": 156146
+      "sha256": "cf074e11b5e8710fcfb4e2f7a0e74b8f760e1082914e9fd9eeb4f20dbd8d9ad3",
+      "size": 156661
     }
   }
 }

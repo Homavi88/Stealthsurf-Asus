@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.21** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.22** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.21](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.21) (после публикации feed)
+Релиз: [engvpn-0.5.22](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.22) (после публикации feed)
 
 ---
 
@@ -130,6 +130,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.22
+
+- «Свои правила»: исправлен toast `null is not an object (… draft-action)` — селекты `sel()` пишут `data-input`, а «Добавить» искало `data-set`.
+- Добавление правила читает `data-input`/`data-set` через `ctrl()`, с проверкой на null и пустое значение.
+- Эфемерные селекты (`draft-*`, `cr-*`, `zkind`, `bridge-to`) больше не уходят в `patch`.
 
 ### Что нового в 0.5.21
 

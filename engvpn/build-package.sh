@@ -1269,7 +1269,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — router VPN mode is a single <select> (desktop+mobile); settings CSS mobile-first (list→detail on phone, nav+pane split ≥900px)."
+RELEASE_NOTES="EngVPN $VERSION — fix «Свои правила» add-rule null draft-action (sel data-input vs data-set); ephemeral form selects skip patch; null-safe ctrl() for draft/cr/zkind/bridge."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
