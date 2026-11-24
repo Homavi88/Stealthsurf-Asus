@@ -20,7 +20,17 @@ import {
 import { readFileSync } from "node:fs";
 import { scryptSync, randomBytes } from "node:crypto";
 import { deflateRawSync } from "node:zlib";
-import { buildMihomo, buildSingBox, buildXray, corePath, extractZipMember, writeConfigs } from "../lib/engines.mjs";
+import {
+  buildMihomo,
+  buildSingBox,
+  buildXray,
+  corePath,
+  extractZipMember,
+  probePort,
+  waitForPort,
+  waitForPortDown,
+  writeConfigs,
+} from "../lib/engines.mjs";
 import { parseShareLink, parseSubscriptionBody } from "../lib/subscription.mjs";
 import { dialTarget, startEdge } from "../lib/proxy.mjs";
 
@@ -102,6 +112,20 @@ test("ROOT works on Node 18 without import.meta.dirname", () => {
   const src = readFileSync(join(ROOT, "lib/state.mjs"), "utf8");
   assert.match(src, /fileURLToPath\(import\.meta\.url\)/);
   assert.doesNotMatch(src, /join\(import\.meta\.dirname/);
+});
+
+test("engine port wait refuses dead child / waits for down", async () => {
+  const server = net.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  assert.equal(await probePort(port), true);
+  assert.equal(await waitForPort(port, "127.0.0.1", 1500), true);
+  // Dual-runtime false-OK: port open but our spawned child already exited
+  assert.equal(await waitForPort(port, "127.0.0.1", 600, { child: { killed: false, exitCode: 1 } }), false);
+  server.close();
+  await new Promise((resolve) => server.once("close", resolve));
+  assert.equal(await waitForPortDown(port, "127.0.0.1", 2000), true);
+  assert.equal(await probePort(port), false);
 });
 
 test("policy sends telegram direct, ads blocked, exceptions direct", () => {

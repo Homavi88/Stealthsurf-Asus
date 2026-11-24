@@ -1269,7 +1269,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — fix «Свои правила» add-rule null draft-action (sel data-input vs data-set); ephemeral form selects skip patch; null-safe ctrl() for draft/cr/zkind/bridge."
+RELEASE_NOTES="EngVPN $VERSION — harden sing-box :20828 wait (alive-aware, free-after-stop, orphan kill via /proc); fixes false fail under dual run.mjs race (EV-64; EV-62 owns single-instance)."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

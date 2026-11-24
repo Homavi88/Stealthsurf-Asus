@@ -520,6 +520,18 @@ grep -q 'smartdnsBypassRules' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || 
 	echo "engines.mjs missing smartdnsBypassRules merge" >&2
 	exit 1
 }
+grep -q 'ensureEnginePortFree' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || {
+	echo "engines.mjs missing ensureEnginePortFree (20828 race)" >&2
+	exit 1
+}
+grep -q 'findEnginePortHolders' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || {
+	echo "engines.mjs missing findEnginePortHolders" >&2
+	exit 1
+}
+grep -q 'opts?.child\|opts.child\|{ child:' "$PREFIX/share/engvpn/runtime/lib/runtime.mjs" || {
+	echo "runtime.mjs missing alive-aware waitForPort(child)" >&2
+	exit 1
+}
 grep -q 'bypass.routing.json' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" || {
 	echo "engines.mjs does not read bypass.routing.json" >&2
 	exit 1

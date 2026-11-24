@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, statSync, renameSync, createWriteStream, createReadStream, chmodSync } from "node:fs";
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, statSync, renameSync, createWriteStream, createReadStream, chmodSync, readlinkSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { createGunzip, inflateRawSync } from "node:zlib";
 import { pipeline } from "node:stream/promises";
@@ -477,19 +477,125 @@ export function coreStatus(state) {
 
 let engineChild = null;
 
+const ENGINE_BIN_RE = /(^|[\\/])(sing-box|xray|mihomo|ferrum)(\s|$)/i;
+
 export function engineRunning() {
   return Boolean(engineChild && engineChild.exitCode === null && !engineChild.killed);
+}
+
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/** TCP connect probe — true when something accepts on host:port. */
+export async function probePort(port, host = "127.0.0.1", connectMs = 250) {
+  const net = await import("node:net");
+  return new Promise((resolve) => {
+    const socket = net.connect({ port, host });
+    let settled = false;
+    const done = (value) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(value);
+    };
+    socket.once("connect", () => done(true));
+    socket.once("error", () => done(false));
+    socket.setTimeout(connectMs, () => done(false));
+  });
+}
+
+/** Wait until nothing accepts on the port (post-stop / BusyBox Merlin race). */
+export async function waitForPortDown(port, host = "127.0.0.1", timeoutMs = 4000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (!(await probePort(port, host))) return true;
+    await sleep(80);
+  }
+  return !(await probePort(port, host));
+}
+
+/**
+ * Find PIDs whose /proc/net/tcp{,6} LISTEN inode matches `port`, with engine-like cmdline.
+ * BusyBox Merlin often has no `ss`/`lsof`; /proc is enough for orphan cleanup after dual run.mjs.
+ */
+export function findEnginePortHolders(port) {
+  const hexPort = Number(port).toString(16).padStart(4, "0").toUpperCase();
+  const inodes = new Set();
+  for (const table of ["/proc/net/tcp", "/proc/net/tcp6"]) {
+    if (!existsSync(table)) continue;
+    let text = "";
+    try { text = readFileSync(table, "utf8"); } catch { continue; }
+    for (const line of text.split("\n").slice(1)) {
+      const cols = line.trim().split(/\s+/);
+      if (cols.length < 10) continue;
+      const local = cols[1] || "";
+      const state = (cols[3] || "").toUpperCase();
+      if (state !== "0A") continue; // LISTEN
+      const parts = local.split(":");
+      if (parts.length < 2) continue;
+      if ((parts[parts.length - 1] || "").toUpperCase() !== hexPort) continue;
+      const inode = cols[9];
+      if (inode && inode !== "0") inodes.add(inode);
+    }
+  }
+  if (!inodes.size) return [];
+  const pids = [];
+  let procEntries = [];
+  try { procEntries = readdirSync("/proc"); } catch { return []; }
+  for (const ent of procEntries) {
+    if (!/^\d+$/.test(ent)) continue;
+    const fdDir = `/proc/${ent}/fd`;
+    let fds = [];
+    try { fds = readdirSync(fdDir); } catch { continue; }
+    let holds = false;
+    for (const fd of fds) {
+      let link = "";
+      try { link = readlinkSync(`${fdDir}/${fd}`); } catch { continue; }
+      const m = /^socket:\[(\d+)\]$/.exec(link || "");
+      if (m && inodes.has(m[1])) { holds = true; break; }
+    }
+    if (!holds) continue;
+    let cmd = "";
+    try { cmd = readFileSync(`/proc/${ent}/cmdline`, "utf8").replace(/\0/g, " "); } catch { continue; }
+    if (!ENGINE_BIN_RE.test(cmd) && !/sing-box|xray|mihomo|ferrum/i.test(cmd)) continue;
+    pids.push(Number(ent));
+  }
+  return [...new Set(pids)];
+}
+
+/** SIGTERM/KILL engine binaries still holding the tunnel port (orphan from dual run.mjs). */
+export function killEnginePortHolders(port) {
+  const pids = findEnginePortHolders(port);
+  for (const pid of pids) {
+    try { process.kill(pid, "SIGTERM"); } catch { /* gone */ }
+  }
+  return pids;
+}
+
+/** After stop: wait for free port; if stuck, kill orphan engine listeners. */
+export async function ensureEnginePortFree(port = ENGINE_PORT, host = "127.0.0.1", timeoutMs = 4000) {
+  if (!(await probePort(port, host))) return true;
+  if (await waitForPortDown(port, host, Math.min(1200, timeoutMs))) return true;
+  killEnginePortHolders(port);
+  return waitForPortDown(port, host, timeoutMs);
 }
 
 export async function stopEngine() {
   const child = engineChild;
   engineChild = null;
-  if (!child || child.exitCode !== null) return;
-  try { child.kill("SIGTERM"); } catch { return; }
-  await new Promise((resolve) => {
-    const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(); }, 1500);
-    child.once("exit", () => { clearTimeout(timer); resolve(); });
-  });
+  if (child && child.exitCode === null) {
+    try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        try { child.kill("SIGKILL"); } catch { /* ignore */ }
+        resolve();
+      }, 1500);
+      child.once("exit", () => { clearTimeout(timer); resolve(); });
+    });
+  }
+  // Dual run.mjs: the other panel may still own sing-box on :20828 — free before rebind.
+  await ensureEnginePortFree(ENGINE_PORT);
 }
 
 export function startEngine(id, configPath, onLog) {
@@ -521,7 +627,7 @@ export function startEngine(id, configPath, onLog) {
     if (engineChild === child) engineChild = null;
     onLog?.(`ядро ${id} завершилось с кодом ${code}`);
   });
-  return { started: true, pid: child.pid };
+  return { started: true, pid: child.pid, child };
 }
 
 function redact(line) {
@@ -530,19 +636,21 @@ function redact(line) {
     .slice(0, 500);
 }
 
-export async function waitForPort(port, host = "127.0.0.1", timeoutMs = 4000) {
-  const net = await import("node:net");
+/**
+ * Wait for tunnel port. If `child` is given, fail immediately when our process exits
+ * (avoids false-OK against another runtime's stale listener after dual run.mjs).
+ * Merlin ARM: default 10s — sing-box cold start can exceed the old 4s window.
+ */
+export async function waitForPort(port, host = "127.0.0.1", timeoutMs = 10000, opts = {}) {
+  const child = opts?.child;
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
-    const ok = await new Promise((resolve) => {
-      const socket = net.connect({ port, host });
-      const done = (value) => { socket.destroy(); resolve(value); };
-      socket.once("connect", () => done(true));
-      socket.once("error", () => done(false));
-      socket.setTimeout(250, () => done(false));
-    });
-    if (ok) return true;
-    await new Promise((r) => setTimeout(r, 120));
+    if (child && (child.killed || child.exitCode !== null)) return false;
+    if (await probePort(port, host)) {
+      if (child && (child.killed || child.exitCode !== null)) return false;
+      return true;
+    }
+    await sleep(120);
   }
   return false;
 }
