@@ -33,7 +33,7 @@ MIN_UPDATE_FREE_KB=10240
 MIN_TMP_FREE_KB=32768
 
 # Staged progress ([n/N]). install.sh continues from STAGE_NUM.
-STAGE_TOTAL=9
+STAGE_TOTAL=10
 STAGE_NUM=0
 STAGE_NAME=""
 
@@ -673,8 +673,8 @@ export ENGVPN_STAGE_NUM="$STAGE_NUM"
 if ! sh "$WORK/install.sh" install "$archive" "$prefix"; then
 	exit 1
 fi
-# install.sh printed stages 4–7 (unpack…hooks); child cannot export STAGE_NUM back.
-STAGE_NUM=7
+# install.sh printed stages 4–8 (unpack…hooks…cores); child cannot export STAGE_NUM back.
+STAGE_NUM=8
 
 if [ "$skip_password" -eq 1 ]; then
 	stage "Пароль" "Открытый доступ к панели (без пароля)…"

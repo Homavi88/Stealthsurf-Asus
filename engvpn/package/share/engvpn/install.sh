@@ -596,6 +596,45 @@ begin_uninstall_stages() {
 	STAGE_NUM=0
 }
 
+# Download Xray / Ferrum / sing-box / mihomo + geosite/geoip (default on).
+# Soft-fail: network errors do not roll back the package install.
+# Always emits a progress stage so merlin.sh [n/N] stays consistent.
+fetch_engine_assets() {
+	stage "Ядра" "Загрузка ядер и гео-баз…"
+	case "${ENGVPN_SKIP_CORES:-}" in
+	1 | yes | YES | y | Y)
+		say "ядра пропущены (ENGVPN_SKIP_CORES)"
+		return 0
+		;;
+	esac
+	# Smoke stays offline unless ENGVPN_FETCH_CORES=1
+	if [ "${ENGVPN_SMOKE:-}" = 1 ] && [ "${ENGVPN_FETCH_CORES:-}" != 1 ]; then
+		say "ядра пропущены (smoke)"
+		return 0
+	fi
+	node_bin=""
+	if [ -x /opt/bin/node ]; then
+		node_bin=/opt/bin/node
+	elif command -v node >/dev/null 2>&1; then
+		node_bin=$(command -v node)
+	fi
+	script=""
+	# Prefer just-installed share (after place); fall back to staged copy during install
+	if [ -f "$SHARE/download-cores.mjs" ]; then
+		script=$SHARE/download-cores.mjs
+	elif [ -f "$STAGE/share/engvpn/download-cores.mjs" ]; then
+		script=$STAGE/share/engvpn/download-cores.mjs
+	fi
+	if [ -z "$node_bin" ] || [ -z "$script" ]; then
+		complain "ядра не скачаны (нужен Node + download-cores.mjs) — скачайте позже в панели «Движок»"
+		return 0
+	fi
+	ENGVPN_DATA_DIR="$DATA_DIR" ENGVPN_PREFIX="$PREFIX" \
+		"$node_bin" "$script" --data-dir "$DATA_DIR" --prefix "$PREFIX" ||
+		complain "часть ядер/гео не скачалась — повторите в панели «Движок»"
+	return 0
+}
+
 do_install() {
 	archive=$1
 	stage "Распаковка" "Распаковка пакета…"
@@ -640,6 +679,8 @@ do_install() {
 			if [ -x "$SHARE/schedule-update.sh" ]; then
 				ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
 			fi
+			# Default: download Xray / Ferrum / sing-box / mihomo + geo DBs so Engines are ready
+			fetch_engine_assets
 			if [ "${ENGVPN_DEFER_START:-}" = 1 ]; then
 				: # merlin.sh starts after saving the panel password
 			else
@@ -696,6 +737,7 @@ do_upgrade() {
 		install_cli_path || true
 		[ -x "$SHARE/schedule-update.sh" ] &&
 			ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
+		fetch_engine_assets
 		rm -rf "$STAGE"
 		start_service
 		waited=0

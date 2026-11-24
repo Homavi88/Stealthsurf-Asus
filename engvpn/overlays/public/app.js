@@ -9,6 +9,8 @@ let ui = {
   toast: "",
   busy: false,
   busyCore: null,
+  busyGeo: false,
+  downloadProgress: null, // { id, kind, phase, label, received, total, percent }
   form: {},
   modal: null,
   result: null,
@@ -21,6 +23,7 @@ let ui = {
   focusPassAfterRender: false,
 };
 let es;
+let progressPoll = null;
 
 const fmt = (n) => {
   const v = Number(n) || 0;
@@ -798,12 +801,55 @@ function screenNetAuto() {
   </div></div>`;
 }
 
+function dlProgressHtml(p) {
+  if (!p) return "";
+  const phase = p.phase === "install" ? "установка" : p.phase === "lookup" ? "поиск" : "скачивание";
+  const pct = Number(p.percent);
+  const known = Number.isFinite(pct) && pct >= 0 && p.total > 0;
+  const label = p.label || phase;
+  const bytes = p.total > 0
+    ? `${fmtBytes(p.received || 0)} / ${fmtBytes(p.total)}`
+    : (p.received > 0 ? fmtBytes(p.received) : "");
+  const right = known ? `${Math.min(100, Math.round(pct))}%` : (bytes || "…");
+  return `<div class="dl-progress" data-live="dl-progress">
+      <div class="dl-progress-meta"><span>${esc(label)}${bytes && known ? ` · ${esc(bytes)}` : bytes ? ` · ${esc(bytes)}` : ""}</span><span>${esc(right)}</span></div>
+      <div class="dl-progress-bar${known ? "" : " indeterminate"}"><i style="width:${known ? Math.min(100, Math.round(pct)) : 36}%"></i></div>
+    </div>`;
+}
+function paintDownloadProgress() {
+  const el = document.querySelector("[data-live=dl-progress]");
+  if (!el) return false;
+  const html = dlProgressHtml(ui.downloadProgress);
+  if (!html) return false;
+  el.outerHTML = html;
+  return true;
+}
+function startProgressPoll() {
+  stopProgressPoll();
+  progressPoll = setInterval(async () => {
+    if (!ui.busyCore && !ui.busyGeo) { stopProgressPoll(); return; }
+    try {
+      const res = await invoke("downloadProgress", {}, { quiet: true });
+      const p = res?.progress || res;
+      if (p && (p.id || p.phase || p.percent != null)) {
+        ui.downloadProgress = p;
+        if (ui.stack.at(-1) === "engine" && !paintDownloadProgress()) render();
+      }
+    } catch { /* ignore */ }
+  }, 600);
+}
+function stopProgressPoll() {
+  if (progressPoll) { clearInterval(progressPoll); progressPoll = null; }
+}
+
 function screenEngine() {
   const e = S.engine;
   const cores = S.runtime.cores || {};
   const pref = e.preference;
+  const geoBusy = !!ui.busyGeo;
+  const geoProg = geoBusy && ui.downloadProgress?.kind === "geo" ? ui.downloadProgress : null;
   return `${backBar("Движок")}<div class="drawer-body">
-    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum (Xray Reality)</b> — открытый слот: тот же Xray-core → <code>data/cores/ferrum</code> (не проприетарный Ferrum StealthSurf). sing-box / mihomo — конвертация; mihomo умеет AmneziaWG.</p>
+    <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum (Xray Reality)</b> — открытый слот: тот же Xray-core → <code>data/cores/ferrum</code> (не проприетарный Ferrum StealthSurf). sing-box / mihomo — конвертация; mihomo умеет AmneziaWG. При установке аддона ядра и гео-базы скачиваются сами.</p>
     <div class="seg">
       ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => {
         const soft = id !== "auto" && (cores[id]?.softHidden || cores[id]?.broken);
@@ -826,12 +872,15 @@ function screenEngine() {
       <button class="${e.geoSource === "custom" ? "on" : ""}" data-geo="custom">Свой URL</button>
     </div>
     ${e.geoSource === "custom" ? `<input class="text" data-input="engine.geoUrl" placeholder="https://…/geosite.dat" value="${esc(e.geoUrl || "")}">` : ""}
-    ${cell("Базы", `geosite ${fmtBytes(e.geo.geosite)} · geoip ${fmtBytes(e.geo.geoip)}`, `<button class="ghost" data-act="geo">Обновить</button>`)}
+    ${cell("Базы", `geosite ${fmtBytes(e.geo.geosite)} · geoip ${fmtBytes(e.geo.geoip)}`, geoBusy ? `<button class="ghost busy" disabled>Скачиваю…</button>` : `<button class="ghost" data-act="geo">Обновить</button>`)}
+    ${geoProg ? dlProgressHtml(geoProg) : ""}
     <div class="h">ЗАГРУЖЕННЫЕ ЯДРА</div>
     ${["xray", "ferrum", "sing-box", "mihomo"].map((id) => {
       const c = cores[id] || {};
       const busy = ui.busyCore === id;
       const soft = c.softHidden || c.broken;
+      const prog = busy && ui.downloadProgress && (ui.downloadProgress.id === id || ui.downloadProgress.kind === "core")
+        ? ui.downloadProgress : null;
       if (soft) {
         return `<div class="card core-card soft-core"><b>${esc(c.title || id)}</b>
           <p class="muted">Скрыто: не запускается на этой прошивке${c.brokenReason ? ` (${esc(c.brokenReason)})` : ""}. Можно удалить файл или оставить — авто движок его не выберет.</p>
@@ -840,6 +889,7 @@ function screenEngine() {
       }
       return `<div class="card core-card"><b>${esc(c.title || id)}</b><p>Эталон снимка: ${esc(c.ref || "")}. ${c.installed ? `Файл ${fmtBytes(c.bytes)}. ${esc(c.version || "")}` : "Не скачано"}</p>
         <button class="ghost${busy ? " busy" : ""}" data-act="get-core" data-id="${id}" ${busy ? "disabled" : ""}>${busy ? "Скачиваю…" : id === "ferrum" ? "Скачать (Xray Reality)" : "Скачать"}</button>
+        ${busy ? dlProgressHtml(prog || { phase: "download", label: "Скачиваю…", percent: 0 }) : ""}
         ${c.installed ? `<button class="ghost" data-act="test-core" data-id="${id}">Проверить конфиг</button><button class="danger" data-act="del-core" data-id="${id}">Удалить</button>` : ""}
       </div>`;
     }).join("")}
@@ -898,15 +948,36 @@ function feedNewer(feed, installed) {
   return false;
 }
 function updateAvailable(u = S?.updates || {}) {
-  if (u.available === true) return true;
-  if (u.available === false && !u.latest) return false;
-  if (typeof u.lastResult === "string" && /^(available|available-wait-window):/.test(u.lastResult)) return true;
-  return feedNewer(u.latest, S?.version);
+  const installed = S?.version || "";
+  const feed = u.latest || "";
+  // Single source of truth: compare VERSION vs feed. Ignore stale available/applied flags.
+  if (feed && installed && !feedNewer(feed, installed)) return false;
+  if (feedNewer(feed, installed)) return true;
+  if (typeof u.lastResult === "string" && /^(available|available-wait-window):/.test(u.lastResult)) {
+    const tagged = u.lastResult.split(":")[1] || "";
+    return feedNewer(tagged || feed, installed);
+  }
+  return false;
+}
+function statusNote(u = S?.updates || {}, avail) {
+  const installed = S?.version || "";
+  const feed = u.latest || "";
+  if (avail) return "доступно обновление";
+  if (installed && feed && installed === feed) return "актуально";
+  if (typeof u.lastResult === "string") {
+    if (u.lastResult.startsWith("up-to-date:")) return "актуально";
+    if (u.lastResult.startsWith("applied:")) {
+      const v = u.lastResult.split(":")[1] || "";
+      if (v && installed && v === installed) return "актуально";
+    }
+  }
+  return "";
 }
 function screenUpdates() {
   const u = S.updates || {};
   const avail = updateAvailable(u);
-  const feedLabel = u.latest || (typeof u.lastResult === "string" ? (u.lastResult.split(":")[1] || "") : "");
+  const feedLabel = u.latest || "";
+  const note = statusNote(u, avail);
   return `${backBar("Обновления")}<div class="drawer-body"><div class="group">
     ${cell("Автообновление", `По умолчанию выкл. При включении — engvpnd update в окне ${String(u.windowStart ?? 2).padStart(2, "0")}:00–${String(u.windowEnd ?? 5).padStart(2, "0")}:00 (SHA-256 + Minisign)`, sw("updates.auto", !!u.auto))}
     ${cell("Гео-базы раз в неделю", "", sw("updates.geoWeekly", u.geoWeekly))}
@@ -916,7 +987,7 @@ function screenUpdates() {
       <button class="primary" data-act="check-updates">Проверить сейчас</button>
       ${avail ? `<button class="primary" data-act="install-update">Установить обновление${feedLabel ? ` ${esc(feedLabel)}` : ""}</button>` : ""}
     </div>
-    <p class="muted">Текущая сборка ${esc(S.version)}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.lastResult ? ` · ${esc(u.lastResult)}` : ""}${u.note ? ` ${esc(u.note)}` : ""}</p>
+    <p class="muted">Текущая сборка ${esc(S.version || "—")}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}${note ? ` · ${esc(note)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.note ? ` ${esc(u.note)}` : ""}</p>
   </div></div>`;
 }
 function screenFeedback() {
@@ -1573,15 +1644,19 @@ document.addEventListener("click", (event) => {
   if (act === "detect-net") return run(() => invoke("detectNetwork", {}));
   if (act === "get-core") return run(async () => {
     const id = t.dataset.id;
-    if (ui.busyCore) { toast("Уже скачивается другое ядро…"); return; }
+    if (ui.busyCore || ui.busyGeo) { toast("Уже идёт загрузка…"); return; }
     ui.busyCore = id;
-    toast("Скачиваю ядро с GitHub… это может занять минуту", 8000);
+    ui.downloadProgress = { id, kind: "core", phase: "lookup", label: "Смотрю релиз…", percent: 0, received: 0, total: 0 };
+    toast("Скачиваю ядро с GitHub…", 8000);
     render();
+    startProgressPoll();
     try {
       await invoke("downloadCore", { id });
       toast("Ядро скачано", 4000);
     } finally {
+      stopProgressPoll();
       ui.busyCore = null;
+      ui.downloadProgress = null;
       render();
     }
   });
@@ -1601,7 +1676,23 @@ document.addEventListener("click", (event) => {
     }
     toast(res.ok ? "Конфиг ядра принят" : (out || "Ядро не приняло конфиг"));
   });
-  if (act === "geo") return run(async () => { toast("Качаю гео-базы…"); await invoke("updateGeo", {}); toast("Гео-базы обновлены"); });
+  if (act === "geo") return run(async () => {
+    if (ui.busyCore || ui.busyGeo) { toast("Уже идёт загрузка…"); return; }
+    ui.busyGeo = true;
+    ui.downloadProgress = { id: "geo", kind: "geo", phase: "download", label: "Гео-базы…", percent: 0, received: 0, total: 0 };
+    toast("Качаю гео-базы…", 8000);
+    render();
+    startProgressPoll();
+    try {
+      await invoke("updateGeo", {});
+      toast("Гео-базы обновлены");
+    } finally {
+      stopProgressPoll();
+      ui.busyGeo = false;
+      ui.downloadProgress = null;
+      render();
+    }
+  });
   if (act === "load-config") return run(async () => {
     const configs = await invoke("configs", {}, { quiet: true });
     ui.result = { text: Object.entries(configs).map(([k, v]) => `----- ${k} -----\n${v}`).join("\n\n") };
@@ -1612,15 +1703,18 @@ document.addEventListener("click", (event) => {
     try { res = await invoke("engvpnUpdateCheck", {}, { quiet: true }); }
     catch { res = await invoke("checkUpdates", {}, { quiet: true }); }
     if (!S.updates) S.updates = {};
-    if (res.latest || res.feed || res.version) S.updates.latest = res.latest || res.feed || res.version;
+    if (res.installed || res.current) S.version = res.installed || res.current;
+    if (res.latest || res.feed) S.updates.latest = res.latest || res.feed;
     if (res.available != null) S.updates.available = !!res.available || res.update_available === "1" || res.update_available === 1;
     else if (res.update_available != null) S.updates.available = res.update_available === "1" || res.update_available === 1 || res.update_available === true;
     if (res.lastCheck) S.updates.lastCheck = res.lastCheck;
     if (res.lastResult) S.updates.lastResult = res.lastResult;
-    else if (S.updates.available) S.updates.lastResult = `available:${S.updates.latest || ""}`;
-    else if (S.updates.latest) S.updates.lastResult = `up-to-date:${S.updates.latest}`;
+    else if (updateAvailable(S.updates)) S.updates.lastResult = `available:${S.updates.latest || ""}`;
+    else if (S.version) S.updates.lastResult = `up-to-date:${S.version}`;
+    // Recompute from VERSION vs feed — never keep install button when already current
+    S.updates.available = updateAvailable(S.updates);
     render();
-    const msg = res.message || (S.updates.available ? `Доступно: ${S.updates.latest}` : null) || (res.current || res.installed ? `Текущая: ${res.current || res.installed}` : null) || "Проверено";
+    const msg = res.message || (S.updates.available ? `Доступно: ${S.updates.latest}` : null) || (S.version ? `Текущая: ${S.version}` : null) || "Проверено";
     toast(typeof msg === "string" ? msg : JSON.stringify(res));
   });
   if (act === "install-update") return run(async () => {
@@ -1629,11 +1723,19 @@ document.addEventListener("click", (event) => {
     let res;
     try { res = await invoke("engvpnUpdateApply", { wait: "90" }, { quiet: true }); }
     catch { res = await invoke("installUpdate", { wait: "90" }, { quiet: true }); }
+    if (res?.installed || res?.current || res?.version) S.version = res.installed || res.current || res.version;
     if (S.updates) {
       S.updates.available = false;
-      if (ver) S.updates.lastResult = `applied:${ver}`;
+      S.updates.lastResult = S.version ? `up-to-date:${S.version}` : (ver ? `applied:${ver}` : S.updates.lastResult);
+      if (ver) S.updates.latest = ver;
     }
-    toast(res?.message || res?.output || "Обновление установлено");
+    try {
+      const snap = await api("/api/snapshot");
+      if (snap?.version) S.version = snap.version;
+      if (snap?.updates) S.updates = { ...S.updates, ...snap.updates };
+    } catch { /* ignore */ }
+    S.updates.available = updateAvailable(S.updates);
+    toast(res?.message || res?.output || "Обновление установлено — сделайте hard refresh");
     render();
   });
   if (act === "feedback") return run(async () => {
@@ -1726,7 +1828,18 @@ function listen() {
       S.runtime = msg.runtime;
       S.vpn.connected = msg.connected;
       S.vpn.directMode = msg.directMode;
+      if (msg.runtime?.download) ui.downloadProgress = msg.runtime.download;
       paintLive();
+      if (ui.downloadProgress && (ui.busyCore || ui.busyGeo)) paintDownloadProgress();
+    } else if (msg.type === "progress") {
+      if (msg.done) {
+        ui.downloadProgress = null;
+      } else {
+        ui.downloadProgress = msg;
+      }
+      if (ui.stack.at(-1) === "engine") {
+        if (!paintDownloadProgress()) render();
+      }
     } else if (msg.type === "snapshot") {
       S = msg.state;
       if (!ui.stack.length) render();

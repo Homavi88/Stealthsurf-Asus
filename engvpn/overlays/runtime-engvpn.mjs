@@ -20,9 +20,67 @@ const SHARE = join(RUNTIME_ROOT, "..");
 const ENGVPN_PREFIX = join(SHARE, "..", "..");
 const ENGVPND = join(ENGVPN_PREFIX, "sbin", "engvpnd");
 const DATA = process.env.ENGVPN_DATA_DIR || join(ENGVPN_PREFIX, "data");
+const VERSION_FILE = join(SHARE, "VERSION");
 const ACCOUNT_PATH = join(DATA, "account.json");
 const SS_API = process.env.ENGVPN_SS_API || "https://api.stealthsurf.net";
 const API_KEY_RE = /^stlth_([a-f0-9]{8})_([a-f0-9]{24})$/;
+
+/** Single source of truth for installed package version (share/engvpn/VERSION). */
+export function readInstalledVersion() {
+  try {
+    if (existsSync(VERSION_FILE)) {
+      const v = String(readFileSync(VERSION_FILE, "utf8") || "").trim();
+      if (v) return v;
+    }
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
+function verParts(v) {
+  return String(v || "").replace(/^v/i, "").split(/[.+-]/).map((p) => {
+    const n = parseInt(p, 10);
+    return Number.isFinite(n) ? n : 0;
+  });
+}
+function feedNewerThan(feed, installed) {
+  if (!feed) return false;
+  if (!installed) return true;
+  const a = verParts(feed);
+  const b = verParts(installed);
+  const n = Math.max(a.length, b.length);
+  for (let i = 0; i < n; i++) {
+    const x = a[i] || 0;
+    const y = b[i] || 0;
+    if (x > y) return true;
+    if (x < y) return false;
+  }
+  return false;
+}
+
+/** In-memory download/geo job progress for panel SSE + polling. */
+let downloadJob = null;
+export function getDownloadProgress() {
+  return downloadJob ? { ...downloadJob } : null;
+}
+export function setDownloadProgress(partial) {
+  if (!partial || partial.done) {
+    downloadJob = null;
+    return null;
+  }
+  downloadJob = {
+    id: partial.id || downloadJob?.id || "",
+    kind: partial.kind || downloadJob?.kind || "core",
+    phase: partial.phase || downloadJob?.phase || "download",
+    label: partial.label || downloadJob?.label || "",
+    received: partial.received ?? downloadJob?.received ?? 0,
+    total: partial.total ?? downloadJob?.total ?? 0,
+    percent: partial.percent ?? downloadJob?.percent ?? 0,
+    at: Date.now(),
+  };
+  return getDownloadProgress();
+}
 
 async function shEngvpnd(...args) {
   const bin = existsSync(ENGVPND) ? ENGVPND : "engvpnd";
@@ -288,13 +346,16 @@ export async function engvpnUpdateCheck(state) {
     if (i > 0) out[line.slice(0, i)] = line.slice(i + 1);
   }
   const now = Date.now();
-  const available = out.update === "1" || out.available === "1" || out.update_available === "1";
+  const installed = readInstalledVersion() || out.installed || out.current || state?.version || "";
   const feedVer = out.feed || out.latest || "";
+  // Prefer VERSION file over stale state.json / lastResult flags
+  if (state && installed) state.version = installed;
+  const available = feedNewerThan(feedVer, installed);
   if (state?.updates) {
     state.updates.lastCheck = now;
     if (feedVer) state.updates.latest = feedVer;
-    state.updates.available = available;
-    state.updates.lastResult = available ? `available:${feedVer}` : `up-to-date:${feedVer}`;
+    state.updates.available = !!available;
+    state.updates.lastResult = available ? `available:${feedVer}` : `up-to-date:${installed || feedVer}`;
   }
   try {
     writeUpdatesConf({
@@ -316,17 +377,22 @@ export async function engvpnUpdateCheck(state) {
   }
   if (!out.message) {
     const parts = [];
-    if (out.current || out.version || out.installed) parts.push(`текущая ${out.current || out.version || out.installed}`);
+    if (installed) parts.push(`текущая ${installed}`);
     if (feedVer) parts.push(`в feed ${feedVer}`);
     if (available) parts.push("доступно обновление");
+    else if (installed && feedVer && installed === feedVer) parts.push("актуально");
     out.message = parts.length ? parts.join(" · ") : "Проверка feed EngVPN завершена";
   }
   out.ok = true;
-  out.available = available;
+  out.available = !!available;
   out.update_available = available ? "1" : "0";
   out.latest = feedVer || out.latest;
-  out.version = feedVer || out.version;
+  out.feed = feedVer || out.feed;
+  out.installed = installed;
+  out.current = installed;
+  out.version = installed; // installed package, not feed
   out.lastCheck = now;
+  out.lastResult = state?.updates?.lastResult || "";
   return out;
 }
 
@@ -347,31 +413,42 @@ export async function engvpnUpdateApply(state, body = {}) {
     throw err;
   }
   const combined = `${stdout}\n${stderr}`;
-  if (state?.updates) {
-    state.updates.available = false;
-    state.updates.lastResult = `applied:${state.updates.latest || ""}`;
-    state.updates.lastCheck = Date.now();
-    try {
-      writeUpdatesConf({
-        interval: state.updates.interval,
-        auto: !!state.updates.auto,
-        windowStart: state.updates.windowStart,
-        windowEnd: state.updates.windowEnd,
-        geoWeekly: state.updates.geoWeekly,
-        coresWhenMissing: state.updates.coresWhenMissing,
-        lastCheck: state.updates.lastCheck,
-        lastResult: state.updates.lastResult,
-      });
-    } catch {
-      /* ignore */
+  const installed = readInstalledVersion() || state?.updates?.latest || state?.version || "";
+  if (state) {
+    if (installed) state.version = installed;
+    if (state.updates) {
+      state.updates.available = false;
+      state.updates.latest = state.updates.latest || installed;
+      // Prefer up-to-date over applied: so UI doesn't show conflicting "current 0.5.x · applied:0.5.y"
+      state.updates.lastResult = installed
+        ? `up-to-date:${installed}`
+        : `applied:${state.updates.latest || ""}`;
+      state.updates.lastCheck = Date.now();
+      try {
+        writeUpdatesConf({
+          interval: state.updates.interval,
+          auto: !!state.updates.auto,
+          windowStart: state.updates.windowStart,
+          windowEnd: state.updates.windowEnd,
+          geoWeekly: state.updates.geoWeekly,
+          coresWhenMissing: state.updates.coresWhenMissing,
+          lastCheck: state.updates.lastCheck,
+          lastResult: state.updates.lastResult,
+        });
+      } catch {
+        /* ignore */
+      }
     }
   }
   return {
     ok: true,
     output: combined.trim(),
+    installed,
+    current: installed,
+    version: installed,
     message: /already on|уже/i.test(combined)
-      ? "Уже актуальная версия"
-      : "Обновление установлено — перезагрузите панель при необходимости",
+      ? `Уже актуальная версия${installed ? ` ${installed}` : ""}`
+      : `Обновление установлено${installed ? ` (${installed})` : ""} — сделайте hard refresh панели`,
   };
 }
 
@@ -1242,6 +1319,27 @@ export function scrubAlphaDemoNodes(target) {
  */
 export function hydratePanelSnapshot(snap, state) {
   if (!snap || typeof snap !== "object") return snap;
+  // Always prefer on-disk VERSION over stale state.json / catalog memory
+  try {
+    const installed = readInstalledVersion();
+    if (installed) {
+      snap.version = installed;
+      if (state) state.version = installed;
+      // If feed already matches installed, clear stale "available/applied" conflict
+      if (snap.updates && typeof snap.updates === "object") {
+        const feed = snap.updates.latest || "";
+        if (feed && !feedNewerThan(feed, installed)) {
+          snap.updates.available = false;
+          if (typeof snap.updates.lastResult === "string" &&
+              /^(available|available-wait-window|applied):/.test(snap.updates.lastResult)) {
+            snap.updates.lastResult = `up-to-date:${installed}`;
+          }
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   try {
     const acct = readAccountFile();
     const account = { ...(snap.account || {}) };

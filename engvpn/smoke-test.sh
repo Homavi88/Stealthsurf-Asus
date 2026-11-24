@@ -140,10 +140,10 @@ sh ./merlin.sh >"$install_log" 2>&1 || {
 	exit 1
 }
 echo "==> install progress stages"
-# Expect [1/9]…[9/9] with RU stage labels
-for n in 1 2 3 4 5 6 7 8 9; do
-	grep -E "^\\[$n/9\\] " "$install_log" >/dev/null || {
-		echo "missing progress stage [$n/9] in:" >&2
+# Expect [1/10]…[10/10] with RU stage labels (incl. cores/geo download stage)
+for n in 1 2 3 4 5 6 7 8 9 10; do
+	grep -E "^\\[$n/10\\] " "$install_log" >/dev/null || {
+		echo "missing progress stage [$n/10] in:" >&2
 		cat "$install_log" >&2
 		exit 1
 	}
@@ -154,9 +154,10 @@ grep -q 'Распаковка пакета' "$install_log"
 grep -q 'Резервная копия' "$install_log"
 grep -q 'Установка файлов' "$install_log"
 grep -q 'Хуки' "$install_log"
+grep -q 'Загрузка ядер и гео-баз\|ядра пропущены' "$install_log"
 grep -q 'Сохранение пароля' "$install_log"
 grep -q 'Запуск сервиса' "$install_log"
-echo "  progress [1/9]…[9/9] ok"
+echo "  progress [1/10]…[10/10] ok"
 
 echo "==> verify layout"
 [ -x "$PREFIX/sbin/engvpnd" ]
@@ -343,6 +344,21 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'Установить обновление\|install-update\|updateAvailable\|feedNewer' "$_ui_js" \
 		&& echo "  updates install button UI ok" \
 		|| { echo "missing install-update button in app.js" >&2; exit 1; }
+	grep -q 'dl-progress\|downloadProgress\|paintDownloadProgress' "$_ui_js" \
+		&& echo "  core/geo download progress UI ok" \
+		|| { echo "missing download progress UI in app.js" >&2; exit 1; }
+	grep -q 'min-width: 900px\|drawer-settings' "$_ui_css" \
+		&& echo "  desktop settings ≥900px CSS ok" \
+		|| { echo "missing desktop settings width CSS" >&2; exit 1; }
+	grep -q 'readInstalledVersion\|export function readInstalledVersion' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& echo "  VERSION source-of-truth ok" \
+		|| { echo "missing readInstalledVersion" >&2; exit 1; }
+	grep -q 'download-cores.mjs\|fetch_engine_assets' "$PREFIX/share/engvpn/install.sh" \
+		&& echo "  install cores hook ok" \
+		|| { echo "missing install cores hook" >&2; exit 1; }
+	[ -f "$PREFIX/share/engvpn/download-cores.mjs" ] \
+		&& echo "  download-cores.mjs packaged ok" \
+		|| { echo "missing download-cores.mjs in package" >&2; exit 1; }
 	grep -q 'engvpnUpdateApply\|export async function engvpnUpdateApply' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
 		&& echo "  engvpnUpdateApply ok" \
 		|| { echo "missing engvpnUpdateApply in runtime-engvpn.mjs" >&2; exit 1; }

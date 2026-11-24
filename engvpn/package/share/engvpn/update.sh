@@ -299,6 +299,7 @@ cmd_check() {
 	url=$(field "$feed" "$key" url)
 	resolved=$(resolve_package_url "$url" "$ver" "$key") || resolved=""
 	echo "installed=$cur"
+	echo "current=$cur"
 	echo "feed=$ver"
 	echo "arch=$key"
 	echo "url=$resolved"

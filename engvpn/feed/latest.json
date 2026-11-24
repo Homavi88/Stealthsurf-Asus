@@ -1,24 +1,24 @@
 {
-  "version": "0.5.18",
-  "notes": "EngVPN 0.5.18 — feed always GitHub HTTPS URLs; updater rejects agent/local paths and falls back to release tarball.",
+  "version": "0.5.19",
+  "notes": "EngVPN 0.5.19 — desktop settings fill viewport (≥900px); VERSION file is installed-version source of truth; core/geo download progress in panel; install downloads Xray/Ferrum/sing-box/mihomo + geo by default.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.18/engvpn_0.5.18_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "68edd373be45e662ea8d2c0ddbc370af1cadcce3b491e6664b3f3c195fda6f9e",
-      "size": 146444
+      "sha256": "78d8cf7f77cc75cf29563038fa844077cfc949846c7519e4c437885fad2afee1",
+      "size": 152949
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.18/engvpn_0.5.18_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "68edd373be45e662ea8d2c0ddbc370af1cadcce3b491e6664b3f3c195fda6f9e",
-      "size": 146444
+      "sha256": "78d8cf7f77cc75cf29563038fa844077cfc949846c7519e4c437885fad2afee1",
+      "size": 152949
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.18/engvpn_0.5.18_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "68edd373be45e662ea8d2c0ddbc370af1cadcce3b491e6664b3f3c195fda6f9e",
-      "size": 146444
+      "sha256": "78d8cf7f77cc75cf29563038fa844077cfc949846c7519e4c437885fad2afee1",
+      "size": 152949
     }
   }
 }
