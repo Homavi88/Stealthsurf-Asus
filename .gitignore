@@ -10,6 +10,9 @@ scripts/*
 dist/
 *.tar.gz
 
+# EngVPN local-only smoke feed (file:// build paths) — never commit
+engvpn/feed/latest.local.json
+
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 .claude/
