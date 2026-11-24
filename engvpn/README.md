@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.24** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.25** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.24](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.24) (после публикации feed)
+Релиз: [engvpn-0.5.25](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.25) (после публикации feed)
 
 ---
 
@@ -130,6 +130,14 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+
+### Что нового в 0.5.25
+
+- **CPU leak / restart storm:** один supervisor на PREFIX — `flock` на `data/.supervisor.lock` держится всю жизнь фона (не отпускается при выходе `service.sh`); параллельные `start`/`restart` из хуков проигрывают lock и выходят. Один `run.mjs` — `.panel.lock` в `engvpnd serve` (exit 75). `kill-strays`/`stop` чистят все `service.sh`+`run.mjs` этого PREFIX. Лишние панели cull, без нового spawn.
+- **Restart false-fail:** дети supervisor (`sleep`/`engvpnd`/`node`) больше не наследуют fd flock — иначе после `stop` orphan `sleep` держал lock и `restart`/`install` ложно «failed to start». `kill-strays` ждёт освобождения lock.
+- Idle tick: без SSE панель почти спит (~10 с); `iptables -L` ≤ раз/10 с.
+- Диагностика: топ процессов, подсветка engvpnd/node/ядер, hints на dual-panel и crash-loop sing-box (:20828).
 
 ### Что нового в 0.5.24
 

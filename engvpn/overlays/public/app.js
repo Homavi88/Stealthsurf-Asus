@@ -21,9 +21,12 @@ let ui = {
   loginPass: "",
   /** After eye toggle, re-focus under the same user gesture (iOS keyboard). */
   focusPassAfterRender: false,
+  /** Top processes from get_router_load (diagnostics showLoad). */
+  processes: null,
 };
 let es;
 let progressPoll = null;
+let procsPoll = null;
 
 /** Rate in bytes/s → Мбит/с (Mbps). */
 const fmt = (n) => {
@@ -1178,13 +1181,84 @@ function screenPrivacy() {
   </div>`;
 }
 
+function procRowsHtml(list, kind) {
+  if (!list?.length) return `<p class="muted">Нет данных процессов</p>`;
+  return `<div class="proc-table">${list.map((p) => {
+    const metric = kind === "cpu"
+      ? `${Number(p.cpu) || 0}%`
+      : fmtBytes(p.rss != null ? p.rss : (Number(p.rssKb) || 0) * 1024);
+    const badge = p.label || p.kind
+      ? `<span class="proc-flag kind-${esc(p.kind || "engvpn")}${p.crashLoop || p.missing ? " warn" : ""}">${esc(p.missing ? `${p.label || p.name} ?` : (p.label || p.kind))}</span>`
+      : "";
+    const rowClass = [
+      "proc-row",
+      (p.flag || p.kind) ? "flagged" : "",
+      p.crashLoop || p.missing ? "crash" : "",
+    ].filter(Boolean).join(" ");
+    const title = esc(p.hint || p.name);
+    return `<div class="${rowClass}"><span class="proc-pid">${esc(p.pid || "—")}</span><span class="proc-name" title="${title}">${badge}${esc(p.name)}</span><span class="proc-metric">${esc(metric)}</span></div>`;
+  }).join("")}</div>`;
+}
+
+function procsBlockHtml(procs) {
+  const flagged = procs?.flagged || [];
+  const hints = procs?.hints || [];
+  return `<div class="h">КТО ГРУЗИТ РОУТЕР</div>
+    <p class="muted">Топ по ЦП и ОЗУ (/proc). Подсвечены engvpnd / node / xray / sing-box / mihomo. Обновление ~2 с.</p>
+    ${hints.length ? `<div class="proc-hints">${hints.map((h) => `<p class="proc-hint">${esc(h)}</p>`).join("")}</div>` : ""}
+    ${flagged.length ? `<div class="h">EngVPN / ЯДРА</div>${procRowsHtml(flagged, "cpu")}` : ""}
+    <div class="h">ПО ЦП</div>
+    ${procRowsHtml(procs?.byCpu, "cpu")}
+    <div class="h">ПО ОЗУ</div>
+    ${procRowsHtml(procs?.byRam, "ram")}`;
+}
+
+function paintProcs() {
+  const el = document.querySelector("[data-live=procs]");
+  if (!el) return false;
+  el.innerHTML = procsBlockHtml(ui.processes || S?.runtime?.load?.processes);
+  return true;
+}
+
+async function refreshProcs() {
+  if (!S?.diagnostics?.showLoad || ui.stack.at(-1) !== "diagnostics") return;
+  try {
+    const r = await invoke("get_router_load", { limit: 8 }, { quiet: true });
+    ui.processes = r?.processes || null;
+    if (r && S.runtime?.load) {
+      S.runtime.load.cpu = r.cpu ?? S.runtime.load.cpu;
+      S.runtime.load.ramUsed = r.ramUsed ?? S.runtime.load.ramUsed;
+      S.runtime.load.ramTotal = r.ramTotal ?? S.runtime.load.ramTotal;
+      S.runtime.load.proc = r.proc ?? S.runtime.load.proc;
+      S.runtime.load.processes = ui.processes;
+    }
+    if (!paintProcs()) render();
+    else paintLive();
+  } catch {
+    /* diagnostics poll best-effort */
+  }
+}
+
+function ensureProcsPoll() {
+  const want = !!(S?.diagnostics?.showLoad && ui.stack.at(-1) === "diagnostics");
+  if (want && !procsPoll) {
+    procsPoll = setInterval(() => { refreshProcs(); }, 2000);
+    refreshProcs();
+  } else if (!want && procsPoll) {
+    clearInterval(procsPoll);
+    procsPoll = null;
+  }
+}
+
 function screenDiag() {
   const d = S.diagnostics;
+  const procs = ui.processes || S.runtime?.load?.processes;
   return `${backBar("Диагностика")}<div class="drawer-body"><div class="group">
     ${cell("Тест скорости", "Пинг, загрузка через VPN и напрямую", `<button class="ghost" data-act="speedtest">Запустить</button>`)}
     ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${fmt(ui.result.direct.down || 0)}. VPN: ${ui.result.vpn ? (typeof ui.result.vpn.down === "number" ? fmt(ui.result.vpn.down) : esc(ui.result.vpn.error || ui.result.vpn.down || "—")) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
     ${cell("Проверки скрытности", "Exit IP, DNS, IPv6, DPI, kill-switch", `<button class="ghost" data-go="privacy">Открыть</button>`)}
-    ${cell("Нагрузка на роутер", "Пока панель открыта", sw("diagnostics.showLoad", d.showLoad))}
+    ${cell("Нагрузка на роутер", "Пока панель открыта — строка на главной и топ процессов", sw("diagnostics.showLoad", d.showLoad))}
+    ${d.showLoad ? `<div data-live="procs">${procsBlockHtml(procs)}</div>` : ""}
     ${cell("Режим разработчика", "Логи ядра и подробности", sw("diagnostics.devMode", d.devMode))}
     ${cell("Отправлять отчёты об ошибках", "В EngVPN отчёты остаются локально", sw("diagnostics.errorReports", d.errorReports))}
     ${cell("Проверка туннеля после подключения", "Три неудачи подряд включают резерв или автонастройку", sw("diagnostics.tunnelCheck", d.tunnelCheck))}
@@ -1464,6 +1538,7 @@ function render() {
   // Do NOT autofocus #q — that steals focus from API key / URL / SmartDNS on every render (iPhone paste breaks).
   restoreFocus(focusSnap);
   if (ui.auth === false) bindLoginForm();
+  ensureProcsPoll();
 }
 
 function paintLive() {

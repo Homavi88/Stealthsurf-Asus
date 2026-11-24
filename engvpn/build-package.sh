@@ -105,6 +105,7 @@ fi
 cat >"$RUNTIME/run.mjs" <<'EOF'
 /**
  * EngVPN panel entry — SIGHUP ignored before loading the server.
+ * Exit 75 = duplicate / EADDRINUSE (supervisor backs off; do not spin).
  */
 try {
   process.on("SIGHUP", () => {});
@@ -129,8 +130,9 @@ const { PANEL_PORT } = await import("./lib/catalog.mjs");
 start().then(() => {
   console.log(`EngVPN panel http://0.0.0.0:${PANEL_PORT} openAccess=${process.env.ENGVPN_OPEN_PANEL === "1"}`);
 }).catch((err) => {
+  const code = err && (err.code === "EADDRINUSE" || err.errno === -98) ? 75 : 1;
   console.error(err);
-  process.exit(1);
+  process.exit(code);
 });
 EOF
 
@@ -139,6 +141,36 @@ RUNTIME="$RUNTIME" python3 - <<'PY'
 from pathlib import Path
 import os
 rt = Path(os.environ["RUNTIME"])
+p = rt / "server.mjs"
+# Reject EADDRINUSE so a second panel exits 75 instead of hanging / burning CPU
+st = p.read_text()
+old_listen = '''export function start(port = PANEL_PORT, host = "0.0.0.0") {
+  return new Promise((resolve) => {
+    server.listen(port, host, async () => {
+      await runtime.boot();
+      resolve(server);
+    });
+  });
+}'''
+new_listen = '''export function start(port = PANEL_PORT, host = "0.0.0.0") {
+  return new Promise((resolve, reject) => {
+    server.once("error", (err) => reject(err));
+    server.listen(port, host, async () => {
+      try {
+        await runtime.boot();
+        resolve(server);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}'''
+if old_listen in st:
+    st = st.replace(old_listen, new_listen, 1)
+    p.write_text(st)
+    print("patched server.mjs start() → EADDRINUSE reject")
+else:
+    print("server.mjs start() already patched or shape changed")
 p = rt / "server.mjs"
 text = p.read_text()
 text = text.replace("alfa_session", "engvpn_session")
@@ -723,10 +755,42 @@ text = text.replace(
     '            });\n',
 )
 
-# Tick: merge iptables/WAN sampling so home speed is not stuck at 0 B/s under transparent mode
-if "sampleRouterTraffic(live)" not in text and "function tick()" in text:
-    old_tick_rates = "    live.rates = { ...live.window };\n    live.history.push({ t: Date.now(), ...live.rates });"
-    new_tick_rates = (
+# Tick: idle panels must nearly sleep (dual run.mjs was ~50% CPU on Merlin).
+# When no SSE clients: skip traffic sample + skip broadcast (keep cheap load counters every 10th tick).
+# When clients connected: sample traffic (iptables throttled inside sampleRouterTraffic to ≥10s).
+if "ENGVPN_IDLE_TICK" not in text and "function tick()" in text:
+    old_tick = (
+        "  function tick() {\n"
+        "    const cpu = cpuPercent();\n"
+        "    const free = os.freemem();\n"
+        "    live.load = {\n"
+        "      cpu,\n"
+        "      ramUsed: os.totalmem() - free,\n"
+        "      ramTotal: os.totalmem(),\n"
+        "      proc: process.memoryUsage().rss,\n"
+        "    };\n"
+        "    live.rates = { ...live.window };\n"
+        "    live.history.push({ t: Date.now(), ...live.rates });\n"
+        "    if (live.history.length > 180) live.history.splice(0, live.history.length - 180);\n"
+        "    live.window = emptyBytes();\n"
+        "    broadcast({ type: \"tick\", runtime: runtimeView(), connected: state.vpn.connected, directMode: state.vpn.directMode });\n"
+        "  }"
+    )
+    new_tick = (
+        "  function tick() {\n"
+        "    // ENGVPN_IDLE_TICK: no browser SSE → do almost nothing (fixes Merlin CPU with stray panels)\n"
+        "    const hasClients = !!(live.sse && live.sse.size);\n"
+        "    live._idleTicks = (live._idleTicks || 0) + 1;\n"
+        "    if (!hasClients && (live._idleTicks % 10) !== 0) return;\n"
+        "    const cpu = cpuPercent();\n"
+        "    const free = os.freemem();\n"
+        "    live.load = {\n"
+        "      cpu,\n"
+        "      ramUsed: os.totalmem() - free,\n"
+        "      ramTotal: os.totalmem(),\n"
+        "      proc: process.memoryUsage().rss,\n"
+        "    };\n"
+        "    if (!hasClients) return;\n"
         "    try {\n"
         "      const sampled = sampleRouterTraffic(live);\n"
         "      const proxySum = (live.window.vpnDown + live.window.vpnUp + live.window.directDown + live.window.directUp) || 0;\n"
@@ -745,11 +809,43 @@ if "sampleRouterTraffic(live)" not in text and "function tick()" in text:
         "      }\n"
         "    } catch { /* traffic sample best-effort */ }\n"
         "    live.rates = { ...live.window };\n"
+        "    live.history.push({ t: Date.now(), ...live.rates });\n"
+        "    if (live.history.length > 180) live.history.splice(0, live.history.length - 180);\n"
+        "    live.window = emptyBytes();\n"
+        "    broadcast({ type: \"tick\", runtime: runtimeView(), connected: state.vpn.connected, directMode: state.vpn.directMode });\n"
+        "  }"
+    )
+    if old_tick in text:
+        text = text.replace(old_tick, new_tick, 1)
+        print("patched tick() → ENGVPN_IDLE_TICK + SSE traffic sample")
+elif "sampleRouterTraffic(live)" not in text and "function tick()" in text:
+    old_tick_rates = "    live.rates = { ...live.window };\n    live.history.push({ t: Date.now(), ...live.rates });"
+    new_tick_rates = (
+        "    try {\n"
+        "      if (live.sse && live.sse.size) {\n"
+        "        const sampled = sampleRouterTraffic(live);\n"
+        "        const proxySum = (live.window.vpnDown + live.window.vpnUp + live.window.directDown + live.window.directUp) || 0;\n"
+        "        if (sampled && proxySum === 0) {\n"
+        "          live.window.vpnDown += sampled.vpnDown;\n"
+        "          live.window.vpnUp += sampled.vpnUp;\n"
+        "          live.window.directDown += sampled.directDown;\n"
+        "          live.window.directUp += sampled.directUp;\n"
+        "          live.session.vpnDown += sampled.vpnDown;\n"
+        "          live.session.vpnUp += sampled.vpnUp;\n"
+        "          live.session.directDown += sampled.directDown;\n"
+        "          live.session.directUp += sampled.directUp;\n"
+        "        } else if (sampled) {\n"
+        "          live.window.directDown = Math.max(live.window.directDown, sampled.directDown);\n"
+        "          live.window.directUp = Math.max(live.window.directUp, sampled.directUp);\n"
+        "        }\n"
+        "      }\n"
+        "    } catch { /* traffic sample best-effort */ }\n"
+        "    live.rates = { ...live.window };\n"
         "    live.history.push({ t: Date.now(), ...live.rates });"
     )
     if old_tick_rates in text:
         text = text.replace(old_tick_rates, new_tick_rates, 1)
-        print("patched tick() → sampleRouterTraffic")
+        print("patched tick() → sampleRouterTraffic (SSE-gated)")
 
 # Soft-probe cores after boot (libresolv / missing) without toasting Load failed
 if "probeCoresHealth" not in text.split("async function boot()")[1][:800]:
@@ -1269,7 +1365,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — harden sing-box :20828 wait (alive-aware, free-after-stop, orphan kill via /proc); fixes false fail under dual run.mjs race (EV-64; EV-62 owns single-instance)."
+RELEASE_NOTES="EngVPN $VERSION — fix supervisor restart storm: lifetime flock on .supervisor.lock; single run.mjs; kill-strays; idle tick; diagnostics process load."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

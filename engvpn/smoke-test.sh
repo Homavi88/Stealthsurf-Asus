@@ -21,12 +21,30 @@ cleanup() {
 	[ -n "${MOCK_PID:-}" ] && kill "$MOCK_PID" 2>/dev/null || true
 	ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" \
 		"$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
-	# Ensure supervisor/panel gone even if stop raced
+	# Ensure supervisor/panel gone even if stop raced (including service.sh flock holders)
+	pkill -f "$PREFIX/share/engvpn/service.sh" 2>/dev/null || true
 	pkill -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
 	pkill -f "$PREFIX/sbin/engvpnd" 2>/dev/null || true
 	rm -rf "$SMOKE_ROOT"
 }
 trap cleanup EXIT
+
+# Reap orphan supervisors from earlier smoke runs (deleted PREFIX → exit 127 loop)
+echo "==> reap orphan engvpn supervisors"
+for e in /proc/[0-9]*; do
+	p=${e#/proc/}
+	cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+	case "$cmd" in
+	*/share/engvpn/service.sh*)
+		spath=$(printf '%s\n' "$cmd" | tr ' ' '\n' | grep '/share/engvpn/service.sh' | head -n1)
+		if [ -n "$spath" ] && [ ! -x "$spath" ]; then
+			echo "  kill orphan supervisor pid=$p ($spath missing)"
+			kill "$p" 2>/dev/null || true
+		fi
+		;;
+	esac
+done
+sleep 1
 
 echo "==> build packages"
 sh ./build-package.sh
@@ -250,6 +268,121 @@ grep -E 'last_result=(up-to-date|available)' "$PREFIX/data/updates.conf" || {
 "$PREFIX/sbin/engvpnd" schedule-update status | grep -q 'conf='
 echo "  schedule-update ok"
 
+echo "==> single-instance panel (no dual run.mjs / no supervisor storm)"
+"$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
+count_panels() {
+	_n=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX/share/engvpn/runtime/run.mjs"*) _n=$((_n + 1)) ;;
+		esac
+	done
+	echo "$_n"
+}
+count_supervisors() {
+	# Background shells that keep service.sh in argv (supervisor flock holders)
+	_n=0
+	for e in /proc/[0-9]*; do
+		p=${e#/proc/}
+		[ "$p" = "$$" ] && continue
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX/share/engvpn/service.sh"*) _n=$((_n + 1)) ;;
+		esac
+	done
+	echo "$_n"
+}
+"$PREFIX/share/engvpn/service.sh" start
+# Storm: many concurrent start (services-start + post-mount race) — must not stack
+i=0
+while [ "$i" -lt 18 ]; do
+	"$PREFIX/share/engvpn/service.sh" start >/dev/null 2>&1 &
+	i=$((i + 1))
+done
+wait || true
+sleep 2
+n_panels=$(count_panels)
+n_sup=$(count_supervisors)
+echo "  after 18× parallel start: panels=$n_panels supervisors≈$n_sup"
+[ "$n_panels" -eq 1 ] || {
+	echo "expected exactly 1 run.mjs, got $n_panels" >&2
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*run.mjs* | *"$PREFIX"*service.sh*) echo "  pid ${e#/proc/}: $cmd" >&2 ;;
+		esac
+	done
+	exit 1
+}
+# One flock-holding supervisor (+ maybe a short-lived start script still exiting)
+[ "$n_sup" -le 2 ] || {
+	echo "supervisor storm: $n_sup service.sh processes (want ≤2)" >&2
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*service.sh*) echo "  pid ${e#/proc/}: $cmd" >&2 ;;
+		esac
+	done
+	exit 1
+}
+# Serial restart once — still one panel
+"$PREFIX/share/engvpn/service.sh" restart >/dev/null
+sleep 2
+n_panels=$(count_panels)
+echo "  after restart: panels=$n_panels"
+[ "$n_panels" -eq 1 ] || {
+	echo "after restart expected 1 run.mjs, got $n_panels" >&2
+	exit 1
+}
+# engvpnd serve while running must exit 75 (duplicate lock)
+# Keep set +e across wait — exit 75 must not abort the smoke script.
+set +e
+"$PREFIX/sbin/engvpnd" serve --data-dir "$PREFIX/data" >/tmp/engvpn-dup-serve.out 2>&1 &
+dup_pid=$!
+sleep 1
+kill -0 "$dup_pid" 2>/dev/null
+dup_alive=$?
+if [ "$dup_alive" = 0 ]; then
+	# still running — wait a bit for flock fail / EADDRINUSE
+	sleep 2
+	if kill -0 "$dup_pid" 2>/dev/null; then
+		echo "duplicate engvpnd serve still alive — killing" >&2
+		kill "$dup_pid" 2>/dev/null || true
+		wait "$dup_pid" 2>/dev/null
+		set -e
+		exit 1
+	fi
+fi
+wait "$dup_pid" 2>/dev/null
+dup_code=$?
+set -e
+# 75 = flock/EADDRINUSE; some shells report 128+signal — accept 75 or immediate exit non-zero with lock message
+if [ "$dup_code" != 75 ]; then
+	if grep -qi 'already running\|EADDRINUSE\|panel lock' /tmp/engvpn-dup-serve.out 2>/dev/null; then
+		echo "  duplicate serve rejected (msg, exit=$dup_code)"
+	else
+		echo "duplicate serve exit=$dup_code out=$(cat /tmp/engvpn-dup-serve.out)" >&2
+		# Still require single panel after attempt
+		n2=0
+		for e in /proc/[0-9]*; do
+			cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+			case "$cmd" in
+			*"$PREFIX/share/engvpn/runtime/run.mjs"*) n2=$((n2 + 1)) ;;
+			esac
+		done
+		[ "$n2" -eq 1 ] || {
+			echo "after dup serve: expected 1 panel, got $n2" >&2
+			exit 1
+		}
+		echo "  duplicate serve did not add panel (exit=$dup_code)"
+	fi
+else
+	echo "  duplicate serve exit 75 ok"
+fi
+"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || "$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
+echo "  single-instance ok"
+
 echo "==> transparent dry-run + dokodemo snippet"
 # Stop panel first so watchdog cannot race with dry-run iptables probes
 "$PREFIX/share/engvpn/service.sh" stop >/dev/null 2>&1 || true
@@ -303,7 +436,9 @@ if command -v node >/dev/null 2>&1; then
 	done
 	[ "$ok" = 1 ] || {
 		echo "panel health failed; log:" >&2
-		tail -50 /tmp/engvpn/engvpnd.log 2>/dev/null || true
+		_hash=$(printf '%s' "$PREFIX" | md5sum 2>/dev/null | awk '{print substr($1,1,12)}')
+		tail -50 "/tmp/engvpn-${_hash:-}/engvpnd.log" 2>/dev/null ||
+			tail -50 /tmp/engvpn/engvpnd.log 2>/dev/null || true
 		exit 1
 	}
 	echo "  health ok"
@@ -684,6 +819,34 @@ if command -v node >/dev/null 2>&1; then
 	inv_ok "patch.router.mode" patch '{"path":"router.mode","value":"all"}'
 	inv_ok "patch.transparentMethod" patch '{"path":"router.transparentMethod","value":"redirect"}'
 	inv_ok "get_router_settings" get_router_settings '{}'
+	# Diagnostics: top processes by CPU/RAM (BusyBox /proc)
+	inv_ok "get_router_load" get_router_load '{"limit":5}'
+	grep -q '"processes"' /tmp/engvpn-inv-out.json || {
+		echo "get_router_load missing processes" >&2
+		head -c 800 /tmp/engvpn-inv-out.json >&2
+		exit 1
+	}
+	grep -q '"byCpu"\|"byRam"' /tmp/engvpn-inv-out.json || {
+		echo "get_router_load processes missing byCpu/byRam" >&2
+		head -c 800 /tmp/engvpn-inv-out.json >&2
+		exit 1
+	}
+	# Second sample so CPU deltas can populate (first may be 0%)
+	inv_ok "get_top_processes" get_top_processes '{"limit":5}'
+	node -e '
+	  const j=JSON.parse(require("fs").readFileSync("/tmp/engvpn-inv-out.json","utf8"));
+	  const r=j.result||j;
+	  const p=r.processes||{};
+	  const n=(p.byRam||[]).length;
+	  if(n<1){console.error("expected byRam entries, got",JSON.stringify(p).slice(0,400));process.exit(1)}
+	  const row=p.byRam[0];
+	  if(!row||!(row.pid>0)||!row.name){console.error("bad process row",row);process.exit(1)}
+	  if(!Array.isArray(p.flagged)){console.error("missing flagged[]");process.exit(1)}
+	  if(!Array.isArray(p.hints)){console.error("missing hints[]");process.exit(1)}
+	  const hit=(p.flagged||[]).some(x=>x&&(x.kind==="engvpn"||x.kind==="node"||/node|engvpn|run\.mjs/i.test(String(x.name||""))));
+	  if(!hit){console.error("expected flagged engvpn/node process, flagged=",JSON.stringify(p.flagged).slice(0,500));process.exit(1)}
+	  console.log("  top processes ok:", n, "byRam, flagged", p.flagged.length, "hints", p.hints.length, "sample", row.name, "rssKb="+row.rssKb);
+	'
 	inv_ok "engvpnUpdateCheck" engvpnUpdateCheck '{}'
 	# Auto-update toggle must persist to updates.conf + schedule (not bounce off after hydrate)
 	inv_ok "patch.updates.auto" patch '{"path":"updates.auto","value":true}'
