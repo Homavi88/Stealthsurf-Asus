@@ -875,7 +875,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — interactive JFFS/USB install target with free space; space/RAM thresholds documented in README.",
+  "notes": "EngVPN $VERSION — short engvpnd lifecycle verbs (update/uninstall/reinstall/…) + JFFS/USB install target.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -903,7 +903,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — interactive JFFS/USB install target with free space; space/RAM thresholds documented in README.",
+  "notes": "EngVPN $VERSION — short engvpnd lifecycle verbs (update/uninstall/reinstall/…) + JFFS/USB install target.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
