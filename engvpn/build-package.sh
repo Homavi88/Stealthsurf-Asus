@@ -16,7 +16,7 @@ mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs download-cores.mjs; do
 	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
 done
@@ -95,6 +95,10 @@ cp -a "$ROOT/overlays/runtime-engvpn.mjs" "$RUNTIME/lib/runtime-engvpn.mjs"
 if [ -d "$ROOT/overlays/public" ]; then
 	mkdir -p "$RUNTIME/public"
 	cp -a "$ROOT/overlays/public/." "$RUNTIME/public/"
+	# Cache-bust so laptop Safari picks up new CSS/JS after upgrade (hard refresh still recommended)
+	if [ -f "$RUNTIME/public/index.html" ]; then
+		sed -i "s/__ENGVPN_VERSION__/$VERSION/g" "$RUNTIME/public/index.html"
+	fi
 fi
 
 # Brand run.mjs / server cookie name for EngVPN
@@ -229,7 +233,16 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from "./runtime-engvpn.mjs";',
+    )
+elif "getDownloadProgress" not in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
+        "sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
+    )
+    text = text.replace(
+        "probeCoresHealth } from \"./runtime-engvpn.mjs\";",
+        "probeCoresHealth, getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
     )
 elif "engvpnUpdateApply" not in text and "engvpnUpdateCheck" in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
@@ -750,6 +763,171 @@ if "probeCoresHealth" not in text.split("async function boot()")[1][:800]:
         )
         print("patched boot() → probeCoresHealth")
 
+# Expose download progress on runtime snapshot + poll endpoint
+if "download: getDownloadProgress()" not in text and "function runtimeView()" in text:
+    text = text.replace(
+        "      cores: coreStatus(state),\n",
+        "      cores: coreStatus(state),\n"
+        "      download: getDownloadProgress(),\n",
+        1,
+    )
+    print("patched runtimeView() → download progress")
+
+# Refresh state.version from VERSION file on boot
+if "readInstalledVersion()" not in text.split("async function boot()")[1][:900]:
+    boot_ver = "    refreshPublicIp().catch(() => {});\n"
+    if boot_ver in text:
+        text = text.replace(
+            boot_ver,
+            "    try {\n"
+            "      const __ver = readInstalledVersion();\n"
+            "      if (__ver) state.version = __ver;\n"
+            "    } catch { /* ignore */ }\n"
+            + boot_ver,
+            1,
+        )
+        print("patched boot() → readInstalledVersion")
+
+# fetchCore / updateGeo emit SSE progress for panel bar
+if "setDownloadProgress({" not in text and "async function fetchCore(id)" in text:
+    text = text.replace(
+        '''  async function fetchCore(id) {
+    const result = await downloadCore(id, (line) => ctx.hooks.log("info", line));
+    state.engine.cores[id] = { version: result.version, note: result.tag, bytes: result.bytes, at: Date.now() };
+    saveState(state, true);
+    ctx.hooks.log("info", `${ENGINES[id].title} ${result.version} скачан`);
+    return snapshot();
+  }''',
+        '''  async function fetchCore(id) {
+    const emit = (info) => {
+      const base = typeof info === "string"
+        ? { phase: /распак|установ/i.test(info) ? "install" : /скач|зеркал|напрям/i.test(info) ? "download" : "lookup", label: info }
+        : (info || {});
+      const prog = setDownloadProgress({ id, kind: "core", ...base });
+      broadcast({ type: "progress", ...prog });
+      if (base.label) ctx.hooks.log("info", base.label);
+    };
+    emit({ phase: "lookup", percent: 0, label: `смотрю релиз ${id}…` });
+    try {
+      const result = await downloadCore(id, emit);
+      state.engine.cores[id] = { version: result.version, note: result.tag, bytes: result.bytes, at: Date.now() };
+      saveState(state, true);
+      ctx.hooks.log("info", `${ENGINES[id].title} ${result.version} скачан`);
+      return snapshot();
+    } finally {
+      setDownloadProgress({ done: true });
+      broadcast({ type: "progress", done: true, id, kind: "core" });
+    }
+  }''',
+        1,
+    )
+    print("patched fetchCore → progress SSE")
+
+if "kind: \"geo\"" not in text and "async function updateGeo(customUrl)" in text:
+    old_geo = '''  async function updateGeo(customUrl) {
+    mkdirSync(GEO_DIR, { recursive: true });
+    const base = state.engine.geoSource === "custom" && (customUrl || state.engine.geoUrl)
+      ? (customUrl || state.engine.geoUrl).replace(/\\/$/, "")
+      : "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
+    const files = state.engine.geoSource === "custom" && customUrl && !customUrl.endsWith("/")
+      ? [customUrl]
+      : [`${base}/geosite.dat`, `${base}/geoip.dat`];
+    let geosite = state.engine.geo.geosite;
+    let geoip = state.engine.geo.geoip;
+    for (const url of files) {
+      const name = url.split("/").pop().split("?")[0] || "geo.dat";
+      const response = await fetch(url, { signal: AbortSignal.timeout(30000), headers: { "User-Agent": "stealthsurf-alfa" } });
+      if (!response.ok) throw new Error(`${name}: ${response.status}`);
+      const buf = Buffer.from(await response.arrayBuffer());
+      writeFileSync(join(GEO_DIR, name), buf);
+      if (name.includes("geosite")) geosite = buf.length;
+      if (name.includes("geoip")) geoip = buf.length;
+    }
+    state.engine.geo = { geosite, geoip, updatedAt: Date.now() };
+    saveState(state, true);
+    return state.engine.geo;
+  }'''
+    # UA may already be engvpn after replace
+    old_geo2 = old_geo.replace("stealthsurf-alfa", "engvpn")
+    new_geo = '''  async function updateGeo(customUrl) {
+    mkdirSync(GEO_DIR, { recursive: true });
+    const base = state.engine.geoSource === "custom" && (customUrl || state.engine.geoUrl)
+      ? (customUrl || state.engine.geoUrl).replace(/\\/$/, "")
+      : "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
+    const files = state.engine.geoSource === "custom" && customUrl && !customUrl.endsWith("/")
+      ? [customUrl]
+      : [`${base}/geosite.dat`, `${base}/geoip.dat`];
+    let geosite = state.engine.geo.geosite;
+    let geoip = state.engine.geo.geoip;
+    const emit = (info) => {
+      const prog = setDownloadProgress({ id: "geo", kind: "geo", ...info });
+      broadcast({ type: "progress", ...prog });
+    };
+    emit({ phase: "download", percent: 0, label: "гео-базы…", received: 0, total: 0 });
+    try {
+      let done = 0;
+      for (const url of files) {
+        const name = url.split("/").pop().split("?")[0] || "geo.dat";
+        emit({ phase: "download", label: `скачиваю ${name}`, percent: Math.round((done / files.length) * 100) });
+        const response = await fetch(url, { signal: AbortSignal.timeout(120000), headers: { "User-Agent": "engvpn" } });
+        if (!response.ok) throw new Error(`${name}: ${response.status}`);
+        const total = Number(response.headers.get("content-length")) || 0;
+        let buf;
+        if (response.body && typeof response.body.getReader === "function") {
+          const reader = response.body.getReader();
+          const chunks = [];
+          let received = 0;
+          for (;;) {
+            const { done: d, value } = await reader.read();
+            if (d) break;
+            chunks.push(Buffer.from(value));
+            received += value.byteLength;
+            const pctFile = total > 0 ? received / total : 0;
+            emit({
+              phase: "download",
+              label: name,
+              received,
+              total,
+              percent: Math.min(99, Math.round(((done + pctFile) / files.length) * 100)),
+            });
+          }
+          buf = Buffer.concat(chunks);
+        } else {
+          buf = Buffer.from(await response.arrayBuffer());
+        }
+        writeFileSync(join(GEO_DIR, name), buf);
+        if (name.includes("geosite")) geosite = buf.length;
+        if (name.includes("geoip")) geoip = buf.length;
+        done += 1;
+        emit({ phase: "install", label: `${name} сохранён`, percent: Math.round((done / files.length) * 100), received: buf.length, total: buf.length });
+      }
+      state.engine.geo = { geosite, geoip, updatedAt: Date.now() };
+      saveState(state, true);
+      return state.engine.geo;
+    } finally {
+      setDownloadProgress({ done: true });
+      broadcast({ type: "progress", done: true, id: "geo", kind: "geo" });
+    }
+  }'''
+    if old_geo2 in text:
+        text = text.replace(old_geo2, new_geo, 1)
+        print("patched updateGeo → progress SSE")
+    elif old_geo in text:
+        text = text.replace(old_geo, new_geo, 1)
+        print("patched updateGeo → progress SSE")
+
+# Poll endpoint for download progress (panel fallback when SSE lags)
+if 'case "downloadProgress":' not in text:
+    text = text.replace(
+        '      case "downloadCore":\n',
+        '      case "downloadProgress":\n'
+        '      case "engvpnDownloadProgress":\n'
+        '        return { ok: true, progress: getDownloadProgress() };\n'
+        '      case "downloadCore":\n',
+        1,
+    )
+    print("patched invoke → downloadProgress")
+
 rtm.write_text(text)
 print("patched runtime.mjs EngVPN commands")
 # dokodemo inbound injection into xray plan when transparent mode != off
@@ -791,6 +969,99 @@ if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
   const release = await githubLatest(spec.repo);
   const asset = pickCoreAsset(assetId, release);''',
     )
+# Stream core downloads with byte/% progress (panel + install terminal)
+if "response.body.getReader" not in et and "async function downloadToFile" in et:
+    et = et.replace(
+        '''async function downloadToFile(url, dest, onProgress) {
+  let last = "";
+  for (const candidate of mirrorUrls(url)) {
+    try {
+      onProgress?.(`скачиваю ${candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую"}…`);
+      const response = await fetch(candidate, {
+        headers: { "User-Agent": FETCH_UA },
+        signal: AbortSignal.timeout(DOWNLOAD_MS),
+        redirect: "follow",
+      });
+      if (!response.ok) {
+        last = `HTTP ${response.status}`;
+        continue;
+      }
+      const buf = Buffer.from(await response.arrayBuffer());
+      if (!buf.length) {
+        last = "пустой ответ";
+        continue;
+      }
+      writeFileSync(dest, buf);
+      return buf.length;
+    } catch (error) {
+      last = error.name === "TimeoutError" || error.name === "AbortError"
+        ? "таймаут загрузки"
+        : (error.message || String(error));
+    }
+  }
+  throw new Error(`не удалось скачать файл: ${last}`);
+}''',
+        '''async function downloadToFile(url, dest, onProgress) {
+  let last = "";
+  for (const candidate of mirrorUrls(url)) {
+    try {
+      const via = candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую";
+      onProgress?.({ phase: "download", label: `скачиваю ${via}…`, percent: 0, received: 0, total: 0 });
+      const response = await fetch(candidate, {
+        headers: { "User-Agent": FETCH_UA },
+        signal: AbortSignal.timeout(DOWNLOAD_MS),
+        redirect: "follow",
+      });
+      if (!response.ok) {
+        last = `HTTP ${response.status}`;
+        continue;
+      }
+      const total = Number(response.headers.get("content-length")) || 0;
+      let buf;
+      if (response.body && typeof response.body.getReader === "function") {
+        const reader = response.body.getReader();
+        const chunks = [];
+        let received = 0;
+        let lastPct = -1;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(Buffer.from(value));
+          received += value.byteLength;
+          const percent = total > 0 ? Math.min(99, Math.floor((received / total) * 100)) : 0;
+          if (percent >= lastPct + 2 || !total) {
+            lastPct = percent;
+            onProgress?.({ phase: "download", label: via, received, total, percent });
+          }
+        }
+        buf = Buffer.concat(chunks);
+      } else {
+        buf = Buffer.from(await response.arrayBuffer());
+      }
+      if (!buf.length) {
+        last = "пустой ответ";
+        continue;
+      }
+      writeFileSync(dest, buf);
+      onProgress?.({ phase: "download", label: "скачано", received: buf.length, total: buf.length || total, percent: 100 });
+      return buf.length;
+    } catch (error) {
+      last = error.name === "TimeoutError" || error.name === "AbortError"
+        ? "таймаут загрузки"
+        : (error.message || String(error));
+    }
+  }
+  throw new Error(`не удалось скачать файл: ${last}`);
+}''',
+        1,
+    )
+    # Also emit object progress for unpack phase
+    et = et.replace(
+        '    onProgress?.("распаковываю…");',
+        '    onProgress?.({ phase: "install", label: "распаковываю…", percent: 100 });',
+        1,
+    )
+    print("patched downloadToFile → streamed progress")
 if "engvpn-transparent" not in et:
     marker = "  if (!tunnelOnly) {\n    inbounds.push({\n      tag: \"http-in\","
     doko = '''  // EngVPN: dokodemo for iptables REDIRECT/TPROXY when data/transparent.conf mode != off
@@ -998,7 +1269,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — feed always GitHub HTTPS URLs; updater rejects agent/local paths and falls back to release tarball."
+RELEASE_NOTES="EngVPN $VERSION — desktop settings fill viewport (≥900px); VERSION file is installed-version source of truth; core/geo download progress in panel; install downloads Xray/Ferrum/sing-box/mihomo + geo by default."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
