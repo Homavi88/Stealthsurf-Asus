@@ -304,6 +304,47 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   background: var(--menu); border: 1px solid var(--line); border-radius: 28px;
   box-shadow: var(--shadow); display: flex; flex-direction: column; overflow: hidden;
 }
+/* Master-detail settings: left nav + right content (desktop/tablet) */
+.drawer.drawer-settings {
+  width: min(920px, calc(100vw - 24px));
+  left: auto;
+}
+.settings-head { flex: 0 0 auto; }
+.settings-split {
+  display: flex; flex: 1 1 auto; min-height: 0; overflow: hidden;
+}
+.settings-nav {
+  flex: 0 0 min(300px, 38%);
+  width: min(300px, 38%);
+  overflow: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 10px 20px;
+  border-right: 1px solid var(--line);
+}
+.settings-pane {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.settings-pane .drawer-bar { padding-top: 8px; }
+.settings-pane .drawer-body { flex: 1 1 auto; }
+.settings-pane-empty {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  padding: 24px 18px;
+}
+.settings-pane-empty .empty-card { max-width: 360px; width: 100%; }
+.nav-item.on {
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+}
+.nav-item.on .nav-title { color: var(--blue-2); }
+/* Desktop/tablet: sidebar stays visible — hide redundant back on top-level panes */
+@media (min-width: 721px) {
+  .settings-pane.top-level > .drawer-bar [data-act="back"] {
+    visibility: hidden; pointer-events: none;
+  }
+  /* Avoid double title bars: hide pane title close (outer settings head has ✕) */
+  .settings-pane.top-level > .drawer-bar [data-act="close"] {
+    visibility: hidden; pointer-events: none;
+  }
+}
 :root[data-theme="dark"] .drawer {
   background: #12141a;
   border-color: rgba(255,255,255,.06);
@@ -448,4 +489,20 @@ pre.config {
   .layout { flex-direction: column; align-items: stretch; }
   .center, .side { width: min(560px, 100%); margin: 0 auto; }
   .drawer { left: 8px; right: 8px; width: auto; top: 8px; bottom: 8px; }
+  .drawer.drawer-settings { left: 8px; right: 8px; width: auto; }
+}
+/* Phone: stack — list OR content (drill-down), not side-by-side */
+@media (max-width: 720px) {
+  .settings-split { flex-direction: column; }
+  .settings-nav {
+    flex: 1 1 auto; width: 100%; max-width: none;
+    border-right: 0;
+  }
+  .drawer.drawer-settings.has-pane .settings-nav { display: none; }
+  .drawer.drawer-settings:not(.has-pane) .settings-pane { display: none; }
+  .drawer.drawer-settings.has-pane .settings-pane {
+    flex: 1 1 auto; display: flex;
+  }
+  /* Mobile: outer "Настройки" head duplicates pane bar — hide when drilled in */
+  .drawer.drawer-settings.has-pane > .settings-head { display: none; }
 }

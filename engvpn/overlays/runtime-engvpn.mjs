@@ -1139,6 +1139,53 @@ export async function engvpnBackup(command = "latest", prefix) {
 }
 
 /**
+ * Remove alfa placeholder locations (alpha:true VPN rows). They look “live”
+ * (NL Trojan / сервер онлайн) but never connect — confuse users with no API key.
+ * Keep real synced/local nodes and the direct profile.
+ */
+export function scrubAlphaDemoNodes(target) {
+  if (!target?.subscriptions || !Array.isArray(target.subscriptions)) return false;
+  let changed = false;
+  const direct = {
+    id: "direct",
+    name: "Без VPN",
+    protocol: "direct",
+    country: "",
+    flag: "direct",
+    until: "",
+    online: true,
+  };
+  for (const sub of target.subscriptions) {
+    const prev = sub.nodes || [];
+    const next = prev.filter((n) => n && (n.protocol === "direct" || !n.alpha));
+    if (next.length !== prev.length) {
+      sub.nodes = next;
+      changed = true;
+    }
+    if (!(sub.nodes || []).some((n) => n.protocol === "direct")) {
+      sub.nodes = [...(sub.nodes || []), { ...direct }];
+      changed = true;
+    }
+  }
+  const ids = new Set();
+  let hasReal = false;
+  for (const sub of target.subscriptions) {
+    for (const n of sub.nodes || []) {
+      ids.add(n.id);
+      if (n.protocol !== "direct") hasReal = true;
+    }
+  }
+  if (target.vpn && !ids.has(target.vpn.selectedId)) {
+    target.vpn.selectedId = hasReal
+      ? [...ids].find((id) => id !== "direct") || "direct"
+      : "direct";
+    if (!hasReal) target.vpn.lastVpnId = "";
+    changed = true;
+  }
+  return changed;
+}
+
+/**
  * Keep panel snapshot in sync with on-disk EngVPN files (account.json, transparent.conf).
  * Mutates state.account / state.router when provided so subsequent patches stay consistent.
  */
@@ -1159,10 +1206,17 @@ export function hydratePanelSnapshot(snap, state) {
       account.subscriptionName = account.subscriptionUrl ? "Подписка по URL" : "Локальные подписки";
     }
     account.cloud = !!account.apiKeySet;
+    account.hasCredentials = !!(account.apiKeySet || (account.subscriptionUrl && String(account.subscriptionUrl).trim()));
     snap.account = account;
     if (state) {
       state.account = { ...(state.account || {}), ...account };
     }
+  } catch {
+    /* ignore */
+  }
+  try {
+    scrubAlphaDemoNodes(snap);
+    if (state) scrubAlphaDemoNodes(state);
   } catch {
     /* ignore */
   }

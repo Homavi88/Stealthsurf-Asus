@@ -1,24 +1,24 @@
 {
-  "version": "0.5.15",
-  "notes": "EngVPN 0.5.15 — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
+  "version": "0.5.16",
+  "notes": "EngVPN 0.5.16 — settings master-detail; empty home without API key/URL; scrub alpha demo locations.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.16/engvpn_0.5.16_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
-      "size": 141366
+      "sha256": "af6e15c949e451f0cc57f077adb17748654051a96e5bd4d734bdc6acf318aaf1",
+      "size": 143896
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.16/engvpn_0.5.16_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
-      "size": 141366
+      "sha256": "af6e15c949e451f0cc57f077adb17748654051a96e5bd4d734bdc6acf318aaf1",
+      "size": 143896
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.15/engvpn_0.5.15_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.16/engvpn_0.5.16_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "11dec61781833189c79be97ac12ac8c4d0bf29feeb51ac00b6359d59f086b41a",
-      "size": 141366
+      "sha256": "af6e15c949e451f0cc57f077adb17748654051a96e5bd4d734bdc6acf318aaf1",
+      "size": 143896
     }
   }
 }

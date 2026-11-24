@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.15** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.16** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.15](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.15) (после публикации feed)
+Релиз: [engvpn-0.5.16](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.16) (после публикации feed)
 
 ---
 
@@ -130,6 +130,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.16
+
+- Настройки: master-detail — слева меню разделов, справа содержимое (на телефоне по-прежнему список → экран).
+- Главный экран без API-ключа и URL подписки: пустое состояние «добавьте ключ или URL», без фейковых NL/Trojan локаций; локальные и синхронизированные профили подписаны отдельно.
+- Из `defaultState` / hydrate убраны alfa-заглушки (`alpha: true`), чтобы «сервер онлайн» не показывался без конфигурации.
 
 ### Что нового в 0.5.15
 

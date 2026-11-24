@@ -225,19 +225,80 @@ function cell(title, desc, control = "") {
 function fieldBlock(title, desc, control) {
   return `<div class="field-block"><div class="cell-title">${title}</div>${desc ? `<div class="cell-desc">${desc}</div>` : ""}<div class="field-control">${control}</div></div>`;
 }
-function navRow(id, title, ico) {
-  return `<button type="button" class="nav-item" data-go="${id}"><span class="nav-ico" aria-hidden="true">${ico}</span><span class="cell-text"><span class="nav-title">${esc(title)}</span></span><span class="chev">›</span></button>`;
+/** Top-level settings sections (sidebar). Nested screens map via SETTINGS_PARENT. */
+const SETTINGS_TOP = new Set([
+  "account", "router", "subscription", "routing", "network", "connection",
+  "automode", "netauto", "engine", "appearance", "other", "updates",
+  "feedback", "privacy", "diagnostics",
+]);
+const SETTINGS_PARENT = {
+  devices: "router", device: "router", ads: "router", wol: "router",
+  mqtt: "router", schedule: "router", password: "router",
+  subadd: "subscription",
+  rules: "routing", customrules: "routing", balancers: "routing",
+  profiles: "routing", configroute: "routing",
+  zapret: "network",
+  logs: "diagnostics", xray: "engine",
+  speed: "diagnostics", telegram: "network",
+};
+
+function hasCredentials() {
+  const a = S?.account || {};
+  return !!(a.apiKeySet || (a.subscriptionUrl && String(a.subscriptionUrl).trim()) || a.hasCredentials);
+}
+function realVpnNodes() {
+  return nodes().filter((n) => n && n.protocol !== "direct" && !n.alpha);
+}
+function nodeOrigin(n) {
+  if (!n) return { kind: "none", label: "" };
+  for (const sub of S.subscriptions || []) {
+    if (!(sub.nodes || []).some((x) => x.id === n.id)) continue;
+    if (sub.id === "ss-api" || sub.source === "stealthsurf-api") {
+      return { kind: "api", label: "синхронизировано из API" };
+    }
+    if (sub.source === "manual-url" || (sub.url && String(sub.url).trim())) {
+      return { kind: "url", label: "по URL подписки" };
+    }
+    return { kind: "local", label: "локальный профиль" };
+  }
+  return { kind: "local", label: "локальный профиль" };
+}
+function locStatusLine(n) {
+  if (!n || n.protocol === "direct") return "напрямую, без туннеля";
+  const origin = nodeOrigin(n);
+  const until = n.until ? `До ${esc(n.until)} · ` : "";
+  if (origin.kind === "api" || origin.kind === "url") {
+    return `${until}${n.online === false ? "сервер молчит" : "сервер онлайн"} · ${origin.label}`;
+  }
+  return `${until}${origin.label}`;
+}
+
+function navRow(id, title, ico, active = false) {
+  return `<button type="button" class="nav-item${active ? " on" : ""}" data-go-top="${id}"><span class="nav-ico" aria-hidden="true">${ico}</span><span class="cell-text"><span class="nav-title">${esc(title)}</span></span><span class="chev">›</span></button>`;
 }
 function sel(path, value, options, full = false) {
   return `<select class="ctrl${full ? " full" : ""}" data-input="${esc(path)}">${options.map(([v, label]) => `<option value="${esc(v)}" ${String(v) === String(value) ? "selected" : ""}>${esc(label)}</option>`).join("")}</select>`;
 }
-function backBar(title) {
-  return `<div class="drawer-bar"><button class="icon-btn" data-act="back" aria-label="Назад">‹</button><h2>${esc(title)}</h2><button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></div>`;
+function backBar(title, { hideBack = false } = {}) {
+  const back = hideBack
+    ? `<span class="icon-btn spacer-btn" aria-hidden="true"></span>`
+    : `<button class="icon-btn" data-act="back" aria-label="Назад">‹</button>`;
+  return `<div class="drawer-bar">${back}<h2>${esc(title)}</h2><button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></div>`;
 }
 
-function screenMenu() {
+function settingsActiveTop() {
+  const ids = (ui.stack || []).filter((id) => id && id !== "menu");
+  if (!ids.length) return null;
+  const last = ids.at(-1);
+  if (SETTINGS_TOP.has(last)) return last;
+  if (SETTINGS_PARENT[last]) return SETTINGS_PARENT[last];
+  return ids.find((id) => SETTINGS_TOP.has(id)) || null;
+}
+
+function settingsNavBody() {
   const q = (ui.query || "").toLowerCase();
   const match = (title) => !q || title.toLowerCase().includes(q);
+  const active = settingsActiveTop();
   const groups = [
     [["router", "Роутер", "⌂"]],
     [
@@ -267,12 +328,37 @@ function screenMenu() {
     ? `${esc(S.account.subscriptionName || "Основная подписка (API)")}${bal}${cfgN}`
     : `${esc(S.account.subscriptionName || "Локальные подписки")} · API-ключ или URL`;
   const account = `<div class="nav-title">${esc(email)}</div><div class="cell-desc">${subLine}</div>`;
-  return `<div class="drawer-bar"><h2>Настройки</h2><button class="icon-btn" data-act="close">✕</button></div>
-    <div class="drawer-body">
-      <div class="group"><button type="button" class="nav-item" data-go="account"><span class="nav-ico">☺</span><div class="cell-text">${account}</div><span class="chev">›</span></button></div>
+  return `
+      <div class="group"><button type="button" class="nav-item${active === "account" ? " on" : ""}" data-go-top="account"><span class="nav-ico">☺</span><div class="cell-text">${account}</div><span class="chev">›</span></button></div>
       <div class="search"><span>⌕</span><input id="q" placeholder="Поиск настроек" value="${esc(ui.query)}"></div>
-      ${groups.map((g) => `<div class="group">${g.map(([id, title, ico]) => navRow(id, title, ico)).join("")}</div>`).join("")}
-    </div>`;
+      ${groups.map((g) => `<div class="group">${g.map(([id, title, ico]) => navRow(id, title, ico, active === id)).join("")}</div>`).join("")}`;
+}
+
+function screenMenu() {
+  return `<div class="drawer-bar"><h2>Настройки</h2><button class="icon-btn" data-act="close">✕</button></div>
+    <div class="drawer-body settings-nav-scroll">${settingsNavBody()}</div>`;
+}
+
+function settingsDrawer() {
+  const stack = ui.stack || [];
+  const contentId = stack.at(-1);
+  const hasPane = contentId && contentId !== "menu";
+  const top = settingsActiveTop();
+  const nested = hasPane && contentId !== top;
+  const topLevel = hasPane && !nested && SETTINGS_TOP.has(contentId);
+  let pane;
+  if (!hasPane) {
+    pane = `<div class="settings-pane-empty"><div class="card empty-card"><div class="card-head"><span class="card-ico">⚙</span><div><h3>Раздел настроек</h3><p>Выберите пункт в меню слева — справа откроется содержимое.</p></div></div></div></div>`;
+  } else {
+    pane = (screens[contentId] || screenMenu)();
+  }
+  return `<aside class="drawer drawer-settings${hasPane ? " has-pane" : ""}">
+    <div class="drawer-bar settings-head"><h2>Настройки</h2><button class="icon-btn" data-act="close" aria-label="Закрыть">✕</button></div>
+    <div class="settings-split">
+      <nav class="settings-nav" aria-label="Разделы настроек">${settingsNavBody()}</nav>
+      <div class="settings-pane${topLevel ? " top-level" : ""}">${pane}</div>
+    </div>
+  </aside>`;
 }
 
 function screenAccount() {
@@ -1008,41 +1094,56 @@ function home() {
   const rt = S.runtime;
   const connected = S.vpn.connected;
   const direct = S.vpn.directMode;
-  const vpnNodes = nodes().filter((n) => n.protocol !== "direct");
+  const vpnNodes = realVpnNodes();
   const hasProfiles = vpnNodes.length > 0;
-  const label = !hasProfiles ? "Нет профиля" : connected ? "Подключено" : direct ? "Без VPN" : "Отключено";
+  const creds = hasCredentials();
+  const needsSetup = !creds && !hasProfiles;
+  const label = needsSetup || !hasProfiles
+    ? "Нет профиля"
+    : connected ? "Подключено" : direct ? "Без VPN" : "Отключено";
   const ip = (connected ? rt.exitIp : rt.publicIp) || "—";
-  const shape = connected ? "round" : direct ? "diamond" : "triangle";
+  const shape = connected ? "round" : (direct || needsSetup) ? "diamond" : "triangle";
   const news = S.devices.filter((d) => d.isNew && !S.dismissedNew.includes(d.id));
   const rates = rt.rates || {};
-  const activeName = node?.protocol === "direct" && !connected
-    ? (hasProfiles ? node.name : "Нет активного профиля")
-    : (node?.name || (hasProfiles ? "Выберите локацию" : "Нет конфига"));
+  const showNode = hasProfiles ? node : null;
+  const activeName = needsSetup
+    ? "Нет активного профиля"
+    : showNode?.protocol === "direct" && !connected
+      ? (hasProfiles ? showNode.name : "Нет активного профиля")
+      : (showNode?.name || (hasProfiles ? "Выберите локацию" : "Нет конфига"));
+  const flagKind = needsSetup ? "auto" : (showNode?.flag || (hasProfiles ? "auto" : "direct"));
+  const locList = hasProfiles
+    ? nodes().filter((n) => n.id !== showNode?.id && (n.protocol === "direct" || !n.alpha))
+    : [];
   return `<div class="shell">
     <div class="topbar"><div class="brand">${logo()} EngVPN</div><div class="spacer"></div>
       <button class="icon-btn" data-act="settings" aria-label="Настройки">${gear()}</button></div>
     <div class="layout">
       <div class="center">
         <div class="hero-wrap">
-          <button class="hero-btn ${S.other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте профиль"}">${hero(shape)}</button>
+          <button class="hero-btn ${S.other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте ключ или URL"}">${hero(shape)}</button>
           <h2 class="status">${label}</h2>
-          <button class="ip-pill" data-act="ip">${flag(node?.flag || "auto")} ${esc(ip)}</button>
+          <button class="ip-pill" data-act="ip" ${needsSetup ? "disabled" : ""}>${flag(flagKind)} ${esc(needsSetup ? "—" : ip)}</button>
           ${S.diagnostics.showLoad ? `<div class="loadline" data-live="load">ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}</div>` : `<div class="loadline"></div>`}
         </div>
-        ${!hasProfiles ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Добавьте профиль</h3><p>API-ключ StealthSurf или URL подписки — без этого подключать нечего.</p></div></div>
+        ${needsSetup ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Добавьте ключ или URL</h3><p>Пока нет API-ключа StealthSurf и URL подписки — локации не подтягиваются. Главный экран пустой, без «живых» серверов.</p></div></div>
           <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
-        ${S.other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">⇅</span><h3>Скорость</h3></div>
+        ${!needsSetup && !hasProfiles ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Нет профилей</h3><p>Ключ или URL заданы, но конфигов ещё нет — нажмите «Обновить» в аккаунте или проверьте ссылку.</p></div></div>
+          <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
+        ${!needsSetup && S.other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">⇅</span><h3>Скорость</h3></div>
           <div class="muted kv speed-lines" data-live="speed"><span class="spd-vpn">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</span></div></div>
           <span data-live="spark">${spark(rt.history)}</span><span class="chev">›</span></div></button></div>` : ""}
-        <div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>
-        ${news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
-        <p class="muted">Туннель: ${esc(rt.tunnel)} · ${esc(rt.engineMessage || "")}</p>
+        ${!needsSetup ? `<div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>` : ""}
+        ${!needsSetup && news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
+        ${!needsSetup ? `<p class="muted">Туннель: ${esc(rt.tunnel)} · ${esc(rt.engineMessage || "")}</p>` : `<p class="muted">Локальное состояние · синхронизация после ключа или URL</p>`}
       </div>
       <div class="side">
         <div class="card loc-card" style="position:relative">
-          <div class="loc-top">${flag(node?.flag || "auto")}<div><h3>${esc(activeName)}</h3>
-            <div class="online">${!hasProfiles ? "Добавьте API-ключ или URL подписки" : `${node?.until ? `До ${esc(node.until)} · ` : ""}${node?.online === false ? "сервер молчит" : "сервер онлайн"}`}</div></div>
-            ${S.other.showPing && hasProfiles ? `<div class="ping">${pingOf(node?.id) == null ? "" : pingOf(node?.id) ? `${pingOf(node.id)} мс` : "—"}</div>` : ""}</div>
+          <div class="loc-top">${flag(flagKind)}<div><h3>${esc(activeName)}</h3>
+            <div class="online">${needsSetup || !hasProfiles
+              ? "Добавьте ключ или URL"
+              : locStatusLine(showNode)}</div></div>
+            ${S.other.showPing && hasProfiles ? `<div class="ping">${pingOf(showNode?.id) == null ? "" : pingOf(showNode?.id) ? `${pingOf(showNode.id)} мс` : "—"}</div>` : ""}</div>
           ${hasProfiles && S.other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", S.other.autoSetup)}</div>` : ""}
           ${hasProfiles ? `<button class="linkish" data-act="pop">Настройки конфига</button>` : `<button class="linkish" data-go-root="account">Настроить аккаунт</button>`}
           ${ui.pop ? `<div class="menu-pop">
@@ -1052,12 +1153,16 @@ function home() {
           </div>` : ""}
         </div>
         <div class="card loc-card">
-          <div class="section-label">Локации <span class="tools"><button class="icon-btn" data-act="refresh" title="Обновить">↻</button><button class="icon-btn" data-act="ping" title="Пинг">⌁</button></span></div>
-          ${!hasProfiles ? `<p class="muted empty-locs">Список пуст. После синхронизации API или URL здесь появятся серверы.</p>` : nodes().filter((n) => n.id !== node?.id).map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(n.flag)}<span><strong>${esc(n.name)}</strong><small>${n.until ? `До ${esc(n.until)} · ` : ""}${n.online === false ? "нет ответа" : "сервер онлайн"}${S.other.showPing && pingOf(n.id) ? ` · ${pingOf(n.id)} мс` : ""}</small></span></button>`).join("")}
+          <div class="section-label">Локации ${hasProfiles ? `<span class="tools"><button class="icon-btn" data-act="refresh" title="Обновить">↻</button><button class="icon-btn" data-act="ping" title="Пинг">⌁</button></span>` : ""}</div>
+          ${!hasProfiles
+            ? `<p class="muted empty-locs">${needsSetup
+              ? "Список пуст — добавьте ключ или URL в аккаунте. Пока ничего не синхронизировано."
+              : "Список пуст. После синхронизации API или URL здесь появятся серверы."}</p>`
+            : locList.map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(n.flag)}<span><strong>${esc(n.name)}</strong><small>${locStatusLine(n)}${S.other.showPing && pingOf(n.id) ? ` · ${pingOf(n.id)} мс` : ""}</small></span></button>`).join("")}
         </div>
       </div>
     </div>
-    ${ui.stack.length ? `<div class="drawer-back" data-act="close"></div><aside class="drawer">${(screens[ui.stack.at(-1)] || screenMenu)()}</aside>` : ""}
+    ${ui.stack.length ? `<div class="drawer-back" data-act="close"></div>${settingsDrawer()}` : ""}
     ${ui.modal === "new" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Новое устройство</h3><p class="muted">Оставить через VPN или пустить напрямую. Для случайного MAC отметку придётся ставить заново.</p><button class="primary" data-act="keep-vpn">Оставить через VPN</button><button class="ghost" data-act="let-direct">Пустить напрямую</button></div>` : ""}
     ${ui.toast ? `<div class="toast">${esc(ui.toast)}</div>` : ""}
   </div>`;
@@ -1130,7 +1235,8 @@ function bindLoginForm() {
 
 function render() {
   applyTheme();
-  const scroll = document.querySelector(".drawer-body")?.scrollTop || 0;
+  const scroll = document.querySelector(".settings-pane .drawer-body, .drawer-body")?.scrollTop || 0;
+  const navScroll = document.querySelector(".settings-nav")?.scrollTop || 0;
   const focusSnap = ui.auth === false ? null : captureFocus();
   // Keep draft values for long fields across re-renders (paste / iOS keyboard).
   const drafts = {};
@@ -1145,8 +1251,10 @@ function render() {
     const el = document.getElementById(id);
     if (el && el.value !== val) el.value = val;
   }
-  const body = document.querySelector(".drawer-body");
+  const body = document.querySelector(".settings-pane .drawer-body, .drawer-body");
   if (body) body.scrollTop = scroll;
+  const nav = document.querySelector(".settings-nav");
+  if (nav) nav.scrollTop = navScroll;
   // Do NOT autofocus #q — that steals focus from API key / URL / SmartDNS on every render (iPhone paste breaks).
   restoreFocus(focusSnap);
   if (ui.auth === false) bindLoginForm();
@@ -1170,9 +1278,16 @@ function open(id) {
 }
 
 document.addEventListener("click", (event) => {
-  const t = event.target.closest("[data-act],[data-go],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]");
+  const t = event.target.closest("[data-act],[data-go],[data-go-top],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]");
   if (!t || (!S && t.dataset.act !== "eye" && ui.auth !== false)) return;
   const act = t.dataset.act;
+  if (t.dataset.goTop) {
+    ui.form.id = t.dataset.id || ui.form.id;
+    ui.stack = ["menu", t.dataset.goTop];
+    ui.pop = false;
+    render();
+    return;
+  }
   if (t.dataset.go) { ui.form.id = t.dataset.id || ui.form.id; open(t.dataset.go); return; }
   if (t.dataset.goRoot) { ui.stack = ["menu", t.dataset.goRoot]; ui.pop = false; render(); return; }
   if (t.dataset.toggle) {
@@ -1229,12 +1344,17 @@ document.addEventListener("click", (event) => {
   }
   if (act === "settings") { ui.stack = ["menu"]; render(); return; }
   if (act === "close") { ui.stack = []; ui.pop = false; render(); return; }
-  if (act === "back") { ui.stack.pop(); if (!ui.stack.length) ui.stack = ["menu"]; render(); return; }
+  if (act === "back") {
+    ui.stack.pop();
+    if (!ui.stack.length || (ui.stack.length === 1 && ui.stack[0] === "menu")) ui.stack = ["menu"];
+    render();
+    return;
+  }
   if (act === "pop") { ui.pop = !ui.pop; render(); return; }
   if (act === "toggle") return run(async () => {
-    const vpnNodes = nodes().filter((n) => n.protocol !== "direct");
+    const vpnNodes = realVpnNodes();
     if (!vpnNodes.length && !S.vpn.connected) {
-      toast("Сначала добавьте профиль: Аккаунт → API-ключ или URL");
+      toast("Сначала добавьте ключ или URL: Аккаунт");
       ui.stack = ["menu", "account"];
       render();
       return;
