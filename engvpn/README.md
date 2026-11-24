@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.9** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.10** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.9](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.9) (после публикации feed)
+Релиз: [engvpn-0.5.10](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.10) (после публикации feed)
 
 ---
 
@@ -111,7 +111,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.9
+## Панель 0.5.10
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -123,6 +123,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.10
+
+- Разбор блока arch в ленте: гибкие пробелы вокруг `:` / `{`, **минифицированный** JSON в одну строку, кавычки у чисел; глубина `{…}` — поля соседнего arch не протекают.
+- `curl`/`wget`: при HTTP-ошибке удаляется пустой файл; wget с `--tries=3`.
+- `update.sh`: предупреждение при несовпадении `size` с лентой; отказ от ленты меньше 100 байт (как в `merlin.sh`).
 
 ### Что нового в 0.5.9
 
