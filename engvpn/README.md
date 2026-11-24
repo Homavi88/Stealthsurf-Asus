@@ -133,6 +133,16 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 
 ### Что нового в 0.5.19
 
+- Настройки на ≥900px: оверлей на весь экран (nav + pane), не узкий sheet.
+- Updates: одна версия из `share/engvpn/VERSION`; кнопка «Установить» скрыта, если уже на feed.
+- Прогресс скачивания ядер/geo в панели (%, байты, фаза) через SSE.
+- Установка по умолчанию качает Xray / Ferrum / sing-box / mihomo + geosite/geoip.
+- Локации: ping справа зелёный/жёлтый/красный; флаги стран из имени.
+- Скорость в **Мбит/с**.
+- Роутер «VPN для всей сети»: настоящий выбор (выкл / все / только выбранные / все кроме) с persist + apply.
+
+### Что нового в 0.5.18
+
 - Feed `latest.json` всегда пишет HTTPS URL GitHub Releases (больше не `file:///agent/repos/…` из `build-package.sh`).
 - `engvpnd update` / `merlin.sh`: чужие абсолютные/`file://` пути игнорируются, пакет берётся с `releases/download/engvpn-…`.
 - Локальный smoke-feed — только `feed/latest.local.json` (в `.gitignore`).

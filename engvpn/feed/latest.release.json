@@ -1,6 +1,6 @@
 {
   "version": "0.5.19",
-  "notes": "EngVPN 0.5.19 — desktop settings fill viewport (≥900px); VERSION file is installed-version source of truth; core/geo download progress in panel; install downloads Xray/Ferrum/sing-box/mihomo + geo by default.",
+  "notes": "EngVPN 0.5.19 — desktop settings ≥900px; VERSION SSoT; core/geo progress; install downloads cores; Locations flags/ping; Mbps; router VPN mode selector.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.19/engvpn_0.5.19_merlin-aarch64.tar.gz",
