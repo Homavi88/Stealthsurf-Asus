@@ -3,19 +3,19 @@
   "notes": "EngVPN 0.5.17 — Updates install button; auto-update toggle persists + Merlin cru; engvpnUpdateApply.",
   "packages": {
     "merlin-aarch64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.17_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.17/engvpn_0.5.17_merlin-aarch64.tar.gz",
       "minisig": "",
       "sha256": "5d147540d53ca1e548c0420a19f34647227dd6bf460d4677dd22cdf786f6d0e4",
       "size": 145902
     },
     "merlin-armv7": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.17_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.17/engvpn_0.5.17_merlin-armv7.tar.gz",
       "minisig": "",
       "sha256": "5d147540d53ca1e548c0420a19f34647227dd6bf460d4677dd22cdf786f6d0e4",
       "size": 145902
     },
     "merlin-x86_64": {
-      "url": "file:///agent/repos/Stealthsurf-Asus/engvpn/dist/engvpn_0.5.17_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.17/engvpn_0.5.17_merlin-x86_64.tar.gz",
       "minisig": "",
       "sha256": "5d147540d53ca1e548c0420a19f34647227dd6bf460d4677dd22cdf786f6d0e4",
       "size": 145902
