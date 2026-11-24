@@ -69,9 +69,16 @@ collect_list() {
 	for f in share/engvpn/VERSION share/engvpn/files sbin/engvpnd; do
 		[ -e "$PREFIX/$f" ] && echo "$f" >>"$list"
 	done
-	# Deduplicate
+	# Deduplicate. BusyBox sort only accepts -o before FILE args; putting
+	# `sort -u "$list" -o "$list.tmp"` treats -o as another input → files.tmp
+	# never created and `mv` fails with "No such file or directory".
 	if [ -s "$list" ]; then
-		sort -u "$list" -o "$list.tmp" && mv -f "$list.tmp" "$list"
+		sorted=$list.sorted
+		if ! sort -u -o "$sorted" "$list"; then
+			rm -f "$sorted"
+			fail "backup: sort file list failed"
+		fi
+		mv -f "$sorted" "$list" || fail "backup: cannot finalize file list"
 	fi
 }
 

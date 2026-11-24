@@ -636,11 +636,46 @@ grep -q 'restore-me' "$PREFIX/data/smoke.marker" || {
 }
 echo "  restore-on-uninstall (engvpnd) ok"
 
-echo "==> engvpnd remove with ENGVPN_RESTORE=0 (clean remove)"
+echo "==> engvpnd remove with ENGVPN_RESTORE=0 (clean remove, no farewell backup)"
+bak_dir="$(dirname "$PREFIX")/.engvpn-backup"
+case "$PREFIX" in
+*/addons/engvpn) bak_dir=${PREFIX%/engvpn}/.engvpn-backup ;;
+esac
+# Snapshot archive list before clean remove — must not grow / must not recreate empty root
+pre_archives=$(ls -1 "$bak_dir"/engvpn-backup-*.tar.gz 2>/dev/null | wc -l | tr -d ' ')
+rm -rf "$bak_dir"
+uninstall_log=/tmp/engvpn-smoke-uninstall.log
 ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 \
-	"$PREFIX/sbin/engvpnd" remove "$PREFIX"
+	"$PREFIX/sbin/engvpnd" remove "$PREFIX" >"$uninstall_log" 2>&1 || {
+	echo "clean remove failed:" >&2
+	cat "$uninstall_log" >&2
+	exit 1
+}
 [ ! -e "$PREFIX" ]
-echo "  clean remove (engvpnd) ok"
+# Progress stages [1/4]…[4/4] RU labels
+for n in 1 2 3 4; do
+	grep -E "^\\[$n/4\\] " "$uninstall_log" >/dev/null || {
+		echo "missing uninstall progress [$n/4] in:" >&2
+		cat "$uninstall_log" >&2
+		exit 1
+	}
+done
+grep -q 'Остановка сервиса' "$uninstall_log"
+grep -q 'Снятие расписания' "$uninstall_log"
+grep -q 'Снятие хуков' "$uninstall_log"
+grep -q 'Удаление файлов' "$uninstall_log"
+# Must not create sibling .engvpn-backup on clean remove
+if [ -d "$bak_dir" ]; then
+	echo "clean remove created farewell backup dir: $bak_dir" >&2
+	ls -la "$bak_dir" >&2 || true
+	exit 1
+fi
+grep -qi 'files\.tmp' "$uninstall_log" && {
+	echo "files.tmp race leaked into uninstall log:" >&2
+	cat "$uninstall_log" >&2
+	exit 1
+}
+echo "  clean remove (engvpnd) ok (pre_archives=$pre_archives)"
 
 echo "==> ENGVPN_SKIP_BACKUP on re-install"
 export ENGVPN_SMOKE=1

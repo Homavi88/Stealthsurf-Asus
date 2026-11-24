@@ -63,7 +63,7 @@ Usage: engvpnd <command> [options]
   update-check | check         Compare installed version to feed
   update | up                  Download feed package and upgrade in place
   uninstall | remove | удалить
-                               Real uninstall (install.sh); ENGVPN_RESTORE prompt/env
+                               Real uninstall (install.sh); ENGVPN_RESTORE=0/n skips farewell backup
   reinstall | переустановить [--wipe]
                                Re-fetch from feed into same prefix (keeps data).
                                --wipe: wipe data then reinstall (needs confirm /

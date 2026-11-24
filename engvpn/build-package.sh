@@ -956,7 +956,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — Merlin panel mobile UX: dark home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide cores.",
+  "notes": "EngVPN $VERSION — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -984,7 +984,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — Merlin panel mobile UX: dark home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide cores.",
+  "notes": "EngVPN $VERSION — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
