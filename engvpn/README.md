@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.11** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.12** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (нужен пароль) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
-| CLI | `engvpnd` |
+| CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.11](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.11) (после публикации feed)
+Релиз: [engvpn-0.5.12](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.12) (после публикации feed)
 
 ---
 
@@ -77,11 +77,12 @@ sh /jffs/addons/engvpn/share/engvpn/install.sh uninstall
 ENGVPN_RESTORE=0 engvpnd uninstall
 ```
 
-USB (если ставили на флешку):
+USB (если ставили на флешку): после 0.5.12 достаточно `engvpnd uninstall` (через `/opt/bin` или новый SSH-логин с `profile.add`). Полный путь:
 
 ```sh
 ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 # пример: ENGVPN_RESTORE=0 /tmp/mnt/sda1/engvpn/sbin/engvpnd uninstall
+# workaround до обновления / без PATH: тот же полный путь
 ```
 
 Что остаётся после чистого удаления: каталог-сосед `.engvpn-backup` (например `/jffs/addons/.engvpn-backup/`) — для ручного восстановления; его можно удалить вручную, если бэкап не нужен. Подробности бэкапа/отката — в разделе ниже и в [CLI → backup](#engvpnd-backup).
@@ -221,7 +222,8 @@ engvpnd privacy exit         # только exit IP
 
 ## CLI
 
-Основная точка входа после установки — **`engvpnd`** (`/jffs/addons/engvpn/sbin/engvpnd` или `$PREFIX/sbin/engvpnd`).  
+Основная точка входа после установки — **`engvpnd`**. Бинарь всегда в **`$PREFIX/sbin/engvpnd`** (не `bin/`): например `/jffs/addons/engvpn/sbin/engvpnd` или `/tmp/mnt/<USB>/engvpn/sbin/engvpnd`.  
+Установщик добавляет symlink **`/opt/bin/engvpnd`** (Entware) и строку в **`/jffs/configs/profile.add`**, чтобы короткие команды работали в SSH без полного пути. Баннер установки печатает точные пути.  
 Большинство подкоманд вызывают скрипты из `$PREFIX/share/engvpn/`. Глобальный флаг:
 
 ```sh

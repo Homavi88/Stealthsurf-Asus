@@ -13,6 +13,8 @@ umask 022
 SCRIPTS=/jffs/scripts
 HOOKS="services-start services-stop post-mount unmount firewall-start nat-start"
 MARK="# EngVPN"
+PATH_MARK="# EngVPN PATH"
+PROFILE_ADD=/jffs/configs/profile.add
 VOLATILE_DIR=/tmp/engvpn
 WORK=/tmp/engvpn-package
 STAGE=$WORK/stage
@@ -30,6 +32,7 @@ if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
 	LOCK_DIR=${ENGVPN_LOCK_DIR:-/tmp/engvpn-smoke-lock}
 	LOCK=$LOCK_DIR/.engvpn-install.lock
 	SERVICE_LOCK=$LOCK_DIR/.engvpn-service.lock
+	PROFILE_ADD=${ENGVPN_PROFILE_ADD:-$LOCK_DIR/profile.add}
 fi
 
 # Staged progress: merlin.sh sets ENGVPN_STAGE_TOTAL / ENGVPN_STAGE_NUM so
@@ -345,6 +348,99 @@ remove_hooks() (
 	done
 )
 
+# Put engvpnd on PATH: Entware /opt/bin symlink + Merlin profile.add (PREFIX/sbin).
+# Binary lives at $PREFIX/sbin/engvpnd (JFFS or USB), never $PREFIX/bin.
+cli_link_dirs() {
+	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
+		echo "${ENGVPN_BIN_DIR:-$LOCK_DIR/bin}"
+		return 0
+	fi
+	[ -d /opt/bin ] && echo /opt/bin
+}
+
+our_cli_link() {
+	# True if $1 is a symlink/file pointing at this install's engvpnd.
+	[ -e "$1" ] || [ -L "$1" ] || return 1
+	target=$(readlink "$1" 2>/dev/null || true)
+	[ -z "$target" ] && target=$1
+	case "$target" in
+	"$DAEMON" | "$PREFIX/sbin/engvpnd") return 0 ;;
+	*/engvpn/sbin/engvpnd)
+		# Same basename layout; accept if PREFIX matches or PREFIX already gone.
+		[ "$target" = "$PREFIX/sbin/engvpnd" ] && return 0
+		[ ! -e "$PREFIX" ] && return 0
+		;;
+	esac
+	return 1
+}
+
+install_cli_path() {
+	[ -x "$DAEMON" ] || return 0
+	for bindir in $(cli_link_dirs); do
+		[ -n "$bindir" ] || continue
+		mkdir -p "$bindir" 2>/dev/null || continue
+		ln -sf "$DAEMON" "$bindir/engvpnd" 2>/dev/null || true
+	done
+	# Real routers: always try Entware even if cli_link_dirs skipped an empty list.
+	if [ "${ENGVPN_SMOKE:-}" != 1 ] && [ -d /opt/bin ]; then
+		ln -sf "$DAEMON" /opt/bin/engvpnd 2>/dev/null || true
+	fi
+	# Login-shell PATH via Merlin /jffs/configs/profile.add (and smoke override).
+	profile=$PROFILE_ADD
+	mkdir -p "${profile%/*}" 2>/dev/null || true
+	if [ -d "${profile%/*}" ]; then
+		tmp=$profile.engvpn
+		if [ -f "$profile" ]; then
+			grep -vF "$PATH_MARK" "$profile" >"$tmp" 2>/dev/null || : >"$tmp"
+		else
+			: >"$tmp"
+		fi
+		printf '%s\n' \
+			"case \":\${PATH}:\" in *\":$PREFIX/sbin:\"*) ;; *) export PATH=\"$PREFIX/sbin:\${PATH}\" ;; esac $PATH_MARK" \
+			>>"$tmp" || {
+			rm -f "$tmp"
+			return 0
+		}
+		mv -f "$tmp" "$profile" 2>/dev/null || rm -f "$tmp"
+	fi
+	return 0
+}
+
+remove_cli_path() {
+	for bindir in $(cli_link_dirs) /opt/bin; do
+		[ -n "$bindir" ] || continue
+		link=$bindir/engvpnd
+		if our_cli_link "$link"; then
+			rm -f "$link" 2>/dev/null || true
+		fi
+	done
+	profile=$PROFILE_ADD
+	if [ -f "$profile" ]; then
+		tmp=$profile.engvpn
+		# grep exits 1 when every line matched (file becomes empty) — still OK.
+		grep -vF "$PATH_MARK" "$profile" >"$tmp" 2>/dev/null || true
+		if [ ! -s "$tmp" ]; then
+			rm -f "$profile" "$tmp"
+		else
+			mv -f "$tmp" "$profile" 2>/dev/null || rm -f "$tmp"
+		fi
+	fi
+	return 0
+}
+
+print_cli_hint() {
+	# Exact paths for success banners (RU).
+	echo "CLI:"
+	echo "  engvpnd"
+	echo "  полный путь: $PREFIX/sbin/engvpnd"
+	if [ -L /opt/bin/engvpnd ] || [ -x /opt/bin/engvpnd ]; then
+		echo "  в PATH:     /opt/bin/engvpnd"
+	elif [ "${ENGVPN_SMOKE:-}" = 1 ] && [ -n "${ENGVPN_BIN_DIR:-}" ] &&
+		{ [ -L "$ENGVPN_BIN_DIR/engvpnd" ] || [ -x "$ENGVPN_BIN_DIR/engvpnd" ]; }; then
+		echo "  в PATH:     $ENGVPN_BIN_DIR/engvpnd"
+	fi
+}
+
 other_install() {
 	for hook in $HOOKS; do
 		script=$(script_file "$SCRIPTS/$hook")
@@ -410,10 +506,12 @@ roll_back() {
 		done <"$previous"
 		cp -p "$previous" "$MANIFEST" 2>/dev/null || true
 		add_hooks || true
+		install_cli_path || true
 		start_service || true
 		return 0
 	fi
 	remove_hooks
+	remove_cli_path || true
 	rm -rf "$PREFIX/sbin" "$PREFIX/share"
 }
 
@@ -524,6 +622,7 @@ do_install() {
 		if ! add_hooks; then
 			problem="не удалось записать скрипты в $SCRIPTS"
 		else
+			install_cli_path || true
 			# Copy VERSION into share if present in stage
 			[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
 			# Seed updates.conf + Merlin cru / cron (survives reboot via services-start)
@@ -557,6 +656,8 @@ do_install() {
 		echo
 		echo "Адрес: $lan"
 		echo "Порт:  $port"
+		echo
+		print_cli_hint
 	fi
 }
 
@@ -581,6 +682,7 @@ do_upgrade() {
 	}
 	if place && add_hooks; then
 		[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
+		install_cli_path || true
 		[ -x "$SHARE/schedule-update.sh" ] &&
 			ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
 		rm -rf "$STAGE"
@@ -618,6 +720,7 @@ do_uninstall() {
 		remove_hooks
 		sh "$bak" restore "$PREFIX" || fail "restore from backup failed"
 		add_hooks || complain "hooks restore incomplete"
+		install_cli_path || true
 		start_service || complain "service did not start after restore"
 		say "EngVPN restored from backup at $PREFIX"
 		return 0
@@ -628,6 +731,7 @@ do_uninstall() {
 	fi
 	[ -x "$SHARE/schedule-update.sh" ] && sh "$SHARE/schedule-update.sh" remove-cru >/dev/null 2>&1 || true
 	remove_hooks
+	remove_cli_path || true
 	rm -rf "$PREFIX"
 	if [ -e "$PREFIX" ] || [ -L "$PREFIX" ]; then
 		fail "Could not remove $PREFIX completely"

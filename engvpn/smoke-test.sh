@@ -65,12 +65,15 @@ echo "==> install via merlin.sh (local package + password env)"
 export ENGVPN_SMOKE=1
 export ENGVPN_SCRIPTS="$SCRIPTS"
 export ENGVPN_LOCK_DIR="$LOCK_DIR"
+export ENGVPN_BIN_DIR="$SMOKE_ROOT/bin"
+export ENGVPN_PROFILE_ADD="$SMOKE_ROOT/profile.add"
 export ENGVPN_PREFIX="$PREFIX"
 export ENGVPN_PASSWORD="SmokeTest9!"
 export ENGVPN_FEED="file://$FEED_DIR/latest.json"
 # merlin.sh uses curl for feed — file:// may need special handling; use LOCAL override
 export ENGVPN_LOCAL_PACKAGE="$ARCHIVE"
 export ENGVPN_LOCAL_VERSION="$VERSION"
+mkdir -p "$ENGVPN_BIN_DIR"
 
 # merlin.sh still expects curl for non-local; LOCAL path skips download
 install_log=$SMOKE_ROOT/merlin-install.log
@@ -110,6 +113,27 @@ echo "==> hooks present"
 grep -q 'EngVPN' "$SCRIPTS/services-start"
 grep -q 'EngVPN' "$SCRIPTS/firewall-start"
 echo "  hooks ok"
+
+echo "==> PATH / CLI links"
+[ -L "$ENGVPN_BIN_DIR/engvpnd" ] || {
+	echo "missing symlink $ENGVPN_BIN_DIR/engvpnd" >&2
+	exit 1
+}
+link_target=$(readlink "$ENGVPN_BIN_DIR/engvpnd")
+[ "$link_target" = "$PREFIX/sbin/engvpnd" ] || {
+	echo "bad symlink target: $link_target (want $PREFIX/sbin/engvpnd)" >&2
+	exit 1
+}
+grep -q 'EngVPN PATH' "$ENGVPN_PROFILE_ADD"
+grep -q "$PREFIX/sbin" "$ENGVPN_PROFILE_ADD"
+grep -q "полный путь: $PREFIX/sbin/engvpnd" "$install_log" || {
+	echo "install banner missing CLI path; log:" >&2
+	cat "$install_log" >&2
+	exit 1
+}
+# Short verb via PATH-style symlink (smoke BIN_DIR)
+"$ENGVPN_BIN_DIR/engvpnd" ver | grep -q "$VERSION"
+echo "  PATH symlink + profile.add + banner ok"
 
 echo "==> engvpnd status / version"
 "$PREFIX/sbin/engvpnd" version | grep -q "$VERSION"
@@ -636,6 +660,18 @@ echo "  skip-backup install ok"
 ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 \
 	sh "$PREFIX/share/engvpn/install.sh" uninstall "$PREFIX"
 [ ! -e "$PREFIX" ]
+[ ! -e "$ENGVPN_BIN_DIR/engvpnd" ] && [ ! -L "$ENGVPN_BIN_DIR/engvpnd" ] || {
+	echo "CLI symlink not removed: $ENGVPN_BIN_DIR/engvpnd" >&2
+	ls -la "$ENGVPN_BIN_DIR" >&2 || true
+	exit 1
+}
+if [ -f "$ENGVPN_PROFILE_ADD" ]; then
+	grep -q 'EngVPN PATH' "$ENGVPN_PROFILE_ADD" && {
+		echo "profile.add still has EngVPN PATH after uninstall" >&2
+		cat "$ENGVPN_PROFILE_ADD" >&2
+		exit 1
+	}
+fi
 echo "  final uninstall ok"
 
 echo

@@ -634,4 +634,14 @@ echo "Адрес: $lan"
 echo "Порт:  $port"
 echo "Войдите с выбранным паролем."
 echo
+echo "CLI:"
+echo "  engvpnd"
+echo "  полный путь: $prefix/sbin/engvpnd"
+if [ -L /opt/bin/engvpnd ] || [ -x /opt/bin/engvpnd ]; then
+	echo "  в PATH:     /opt/bin/engvpnd"
+elif [ "${ENGVPN_SMOKE:-}" = 1 ] && [ -n "${ENGVPN_BIN_DIR:-}" ] &&
+	{ [ -L "$ENGVPN_BIN_DIR/engvpnd" ] || [ -x "$ENGVPN_BIN_DIR/engvpnd" ]; }; then
+	echo "  в PATH:     $ENGVPN_BIN_DIR/engvpnd"
+fi
+echo
 echo "Пути: не трогает /jffs/addons/stealthsurf (:8800) и /jffs/addons/ssurf (:1131)"
