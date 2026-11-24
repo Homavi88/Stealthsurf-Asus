@@ -42,6 +42,10 @@ INSTALL=$SHARE/install.sh
 
 export PATH="/opt/bin:/opt/sbin:/usr/sbin:/usr/bin:/sbin:/bin:${PATH:-}"
 export ENGVPN_PORT="$PORT"
+# Persist open LAN access across restarts when install skipped the password.
+if [ -z "${ENGVPN_OPEN_PANEL:-}" ] && [ -f "$DATA_DIR/open-panel" ]; then
+	ENGVPN_OPEN_PANEL=1
+fi
 export ENGVPN_OPEN_PANEL="${ENGVPN_OPEN_PANEL:-0}"
 export ENGVPN_PID_FILE="$PIDFILE"
 export ENGVPN_DATA_DIR="$DATA_DIR"
@@ -133,7 +137,9 @@ cmd_set_password() {
 		exit 1
 	}
 	remember_node "$node"
-	"$node" "$SHARE/set-password.mjs" --data-dir "$DATA_DIR"
+	"$node" "$SHARE/set-password.mjs" --data-dir "$DATA_DIR" || exit $?
+	# Password replaces open LAN access from a skip-password install.
+	rm -f "$DATA_DIR/open-panel" 2>/dev/null || true
 }
 
 cmd_serve() {

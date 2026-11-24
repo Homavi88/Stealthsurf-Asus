@@ -4,10 +4,12 @@
 #   curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 #
 # Reads the router feed, picks this router's package, checks SHA-256, runs the
-# package install.sh, then asks for the panel password. Interactive install
-# asks where to put files: JFFS (/jffs/addons/engvpn) or a mounted ext USB
-# (/tmp/mnt/<name>/engvpn), showing required (≥ MIN_FREE_KB) and free space.
-# ENGVPN_PREFIX skips the location prompt; ENGVPN_PASSWORD skips both prompts.
+# package install.sh, then asks whether to set a panel password (default yes).
+# Interactive install asks where to put files: JFFS (/jffs/addons/engvpn) or a
+# mounted ext USB (/tmp/mnt/<name>/engvpn), showing required (≥ MIN_FREE_KB)
+# and free space. ENGVPN_PREFIX skips the location prompt; ENGVPN_PASSWORD
+# skips location + password prompts. ENGVPN_OPEN_PANEL=1 /
+# ENGVPN_SKIP_PASSWORD=1 skips the password (open LAN panel, no login).
 #
 # Open reimplementation — does not ship StealthSurf proprietary binaries.
 # Requires Entware Node.js for the panel runtime (opkg install node).
@@ -344,65 +346,89 @@ else
 	validate_prefix_space "$prefix"
 fi
 
-# Panel password before any mutation (unless ENGVPN_PASSWORD is preset for automation).
+# Panel password before any mutation.
+# ENGVPN_PASSWORD → set that password (automation).
+# ENGVPN_OPEN_PANEL=1 or ENGVPN_SKIP_PASSWORD=1 → open LAN access, no password.
+# Interactive: ask whether to set a password (default yes / recommended).
 password=${ENGVPN_PASSWORD:-}
-if [ -z "$password" ]; then
+skip_password=0
+case "${ENGVPN_OPEN_PANEL:-}${ENGVPN_SKIP_PASSWORD:-}" in
+*1*) skip_password=1 ;;
+esac
+if [ -n "$password" ]; then
+	skip_password=0
+elif [ "$skip_password" -eq 1 ]; then
+	password=""
+else
 	{ : </dev/tty; } 2>/dev/null ||
-		fail "нет TTY для пароля панели: используйте ssh -t или задайте ENGVPN_PASSWORD"
-	echo "Задайте пароль панели EngVPN (гости в LAN не попадут в панель)"
-	hidden_read() {
-		if type stty >/dev/null 2>&1; then
-			stty -echo </dev/tty 2>/dev/null
-			rc=0
-			IFS= read -r "$1" </dev/tty || rc=$?
-			stty echo </dev/tty 2>/dev/null
-			return "$rc"
-		else
-			# shellcheck disable=SC3045
-			IFS= read -rs "$1" </dev/tty
-		fi
-	}
-	c1_control() {
-		hexdump -v -e '1/1 "%u\n"' <<EOF | awk 'previous == 194 && $1 >= 128 && $1 <= 159 { found = 1 } { previous = $1 } END { exit !found }'
-$password
-EOF
-	}
-	while :; do
-		printf "Пароль (8–128 символов): "
+		fail "нет TTY для пароля панели: используйте ssh -t, задайте ENGVPN_PASSWORD или ENGVPN_OPEN_PANEL=1"
+	echo "Пароль панели EngVPN защищает доступ из домашней сети (рекомендуется)."
+	printf "Задать пароль панели? [Y/n]: " >/dev/tty
+	set_pass_ans=""
+	IFS= read -r set_pass_ans </dev/tty || fail "не удалось прочитать ответ"
+	case $set_pass_ans in
+	n | N | no | No | NO | н | Н | нет | Нет | НЕТ)
+		skip_password=1
 		password=""
-		hidden_read password || fail "не удалось прочитать пароль"
-		echo
-		bytes=$(wc -c <<EOF
+		echo "Пароль пропущен: панель откроется без входа (только LAN). Позже: engvpnd set-password"
+		;;
+	*)
+		echo "Задайте пароль панели EngVPN (гости в LAN не попадут в панель)"
+		hidden_read() {
+			if type stty >/dev/null 2>&1; then
+				stty -echo </dev/tty 2>/dev/null
+				rc=0
+				IFS= read -r "$1" </dev/tty || rc=$?
+				stty echo </dev/tty 2>/dev/null
+				return "$rc"
+			else
+				# shellcheck disable=SC3045
+				IFS= read -rs "$1" </dev/tty
+			fi
+		}
+		c1_control() {
+			hexdump -v -e '1/1 "%u\n"' <<EOF | awk 'previous == 194 && $1 >= 128 && $1 <= 159 { found = 1 } { previous = $1 } END { exit !found }'
+$password
+EOF
+		}
+		while :; do
+			printf "Пароль (8–128 символов): "
+			password=""
+			hidden_read password || fail "не удалось прочитать пароль"
+			echo
+			bytes=$(wc -c <<EOF
 $password
 EOF
 )
-		length=$(LC_ALL=C tr -d '\200-\277' <<EOF | wc -c
+			length=$(LC_ALL=C tr -d '\200-\277' <<EOF | wc -c
 $password
 EOF
 )
-		printable=$(LC_ALL=C tr -d '\001-\037\177' <<EOF | wc -c
+			printable=$(LC_ALL=C tr -d '\001-\037\177' <<EOF | wc -c
 $password
 EOF
 )
-		bytes=$((bytes - 1))
-		length=$((length - 1))
-		if [ "$((length))" -lt 8 ] || [ "$((length))" -gt 128 ]; then
-			echo "Пароль должен быть 8–128 символов"
-			continue
-		fi
-		if [ "$((printable))" -ne "$((bytes))" ] || c1_control; then
-			echo "Пароль не должен содержать управляющие символы"
-			continue
-		fi
-		printf "Ещё раз: "
-		confirmation=""
-		hidden_read confirmation || fail "не удалось прочитать пароль"
-		echo
-		case $confirmation in
-		"$password") break ;;
-		esac
-		echo "Пароли не совпадают"
-	done
+			bytes=$((bytes - 1))
+			length=$((length - 1))
+			if [ "$((length))" -lt 8 ] || [ "$((length))" -gt 128 ]; then
+				echo "Пароль должен быть 8–128 символов"
+				continue
+			fi
+			if [ "$((printable))" -ne "$((bytes))" ] || c1_control; then
+				echo "Пароль не должен содержать управляющие символы"
+				continue
+			fi
+			printf "Ещё раз: "
+			confirmation=""
+			hidden_read confirmation || fail "не удалось прочитать пароль"
+			echo
+			case $confirmation in
+			"$password") break ;;
+			esac
+			echo "Пароли не совпадают"
+		done
+		;;
+	esac
 fi
 
 WORK=/tmp/engvpn-get.$$
@@ -606,18 +632,32 @@ fi
 # install.sh printed stages 4–7 (unpack…hooks); child cannot export STAGE_NUM back.
 STAGE_NUM=7
 
-stage "Пароль" "Сохранение пароля панели…"
-(
-	trap '' INT TERM HUP
-	"$prefix/sbin/engvpnd" set-password --data-dir "$prefix/data" <<EOF
+if [ "$skip_password" -eq 1 ]; then
+	stage "Пароль" "Открытый доступ к панели (без пароля)…"
+	mkdir -p "$prefix/data" || fail "не удалось создать $prefix/data"
+	chmod 700 "$prefix/data" 2>/dev/null || true
+	# Flag read by engvpnd/service.sh → ENGVPN_OPEN_PANEL=1 (existing openAccess model).
+	: >"$prefix/data/open-panel" || fail "не удалось включить открытый доступ"
+	chmod 600 "$prefix/data/open-panel" 2>/dev/null || true
+	rm -f "$prefix/data/state.json.new" 2>/dev/null || true
+else
+	stage "Пароль" "Сохранение пароля панели…"
+	rm -f "$prefix/data/open-panel" 2>/dev/null || true
+	(
+		trap '' INT TERM HUP
+		"$prefix/sbin/engvpnd" set-password --data-dir "$prefix/data" <<EOF
 $password
 EOF
-) || fail "пароль панели не сохранён"
+	) || fail "пароль панели не сохранён"
+fi
 
 stage "Запуск" "Запуск сервиса…"
 export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
 export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
+if [ "$skip_password" -eq 1 ]; then
+	export ENGVPN_OPEN_PANEL=1
+fi
 "$prefix/share/engvpn/service.sh" restart || fail "сервис EngVPN не запустился"
 
 lan=""
@@ -632,7 +672,12 @@ echo "http://${lan}:${port}"
 echo
 echo "Адрес: $lan"
 echo "Порт:  $port"
-echo "Войдите с выбранным паролем."
+if [ "$skip_password" -eq 1 ]; then
+	echo "Пароль не задан — панель откроется сразу (доступ из LAN)."
+	echo "Задать пароль позже: engvpnd set-password"
+else
+	echo "Войдите с выбранным паролем."
+fi
 echo
 echo "CLI:"
 echo "  engvpnd"

@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.12** ([`VERSION`](./VERSION)) |
-| Панель | `http://<lan_ip>:8790/` (нужен пароль) |
+| Версия | **0.5.13** ([`VERSION`](./VERSION)) |
+| Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.12](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.12) (после публикации feed)
+Релиз: [engvpn-0.5.13](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.13) (после публикации feed)
 
 ---
 
@@ -47,17 +47,22 @@ curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engv
 Выбор [1]:
 ```
 
-По умолчанию — JFFS, если хватает места (≥20 МБ / `MIN_FREE_KB`); иначе первая подходящая USB (ext2/3/4). Рекомендации по выбору носителя — в [Куда ставить](#куда-ставить). `ENGVPN_PREFIX` пропускает этот вопрос. Затем — пароль панели (8–128 символов), **резервная копия** (если EngVPN уже стоял), загрузка пакета, **SHA-256** / **Minisign**, запуск сервиса.
+По умолчанию — JFFS, если хватает места (≥20 МБ / `MIN_FREE_KB`); иначе первая подходящая USB (ext2/3/4). Рекомендации по выбору носителя — в [Куда ставить](#куда-ставить). `ENGVPN_PREFIX` пропускает этот вопрос. Затем — **задать пароль панели?** (по умолчанию да, рекомендуется; `n` = открытый доступ из LAN без входа), **резервная копия** (если EngVPN уже стоял), загрузка пакета, **SHA-256** / **Minisign**, запуск сервиса.
 
-Ход установки печатается по этапам `[n/9]` (проверки → загрузка → проверка → распаковка → бэкап → файлы → хуки → пароль → запуск). При сбое: `Ошибка на этапе «…»: …` и код выхода ≠ 0.
+Ход установки печатается по этапам `[n/9]` (проверки → загрузка → проверка → распаковка → бэкап → файлы → хуки → пароль/открытый доступ → запуск). При сбое: `Ошибка на этапе «…»: …` и код выхода ≠ 0.
 
-Без интерактива (автовыбор каталога как раньше — JFFS при достаточном месте, иначе USB; без запроса пароля):
+Без интерактива (автовыбор каталога как раньше — JFFS при достаточном месте, иначе USB):
 
 ```sh
+# с паролем:
 ENGVPN_PASSWORD='your-password' curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh
 # или явно:
 ENGVPN_PREFIX=/tmp/mnt/sda1/engvpn ENGVPN_PASSWORD='…' curl -fsSL …/merlin.sh | sh
+# без пароля (панель открывается сразу в LAN):
+ENGVPN_OPEN_PANEL=1 ENGVPN_PREFIX=/jffs/addons/engvpn curl -fsSL …/merlin.sh | sh
 ```
+
+Если пароль пропущен: откройте `http://<lan_ip>:8790/` — вход не спрашивается. Позже: `engvpnd set-password` (снимет открытый доступ).
 
 Переменные установщика (`merlin.sh`) и связанных скриптов — в разделе [CLI](#cli) ниже. Панель: `http://192.168.50.1:8790/` (подставьте LAN IP).
 
@@ -112,7 +117,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 Ключ хранится только на роутере (`data/account.json`, mode 0600).
 
-## Панель 0.5.11
+## Панель 0.5.13
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
@@ -124,6 +129,15 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
+
+### Что нового в 0.5.13
+
+- Логин на iPhone Safari: поле «Пароль панели» снова открывает клавиатуру (без autofocus-ловушки, `inputmode` / `user-select` / `touch-action`, сохранение значения при «глазе»).
+- Установка: вопрос «Задать пароль панели? [Y/n]» — по умолчанию да; `n` или `ENGVPN_OPEN_PANEL=1` / `ENGVPN_SKIP_PASSWORD=1` — открытый доступ из LAN без входа (`data/open-panel`). Позже: `engvpnd set-password`.
+
+### Что нового в 0.5.12
+
+- После установки `engvpnd` в PATH: symlink `/opt/bin/engvpnd` (Entware) и строка в `/jffs/configs/profile.add`; баннер печатает точные пути CLI.
 
 ### Что нового в 0.5.11
 
@@ -455,6 +469,7 @@ sh …/share/engvpn/netfilter.sh set-hold 120
 | Переменная | Где | Назначение |
 | --- | --- | --- |
 | `ENGVPN_PASSWORD` | merlin.sh | Пароль панели без TTY; также отключает вопрос «куда ставить» |
+| `ENGVPN_OPEN_PANEL` / `ENGVPN_SKIP_PASSWORD` | merlin.sh | `1` — без пароля (открытый LAN-доступ; флаг `data/open-panel`) |
 | `ENGVPN_PREFIX` | merlin.sh | Каталог установки (пропускает вопрос JFFS/USB) |
 | `ENGVPN_LOCAL_PACKAGE` | merlin.sh | Локальный `.tar.gz` |
 | `ENGVPN_LOCAL_VERSION` | merlin.sh | Метка версии для локального пакета |
