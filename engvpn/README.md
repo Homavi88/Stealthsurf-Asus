@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.27** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.28** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.27](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.27) (после публикации feed)
+Релиз: [engvpn-0.5.28](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.28) (после публикации feed)
 
 ---
 
@@ -132,6 +132,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.28
+
+- **[10/10] Запуск сервиса:** таймаут (`ENGVPN_START_TIMEOUT`, по умолчанию 45 с) и прогресс «ожидание панели…»; при зависании — явная ошибка, не вечный hang.
+- **Ferrum:** архив Xray (`xray` в zip) корректно ставится как `data/cores/ferrum` (больше не `архив распаковался без бинарника`).
+- **Один supervisor / один run.mjs:** hard-enforce на `start` — storm из нескольких панелей сносится через kill-strays; `engvpnd serve` держит flock в родителе (Node больше не отпускает lock через exec); kill-strays + path-scoped pkill убирают все extras.
 
 ### Что нового в 0.5.27
 

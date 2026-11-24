@@ -75,13 +75,18 @@ read_environ() {
 	printf '%s\n' "$_env"
 }
 
+# Node panel only (run.mjs). engvpnd serve parent holds flock and is tracked separately.
 own_panel() {
 	alive "$1" || return 1
 	cmd=$(read_cmdline "$1") || return 1
 	case "$cmd" in
-	*"$PREFIX"*run.mjs*) return 0 ;;
-	*"$PREFIX"*engvpnd*serve*) return 0 ;;
-	*"$SHARE"/runtime/run.mjs*) return 0 ;;
+	*"$PREFIX"*run.mjs* | *"$SHARE"/runtime/run.mjs*) return 0 ;;
+	*engvpn/share/engvpn/runtime/run.mjs*)
+		# Broad match: any EngVPN install path (symlink / old PREFIX)
+		case "$cmd" in
+		*"$PREFIX"* | *"$SHARE"*) return 0 ;;
+		esac
+		;;
 	esac
 	cwd=$(readlink "/proc/$1/cwd" 2>/dev/null || true)
 	case "$cwd" in
@@ -90,12 +95,33 @@ own_panel() {
 	return 1
 }
 
+# Background supervisor shells (service.sh start/restart holding flock).
 own_service_script() {
 	alive "$1" || return 1
 	[ "$1" = "$$" ] && return 1
 	cmd=$(read_cmdline "$1") || return 1
 	case "$cmd" in
-	*"$SHARE/service.sh"* | *"$PREFIX/share/engvpn/service.sh"*) return 0 ;;
+	*"$SHARE/service.sh"* | *"$PREFIX/share/engvpn/service.sh"* | */engvpn/share/engvpn/service.sh*)
+		case "$cmd" in
+		*"$SHARE/service.sh"* | *"$PREFIX/share/engvpn/service.sh"*) return 0 ;;
+		*"$PREFIX"*) return 0 ;;
+		esac
+		;;
+	esac
+	return 1
+}
+
+# engvpnd serve parent (holds panel flock while node runs) — kill with strays.
+own_engvpnd_serve() {
+	alive "$1" || return 1
+	[ "$1" = "$$" ] && return 1
+	cmd=$(read_cmdline "$1") || return 1
+	case "$cmd" in
+	*"$DAEMON"*serve* | *"$PREFIX/sbin/engvpnd"*serve* | *engvpnd\ serve*)
+		case "$cmd" in
+		*"$PREFIX"* | *"$DAEMON"*) return 0 ;;
+		esac
+		;;
 	esac
 	return 1
 }
@@ -216,32 +242,102 @@ kill_orphan_helpers() {
 	done
 }
 
-# Soft cleanup before start: helpers + storm of sh/service.sh + extra run.mjs.
-reap_orphans_on_start() {
+# Brute-force path-scoped kill. Never pkill service.sh — that would SIGKILL $$ mid kill-strays.
+brute_kill_prefix() {
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/sbin/engvpnd serve" 2>/dev/null || true
+		pkill -9 -f "$SHARE/runtime/run.mjs" 2>/dev/null || true
+	fi
+	# /proc sweep (skips $$): panels, engvpnd serve parents, other service.sh, helpers
+	for entry in /proc/[0-9]*; do
+		p=${entry#/proc/}
+		[ "$p" = "$$" ] && continue
+		cmd=$(read_cmdline "$p") || continue
+		case "$cmd" in
+		*"$PREFIX"* | *"$SHARE"*)
+			case "$cmd" in
+			*run.mjs* | *service.sh* | *engvpnd*serve* | *engvpnd\ serve*)
+				kill_children_of "$p"
+				kill -9 "$p" 2>/dev/null || true
+				;;
+			esac
+			;;
+		esac
+	done
+}
+
+# Lock held by a live supervisor? (flock or lockdir)
+supervisor_lock_busy() {
+	if [ -d "$SUPERVISOR_LOCK.d" ]; then
+		return 0
+	fi
+	if type flock >/dev/null 2>&1; then
+		if ! (
+			flock -n 9 || exit 1
+			exit 0
+		) 9>>"$SUPERVISOR_LOCK" 2>/dev/null; then
+			return 0
+		fi
+	fi
+	return 1
+}
+
+# Hard single-instance on start.
+# Returns 0 if panel already healthy (caller returns success), 1 if must spawn fresh.
+# Note: supervisor_count includes transient `service.sh start` callers — do NOT wipe
+# just because many starts race; key on panel_count + supervisor lock/pidfile.
+enforce_single_on_start() {
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
+	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	kill_dead_prefix_supervisors
 	kill_orphan_helpers
 
 	n=$(panel_count)
+
+	# Multi run.mjs storm — wipe everything, caller respawns one
 	if [ "$n" -gt 1 ]; then
-		echo "EngVPN: start cleanup — culling $n panels" >>"$LOG" 2>/dev/null || true
-		cull_extra_panels
+		echo "EngVPN: hard-enforce — $n panels → kill-strays" >>"$LOG" 2>/dev/null || true
+		kill_strays
+		brute_kill_prefix
+		return 1
 	fi
 
-	n_sup=$(supervisor_count)
-	if [ "$n_sup" -gt 1 ]; then
-		echo "EngVPN: start cleanup — reaping $n_sup supervisors" >>"$LOG" 2>/dev/null || true
-		for entry in /proc/[0-9]*; do
-			p=${entry#/proc/}
-			[ "$p" = "$$" ] && continue
-			own_service_script "$p" || continue
-			kill_children_of "$p"
-			kill "$p" 2>/dev/null || true
-		done
+	# Exactly one panel — keep it; cull orphan helpers only
+	if [ "$n" -eq 1 ]; then
 		kill_orphan_helpers
-		rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE" 2>/dev/null || true
-		rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true
+		echo "EngVPN: single panel present — keep" >>"$LOG" 2>/dev/null || true
+		return 0
 	fi
+
+	# No panel: if a supervisor already holds the lock, wait for its panel (parallel start).
+	# IMPORTANT: do NOT kill-strays here — a losing/stuck start caller would murder the
+	# winner's panel (exit 143). Leave wipe to explicit kill-strays / restart / multi-panel.
+	if supervisor_pid >/dev/null || supervisor_lock_busy; then
+		echo "EngVPN: supervisor lock busy — waiting for panel" >>"$LOG" 2>/dev/null || true
+		_w=0
+		_wait_max=${ENGVPN_START_TIMEOUT:-45}
+		case $_wait_max in
+		'' | *[!0-9]*) _wait_max=45 ;;
+		esac
+		while [ "$_w" -lt "$_wait_max" ]; do
+			n=$(panel_count)
+			if [ "$n" -ge 1 ]; then
+				[ "$n" -gt 1 ] && cull_extra_panels
+				return 0
+			fi
+			# Lock released with no panel — we should spawn
+			supervisor_pid >/dev/null || supervisor_lock_busy || return 1
+			sleep 1
+			_w=$((_w + 1))
+		done
+		echo "EngVPN: supervisor lock busy but no panel after ${_wait_max}s — yield" >>"$LOG" 2>/dev/null || true
+		return 1
+	fi
+
+	# Clean slate — spawn
+	kill_orphan_helpers
+	return 1
 }
 
 # Tracked sleep so EXIT trap / kill-strays can reap after SIGKILL reparent.
@@ -251,6 +347,10 @@ supervisor_sleep() {
 	_sp=$!
 	printf '%s\n' "$_sp" >>"$CHILDREN_FILE" 2>/dev/null || true
 	wait "$_sp" 2>/dev/null || true
+}
+
+is_engvpn_process() {
+	own_panel "$1" || own_service_script "$1" || own_engvpnd_serve "$1" || is_engvpn_helper "$1"
 }
 
 kill_strays() {
@@ -271,11 +371,14 @@ kill_strays() {
 	for entry in /proc/[0-9]*; do
 		p=${entry#/proc/}
 		[ "$p" = "$$" ] && continue
-		if own_panel "$p" || own_service_script "$p" || is_engvpn_helper "$p"; then
+		if is_engvpn_process "$p"; then
 			kill_children_of "$p"
 			kill "$p" 2>/dev/null || true
 		fi
 	done
+
+	# Path-scoped brute force — catches argv variants own_* missed
+	brute_kill_prefix
 
 	i=0
 	while [ "$i" -lt 8 ]; do
@@ -283,13 +386,14 @@ kill_strays() {
 		for entry in /proc/[0-9]*; do
 			p=${entry#/proc/}
 			[ "$p" = "$$" ] && continue
-			if own_panel "$p" || own_service_script "$p" || is_engvpn_helper "$p"; then
+			if is_engvpn_process "$p"; then
 				left=1
 				break
 			fi
 		done
 		[ "$left" = 0 ] && break
 		kill_orphan_helpers
+		brute_kill_prefix
 		sleep 1
 		i=$((i + 1))
 	done
@@ -297,12 +401,13 @@ kill_strays() {
 	for entry in /proc/[0-9]*; do
 		p=${entry#/proc/}
 		[ "$p" = "$$" ] && continue
-		if own_panel "$p" || own_service_script "$p" || is_engvpn_helper "$p"; then
+		if is_engvpn_process "$p"; then
 			kill_children_of "$p"
 			kill -9 "$p" 2>/dev/null || true
 		fi
 	done
 	kill_orphan_helpers
+	brute_kill_prefix
 	[ -n "${sup:-}" ] && kill_children_of "$sup"
 	[ -n "${sup:-}" ] && [ "$sup" != "$$" ] && kill -9 "$sup" 2>/dev/null || true
 
@@ -312,7 +417,7 @@ kill_strays() {
 	# Wait until .supervisor.lock is free (orphan sleep used to hold it after kill)
 	if type flock >/dev/null 2>&1; then
 		w=0
-		while [ "$w" -lt 6 ]; do
+		while [ "$w" -lt 8 ]; do
 			if (
 				flock -n 9 || exit 1
 				exit 0
@@ -320,6 +425,7 @@ kill_strays() {
 				break
 			fi
 			kill_orphan_helpers
+			brute_kill_prefix
 			sleep 1
 			w=$((w + 1))
 		done
@@ -356,15 +462,56 @@ open_panel_port_hook() {
 	printf '\niptables -I INPUT -p tcp --dport %s -j ACCEPT 2>/dev/null %s\n' "$PORT" "$mark" >>"$fs"
 }
 
+# Wait for panel with progress; ENGVPN_START_TIMEOUT seconds (default 45).
+wait_for_panel() {
+	_timeout=${ENGVPN_START_TIMEOUT:-45}
+	case $_timeout in
+	'' | *[!0-9]*) _timeout=45 ;;
+	esac
+	[ "$_timeout" -lt 5 ] && _timeout=5
+	_i=0
+	_quiet=${1:-}
+	while [ "$_i" -lt "$_timeout" ]; do
+		n=$(panel_count)
+		if [ "$n" -ge 1 ]; then
+			[ "$n" -gt 1 ] && cull_extra_panels
+			[ -z "$_quiet" ] && [ "$_i" -gt 0 ] && printf '\n'
+			return 0
+		fi
+		if [ -z "$_quiet" ]; then
+			if [ "$_i" -eq 0 ]; then
+				printf '  ожидание панели'
+			fi
+			printf '.'
+			# every 10s print elapsed
+			if [ "$((_i % 10))" -eq 9 ]; then
+				printf ' %ss' "$((_i + 1))"
+			fi
+		fi
+		sleep 1
+		_i=$((_i + 1))
+	done
+	[ -z "$_quiet" ] && printf '\n'
+	return 1
+}
+
 do_start() {
+	# Disable monitor mode — otherwise ash prints «Terminated» when a
+	# background sleep/helper from kill-strays/supervisor is reaped.
+	set +m 2>/dev/null || true
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR"
 	chmod 700 "$DATA_DIR" 2>/dev/null || true
 	: >>"$LOG" 2>/dev/null || true
 	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	rm -f "$DATA_DIR/.stop-requested" 2>/dev/null || true
 
-	# Auto-cleanup: hung sleeps, multi sh/service.sh, multi run.mjs
-	reap_orphans_on_start
+	# Hard single-instance: wipe storm / orphans; keep only healthy 1+1
+	if enforce_single_on_start; then
+		ensure_firewall
+		open_panel_port_hook
+		echo "EngVPN started (port $PORT)"
+		return 0
+	fi
 
 	[ -x "$DAEMON" ] || {
 		echo "EngVPN: missing $DAEMON" >&2
@@ -423,20 +570,19 @@ do_start() {
 					continue
 				fi
 
-				# 8>&- : do not inherit supervisor flock into engvpnd/node
+				# 8>&- : do not inherit supervisor flock into engvpnd/node.
+				# engvpnd serve exec's into node (same PID) — child is the panel.
 				"$DAEMON" serve --data-dir "$DATA_DIR" 8>&- >>"$LOG" 2>&1 &
 				child=$!
 				printf '%s\n' "$child" >"$PIDFILE"
 				while kill -0 "$child" 2>/dev/null; do
 					[ -f "$DATA_DIR/.stop-requested" ] && break
 					[ -x "$DAEMON" ] || break
-					for entry in /proc/[0-9]*; do
-						p=${entry#/proc/}
-						[ "$p" = "$child" ] && continue
-						own_panel "$p" || continue
-						echo "EngVPN supervisor: killing stray panel $p" >>"$LOG" 2>/dev/null || true
-						kill "$p" 2>/dev/null || true
-					done
+					n=$(panel_count)
+					if [ "$n" -gt 1 ]; then
+						echo "EngVPN supervisor: cull extras ($n panels)" >>"$LOG" 2>/dev/null || true
+						cull_extra_panels
+					fi
 					supervisor_sleep 5
 					ticks=$((ticks + 5))
 					if [ "$ticks" -ge 60 ]; then
@@ -447,6 +593,7 @@ do_start() {
 				wait "$child" 2>/dev/null
 				code=$?
 				rm -f "$PIDFILE"
+				rm -rf "$PANEL_LOCK.d" 2>/dev/null || true
 				[ -f "$DATA_DIR/.stop-requested" ] && break
 				if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
 					echo "EngVPN supervisor: daemon/data gone after child — exit" >>"$LOG" 2>/dev/null || true
@@ -514,35 +661,16 @@ do_start() {
 		) >>"$LOG" 2>&1 &
 	fi
 
-	i=0
-	while [ "$i" -lt 30 ]; do
+	# Progress + hard timeout (default 45s). Losers of flock also wait for the winner's panel.
+	# Do NOT cull other service.sh here — supervisor_count includes transient `start`
+	# callers and killing the flock holder orphans the panel (exit 143).
+	if wait_for_panel; then
 		n=$(panel_count)
-		[ "$n" -ge 1 ] && break
-		# Supervisor holding lock but panel still booting
-		sup=$(supervisor_pid || true)
-		sleep 1
-		i=$((i + 1))
-	done
-	n=$(panel_count)
-	if [ "$n" -ge 1 ]; then
 		[ "$n" -gt 1 ] && cull_extra_panels
 		echo "EngVPN started (port $PORT)"
 		return 0
 	fi
-	# Another start won the flock / supervisor still booting
-	if supervisor_pid >/dev/null || [ -d "$SUPERVISOR_LOCK.d" ]; then
-		echo "EngVPN already running"
-		return 0
-	fi
-	if type flock >/dev/null 2>&1; then
-		if ! flock -n 9 9>>"$SUPERVISOR_LOCK" 2>/dev/null; then
-			echo "EngVPN already running"
-			return 0
-		fi
-		# Acquired unexpectedly with no panel — release via subshell end
-		flock -u 9 2>/dev/null || true
-	fi
-	echo "EngVPN failed to start — see $LOG" >&2
+	echo "EngVPN failed to start (timeout ${ENGVPN_START_TIMEOUT:-45}s) — see $LOG" >&2
 	return 1
 }
 

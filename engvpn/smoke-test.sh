@@ -175,6 +175,8 @@ grep -q 'Хуки' "$install_log"
 grep -q 'Загрузка ядер и гео-баз\|ядра пропущены' "$install_log"
 grep -q 'Сохранение пароля' "$install_log"
 grep -q 'Запуск сервиса' "$install_log"
+grep -qE 'ожидание панели|запуск \(таймаут|EngVPN started' "$install_log" \
+	|| grep -q 'EngVPN started' "$install_log"
 echo "  progress [1/10]…[10/10] ok"
 
 echo "==> verify layout"
@@ -504,10 +506,32 @@ if command -v node >/dev/null 2>&1; then
 		&& ! grep -qE 'tr .*<"/proc/.*/cmdline"' "$PREFIX/share/engvpn/service.sh" \
 		&& echo "  quiet cmdline (-r + cat) ok" \
 		|| { echo "service.sh must use -r + cat for cmdline (no shell <redir)" >&2; exit 1; }
-	grep -q 'kill_orphan_helpers\|reap_orphans_on_start\|supervisor_sleep' "$PREFIX/share/engvpn/service.sh" \
+	grep -q 'kill_orphan_helpers\|enforce_single_on_start\|supervisor_sleep\|brute_kill_prefix\|wait_for_panel' "$PREFIX/share/engvpn/service.sh" \
 		&& grep -q 'kill_strays 2>/dev/null' "$PREFIX/share/engvpn/service.sh" \
-		&& echo "  orphan sleep reap + quiet kill-strays ok" \
-		|| { echo "missing orphan reap / quiet kill-strays" >&2; exit 1; }
+		&& echo "  hard-enforce single + start timeout/progress ok" \
+		|| { echo "missing enforce_single / brute_kill / wait_for_panel" >&2; exit 1; }
+	grep -q 'id === "ferrum" ? "xray"\|member = id === "ferrum"' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
+		&& echo "  Ferrum unpack → xray member ok" \
+		|| { echo "missing Ferrum→xray unpack mapping in engines.mjs" >&2; exit 1; }
+	# kill-strays must leave zero panels for this PREFIX
+	"$PREFIX/share/engvpn/service.sh" start >/dev/null
+	sleep 1
+	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null
+	sleep 1
+	_left=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*run.mjs*) _left=$((_left + 1)) ;;
+		esac
+	done
+	[ "$_left" -eq 0 ] || {
+		echo "kill-strays left $_left panels (want 0)" >&2
+		exit 1
+	}
+	echo "  kill-strays wipes all panels ok"
+	"$PREFIX/share/engvpn/service.sh" start >/dev/null
+	sleep 2
 	grep -q 'pickSingBoxAssets\|musl' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& grep -q 'loaderIncompatible\|libresolv' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& echo "  sing-box musl/libresolv fallback ok" \

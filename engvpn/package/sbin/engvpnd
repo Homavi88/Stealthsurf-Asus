@@ -160,7 +160,8 @@ cmd_serve() {
 	if [ ! -d "$RUNTIME/data" ]; then
 		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || true
 	fi
-	# Exclusive panel lock (held across exec). Second serve → exit 75 (supervisor backs off).
+	# Exclusive panel lock. Prefer flock (held across exec into Node). Also create
+	# PANEL_LOCK.d so kill-strays can see a live panel even if Node closes fd 9.
 	PANEL_LOCK=$DATA_DIR/.panel.lock
 	: >>"$PANEL_LOCK" 2>/dev/null || true
 	if type flock >/dev/null 2>&1; then
@@ -175,11 +176,15 @@ cmd_serve() {
 	else
 		echo $$ >"$PANEL_LOCK.d/pid" 2>/dev/null || true
 	fi
+	# Durable marker (flock may be dropped if Node closes inherited fds)
+	rm -rf "$PANEL_LOCK.d" 2>/dev/null || true
+	mkdir -p "$PANEL_LOCK.d" 2>/dev/null || true
+	printf '%s\n' "$$" >"$PANEL_LOCK.d/pid" 2>/dev/null || true
 	# Record panel pid into transparent state for rule replay ownership
 	export ENGVPN_TRANSPARENT_PID=$$
 	export ENGVPN_PANEL_LOCK="$PANEL_LOCK"
 	printf '%s\n' "$$" >"$PIDFILE" 2>/dev/null || true
-	# Node inherits fd 9 + flock; EADDRINUSE in run.mjs also exits 75
+	# exec: same PID becomes node — supervisor child tracking stays correct
 	exec "$node" "$RUNTIME/run.mjs"
 }
 

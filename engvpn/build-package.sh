@@ -1095,6 +1095,77 @@ if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
     : [pickCoreAsset(assetId, release)].filter(Boolean);''',
     )
     print("patched downloadCore → open Ferrum + musl candidates")
+# Ferrum zip member is "xray" — unpack into data/cores/ferrum (not look for member "ferrum")
+if "async function unpackCore(id, assetName, tmp, dest)" in et and 'id === "ferrum" ? "xray"' not in et:
+    _old_unpack = '''async function unpackCore(id, assetName, tmp, dest) {
+  const spec = ENGINES[id];
+  if (assetName.endsWith(".zip")) {
+    let unzipped = false;
+    try {
+      await execFile("unzip", ["-o", "-j", tmp, spec.bin, "-d", CORE_DIR], { timeout: 60000 });
+      unzipped = true;
+    } catch {
+      writeFileSync(dest, extractZipMember(readFileSync(tmp), spec.bin));
+      return;
+    }
+    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+    return;
+  }
+  if (assetName.endsWith(".tar.gz")) {
+    let last = "";
+    for (const args of [
+      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${spec.bin}`],
+      ["-xzf", tmp, "-C", CORE_DIR],
+    ]) {
+      try {
+        await execFile("tar", args, { timeout: 60000 });
+        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
+        if (existsSync(dest)) return;
+      } catch (error) {
+        last = error.message || String(error);
+      }
+    }
+    throw new Error(`tar не смог распаковать: ${last || "бинарник не найден"}`);
+  }'''
+    _new_unpack = '''async function unpackCore(id, assetName, tmp, dest) {
+  const spec = ENGINES[id];
+  // Ferrum open slot: Xray zip member is "xray" → place as data/cores/ferrum
+  const member = id === "ferrum" ? "xray" : (spec?.bin || id);
+  if (assetName.endsWith(".zip")) {
+    let unzipped = false;
+    try {
+      await execFile("unzip", ["-o", "-j", tmp, member, "-d", CORE_DIR], { timeout: 60000 });
+      unzipped = true;
+    } catch {
+      writeFileSync(dest, extractZipMember(readFileSync(tmp), member));
+      return;
+    }
+    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
+    return;
+  }
+  if (assetName.endsWith(".tar.gz")) {
+    let last = "";
+    for (const args of [
+      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${member}`],
+      ["-xzf", tmp, "-C", CORE_DIR],
+    ]) {
+      try {
+        await execFile("tar", args, { timeout: 60000 });
+        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
+        if (existsSync(dest)) return;
+      } catch (error) {
+        last = error.message || String(error);
+      }
+    }
+    throw new Error(`tar не смог распаковать: ${last || "бинарник не найден"}`);
+  }'''
+    if _old_unpack in et:
+        et = et.replace(_old_unpack, _new_unpack, 1)
+        print("patched unpackCore → Ferrum extracts xray member as ferrum")
+    else:
+        print("WARN: unpackCore Ferrum member patch skipped (shape changed)")
+elif 'id === "ferrum" ? "xray"' in et:
+    print("unpackCore already has Ferrum→xray member mapping")
 # Stream core downloads with byte/% progress (panel + install terminal)
 if "response.body.getReader" not in et and "async function downloadToFile" in et:
     et = et.replace(
@@ -1391,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — clean-install: musl sing-box (libresolv fallback), geosite mkdir, quiet /proc cmdline, orphan sleep reap + start cleanup, curl progress bar."
+RELEASE_NOTES="EngVPN $VERSION — install start timeout+progress; Ferrum extracts Xray zip member as data/cores/ferrum; hard-enforce single supervisor/panel (kill-strays wipes all extras)."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
