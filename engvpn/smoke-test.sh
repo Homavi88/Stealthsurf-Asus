@@ -262,6 +262,30 @@ if command -v node >/dev/null 2>&1; then
 		echo "expected 200 on good login" >&2
 		exit 1
 	}
+	# Empty home: no demo NL/Trojan locations before key/URL
+	snap0=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt "http://127.0.0.1:8790/api/snapshot" || true)
+	if echo "$snap0" | grep -qE 'nl-trojan|Нидерланды Trojan|NL Trojan|Нидерланды VLESS|Умная локация'; then
+		echo "snapshot still has demo locations (expected scrubbed): $(echo "$snap0" | head -c 500)" >&2
+		exit 1
+	fi
+	echo "  no demo locations ok"
+	echo "$snap0" | grep -q 'apiKeySet' && echo "  apiKeySet field ok" || echo "  apiKeySet soft"
+	# UI: settings master-detail + empty-home copy present in panel assets
+	_ui_js="$PREFIX/share/engvpn/runtime/public/app.js"
+	_ui_css="$PREFIX/share/engvpn/runtime/public/app.css"
+	[ -f "$_ui_js" ] || { echo "missing panel app.js at $_ui_js" >&2; exit 1; }
+	grep -q 'drawer-settings\|settings-split\|data-go-top' "$_ui_js" \
+		&& echo "  settings master-detail UI ok" \
+		|| { echo "missing settings master-detail in app.js" >&2; exit 1; }
+	grep -q 'Добавьте ключ или URL\|hasCredentials\|realVpnNodes\|locStatusLine' "$_ui_js" \
+		&& echo "  empty-home UI ok" \
+		|| { echo "missing empty-home helpers in app.js" >&2; exit 1; }
+	grep -q 'settings-split\|drawer-settings' "$_ui_css" \
+		&& echo "  settings CSS ok" \
+		|| { echo "missing settings CSS" >&2; exit 1; }
+	grep -q 'scrubAlphaDemoNodes' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& echo "  scrubAlphaDemoNodes ok" \
+		|| { echo "missing scrubAlphaDemoNodes in runtime-engvpn.mjs" >&2; exit 1; }
 	# Panel EngVPN transparent dry-run via invoke
 	inv=$(curl -fsS -b /tmp/engvpn-smoke-cookie.txt -X POST "http://127.0.0.1:8790/api/invoke/transparent" \
 		-H 'Content-Type: application/json' -d '{"action":"dry-run","mode":"all","method":"redirect"}' || true)

@@ -203,6 +203,17 @@ text = text.replace(
 # Prefer live LAN discovery over demo devices (empty until scan fills)
 if "demoDevices()" in text and "devices: []" not in text:
     text = text.replace("devices: demoDevices(),", "devices: [],  // filled by EngVPN LAN discovery (ARP/dnsmasq)")
+# No fake NL/Trojan locations until API key or subscription URL is set
+if 'nodes: demoNodes()' in text:
+    text = text.replace(
+        '{ id: "main", name: "Основная", url: "", builtin: true, nodes: demoNodes() },',
+        '{ id: "main", name: "Локальные", url: "", builtin: true, nodes: ['
+        '{ id: "direct", name: "Без VPN", protocol: "direct", country: "", flag: "direct", until: "", online: true }'
+        '] },',
+    )
+if 'selectedId: "nl-trojan"' in text:
+    text = text.replace('selectedId: "nl-trojan"', 'selectedId: "direct"', 1)
+    text = text.replace('lastVpnId: "nl-trojan"', 'lastVpnId: ""', 1)
 st.write_text(text)
 print("patched state.mjs EngVPN defaults")
 # runtime.mjs: EngVPN invoke + brand strings + StealthSurf-shaped get_* aliases
@@ -956,7 +967,7 @@ FEED=$ROOT/feed/latest.json
 cat >"$FEED" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
+  "notes": "EngVPN $VERSION — settings master-detail; empty home without API key/URL; scrub alpha demo locations.",
   "packages": {
     "merlin-aarch64": {
       "url": "file://$OUT/engvpn_${VERSION}_merlin-aarch64.tar.gz",
@@ -984,7 +995,7 @@ EOF
 cat >"$ROOT/feed/latest.release.json" <<EOF
 {
   "version": "$VERSION",
-  "notes": "EngVPN $VERSION — uninstall skips farewell backup; RU progress stages; BusyBox sort/files.tmp fix.",
+  "notes": "EngVPN $VERSION — settings master-detail; empty home without API key/URL; scrub alpha demo locations.",
   "packages": {
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-$VERSION/engvpn_${VERSION}_merlin-aarch64.tar.gz",
