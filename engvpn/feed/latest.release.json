@@ -1,24 +1,24 @@
 {
-  "version": "0.5.13",
-  "notes": "EngVPN 0.5.13 — iOS login keyboard fix; optional skip panel password on install.",
+  "version": "0.5.14",
+  "notes": "EngVPN 0.5.14 — Merlin panel mobile UX: dark StealthSurf-like home, iOS paste/zoom, dual VPN/direct speed, Zapret, soft-hide broken cores.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
-      "size": 135947
+      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
+      "size": 140717
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
-      "size": 135947
+      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
+      "size": 140717
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.13/engvpn_0.5.13_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.14/engvpn_0.5.14_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "1c00beeb75208b683d80d02f4c2885b6d1838a73c75048b6bbcf54108157ce93",
-      "size": 135947
+      "sha256": "da3c08de45d4173fba0381988d89c26a3411e75273f5380e100ae5d37d2a7400",
+      "size": 140717
     }
   }
 }

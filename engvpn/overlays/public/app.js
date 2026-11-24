@@ -40,13 +40,22 @@ const mem = (n) => `${(Number(n) / 1024 / 1024 / 1024).toFixed(1)} ГБ`;
 async function api(path, body) {
   const headers = { "X-EngVPN-Panel": "1" };
   if (body) headers["Content-Type"] = "application/json";
-  const res = await fetch(path, {
-    method: body ? "POST" : "GET",
-    headers,
-    credentials: "same-origin",
-    cache: "no-store",
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res;
+  try {
+    res = await fetch(path, {
+      method: body ? "POST" : "GET",
+      headers,
+      credentials: "same-origin",
+      cache: "no-store",
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (err) {
+    // Safari iOS: TypeError "Load failed" on aborted / timed-out panel calls
+    const raw = err?.message || String(err);
+    throw new Error(/load failed|failed to fetch|networkerror/i.test(raw)
+      ? "Сеть панели недоступна (повторите или проверьте engvpnd)"
+      : raw);
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) throw new Error(data.error || data.message || "Ошибка");
   return data;
@@ -89,7 +98,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.oled = a.oled && theme === "dark" ? "1" : "0";
   document.documentElement.dataset.accent = a.accent || "engvpn";
-  if (!a.theme) document.documentElement.dataset.theme = "light";
+  if (!a.theme) document.documentElement.dataset.theme = "dark";
   const icon = document.querySelector("link[rel=icon]");
   if (icon) {
     const svg = a.icon === "cat"
@@ -156,14 +165,55 @@ function gear() {
 }
 function spark(history) {
   const pts = (history || []).slice(-28);
-  if (!pts.length) return `<svg class="spark" viewBox="0 0 92 28"></svg>`;
-  const max = Math.max(1, ...pts.map((p) => p.vpnDown + p.vpnUp));
-  const d = pts.map((p, i) => {
+  if (!pts.length) {
+    return `<svg class="spark" viewBox="0 0 92 28" aria-hidden="true">
+      <polyline points="0,22 92,22" fill="none" stroke="#3b82f6" stroke-width="1.5" opacity=".35"/>
+      <polyline points="0,24 92,24" fill="none" stroke="#f97316" stroke-width="1.5" stroke-dasharray="3 3" opacity=".35"/>
+    </svg>`;
+  }
+  const max = Math.max(
+    1,
+    ...pts.map((p) => Math.max(p.vpnDown + p.vpnUp, p.directDown + p.directUp, p.vpnDown, p.directDown)),
+  );
+  const line = (pick) => pts.map((p, i) => {
     const x = (i / Math.max(pts.length - 1, 1)) * 92;
-    const y = 26 - ((p.vpnDown + p.vpnUp) / max) * 24;
+    const y = 26 - (pick(p) / max) * 22;
     return `${x},${y}`;
   }).join(" ");
-  return `<svg class="spark" viewBox="0 0 92 28"><polyline points="${d}" fill="none" stroke="#3b82f6" stroke-width="2"/></svg>`;
+  const vpn = line((p) => (p.vpnDown || 0) + (p.vpnUp || 0));
+  const direct = line((p) => (p.directDown || 0) + (p.directUp || 0));
+  return `<svg class="spark" viewBox="0 0 92 28" aria-hidden="true">
+    <polyline points="${vpn}" fill="none" stroke="#3b82f6" stroke-width="2"/>
+    <polyline points="${direct}" fill="none" stroke="#f97316" stroke-width="1.6" stroke-dasharray="3 2"/>
+  </svg>`;
+}
+
+function captureFocus() {
+  const el = document.activeElement;
+  if (!el || !app.contains(el)) return null;
+  if (!["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return null;
+  return {
+    id: el.id || null,
+    name: el.getAttribute("name") || null,
+    path: el.dataset?.input || el.dataset?.set || el.dataset?.local || null,
+    selStart: el.selectionStart,
+    selEnd: el.selectionEnd,
+  };
+}
+function restoreFocus(snap) {
+  if (!snap) return;
+  let el = snap.id ? document.getElementById(snap.id) : null;
+  if (!el && snap.path) {
+    el = document.querySelector(`[data-input="${CSS.escape(snap.path)}"],[data-set="${CSS.escape(snap.path)}"],[data-local="${CSS.escape(snap.path)}"]`);
+  }
+  if (!el && snap.name) el = document.querySelector(`[name="${CSS.escape(snap.name)}"]`);
+  if (!el) return;
+  try {
+    el.focus({ preventScroll: true });
+    if (snap.selStart != null && typeof el.setSelectionRange === "function" && el.type !== "number") {
+      el.setSelectionRange(snap.selStart, snap.selEnd ?? snap.selStart);
+    }
+  } catch { /* iOS may reject setSelectionRange on some types */ }
 }
 
 function sw(path, on) {
@@ -241,15 +291,15 @@ function screenAccount() {
       ${keySet && a.referralBalance != null ? cell("Реферальный баланс", formatRub(a.referralBalance)) : ""}
       ${keySet ? cell("Конфиги из API", a.configsCount != null ? `${esc(String(a.configsCount))} · список на главном экране` : "нажмите «Обновить конфиги»") : ""}
       ${keySet ? cell("Email", a.email || "—") : ""}
-      <input class="text" id="apikey" type="password" placeholder="stlth_XXXXXXXX_…" autocomplete="off">
+      <input class="text ios-field" id="apikey" type="password" placeholder="stlth_XXXXXXXX_…" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" inputmode="text">
       <button class="primary" data-act="save-api-key">Сохранить ключ и синхронизировать</button>
       ${keySet ? `<button class="ghost" data-act="sync-account">Обновить конфиги из API</button><button class="danger" data-act="clear-api-key">Удалить ключ</button>` : ""}
     </div>
     ${!keySet ? `<div class="h">URL ПОДПИСКИ (БЕЗ КЛЮЧА)</div>
     <div class="group">
       <p class="muted">Если API-ключ пуст или неактивен — вставьте ссылку подписки или одиночный <code>vless://</code> / <code>trojan://</code>.</p>
-      <input class="text" id="subname-acc" placeholder="Имя (необязательно)" value="Подписка по URL">
-      <textarea class="text" id="suburl-acc" placeholder="https://… или vless:// / trojan:// / ss://">${esc(a.subscriptionUrl || "")}</textarea>
+      <input class="text ios-field" id="subname-acc" placeholder="Имя (необязательно)" value="Подписка по URL" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <textarea class="text ios-field" id="suburl-acc" placeholder="https://… или vless:// / trojan:// / ss://" autocapitalize="off" autocorrect="off" spellcheck="false">${esc(a.subscriptionUrl || "")}</textarea>
       <button class="primary" data-act="save-sub-url">Сохранить URL подписки</button>
     </div>` : `<div class="h">ДОП. URL ПОДПИСКИ</div>
     <div class="group">
@@ -569,7 +619,7 @@ function screenNetwork() {
     <div class="field-block">
       <div class="cell-title">Список доменов и IP</div>
       <div class="cell-desc">По одному на строку: example.com, 1.2.3.4, 10.0.0.0/8</div>
-      <textarea class="text" id="smartdns-list" placeholder="telegram.org&#10;1.1.1.1">${esc((sd.entries || []).join("\n"))}</textarea>
+      <textarea class="text ios-field" id="smartdns-list" placeholder="telegram.org&#10;1.1.1.1" autocapitalize="off" autocorrect="off" spellcheck="false">${esc((sd.entries || []).join("\n"))}</textarea>
       <button class="primary" data-act="save-smartdns">Сохранить и применить</button>
     </div>
   </div>
@@ -669,7 +719,10 @@ function screenEngine() {
   return `${backBar("Движок")}<div class="drawer-body">
     <p class="muted">Авто подключает каждый конфиг подходящим ядром. Xray — полная маршрутизация (без WG/AWG). <b>Ferrum (Xray Reality)</b> — открытый слот: тот же Xray-core → <code>data/cores/ferrum</code> (не проприетарный Ferrum StealthSurf). sing-box / mihomo — конвертация; mihomo умеет AmneziaWG.</p>
     <div class="seg">
-      ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => `<button class="${pref === id ? "on" : ""}" data-engine="${id}">${id === "auto" ? "Авто" : id === "ferrum" ? "Ferrum (Xray Reality)" : id === "sing-box" ? "sing-box" : id[0].toUpperCase() + id.slice(1)}</button>`).join("")}
+      ${["auto", "xray", "ferrum", "sing-box", "mihomo"].map((id) => {
+        const soft = id !== "auto" && (cores[id]?.softHidden || cores[id]?.broken);
+        return `<button class="${pref === id ? "on" : ""}${soft ? " soft-eng" : ""}" data-engine="${id}" ${soft ? "title=\"Несовместимо с прошивкой\"" : ""}>${id === "auto" ? "Авто" : id === "ferrum" ? "Ferrum (Xray Reality)" : id === "sing-box" ? "sing-box" : id[0].toUpperCase() + id.slice(1)}${soft ? " · нет" : ""}</button>`;
+      }).join("")}
     </div>
     <p class="muted">${esc(S.runtime.engineMessage || e.activeReason || "Туннель ещё не поднимался")}</p>
     <div class="h">РАЗРЕШЕНИЕ ИМЁН</div>
@@ -692,6 +745,13 @@ function screenEngine() {
     ${["xray", "ferrum", "sing-box", "mihomo"].map((id) => {
       const c = cores[id] || {};
       const busy = ui.busyCore === id;
+      const soft = c.softHidden || c.broken;
+      if (soft) {
+        return `<div class="card core-card soft-core"><b>${esc(c.title || id)}</b>
+          <p class="muted">Скрыто: не запускается на этой прошивке${c.brokenReason ? ` (${esc(c.brokenReason)})` : ""}. Можно удалить файл или оставить — авто движок его не выберет.</p>
+          ${c.installed ? `<button class="danger" data-act="del-core" data-id="${id}">Удалить</button>` : ""}
+        </div>`;
+      }
       return `<div class="card core-card"><b>${esc(c.title || id)}</b><p>Эталон снимка: ${esc(c.ref || "")}. ${c.installed ? `Файл ${fmtBytes(c.bytes)}. ${esc(c.version || "")}` : "Не скачано"}</p>
         <button class="ghost${busy ? " busy" : ""}" data-act="get-core" data-id="${id}" ${busy ? "disabled" : ""}>${busy ? "Скачиваю…" : id === "ferrum" ? "Скачать (Xray Reality)" : "Скачать"}</button>
         ${c.installed ? `<button class="ghost" data-act="test-core" data-id="${id}">Проверить конфиг</button><button class="danger" data-act="del-core" data-id="${id}">Удалить</button>` : ""}
@@ -705,7 +765,7 @@ function screenLook() {
   const a = S.appearance;
   const themes = [["system", "Системная"], ["light", "Светлая"], ["dark", "Тёмная"], ["retro", "Ретро"], ["halloween", "Хэллоуин"]];
   return `${backBar("Оформление")}<div class="drawer-body">
-    <p class="muted">Светлая тема — отдельный режим панели. Можно включить здесь или через «Системная», если в телефоне светлый режим.</p>
+    <p class="muted">По умолчанию тёмная тема (как StealthSurf VPN). Светлую можно включить здесь или через «Системная».</p>
     <div class="themes">${themes.map(([id, label]) => `<button class="theme-card ${a.theme === id ? "on" : ""}" data-theme="${id}"><div class="swatch" data-sw="${id}"></div>${label}</button>`).join("")}</div>
     ${cell("Акцентная тема", "Цвет кнопок и ссылок", sel("appearance.accent", a.accent, [["engvpn", "EngVPN"], ["ocean", "Океан"], ["ember", "Уголь"], ["mint", "Мята"]]))}
     <div class="h">ИКОНКА ПАНЕЛИ</div>
@@ -838,7 +898,7 @@ function screenDiag() {
     ${cell("Проверка туннеля после подключения", "Три неудачи подряд включают резерв или автонастройку", sw("diagnostics.tunnelCheck", d.tunnelCheck))}
     ${cell("Логи подключения", "Чистятся при каждом подключении", `<button class="ghost" data-go="logs">Открыть</button>`)}
     ${cell("Сбросить сетевые настройки", "MTU, IPv6, порты, системный прокси", `<button class="danger" data-act="reset-net">Сбросить</button>`)}
-    <p class="muted">Версия ${esc(S.version)}. Ядра: Xray ${esc(S.runtime.cores?.xray?.version || "нет")}, sing-box ${esc(S.runtime.cores?.["sing-box"]?.version || "нет")}, mihomo ${esc(S.runtime.cores?.mihomo?.version || "нет")}.</p>
+    <p class="muted">Версия ${esc(S.version)}. Ядра: Xray ${esc(S.runtime.cores?.xray?.softHidden ? "скрыто" : (S.runtime.cores?.xray?.version || "нет"))}, sing-box ${esc(S.runtime.cores?.["sing-box"]?.softHidden ? "скрыто (прошивка)" : (S.runtime.cores?.["sing-box"]?.version || "нет"))}, mihomo ${esc(S.runtime.cores?.mihomo?.softHidden ? "скрыто" : (S.runtime.cores?.mihomo?.version || "нет"))}.</p>
   </div></div>`;
 }
 function screenLogs() {
@@ -857,17 +917,48 @@ function screenXray() {
   </div>`;
 }
 function screenSpeed() {
-  const h = S.runtime.history || [];
-  const max = Math.max(1, ...h.map((p) => p.vpnDown + p.directDown));
-  const line = (key) => h.map((p, i) => `${(i / Math.max(h.length - 1, 1)) * 320},${150 - (p[key] / max) * 140}`).join(" ");
-  const sum = (k) => h.reduce((a, p) => a + (p[k] || 0), 0);
+  const h = (S.runtime.history || []).slice(-120);
+  const rates = S.runtime.rates || {};
+  const max = Math.max(
+    1,
+    ...h.map((p) => Math.max(p.vpnDown || 0, p.vpnUp || 0, p.directDown || 0, p.directUp || 0)),
+    rates.vpnDown || 0, rates.vpnUp || 0, rates.directDown || 0, rates.directUp || 0,
+  );
+  const line = (key, dashed = false) => {
+    if (!h.length) return "";
+    const pts = h.map((p, i) => `${(i / Math.max(h.length - 1, 1)) * 320},${150 - ((p[key] || 0) / max) * 140}`).join(" ");
+    return `<polyline points="${pts}" fill="none" stroke="${dashed ? "#f97316" : "#3b82f6"}" stroke-width="2" ${dashed ? 'stroke-dasharray="5 4"' : ""}/>`;
+  };
+  const peak = (k) => Math.max(0, ...h.map((p) => p[k] || 0), rates[k] || 0);
+  const sess = S.runtime.session || {};
   return `${backBar("Скорость")}<div class="drawer-body">
-    <svg class="chart-big" viewBox="0 0 320 160"><polyline points="${line("vpnDown")}" fill="none" stroke="#3b82f6" stroke-width="2"/><polyline points="${line("directDown")}" fill="none" stroke="#94a3b8" stroke-width="2"/></svg>
-    ${cell("Пик VPN", fmt(Math.max(0, ...h.map((p) => p.vpnDown))))}
-    ${cell("За окно графика через VPN", fmtBytes(sum("vpnDown") + sum("vpnUp")))}
-    ${cell("Напрямую", fmtBytes(sum("directDown") + sum("directUp")))}
-    ${cell("Сессия VPN", fmtBytes((S.runtime.session.vpnDown || 0) + (S.runtime.session.vpnUp || 0)))}
-    <p class="muted">Синяя линия — через VPN, серая — напрямую. Окно около двух минут.</p>
+    <div class="speed-now">
+      <div><b class="kv">${fmt(rates.vpnDown || 0)}</b><span class="muted">↓ Через VPN</span></div>
+      <div><b class="kv">${fmt(rates.vpnUp || 0)}</b><span class="muted">↑ Через VPN</span></div>
+      <div><b class="kv">${fmt(rates.directDown || 0)}</b><span class="muted">↓ Напрямую</span></div>
+      <div><b class="kv">${fmt(rates.directUp || 0)}</b><span class="muted">↑ Напрямую</span></div>
+    </div>
+    <svg class="chart-big" viewBox="0 0 320 160" preserveAspectRatio="none">
+      <line x1="0" y1="150" x2="320" y2="150" stroke="currentColor" opacity=".12"/>
+      ${line("vpnDown")}${line("vpnUp")}${line("directDown", true)}${line("directUp", true)}
+      ${!h.length ? `<text x="160" y="80" text-anchor="middle" fill="currentColor" opacity=".45" font-size="12">Ждём трафик…</text>` : ""}
+    </svg>
+    <div class="chart-x"><span>2 мин назад</span><span>1 мин</span><span>Сейчас</span></div>
+    <div class="h">ЗА 2 МИНУТЫ</div>
+    <div class="group">
+      ${cell("Пик загрузки через VPN", fmt(peak("vpnDown")))}
+      ${cell("Пик отдачи через VPN", fmt(peak("vpnUp")))}
+      ${cell("Пик загрузки напрямую", fmt(peak("directDown")))}
+      ${cell("Пик отдачи напрямую", fmt(peak("directUp")))}
+    </div>
+    <div class="h">ЗА ПОДКЛЮЧЕНИЕ</div>
+    <div class="group">
+      ${cell("Скачано через VPN", fmtBytes(sess.vpnDown || 0))}
+      ${cell("Отдано через VPN", fmtBytes(sess.vpnUp || 0))}
+      ${cell("Скачано напрямую", fmtBytes(sess.directDown || 0))}
+      ${cell("Отдано напрямую", fmtBytes(sess.directUp || 0))}
+    </div>
+    <p class="muted">Сплошные линии — трафик через VPN, пунктирные — напрямую (обход правил маршрутизации).</p>
   </div>`;
 }
 function screenTelegram() {
@@ -917,24 +1008,31 @@ function home() {
   const rt = S.runtime;
   const connected = S.vpn.connected;
   const direct = S.vpn.directMode;
-  const label = connected ? "Подключено" : direct ? "Без VPN" : "Отключено";
+  const vpnNodes = nodes().filter((n) => n.protocol !== "direct");
+  const hasProfiles = vpnNodes.length > 0;
+  const label = !hasProfiles ? "Нет профиля" : connected ? "Подключено" : direct ? "Без VPN" : "Отключено";
   const ip = (connected ? rt.exitIp : rt.publicIp) || "—";
   const shape = connected ? "round" : direct ? "diamond" : "triangle";
   const news = S.devices.filter((d) => d.isNew && !S.dismissedNew.includes(d.id));
   const rates = rt.rates || {};
+  const activeName = node?.protocol === "direct" && !connected
+    ? (hasProfiles ? node.name : "Нет активного профиля")
+    : (node?.name || (hasProfiles ? "Выберите локацию" : "Нет конфига"));
   return `<div class="shell">
     <div class="topbar"><div class="brand">${logo()} EngVPN</div><div class="spacer"></div>
       <button class="icon-btn" data-act="settings" aria-label="Настройки">${gear()}</button></div>
     <div class="layout">
       <div class="center">
         <div class="hero-wrap">
-          <button class="hero-btn ${S.other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy ? "disabled" : ""}>${hero(shape)}</button>
+          <button class="hero-btn ${S.other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте профиль"}">${hero(shape)}</button>
           <h2 class="status">${label}</h2>
           <button class="ip-pill" data-act="ip">${flag(node?.flag || "auto")} ${esc(ip)}</button>
           ${S.diagnostics.showLoad ? `<div class="loadline" data-live="load">ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}</div>` : `<div class="loadline"></div>`}
         </div>
-        ${S.other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">↓</span><h3>Скорость</h3></div>
-          <div class="muted kv" data-live="speed">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}<br>Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</div></div>
+        ${!hasProfiles ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Добавьте профиль</h3><p>API-ключ StealthSurf или URL подписки — без этого подключать нечего.</p></div></div>
+          <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
+        ${S.other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">⇅</span><h3>Скорость</h3></div>
+          <div class="muted kv speed-lines" data-live="speed"><span class="spd-vpn">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</span></div></div>
           <span data-live="spark">${spark(rt.history)}</span><span class="chev">›</span></div></button></div>` : ""}
         <div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>
         ${news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
@@ -942,11 +1040,11 @@ function home() {
       </div>
       <div class="side">
         <div class="card loc-card" style="position:relative">
-          <div class="loc-top">${flag(node?.flag)}<div><h3>${esc(node?.name || "Нет конфига")}</h3>
-            <div class="online">${node?.until ? `До ${esc(node.until)} · ` : ""}${node?.online === false ? "сервер молчит" : "сервер онлайн"}</div></div>
-            ${S.other.showPing ? `<div class="ping">${pingOf(node?.id) == null ? "" : pingOf(node?.id) ? `${pingOf(node.id)} мс` : "—"}</div>` : ""}</div>
-          ${S.other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", S.other.autoSetup)}</div>` : ""}
-          <button class="linkish" data-act="pop">Настройки конфига</button>
+          <div class="loc-top">${flag(node?.flag || "auto")}<div><h3>${esc(activeName)}</h3>
+            <div class="online">${!hasProfiles ? "Добавьте API-ключ или URL подписки" : `${node?.until ? `До ${esc(node.until)} · ` : ""}${node?.online === false ? "сервер молчит" : "сервер онлайн"}`}</div></div>
+            ${S.other.showPing && hasProfiles ? `<div class="ping">${pingOf(node?.id) == null ? "" : pingOf(node?.id) ? `${pingOf(node.id)} мс` : "—"}</div>` : ""}</div>
+          ${hasProfiles && S.other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", S.other.autoSetup)}</div>` : ""}
+          ${hasProfiles ? `<button class="linkish" data-act="pop">Настройки конфига</button>` : `<button class="linkish" data-go-root="account">Настроить аккаунт</button>`}
           ${ui.pop ? `<div class="menu-pop">
             <button data-go-root="configroute">Маршрутизация (сервер)</button>
             <button data-go-root="xray">Xray-конфиг</button>
@@ -955,7 +1053,7 @@ function home() {
         </div>
         <div class="card loc-card">
           <div class="section-label">Локации <span class="tools"><button class="icon-btn" data-act="refresh" title="Обновить">↻</button><button class="icon-btn" data-act="ping" title="Пинг">⌁</button></span></div>
-          ${nodes().filter((n) => n.id !== node?.id).map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(n.flag)}<span><strong>${esc(n.name)}</strong><small>${n.until ? `До ${esc(n.until)} · ` : ""}${n.online === false ? "нет ответа" : "сервер онлайн"}${S.other.showPing && pingOf(n.id) ? ` · ${pingOf(n.id)} мс` : ""}</small></span></button>`).join("")}
+          ${!hasProfiles ? `<p class="muted empty-locs">Список пуст. После синхронизации API или URL здесь появятся серверы.</p>` : nodes().filter((n) => n.id !== node?.id).map((n) => `<button class="loc" data-act="pick" data-id="${n.id}">${flag(n.flag)}<span><strong>${esc(n.name)}</strong><small>${n.until ? `До ${esc(n.until)} · ` : ""}${n.online === false ? "нет ответа" : "сервер онлайн"}${S.other.showPing && pingOf(n.id) ? ` · ${pingOf(n.id)} мс` : ""}</small></span></button>`).join("")}
         </div>
       </div>
     </div>
@@ -1033,14 +1131,24 @@ function bindLoginForm() {
 function render() {
   applyTheme();
   const scroll = document.querySelector(".drawer-body")?.scrollTop || 0;
+  const focusSnap = ui.auth === false ? null : captureFocus();
+  // Keep draft values for long fields across re-renders (paste / iOS keyboard).
+  const drafts = {};
+  for (const id of ["apikey", "suburl-acc", "subname-acc", "smartdns-list", "zdom", "zname", "idea", "warpini"]) {
+    const el = document.getElementById(id);
+    if (el) drafts[id] = el.value;
+  }
   if (ui.auth === false) app.innerHTML = loginScreen();
   else if (!S) app.innerHTML = bootSplash();
   else app.innerHTML = home();
+  for (const [id, val] of Object.entries(drafts)) {
+    const el = document.getElementById(id);
+    if (el && el.value !== val) el.value = val;
+  }
   const body = document.querySelector(".drawer-body");
   if (body) body.scrollTop = scroll;
-  const q = document.querySelector("#q");
-  // Never steal focus while the login field should keep the keyboard.
-  if (q && ui.auth !== false) q.focus();
+  // Do NOT autofocus #q — that steals focus from API key / URL / SmartDNS on every render (iPhone paste breaks).
+  restoreFocus(focusSnap);
   if (ui.auth === false) bindLoginForm();
 }
 
@@ -1049,7 +1157,7 @@ function paintLive() {
   const load = document.querySelector("[data-live=load]");
   if (load) load.textContent = `ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}`;
   const speed = document.querySelector("[data-live=speed]");
-  if (speed) speed.innerHTML = `VPN ↓ ${fmt(rt.rates.vpnDown)} ↑ ${fmt(rt.rates.vpnUp)}<br>Напрямую ↓ ${fmt(rt.rates.directDown)} ↑ ${fmt(rt.rates.directUp)}`;
+  if (speed) speed.innerHTML = `<span class="spd-vpn">VPN ↓ ${fmt(rt.rates.vpnDown)} ↑ ${fmt(rt.rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rt.rates.directDown)} ↑ ${fmt(rt.rates.directUp)}</span>`;
   const sp = document.querySelector("[data-live=spark]");
   if (sp) sp.innerHTML = spark(rt.history);
 }
@@ -1070,6 +1178,13 @@ document.addEventListener("click", (event) => {
   if (t.dataset.toggle) {
     const path = t.dataset.toggle;
     const on = !t.classList.contains("on");
+    // Optimistic UI so Zapret / switches feel instant; dpi apply runs in background on server.
+    t.classList.toggle("on", on);
+    t.setAttribute("aria-pressed", on ? "true" : "false");
+    if (path === "network.youtubeZapret" || path === "network.discordZapret") {
+      if (!S.network) S.network = {};
+      S.network[path.split(".").pop()] = on;
+    }
     if (path === "smartdns.enabled") {
       S.smartdns = S.smartdns || { enabled: false, entries: [] };
       const prev = !!S.smartdns.enabled;
@@ -1117,10 +1232,17 @@ document.addEventListener("click", (event) => {
   if (act === "back") { ui.stack.pop(); if (!ui.stack.length) ui.stack = ["menu"]; render(); return; }
   if (act === "pop") { ui.pop = !ui.pop; render(); return; }
   if (act === "toggle") return run(async () => {
+    const vpnNodes = nodes().filter((n) => n.protocol !== "direct");
+    if (!vpnNodes.length && !S.vpn.connected) {
+      toast("Сначала добавьте профиль: Аккаунт → API-ключ или URL");
+      ui.stack = ["menu", "account"];
+      render();
+      return;
+    }
     ui.busy = true; render();
     try {
       if (S.vpn.connected) await invoke("disconnect");
-      else if (S.vpn.directMode) await invoke("selectNode", { id: S.vpn.lastVpnId || nodes().find((n) => n.protocol !== "direct")?.id });
+      else if (S.vpn.directMode) await invoke("selectNode", { id: S.vpn.lastVpnId || vpnNodes[0]?.id });
       else await invoke("connect");
     } finally {
       ui.busy = false;
@@ -1309,7 +1431,18 @@ document.addEventListener("click", (event) => {
   if (act === "del-core") return run(() => invoke("deleteCore", { id: t.dataset.id }));
   if (act === "test-core") return run(async () => {
     const res = await invoke("testCore", { id: t.dataset.id }, { quiet: true });
-    toast(res.ok ? "Конфиг ядра принят" : (res.error || res.output || "Ядро не приняло конфиг"));
+    const out = res.error || res.output || "";
+    if (/libresolv|shared object|Load failed/i.test(out)) {
+      toast("Ядро несовместимо с прошивкой — скрыто в списке");
+      if (S.runtime?.cores?.[t.dataset.id]) {
+        S.runtime.cores[t.dataset.id].softHidden = true;
+        S.runtime.cores[t.dataset.id].broken = true;
+        S.runtime.cores[t.dataset.id].brokenReason = "libresolv / loader";
+      }
+      render();
+      return;
+    }
+    toast(res.ok ? "Конфиг ядра принят" : (out || "Ядро не приняло конфиг"));
   });
   if (act === "geo") return run(async () => { toast("Качаю гео-базы…"); await invoke("updateGeo", {}); toast("Гео-базы обновлены"); });
   if (act === "load-config") return run(async () => {

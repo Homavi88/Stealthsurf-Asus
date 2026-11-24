@@ -4,6 +4,7 @@
  * StealthSurf HTTP API (user-provided API keys) + local subscription URLs.
  */
 import { execFile, execFileSync } from "node:child_process";
+// execFileSync used by sampleRouterTraffic (iptables /proc tick)
 import { promisify } from "node:util";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -1462,6 +1463,149 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     default:
       return undefined;
   }
+}
+
+/* ─── Live speed: WAN + ENGVPN iptables counters (transparent path bypasses Node proxy hooks) ─── */
+
+function readProcNetDev() {
+  try {
+    const text = readFileSync("/proc/net/dev", "utf8");
+    const rows = {};
+    for (const line of text.split("\n")) {
+      const m = line.match(/^\s*([a-zA-Z0-9._-]+):\s*(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/);
+      if (!m) continue;
+      rows[m[1]] = { rx: Number(m[2]) || 0, tx: Number(m[3]) || 0 };
+    }
+    return rows;
+  } catch {
+    return {};
+  }
+}
+
+function pickWanIfaces(rows) {
+  const skip = /^(lo|br\d*|docker|veth|virbr|tun|tap|wg|engvpn|ipsec|ppp)/i;
+  const preferred = Object.keys(rows).filter((n) => /^(eth|en|wan|vlan)/i.test(n) && !skip.test(n));
+  const rest = Object.keys(rows).filter((n) => !skip.test(n) && !preferred.includes(n));
+  const names = preferred.length ? preferred : rest;
+  return names.length ? names : Object.keys(rows).filter((n) => n !== "lo");
+}
+
+function sumIptablesChainBytes(table, chain) {
+  try {
+    const stdout = execFileSync("iptables", ["-t", table, "-L", chain, "-nvx"], {
+      encoding: "utf8",
+      timeout: 1500,
+      maxBuffer: 2 * 1024 * 1024,
+    });
+    let total = 0;
+    for (const line of String(stdout || "").split("\n")) {
+      if (!/TPROXY|REDIRECT|DNAT|MARK/.test(line)) continue;
+      const parts = line.trim().split(/\s+/);
+      // pkts bytes target ...
+      if (parts.length >= 3 && /^\d+$/.test(parts[0]) && /^\d+$/.test(parts[1])) {
+        total += Number(parts[1]) || 0;
+      }
+    }
+    return total;
+  } catch {
+    return 0;
+  }
+}
+
+/** Bytes/sec estimates for VPN vs direct — used when proxy hooks see no LAN transparent traffic. */
+export function sampleRouterTraffic(live) {
+  const now = Date.now();
+  const ifaces = readProcNetDev();
+  const wanNames = pickWanIfaces(ifaces);
+  let wanRx = 0;
+  let wanTx = 0;
+  for (const n of wanNames) {
+    wanRx += ifaces[n]?.rx || 0;
+    wanTx += ifaces[n]?.tx || 0;
+  }
+  const vpnBytes =
+    sumIptablesChainBytes("mangle", "ENGVPN") +
+    sumIptablesChainBytes("nat", "ENGVPN") +
+    sumIptablesChainBytes("mangle", "ENGVPN_SEL") +
+    sumIptablesChainBytes("nat", "ENGVPN_SEL");
+
+  if (!live.engvpnTraffic) live.engvpnTraffic = { last: null, lastAt: 0 };
+  const cur = { wanRx, wanTx, vpnBytes };
+  const prev = live.engvpnTraffic.last;
+  const prevAt = live.engvpnTraffic.lastAt;
+  live.engvpnTraffic.last = cur;
+  live.engvpnTraffic.lastAt = now;
+  if (!prev || !prevAt) {
+    return { vpnDown: 0, vpnUp: 0, directDown: 0, directUp: 0 };
+  }
+  const dt = Math.max(0.25, (now - prevAt) / 1000);
+  const wanDown = Math.max(0, (cur.wanRx - prev.wanRx) / dt);
+  const wanUp = Math.max(0, (cur.wanTx - prev.wanTx) / dt);
+  const vpnDelta = Math.max(0, (cur.vpnBytes - prev.vpnBytes) / dt);
+  // ENGVPN counters are mostly LAN→tunnel (upload); split WAN with vpn share.
+  const vpnShare = wanDown + wanUp > 0 ? Math.min(1, vpnDelta / Math.max(wanDown + wanUp, 1)) : (vpnDelta > 0 ? 0.7 : 0);
+  const vpnDown = wanDown * vpnShare;
+  const vpnUp = Math.max(vpnDelta * 0.5, wanUp * vpnShare);
+  return {
+    vpnDown,
+    vpnUp,
+    directDown: Math.max(0, wanDown - vpnDown),
+    directUp: Math.max(0, wanUp - vpnUp),
+  };
+}
+
+/** Mark cores that cannot run on this firmware (e.g. sing-box missing libresolv.so.2). */
+export async function probeCoresHealth(state) {
+  const { corePath } = await import("./engines.mjs").catch(() => ({}));
+  const ids = ["xray", "ferrum", "sing-box", "mihomo"];
+  state.engine = state.engine || {};
+  state.engine.cores = state.engine.cores || {};
+  for (const id of ids) {
+    let bin = null;
+    try {
+      bin = typeof corePath === "function" ? corePath(id) : join(DATA, "cores", id === "sing-box" ? "sing-box" : id === "mihomo" ? "mihomo" : id === "ferrum" ? "ferrum" : "xray");
+    } catch {
+      bin = join(DATA, "cores", id === "sing-box" ? "sing-box" : id);
+    }
+    if (!bin || !existsSync(bin)) {
+      state.engine.cores[id] = { ...(state.engine.cores[id] || {}), broken: false, softHidden: false };
+      continue;
+    }
+    try {
+      const args = id === "mihomo" ? ["-v"] : ["version"];
+      const { stdout, stderr } = await exec(bin, args, { timeout: 4000 }).catch((e) => ({
+        stdout: "",
+        stderr: String(e?.stderr || e?.message || e),
+      }));
+      const out = `${stdout || ""}\n${stderr || ""}`;
+      const broken = /libresolv\.so|not found|cannot open shared object|No such file|Exec format error/i.test(out)
+        || (/error while loading/i.test(out) && !/Xray|sing-box|Mihomo|mihomo/i.test(out));
+      // empty version + non-zero often means loader failure
+      const softHidden = broken || /libresolv\.so/i.test(out);
+      state.engine.cores[id] = {
+        ...(state.engine.cores[id] || {}),
+        broken: softHidden,
+        softHidden,
+        brokenReason: softHidden ? (out.match(/libresolv\.so[^\s]*/)?.[0] || "не запускается на этой прошивке") : "",
+      };
+    } catch (e) {
+      const msg = String(e?.message || e);
+      const softHidden = /libresolv|ENOENT|spawn|shared object/i.test(msg);
+      state.engine.cores[id] = {
+        ...(state.engine.cores[id] || {}),
+        broken: softHidden,
+        softHidden,
+        brokenReason: softHidden ? msg.slice(0, 120) : "",
+      };
+    }
+  }
+  try {
+    const { saveState } = await import("./state.mjs");
+    saveState(state);
+  } catch {
+    /* best-effort */
+  }
+  return state.engine.cores;
 }
 
 export { unlinkSync, ACCOUNT_PATH, SS_API, API_KEY_RE, maskKey };
