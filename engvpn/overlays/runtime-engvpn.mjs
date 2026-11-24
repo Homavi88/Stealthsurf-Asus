@@ -3,7 +3,7 @@
  * Open components only — shells out to engvpnd / transparent / dpi / warp / update.
  * StealthSurf HTTP API (user-provided API keys) + local subscription URLs.
  */
-import { execFile, execFileSync } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
 // execFileSync used by sampleRouterTraffic (iptables /proc tick)
 import { promisify } from "node:util";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
@@ -80,6 +80,27 @@ export function setDownloadProgress(partial) {
     at: Date.now(),
   };
   return getDownloadProgress();
+}
+
+/** Durable update action log (survives panel kill during upgrade). */
+const UPDATE_LOG = join(DATA, "update-action.log");
+const UPDATE_STATUS = join(DATA, "update-action.status");
+
+export function getUpdateActionLog() {
+  let log = "";
+  let status = "idle";
+  try {
+    if (existsSync(UPDATE_LOG)) log = String(readFileSync(UPDATE_LOG, "utf8") || "");
+  } catch {
+    /* ignore */
+  }
+  try {
+    if (existsSync(UPDATE_STATUS)) status = String(readFileSync(UPDATE_STATUS, "utf8") || "").trim() || "idle";
+  } catch {
+    /* ignore */
+  }
+  const lines = log.split(/\r?\n/).filter((l) => l.length > 0).slice(-120);
+  return { ok: true, log, status, lines, running: status === "running" };
 }
 
 async function shEngvpnd(...args) {
@@ -354,6 +375,7 @@ export async function engvpnUpdateCheck(state) {
   if (state?.updates) {
     state.updates.lastCheck = now;
     if (feedVer) state.updates.latest = feedVer;
+    if (out.notes) state.updates.note = out.notes;
     state.updates.available = !!available;
     state.updates.lastResult = available ? `available:${feedVer}` : `up-to-date:${installed || feedVer}`;
   }
@@ -396,9 +418,51 @@ export async function engvpnUpdateCheck(state) {
   return out;
 }
 
-/** Apply feed package via engvpnd update (SHA-256 + Minisign). */
+/** Apply feed package via engvpnd update (SHA-256 + Minisign).
+ * Panel path: detach so kill-strays during upgrade does not abort the job.
+ * Smoke / body.sync=true: wait for completion (blocking). */
 export async function engvpnUpdateApply(state, body = {}) {
   const wait = String(body.wait || body.timeout || "90");
+  const sync =
+    body.sync === true ||
+    body.waitFor === true ||
+    process.env.ENGVPN_SMOKE === "1" ||
+    body.detach === false;
+
+  mkdirSync(DATA, { recursive: true });
+  try {
+    writeFileSync(UPDATE_STATUS, "running\n", { mode: 0o600 });
+    writeFileSync(UPDATE_LOG, "", { mode: 0o600 });
+  } catch {
+    /* ignore */
+  }
+
+  if (!sync) {
+    const bin = existsSync(ENGVPND) ? ENGVPND : "engvpnd";
+    // stdio ignored: update.sh ulog appends to ENGVPN_UPDATE_LOG (avoid double lines).
+    const child = spawn(bin, ["update", wait], {
+      detached: true,
+      stdio: "ignore",
+      env: {
+        ...process.env,
+        ENGVPN_DATA_DIR: process.env.ENGVPN_DATA_DIR || DATA,
+        ENGVPN_UPDATE_LOG: UPDATE_LOG,
+        ENGVPN_UPDATE_STATUS: UPDATE_STATUS,
+      },
+    });
+    child.unref();
+    if (state?.updates) {
+      state.updates.lastResult = `updating:${state.updates.latest || ""}`;
+    }
+    return {
+      ok: true,
+      started: true,
+      detached: true,
+      message: "Обновление запущено — следите за журналом. Панель перезапустится сама.",
+      log: getUpdateActionLog(),
+    };
+  }
+
   let stdout = "";
   let stderr = "";
   try {
@@ -408,6 +472,11 @@ export async function engvpnUpdateApply(state, body = {}) {
   } catch (e) {
     stdout = String(e?.stdout || "");
     stderr = String(e?.stderr || e?.message || e);
+    try {
+      writeFileSync(UPDATE_STATUS, "fail\n");
+    } catch {
+      /* ignore */
+    }
     const err = new Error(stderr.trim() || stdout.trim() || "Не удалось установить обновление");
     err.status = 500;
     throw err;
@@ -440,12 +509,18 @@ export async function engvpnUpdateApply(state, body = {}) {
       }
     }
   }
+  try {
+    writeFileSync(UPDATE_STATUS, "ok\n");
+  } catch {
+    /* ignore */
+  }
   return {
     ok: true,
     output: combined.trim(),
     installed,
     current: installed,
     version: installed,
+    log: getUpdateActionLog(),
     message: /already on|уже/i.test(combined)
       ? `Уже актуальная версия${installed ? ` ${installed}` : ""}`
       : `Обновление установлено${installed ? ` (${installed})` : ""} — сделайте hard refresh панели`,

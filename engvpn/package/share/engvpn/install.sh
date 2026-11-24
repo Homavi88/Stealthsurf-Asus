@@ -466,7 +466,9 @@ start_service() {
 
 stop_service() {
 	[ -x "$SERVICE" ] || return 0
-	"$SERVICE" stop >/dev/null 2>&1 6>&- 8>&- 9>&-
+	# Prefer kill-strays (reaps storm leftovers + waits for flock) over plain stop.
+	"$SERVICE" kill-strays >/dev/null 2>&1 6>&- 8>&- 9>&- ||
+		"$SERVICE" stop >/dev/null 2>&1 6>&- 8>&- 9>&-
 }
 
 running() {
@@ -578,6 +580,32 @@ ask_restore() {
 		return 1
 	}
 	printf "Восстановить EngVPN из резервной копии (откат)? [y/N]: " >/dev/tty
+	ans=""
+	IFS= read -r ans </dev/tty || ans=""
+	case "$ans" in
+	y | Y | yes | YES | да | Да | ДА) return 0 ;;
+	esac
+	return 1
+}
+
+# After clean remove: optionally wipe sibling .engvpn-backup. Default = keep.
+# ENGVPN_DELETE_BACKUP=1|yes → delete; 0|no → keep; unset → prompt [y/N].
+ask_delete_backup() {
+	bak=$1
+	[ -n "$bak" ] && [ -d "$bak" ] || return 1
+	case "${ENGVPN_DELETE_BACKUP:-}" in
+	1 | yes | YES | y | Y) return 0 ;;
+	0 | no | NO | n | N) return 1 ;;
+	esac
+	if [ "${ENGVPN_SMOKE:-}" = 1 ]; then
+		# Smoke default: keep backups unless ENGVPN_DELETE_BACKUP set
+		return 1
+	fi
+	{ : </dev/tty; } 2>/dev/null || {
+		complain "no TTY for backup-delete prompt; set ENGVPN_DELETE_BACKUP=1|0 (default: keep $bak)"
+		return 1
+	}
+	printf "Удалить каталог резервных копий %s? [y/N]: " "$bak" >/dev/tty
 	ans=""
 	IFS= read -r ans </dev/tty || ans=""
 	case "$ans" in
@@ -818,7 +846,17 @@ do_uninstall() {
 	*/addons/engvpn) bak_root=${PREFIX%/engvpn}/.engvpn-backup ;;
 	esac
 	if [ -d "$bak_root" ]; then
-		say "EngVPN удалён (старые бэкапы: $bak_root — удалите вручную при необходимости)"
+		if ask_delete_backup "$bak_root"; then
+			rm -rf "$bak_root"
+			if [ -d "$bak_root" ]; then
+				complain "не удалось удалить $bak_root"
+				say "EngVPN удалён (бэкапы остались: $bak_root)"
+			else
+				say "EngVPN удалён; каталог бэкапов $bak_root удалён"
+			fi
+		else
+			say "EngVPN удалён (бэкапы сохранены: $bak_root)"
+		fi
 	else
 		say "EngVPN удалён"
 	fi

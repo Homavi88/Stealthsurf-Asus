@@ -1,24 +1,24 @@
 {
-  "version": "0.5.25",
-  "notes": "EngVPN 0.5.25 \u2014 restart-storm fix: lifetime supervisor flock; close flock fd in children (no orphan sleep lock); single run.mjs; kill-strays waits for lock; idle tick; diagnostics top processes.",
+  "version": "0.5.26",
+  "notes": "EngVPN 0.5.26 — storm-safe update (kill-strays before engvpnd update/merlin); Updates action log; home chip «Доступна версия» + Обновить; uninstall asks to delete .engvpn-backup (default keep).",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.25/engvpn_0.5.25_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "48d8d4840dbd1a9b60e90d1b5950d4532c4307061bf91e54b717625e06b1aab7",
-      "size": 166023
+      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
+      "size": 169994
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.25/engvpn_0.5.25_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "48d8d4840dbd1a9b60e90d1b5950d4532c4307061bf91e54b717625e06b1aab7",
-      "size": 166023
+      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
+      "size": 169994
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.25/engvpn_0.5.25_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.26/engvpn_0.5.26_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "48d8d4840dbd1a9b60e90d1b5950d4532c4307061bf91e54b717625e06b1aab7",
-      "size": 166023
+      "sha256": "e9b32a0a51da27019eb41c3c0b4ba091f017b608a3514555ab76bae946039dac",
+      "size": 169994
     }
   }
 }

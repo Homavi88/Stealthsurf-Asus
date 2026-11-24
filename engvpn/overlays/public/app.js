@@ -11,6 +11,8 @@ let ui = {
   busyCore: null,
   busyGeo: false,
   downloadProgress: null, // { id, kind, phase, label, received, total, percent }
+  updateLog: null, // { lines: string[], status: string, running: bool }
+  updateBusy: false,
   form: {},
   modal: null,
   result: null,
@@ -27,6 +29,33 @@ let ui = {
 let es;
 let progressPoll = null;
 let procsPoll = null;
+let updateLogPoll = null;
+
+function updateArrowIco() {
+  // StealthSurf Icon24ArrowDownOutline in accent circle (download arrow)
+  return `<svg class="update-banner-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path fill="currentColor" d="M19.74 12.468a.9.9 0 0 0-1.18-.089l-.092.08L12.9 17.95V3.9a.9.9 0 0 0-1.793-.113L11.1 3.9v14.05l-5.568-5.49a.9.9 0 0 0-1.181-.073l-.092.081a.9.9 0 0 0-.072 1.181l.081.092 7.1 7a.9.9 0 0 0 1.172.08l.092-.08 7.1-7a.9.9 0 0 0 .009-1.273"/></svg>`;
+}
+
+function homeUpdateChipHtml() {
+  const u = S?.updates || {};
+  if (!updateAvailable(u)) return "";
+  const ver = esc(u.latest || "");
+  const busy = ui.updateBusy;
+  return `<div class="card update-banner" data-live="update-banner">
+    <div class="update-banner-in">
+      <span class="update-banner-ico" aria-hidden="true">${updateArrowIco()}</span>
+      <div class="update-banner-body">
+        <div class="update-banner-title">Доступна версия ${ver}</div>
+        ${busy
+          ? `<div class="update-banner-sub muted">Обновление…</div>`
+          : `<button type="button" class="update-banner-link" data-act="update-notes">Список изменений</button>`}
+      </div>
+      ${busy
+        ? `<span class="update-banner-spin" aria-hidden="true"></span>`
+        : `<button type="button" class="primary update-banner-btn" data-act="install-update">Обновить</button>`}
+    </div>
+  </div>`;
+}
 
 /** Rate in bytes/s → Мбит/с (Mbps). */
 const fmt = (n) => {
@@ -922,6 +951,46 @@ function dlProgressHtml(p) {
       <div class="dl-progress-bar${known ? "" : " indeterminate"}"><i style="width:${known ? Math.min(100, Math.round(pct)) : 36}%"></i></div>
     </div>`;
 }
+function startUpdateLogPoll() {
+  stopUpdateLogPoll();
+  updateLogPoll = setInterval(async () => {
+    try {
+      const res = await invoke("updateActionLog", {}, { quiet: true });
+      if (!res) return;
+      ui.updateLog = res;
+      if (res.running) ui.updateBusy = true;
+      else if (res.status === "ok" || res.status === "fail") {
+        ui.updateBusy = false;
+        stopUpdateLogPoll();
+        if (res.status === "ok") {
+          try {
+            const snap = await api("/api/snapshot");
+            if (snap?.version) S.version = snap.version;
+            if (snap?.updates) S.updates = { ...(S.updates || {}), ...snap.updates };
+          } catch { /* panel may be restarting */ }
+          if (S.updates) S.updates.available = updateAvailable(S.updates);
+        }
+      }
+      if (!paintUpdateLog()) render();
+    } catch {
+      /* panel restarting during upgrade — keep polling */
+    }
+  }, 900);
+}
+function stopUpdateLogPoll() {
+  if (updateLogPoll) { clearInterval(updateLogPoll); updateLogPoll = null; }
+}
+function paintUpdateLog() {
+  const el = document.querySelector("[data-live=update-log]");
+  if (!el) return false;
+  const wrap = document.createElement("div");
+  wrap.innerHTML = updateActionLogHtml();
+  const next = wrap.firstElementChild;
+  if (!next) return false;
+  el.replaceWith(next);
+  return true;
+}
+
 function paintDownloadProgress() {
   const el = document.querySelector("[data-live=dl-progress]");
   if (!el) return false;
@@ -1079,6 +1148,18 @@ function statusNote(u = S?.updates || {}, avail) {
   }
   return "";
 }
+function updateActionLogHtml() {
+  const log = ui.updateLog;
+  const lines = log?.lines?.length ? log.lines : (ui.updateBusy ? ["Ожидание шагов обновления…"] : []);
+  if (!lines.length && !ui.updateBusy && log?.status !== "fail" && log?.status !== "ok") return "";
+  const st = log?.status || (ui.updateBusy ? "running" : "");
+  const stLabel = st === "running" ? "идёт" : st === "ok" ? "готово" : st === "fail" ? "ошибка" : "";
+  return `<div class="update-action-log" data-live="update-log">
+    <div class="update-action-log-head"><b>Журнал обновления</b>${stLabel ? ` · ${esc(stLabel)}` : ""}</div>
+    <pre class="update-action-log-body">${lines.map((l) => esc(l)).join("\n")}</pre>
+  </div>`;
+}
+
 function screenUpdates() {
   const u = S.updates || {};
   const avail = updateAvailable(u);
@@ -1091,8 +1172,10 @@ function screenUpdates() {
     ${cell("Интервал проверки", "Merlin cru / cron · переживает перезагрузку", sel("updates.interval", u.interval || "1d", [["6h", "Каждые 6 часов"], ["12h", "Каждые 12 часов"], ["1d", "Раз в сутки"], ["3d", "Раз в 3 дня"], ["7d", "Раз в неделю"], ["off", "Выкл."]]))}
     <div class="row-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
       <button class="primary" data-act="check-updates">Проверить сейчас</button>
-      ${avail ? `<button class="primary" data-act="install-update">Установить обновление${feedLabel ? ` ${esc(feedLabel)}` : ""}</button>` : ""}
+      ${avail ? `<button class="primary" data-act="install-update"${ui.updateBusy ? " disabled" : ""}>Установить обновление${feedLabel ? ` ${esc(feedLabel)}` : ""}</button>` : ""}
+      ${avail ? `<button class="ghost" data-act="update-notes">Список изменений</button>` : ""}
     </div>
+    ${updateActionLogHtml()}
     <p class="muted">Текущая сборка ${esc(S.version || "—")}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}${note ? ` · ${esc(note)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.note ? ` ${esc(u.note)}` : ""}</p>
   </div></div>`;
 }
@@ -1414,6 +1497,7 @@ function home() {
           <div class="muted kv speed-lines" data-live="speed"><span class="spd-vpn">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</span></div></div>
           <span data-live="spark">${spark(rt.history)}</span><span class="chev">›</span></div></button></div>` : ""}
         ${!needsSetup ? `<div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>` : ""}
+        ${!needsSetup ? homeUpdateChipHtml() : ""}
         ${!needsSetup && news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
         ${!needsSetup ? `<p class="muted">Туннель: ${esc(rt.tunnel)} · ${esc(rt.engineMessage || "")}</p>` : `<p class="muted">Локальное состояние · синхронизация после ключа или URL</p>`}
       </div>
@@ -1444,6 +1528,7 @@ function home() {
     </div>
     ${ui.stack.length ? `<div class="drawer-back" data-act="close"></div>${settingsDrawer()}` : ""}
     ${ui.modal === "new" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Новое устройство</h3><p class="muted">Оставить через VPN или пустить напрямую. Для случайного MAC отметку придётся ставить заново.</p><button class="primary" data-act="keep-vpn">Оставить через VPN</button><button class="ghost" data-act="let-direct">Пустить напрямую</button></div>` : ""}
+    ${ui.modal === "update-notes" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Список изменений</h3><p class="muted">Версия ${esc(S.updates?.latest || "—")}</p><div class="update-notes-body">${esc(S.updates?.note || "Подробности для этой версии не указаны")}</div><button class="primary" data-act="install-update"${ui.updateBusy ? " disabled" : ""}>Обновить</button><button class="ghost" data-act="modal-close">Закрыть</button></div>` : ""}
     ${ui.toast ? `<div class="toast">${esc(ui.toast)}</div>` : ""}
   </div>`;
 }
@@ -1906,6 +1991,7 @@ document.addEventListener("click", (event) => {
     if (!S.updates) S.updates = {};
     if (res.installed || res.current) S.version = res.installed || res.current;
     if (res.latest || res.feed) S.updates.latest = res.latest || res.feed;
+    if (res.notes || res.note) S.updates.note = res.notes || res.note;
     if (res.available != null) S.updates.available = !!res.available || res.update_available === "1" || res.update_available === 1;
     else if (res.update_available != null) S.updates.available = res.update_available === "1" || res.update_available === 1 || res.update_available === true;
     if (res.lastCheck) S.updates.lastCheck = res.lastCheck;
@@ -1918,12 +2004,40 @@ document.addEventListener("click", (event) => {
     const msg = res.message || (S.updates.available ? `Доступно: ${S.updates.latest}` : null) || (S.version ? `Текущая: ${S.version}` : null) || "Проверено";
     toast(typeof msg === "string" ? msg : JSON.stringify(res));
   });
+  if (act === "update-notes") {
+    ui.modal = "update-notes";
+    render();
+    return;
+  }
   if (act === "install-update") return run(async () => {
+    if (ui.updateBusy) { toast("Обновление уже идёт…"); return; }
     const ver = S.updates?.latest || "";
+    ui.modal = null;
+    ui.updateBusy = true;
+    ui.updateLog = { lines: ["Запуск обновления…"], status: "running", running: true };
     toast(ver ? `Устанавливаю ${ver}…` : "Устанавливаю обновление…", 12000);
+    render();
+    startUpdateLogPoll();
     let res;
-    try { res = await invoke("engvpnUpdateApply", { wait: "90" }, { quiet: true }); }
-    catch { res = await invoke("installUpdate", { wait: "90" }, { quiet: true }); }
+    try {
+      try { res = await invoke("engvpnUpdateApply", { wait: "90" }, { quiet: true }); }
+      catch { res = await invoke("installUpdate", { wait: "90" }, { quiet: true }); }
+    } catch (e) {
+      stopUpdateLogPoll();
+      ui.updateBusy = false;
+      ui.updateLog = { ...(ui.updateLog || {}), status: "fail", running: false, lines: [...(ui.updateLog?.lines || []), String(e?.message || e || "ошибка")] };
+      toast(String(e?.message || e || "Не удалось установить обновление"));
+      render();
+      return;
+    }
+    if (res?.started || res?.detached) {
+      toast(res.message || "Обновление запущено — следите за журналом", 10000);
+      // Keep polling; panel may die mid-upgrade (expected).
+      return;
+    }
+    stopUpdateLogPoll();
+    ui.updateBusy = false;
+    if (res?.log) ui.updateLog = res.log;
     if (res?.installed || res?.current || res?.version) S.version = res.installed || res.current || res.version;
     if (S.updates) {
       S.updates.available = false;
@@ -1935,6 +2049,7 @@ document.addEventListener("click", (event) => {
       if (snap?.version) S.version = snap.version;
       if (snap?.updates) S.updates = { ...S.updates, ...snap.updates };
     } catch { /* ignore */ }
+    if (!S.updates) S.updates = {};
     S.updates.available = updateAvailable(S.updates);
     toast(res?.message || res?.output || "Обновление установлено — сделайте hard refresh");
     render();

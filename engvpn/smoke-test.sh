@@ -486,6 +486,25 @@ if command -v node >/dev/null 2>&1; then
 	grep -q 'Установить обновление\|install-update\|updateAvailable\|feedNewer' "$_ui_js" \
 		&& echo "  updates install button UI ok" \
 		|| { echo "missing install-update button in app.js" >&2; exit 1; }
+	grep -q 'Доступна версия\|update-banner\|Список изменений\|homeUpdateChipHtml' "$_ui_js" \
+		&& echo "  home update chip UI ok" \
+		|| { echo "missing StealthSurf-style home update chip in app.js" >&2; exit 1; }
+	grep -q 'update-action-log\|updateActionLog\|startUpdateLogPoll\|Журнал обновления' "$_ui_js" \
+		&& echo "  updates action log UI ok" \
+		|| { echo "missing updates action log in app.js" >&2; exit 1; }
+	grep -q 'update-banner\|update-banner-ico\|update-action-log' "$_ui_css" \
+		&& echo "  update banner/log CSS ok" \
+		|| { echo "missing update banner CSS" >&2; exit 1; }
+	grep -q 'kill-strays before update\|ENGVPN_STORM_CLEARED\|clear_engvpn_storm' "$PREFIX/sbin/engvpnd" \
+		&& grep -q 'clear_engvpn_storm\|Очистка лишних процессов' "$ROOT/merlin.sh" \
+		&& echo "  storm-safe update path ok" \
+		|| { echo "missing kill-strays before update in engvpnd/merlin" >&2; exit 1; }
+	grep -q 'ask_delete_backup\|ENGVPN_DELETE_BACKUP\|Удалить каталог резервных копий' "$PREFIX/share/engvpn/install.sh" \
+		&& echo "  uninstall backup-delete prompt ok" \
+		|| { echo "missing ask_delete_backup in install.sh" >&2; exit 1; }
+	grep -q 'getUpdateActionLog\|update-action.log\|detached' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& echo "  update action log runtime ok" \
+		|| { echo "missing getUpdateActionLog / detached update" >&2; exit 1; }
 	grep -q 'dl-progress\|downloadProgress\|paintDownloadProgress' "$_ui_js" \
 		&& echo "  core/geo download progress UI ok" \
 		|| { echo "missing download progress UI in app.js" >&2; exit 1; }
@@ -1046,6 +1065,55 @@ grep -qi 'files\.tmp' "$uninstall_log" && {
 	exit 1
 }
 echo "  clean remove (engvpnd) ok (pre_archives=$pre_archives)"
+
+echo "==> engvpnd remove keeps .engvpn-backup by default; DELETE_BACKUP=1 wipes it"
+# Reinstall briefly, seed a fake backup dir, remove with keep, then with delete
+export ENGVPN_SMOKE=1
+export ENGVPN_SCRIPTS="$SCRIPTS"
+export ENGVPN_LOCK_DIR="$LOCK_DIR"
+export ENGVPN_PREFIX="$PREFIX"
+export ENGVPN_PASSWORD="SmokeTest9!"
+export ENGVPN_LOCAL_PACKAGE="$ARCHIVE"
+export ENGVPN_LOCAL_VERSION="$VERSION"
+export ENGVPN_SKIP_BACKUP=1
+sh ./merlin.sh >/tmp/engvpn-smoke-reinstall-bak.log 2>&1 || {
+	echo "reinstall for backup-delete test failed:" >&2
+	cat /tmp/engvpn-smoke-reinstall-bak.log >&2
+	exit 1
+}
+mkdir -p "$bak_dir"
+echo seed >"$bak_dir/seed.txt"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 ENGVPN_DELETE_BACKUP=0 \
+	"$PREFIX/sbin/engvpnd" remove "$PREFIX" >/tmp/engvpn-smoke-bak-keep.log 2>&1 || {
+	echo "remove with DELETE_BACKUP=0 failed:" >&2
+	cat /tmp/engvpn-smoke-bak-keep.log >&2
+	exit 1
+}
+[ ! -e "$PREFIX" ]
+[ -f "$bak_dir/seed.txt" ] || {
+	echo "DELETE_BACKUP=0 should keep $bak_dir" >&2
+	exit 1
+}
+grep -q 'бэкапы сохранены\|сохранены' /tmp/engvpn-smoke-bak-keep.log || true
+# Reinstall again and delete backups
+export ENGVPN_SKIP_BACKUP=1
+sh ./merlin.sh >/tmp/engvpn-smoke-reinstall-bak2.log 2>&1
+mkdir -p "$bak_dir"
+echo seed2 >"$bak_dir/seed.txt"
+ENGVPN_SMOKE=1 ENGVPN_SCRIPTS="$SCRIPTS" ENGVPN_LOCK_DIR="$LOCK_DIR" ENGVPN_RESTORE=0 ENGVPN_DELETE_BACKUP=1 \
+	"$PREFIX/sbin/engvpnd" remove "$PREFIX" >/tmp/engvpn-smoke-bak-del.log 2>&1 || {
+	echo "remove with DELETE_BACKUP=1 failed:" >&2
+	cat /tmp/engvpn-smoke-bak-del.log >&2
+	exit 1
+}
+[ ! -e "$PREFIX" ]
+[ ! -d "$bak_dir" ] || {
+	echo "DELETE_BACKUP=1 should remove $bak_dir" >&2
+	ls -la "$bak_dir" >&2 || true
+	exit 1
+}
+grep -q 'каталог бэкапов\|удалён' /tmp/engvpn-smoke-bak-del.log
+echo "  backup-delete prompt (keep/delete) ok"
 
 echo "==> ENGVPN_SKIP_BACKUP on re-install"
 export ENGVPN_SMOKE=1

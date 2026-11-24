@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.25** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.26** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.25](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.25) (после публикации feed)
+Релиз: [engvpn-0.5.26](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.26) (после публикации feed)
 
 ---
 
@@ -91,7 +91,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 # workaround до обновления / без PATH: тот же полный путь
 ```
 
-После **чистого** удаления новый снимок **не** пишется. Если раньше были бэкапы от install/upgrade, соседний каталог `.engvpn-backup` может остаться — удалите вручную. Подробности — ниже и в [CLI → backup](#engvpnd-backup).
+После **чистого** удаления новый снимок **не** пишется. Если остался соседний `.engvpn-backup`, `engvpnd remove` спросит, удалить ли его (**по умолчанию оставить**). `ENGVPN_DELETE_BACKUP=1` — удалить, `=0` — оставить без вопроса. Подробности — ниже и в [CLI → backup](#engvpnd-backup).
 
 ## Резервная копия и восстановление
 
@@ -106,6 +106,7 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 2. Скрипт спрашивает: *«Восстановить EngVPN из резервной копии (откат)?»*  
    - **да** (`ENGVPN_RESTORE=1`) — распаковать последний бэкап в prefix, вернуть хуки, запустить сервис (uninstall отменяется → откат);  
    - **нет** (`ENGVPN_RESTORE=0` / ответ `n` / `ENGVPN_SKIP_BACKUP=1`) — удалить prefix **без** создания нового `.engvpn-backup` (старые снимки от install/upgrade не трогаются).
+3. Если каталог `.engvpn-backup` ещё есть: *«Удалить каталог резервных копий …? [y/N]»* — **по умолчанию оставить**. `ENGVPN_DELETE_BACKUP=1` удаляет, `=0` оставляет.
 
 Команды: `engvpnd backup …` — см. [CLI → backup](#engvpnd-backup).
 
@@ -122,15 +123,22 @@ ENGVPN_RESTORE=0 /tmp/mnt/<USB>/engvpn/sbin/engvpnd uninstall
 
 UI по карте экранов StealthSurf, бренд **EngVPN**, русский интерфейс:
 
-- **Главная** — статус, IP, нагрузка, скорость, локации  
+- **Главная** — статус, IP, нагрузка, скорость, локации; чип **«Доступна версия X.Y.Z»** (как у StealthSurf) с «Список изменений» и **Обновить**  
 - **Роутер** — transparent (selected/exclude ↔ `devices.select`), **DNS hijack LAN :53 → :5353**, captive passthrough, DNS/QUIC/kill-switch, устройства из ARP/neigh/dnsmasq  
 - **Сеть** — zapret → реальный **dpi.sh/nfqws** + **SmartDNS** (IP в iptables + домены в routing ядер)  
 - **Подключение** — Cloudflare WARP + GRE (ошибка без `gre.conf`, без тихого ok)  
 - **Движок** — Xray / **Ferrum (Xray Reality)** / sing-box / mihomo  
-- **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA)  
+- **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA); живой журнал шагов обновления  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.26
+
+- **Storm-safe update:** `engvpnd update` и `merlin.sh` сначала делают kill-strays (и path-scoped pkill), чтобы шторм `service.sh`/`run.mjs` не мешал обновлению с 0.5.19.
+- Панель: обновление запускается **detached** (журнал в `data/update-action.log`); экран **Обновления** показывает живой журнал шагов.
+- Главная: баннер как у StealthSurf — синяя стрелка, «Доступна версия X.Y.Z», ссылка «Список изменений», кнопка **Обновить**.
+- `engvpnd remove`: после удаления спрашивает про каталог `.engvpn-backup` (**по умолчанию оставить**); `ENGVPN_DELETE_BACKUP=1|0`.
 
 ### Что нового в 0.5.25
 

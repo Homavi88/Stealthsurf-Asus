@@ -346,6 +346,26 @@ else
 	validate_prefix_space "$prefix"
 fi
 
+# Kill leftover supervisors / run.mjs from a restart-storm so download+install
+# are not starved. Works on 0.5.19 (no kill-strays) via path-scoped pkill.
+clear_engvpn_storm() {
+	_p=$1
+	echo "Очистка лишних процессов EngVPN (storm)…"
+	if [ -n "$_p" ] && [ -x "$_p/share/engvpn/service.sh" ]; then
+		sh "$_p/share/engvpn/service.sh" kill-strays 2>/dev/null ||
+			sh "$_p/share/engvpn/service.sh" stop 2>/dev/null || true
+	fi
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -9 -f 'share/engvpn/runtime/run.mjs' 2>/dev/null || true
+		pkill -9 -f 'engvpnd serve' 2>/dev/null || true
+		pkill -9 -f '/engvpn/share/engvpn/service.sh' 2>/dev/null || true
+	fi
+	# BusyBox without pkill: best-effort killall of known names
+	killall -9 engvpnd 2>/dev/null || true
+	sleep 1
+}
+clear_engvpn_storm "$prefix"
+
 # Panel password before any mutation.
 # ENGVPN_PASSWORD → set that password (automation).
 # ENGVPN_OPEN_PANEL=1 or ENGVPN_SKIP_PASSWORD=1 → open LAN access, no password.
