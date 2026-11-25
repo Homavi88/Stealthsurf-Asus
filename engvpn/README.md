@@ -80,7 +80,9 @@ $PREFIX/
 - Полная замена Node-панели на **`engvpn-daemon`** (axum, без Entware Node).  
 - Архив прежнего стека: `engvpn/archive/`.  
 - Установщик и README без требования `opkg install node`.  
-- Кросс-сборка aarch64-musl (zigbuild) в `build-package.sh`.
+- Кросс-сборка **aarch64-musl** (`cargo-zigbuild` + Zig; обёртка `scripts/zig-wrap.sh` снимает несовместимый `--fix-cortex-a53-843419`).  
+- В `merlin-aarch64.tar.gz` **запрещён** host-бинарник: только ELF AArch64 (иначе сборка падает).  
+- `ENGVPN_SKIP_CROSS=1` — только `merlin-x86_64` для smoke; release feed не трогает.
 
 ## CLI (кратко)
 
@@ -99,9 +101,10 @@ $PREFIX/
 
 ```sh
 cd engvpn
+# Zig ≥0.13 в PATH (или ~/.local/zig15) + cargo-zigbuild; запасной путь: gcc-aarch64-linux-gnu
 cargo test -p engvpn-daemon
-./build-package.sh          # или ENGVPN_SKIP_CROSS=1 для быстрой host-сборки
-./smoke-test.sh
+./build-package.sh          # обязателен реальный aarch64 для merlin-aarch64.tar.gz
+ENGVPN_SKIP_CROSS=1 ./smoke-test.sh   # smoke: только host x86_64, без подмены aarch64
 ./publish-release.sh --push
 ```
 

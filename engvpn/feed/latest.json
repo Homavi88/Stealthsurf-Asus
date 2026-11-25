@@ -5,14 +5,14 @@
     "merlin-aarch64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "6364ebe7de520517791d5dd3bbd0d4c9cff8eb3027e2d04a82b1777a307b3c8b",
-      "size": 1882910
+      "sha256": "85114472f39b461d0fa5cb4854d565dc04ddb994352c8212bf8f6eb4c8352290",
+      "size": 1815545
     },
     "merlin-armv7": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "6364ebe7de520517791d5dd3bbd0d4c9cff8eb3027e2d04a82b1777a307b3c8b",
-      "size": 1882910
+      "sha256": "e3602f368c26dc9bb048fdef09e501b0b9165659767b6b13abb6f0d266d3fa7d",
+      "size": 1695407
     },
     "merlin-x86_64": {
       "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-x86_64.tar.gz",
