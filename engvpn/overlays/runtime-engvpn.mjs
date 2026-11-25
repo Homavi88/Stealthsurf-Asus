@@ -1696,6 +1696,8 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "get_router_processes": {
       const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
       const sys = sampleSystemLoad();
+      // Panel Node process uptime (resets on crash/restart of engvpnd/run.mjs).
+      const uptime = Math.max(0, Math.floor(process.uptime() * 1000));
       // Keep latest sample on runtime for home loadline + Diagnostics summary
       if (state.runtime?.load) {
         state.runtime.load.cpu = sys.cpu;
@@ -1703,12 +1705,15 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
         state.runtime.load.ramTotal = sys.ramTotal;
         state.runtime.load.proc = sys.proc;
         state.runtime.load.processes = processes;
+        state.runtime.load.uptime = uptime;
       }
+      if (state.runtime) state.runtime.uptime = uptime;
       return {
         cpu: sys.cpu,
         ramUsed: sys.ramUsed,
         ramTotal: sys.ramTotal,
         proc: sys.proc,
+        uptime,
         processes,
       };
     }

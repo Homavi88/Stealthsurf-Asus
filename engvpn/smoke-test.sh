@@ -507,6 +507,18 @@ if command -v node >/dev/null 2>&1; then
 		exit 1
 	}
 	echo "  health ok"
+	# SPA fallback: deep path must serve index.html (Safari refresh of /#/… or mistaken /diagnostics)
+	spa=$(curl -fsS "http://127.0.0.1:8790/diagnostics" || true)
+	echo "$spa" | grep -q 'id="app"\|app.js' || {
+		echo "SPA fallback missing for /diagnostics:" >&2
+		echo "$spa" | head -c 400 >&2
+		exit 1
+	}
+	echo "$spa" | grep -q 'base href="/"' || {
+		echo "index.html missing <base href=\"/\">" >&2
+		exit 1
+	}
+	echo "  spa fallback + base href ok"
 	# unauthenticated invoke should fail when OPEN_PANEL=0
 	code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:8790/api/login" \
 		-H 'Content-Type: application/json' -d '{"password":"wrong-password-xx"}' || true)
@@ -587,6 +599,13 @@ if command -v node >/dev/null 2>&1; then
 		&& grep -q 'install-keepalive' "$PREFIX/share/engvpn/hook.sh" \
 		&& echo "  0.5.32 start alias + last-event + keepalive cru ok" \
 		|| { echo "missing 0.5.32 start/keepalive/last-event" >&2; exit 1; }
+	# 0.5.33: Safari slash / SPA fallback + hash routing + addon uptime in Diagnostics
+	grep -q 'resolvePublicFile' "$PREFIX/share/engvpn/runtime/server.mjs" \
+		&& grep -q 'panelUrl\|normalizePanelUrl\|syncHashFromStack\|fmtUptime' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'base href="/"' "$PREFIX/share/engvpn/runtime/public/index.html" \
+		&& grep -q 'EngVPN без перезапуска\|data-live="uptime"' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& echo "  0.5.33 safari slash + hash + uptime UI markers ok" \
+		|| { echo "missing 0.5.33 safari slash / uptime markers" >&2; exit 1; }
 	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
 	sleep 1
 	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-start.out 2>&1 || {
@@ -993,7 +1012,8 @@ if command -v node >/dev/null 2>&1; then
 	  const r=j.result||j;
 	  if(typeof r.cpu!=="number"||r.cpu<0||r.cpu>100){console.error("bad cpu",r.cpu);process.exit(1)}
 	  if(!(r.ramTotal>0)||!(r.ramUsed>=0)||r.ramUsed>r.ramTotal*1.05){console.error("bad ram",r.ramUsed,r.ramTotal);process.exit(1)}
-	  console.log("  system load ok: cpu="+r.cpu+"% ramUsed="+r.ramUsed+" ramTotal="+r.ramTotal);
+	  if(!(typeof r.uptime==="number")||!(r.uptime>=0)){console.error("bad addon uptime",r.uptime);process.exit(1)}
+	  console.log("  system load ok: cpu="+r.cpu+"% ramUsed="+r.ramUsed+" ramTotal="+r.ramTotal+" uptimeMs="+r.uptime);
 	'
 	# Second poll so /proc/stat CPU delta is real (first may be loadavg fallback)
 	inv_ok "get_router_load.2" get_router_load '{"limit":5}'
