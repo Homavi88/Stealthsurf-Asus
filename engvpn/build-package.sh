@@ -140,7 +140,7 @@ fi
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh verify-minisign.mjs download-cores.mjs; do
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh verify-minisign.mjs download-cores.sh; do
 	if [ -f "$ROOT/package/share/engvpn/$f" ]; then
 		cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
 		chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
@@ -303,7 +303,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — полная замена Node-панели на Rust engvpn-daemon (musl aarch64); без V8; Diagnostics /proc без Fatal; CLI engvpnd без Node; www UI сохранён; shell transparent/DPI/WARP."
+RELEASE_NOTES="EngVPN $VERSION — hotfix: shell download-cores (без Node/engines.mjs на шаге [8/10]); snapshot other.liveButton + UI guards (Safari login); Rust engvpn-daemon musl aarch64."
 
 FEED=$ROOT/feed/latest.json
 LOCAL_FEED=$ROOT/feed/latest.local.json

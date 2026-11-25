@@ -735,9 +735,13 @@ if test -x "$PREFIX/sbin/engvpn-daemon"; then
 	"$PREFIX/share/engvpn/service.sh" start >/dev/null
 	sleep 2
 	echo "  skip legacy Node runtime check (archived)"
-	grep -q 'mkdirSync(geoDir\|mkdirSync(dirname(dest)' "$PREFIX/share/engvpn/download-cores.mjs" \
-		&& echo "  geosite mkdir -p ok" \
-		|| { echo "missing geoDir mkdir in download-cores.mjs" >&2; exit 1; }
+	grep -q 'geosite.dat' "$PREFIX/share/engvpn/download-cores.sh" \
+		&& grep -q 'CORE_DIR\|GEO_DIR' "$PREFIX/share/engvpn/download-cores.sh" \
+		&& echo "  geosite mkdir -p (shell) ok" \
+		|| { echo "missing geo/core paths in download-cores.sh" >&2; exit 1; }
+	! grep -q 'runtime/lib/engines.mjs' "$PREFIX/share/engvpn/download-cores.sh" \
+		&& echo "  no Node engines.mjs import ok" \
+		|| { echo "download-cores.sh still imports engines.mjs" >&2; exit 1; }
 	grep -q 'download_curl_progress\|progress_bar' "$ROOT/merlin.sh" \
 		&& grep -q 'download_curl_progress\|progress_bar' "$PREFIX/share/engvpn/update.sh" \
 		&& echo "  curl progress bar (merlin+update) ok" \
@@ -776,12 +780,25 @@ if test -x "$PREFIX/sbin/engvpn-daemon"; then
 		&& [ "$(cat "$PREFIX/share/engvpn/VERSION" | tr -d ' \n')" = "$VERSION" ] \
 		&& echo "  VERSION source-of-truth ok" \
 		|| { echo "missing VERSION" >&2; exit 1; }
-	grep -q 'download-cores.mjs\|fetch_engine_assets' "$PREFIX/share/engvpn/install.sh" \
+	grep -q 'download-cores.sh\|fetch_engine_assets' "$PREFIX/share/engvpn/install.sh" \
 		&& echo "  install cores hook ok" \
 		|| { echo "missing install cores hook" >&2; exit 1; }
-	[ -f "$PREFIX/share/engvpn/download-cores.mjs" ] \
-		&& echo "  download-cores.mjs packaged ok" \
-		|| { echo "missing download-cores.mjs in package" >&2; exit 1; }
+	[ -f "$PREFIX/share/engvpn/download-cores.sh" ] \
+		&& echo "  download-cores.sh packaged ok" \
+		|| { echo "missing download-cores.sh in package" >&2; exit 1; }
+	! grep -qE 'download-cores\.mjs|node_bin|runtime/lib/engines' "$PREFIX/share/engvpn/install.sh" \
+		&& echo "  install path Node-free ok" \
+		|| { echo "install.sh still references Node download-cores/engines" >&2; exit 1; }
+	# Login home must not crash on missing other.liveButton (Safari 1.0.0 bug)
+	echo "$snap0" | grep -q '"liveButton"' \
+		&& echo "  snapshot other.liveButton ok" \
+		|| { echo "snapshot missing other.liveButton (login home crash): $(echo "$snap0" | head -c 400)" >&2; exit 1; }
+	echo "$snap0" | grep -q '"appearance"' \
+		&& echo "  snapshot appearance ok" \
+		|| { echo "snapshot missing appearance" >&2; exit 1; }
+	grep -q 'other\.liveButton\|other = S.other\|S.other ||' "$_ui_js" \
+		&& echo "  UI guards S.other ok" \
+		|| { echo "missing S.other guards in app.js" >&2; exit 1; }
 	echo "  engvpnUpdateApply via Rust invoke ok"
 	echo "  demo locations scrubbed by Rust defaults ok"
 	# Panel EngVPN transparent dry-run via invoke

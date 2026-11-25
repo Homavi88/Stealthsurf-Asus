@@ -185,11 +185,13 @@ jobs:
           grep -Eq 'ARM aarch64|AArch64|aarch64' /tmp/engvpn-a64.file
           ! grep -Eqi 'x86-64|x86_64|Intel 80386' /tmp/engvpn-a64.file
           readelf -h "$tmp/sbin/engvpn-daemon" | grep -q 'AArch64'
-          grep -q '"version": "1.0.0"' feed/latest.json
+          VER=$(tr -d ' \n' < VERSION)
+          grep -q "\"version\": \"$VER\"" feed/latest.json
           ! grep -qE 'file://|/agent/repos/' feed/latest.json
           # Feed sha must match the aarch64 tarball
           want=$(sha256sum "$PKG" | awk '{print $1}')
           grep -q "$want" feed/latest.json
+
       - name: Smoke (host x86 package only)
         env:
           ENGVPN_SKIP_CROSS: "1"

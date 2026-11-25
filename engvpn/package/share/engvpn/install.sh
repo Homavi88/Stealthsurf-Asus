@@ -645,25 +645,20 @@ fetch_engine_assets() {
 		say "ядра пропущены (smoke)"
 		return 0
 	fi
-	node_bin=""
-	if [ -x /opt/bin/node ]; then
-		node_bin=/opt/bin/node
-	elif command -v node >/dev/null 2>&1; then
-		node_bin=$(command -v node)
-	fi
 	script=""
-	# Prefer just-installed share (after place); fall back to staged copy during install
-	if [ -f "$SHARE/download-cores.mjs" ]; then
-		script=$SHARE/download-cores.mjs
-	elif [ -f "$STAGE/share/engvpn/download-cores.mjs" ]; then
-		script=$STAGE/share/engvpn/download-cores.mjs
+	# Prefer just-installed share (after place); fall back to staged copy during install.
+	# Shell downloader (Rust 1.0+; Node runtime not required).
+	if [ -f "$SHARE/download-cores.sh" ]; then
+		script=$SHARE/download-cores.sh
+	elif [ -f "$STAGE/share/engvpn/download-cores.sh" ]; then
+		script=$STAGE/share/engvpn/download-cores.sh
 	fi
-	if [ -z "$node_bin" ] || [ -z "$script" ]; then
-		complain "ядра не скачаны (нужен Node + download-cores.mjs) — скачайте позже в панели «Движок»"
+	if [ -z "$script" ]; then
+		complain "ядра не скачаны (нет download-cores.sh) — скачайте позже в панели «Движок»"
 		return 0
 	fi
 	ENGVPN_DATA_DIR="$DATA_DIR" ENGVPN_PREFIX="$PREFIX" \
-		"$node_bin" "$script" --data-dir "$DATA_DIR" --prefix "$PREFIX" ||
+		sh "$script" --data-dir "$DATA_DIR" --prefix "$PREFIX" ||
 		complain "часть ядер/гео не скачалась — повторите в панели «Движок»"
 	return 0
 }

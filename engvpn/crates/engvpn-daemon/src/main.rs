@@ -1,4 +1,5 @@
 //! EngVPN Merlin panel daemon — static musl-friendly binary (no Node/V8).
+#![recursion_limit = "256"]
 mod account;
 mod api;
 mod auth;

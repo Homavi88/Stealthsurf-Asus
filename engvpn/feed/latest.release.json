@@ -1,24 +1,24 @@
 {
-  "version": "1.0.0",
-  "notes": "EngVPN 1.0.0 — полная замена Node-панели на Rust engvpn-daemon (musl aarch64); без V8; Diagnostics /proc без Fatal; CLI engvpnd без Node; www UI сохранён; shell transparent/DPI/WARP.",
+  "version": "1.0.1",
+  "notes": "EngVPN 1.0.1 — hotfix: shell download-cores (без Node/engines.mjs на шаге [8/10]); snapshot other.liveButton + UI guards (Safari login); Rust engvpn-daemon musl aarch64.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "85114472f39b461d0fa5cb4854d565dc04ddb994352c8212bf8f6eb4c8352290",
-      "size": 1815545
+      "sha256": "688fda7d16304ddf818c9e5a76634a4d99293220872bf41ee8b59b5e6ced9989",
+      "size": 1820126
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "e3602f368c26dc9bb048fdef09e501b0b9165659767b6b13abb6f0d266d3fa7d",
-      "size": 1695407
+      "sha256": "3bc0ef6fded6cea0e41c1afa5b0f50a52c2587b0ea51d55d2a1bf94783ae4f7a",
+      "size": 1697682
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.0/engvpn_1.0.0_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "6364ebe7de520517791d5dd3bbd0d4c9cff8eb3027e2d04a82b1777a307b3c8b",
-      "size": 1882910
+      "sha256": "34d25214d7c8da9ac307b21f9b550be633205fb694a55f579c8f33f30158ff4e",
+      "size": 1886773
     }
   }
 }
