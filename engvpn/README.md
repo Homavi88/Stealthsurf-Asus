@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.29** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.30** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.29](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.29) (после публикации feed)
+Релиз: [engvpn-0.5.30](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.30) (после публикации feed)
 
 ---
 
@@ -132,6 +132,13 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.30
+
+- **Нет swarm `[SERVICE] sh`:** `mkdir` lockdir (атомарно) + flock; проигравшие start **не** уходят в 45 с `wait_for_panel` и не копятся в топе.
+- **`engvpnd restart` быстрый:** `kill_strays` — один проход SIGKILL (без O(n²) nested scan), без паузы перед start.
+- Watchdog под supervisor **не** вызывает вложенный `service.sh start`; pidfile = `/tmp/engvpn-<hash>/` (как у service.sh).
+- Диагностика: hint на multi-service только при >1 supervisor; один sleep под supervisor — норма.
 
 ### Что нового в 0.5.29
 

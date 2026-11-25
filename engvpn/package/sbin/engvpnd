@@ -35,8 +35,13 @@ PREFIX=${SHARE%/share/engvpn}
 RUNTIME=$SHARE/runtime
 DATA_DIR=${ENGVPN_DATA_DIR:-$PREFIX/data}
 PORT=${ENGVPN_PORT:-8790}
-PIDFILE=${ENGVPN_PIDFILE:-/tmp/engvpn-panel.pid}
-LOGFILE=${ENGVPN_LOGFILE:-/tmp/engvpn-panel.log}
+# Same per-prefix volatile dir as service.sh (never the global /tmp/engvpn-panel.pid —
+# a stale global pidfile made watchdog think the panel was down and re-spawn service.sh).
+PREFIX_HASH=$(printf '%s' "$PREFIX" | md5sum 2>/dev/null | awk '{print substr($1,1,12)}')
+[ -n "$PREFIX_HASH" ] || PREFIX_HASH=default
+VOLATILE_DIR=/tmp/engvpn-$PREFIX_HASH
+PIDFILE=${ENGVPN_PIDFILE:-$VOLATILE_DIR/panel.pid}
+LOGFILE=${ENGVPN_LOGFILE:-$VOLATILE_DIR/engvpnd.log}
 VERSION_FILE=$SHARE/VERSION
 INSTALL=$SHARE/install.sh
 
@@ -465,9 +470,16 @@ cmd_watchdog() {
 	# Panel listen check
 	ok=1
 	if ! cmd_status >/dev/null 2>&1; then
-		echo "watchdog: panel down — restarting"
-		[ -x "$SHARE/service.sh" ] && sh "$SHARE/service.sh" start || true
-		ok=0
+		# Never nest service.sh start from inside the supervisor loop —
+		# that spawned waiter storms ([SERVICE] sh) on Merlin.
+		if [ "${ENGVPN_IN_SUPERVISOR:-}" = 1 ]; then
+			echo "watchdog: panel down (under supervisor — not nesting start)"
+			ok=0
+		else
+			echo "watchdog: panel down — restarting"
+			[ -x "$SHARE/service.sh" ] && sh "$SHARE/service.sh" start || true
+			ok=0
+		fi
 	fi
 	# Transparent restore if state says active but chains missing
 	if [ -f "$DATA_DIR/netfilter/rules" ] && [ -x "$SHARE/netfilter.sh" ]; then

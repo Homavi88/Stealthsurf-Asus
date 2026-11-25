@@ -1,24 +1,24 @@
 {
-  "version": "0.5.29",
-  "notes": "EngVPN 0.5.29 — fast [10/10] start: one-shot purge orphan service.sh/sleep, single supervisor (no hang on «остановка лишних процессов»); diagnostics distinguish panel vs supervisor.",
+  "version": "0.5.30",
+  "notes": "EngVPN 0.5.30 — stop [SERVICE] sh swarm: mkdir+flock single supervisor, lock losers never wait 45s; snappy engvpnd restart; watchdog no nested start.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.29/engvpn_0.5.29_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.30/engvpn_0.5.30_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "b526fe47485ab464a5b1c721f8f9db9940f29bfaf7fea90131ae6f0bf8903e22",
-      "size": 174762
+      "sha256": "602ec2c0c6c1105611a51bd6ead4d1debdcfa5408c65a95bdc882355eee63ece",
+      "size": 175521
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.29/engvpn_0.5.29_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.30/engvpn_0.5.30_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "b526fe47485ab464a5b1c721f8f9db9940f29bfaf7fea90131ae6f0bf8903e22",
-      "size": 174762
+      "sha256": "602ec2c0c6c1105611a51bd6ead4d1debdcfa5408c65a95bdc882355eee63ece",
+      "size": 175521
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.29/engvpn_0.5.29_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.30/engvpn_0.5.30_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "b526fe47485ab464a5b1c721f8f9db9940f29bfaf7fea90131ae6f0bf8903e22",
-      "size": 174762
+      "sha256": "602ec2c0c6c1105611a51bd6ead4d1debdcfa5408c65a95bdc882355eee63ece",
+      "size": 175521
     }
   }
 }

@@ -331,7 +331,7 @@ echo "  after 18× parallel start: panels=$n_panels supervisors≈$n_sup"
 	done
 	exit 1
 }
-# 0.5.29: one-shot purge on start must leave ≤1 supervisor (no orphan storm)
+# 0.5.29/0.5.30: one-shot purge on start must leave ≤1 supervisor (no orphan storm)
 "$PREFIX/share/engvpn/service.sh" start >/dev/null
 sleep 1
 n_sup=$(count_supervisors)
@@ -348,15 +348,54 @@ echo "  after purge start: panels=$n_panels supervisors=$n_sup"
 	exit 1
 }
 echo "  one-shot orphan purge → single supervisor ok"
-# Serial restart once — still one panel
-"$PREFIX/share/engvpn/service.sh" restart >/dev/null
+# 0.5.30: noop-flock + slow panel must NOT leave a waiter swarm after starts finish
+_noop_bin=$SMOKE_ROOT/noop-bin
+mkdir -p "$_noop_bin"
+cat >"$_noop_bin/flock" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+chmod +x "$_noop_bin/flock"
+# Mid-storm snapshot while panel is up: parallel starts with broken flock
+i=0
+while [ "$i" -lt 14 ]; do
+	PATH="$_noop_bin:$PATH" "$PREFIX/share/engvpn/service.sh" start >/dev/null 2>&1 &
+	i=$((i + 1))
+done
+wait || true
 sleep 2
+n_sup=$(count_supervisors)
 n_panels=$(count_panels)
-echo "  after restart: panels=$n_panels"
+echo "  after 14× start with noop-flock: panels=$n_panels supervisors=$n_sup"
+[ "$n_panels" -eq 1 ] && [ "$n_sup" -le 2 ] || {
+	echo "noop-flock swarm: panels=$n_panels supervisors=$n_sup (want 1 panel, ≤2 supervisors)" >&2
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*service.sh*) echo "  pid ${e#/proc/}: $cmd" >&2 ;;
+		esac
+	done
+	exit 1
+}
+echo "  noop-flock mkdir-lock holds single supervisor ok"
+# Serial restart once — still one panel; must finish quickly
+_t0=$(date +%s)
+"$PREFIX/share/engvpn/service.sh" restart >/dev/null
+_t1=$(date +%s)
+_restart_s=$((_t1 - _t0))
+sleep 1
+n_panels=$(count_panels)
+n_sup=$(count_supervisors)
+echo "  after restart: panels=$n_panels supervisors=$n_sup elapsed=${_restart_s}s"
 [ "$n_panels" -eq 1 ] || {
 	echo "after restart expected 1 run.mjs, got $n_panels" >&2
 	exit 1
 }
+[ "$_restart_s" -le 25 ] || {
+	echo "restart too slow: ${_restart_s}s (want ≤25s)" >&2
+	exit 1
+}
+echo "  snappy restart ok"
 # engvpnd serve while running must exit 75 (duplicate lock)
 # Keep set +e across wait — exit 75 must not abort the smoke script.
 set +e
@@ -532,6 +571,12 @@ if command -v node >/dev/null 2>&1; then
 		&& ! grep -q 'остановка лишних процессов' "$ROOT/merlin.sh" \
 		&& echo "  hard-enforce single + one-shot purge + fast [10/10] ok" \
 		|| { echo "missing purge_orphans_oneshot / fast start path" >&2; exit 1; }
+	# 0.5.30: mkdir lock + no waiter swarm; watchdog must not nest start under supervisor
+	grep -q 'SUPERVISOR_LOCK\.d\|spawn_supervisor\|panel_quick_ok\|ENGVPN_IN_SUPERVISOR' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q 'ENGVPN_IN_SUPERVISOR\|not nesting start' "$PREFIX/sbin/engvpnd" \
+		&& grep -q 'engvpn-\$PREFIX_HASH\|VOLATILE_DIR=/tmp/engvpn-' "$PREFIX/sbin/engvpnd" \
+		&& echo "  0.5.30 mkdir-lock + no nested watchdog start + per-prefix pidfile ok" \
+		|| { echo "missing 0.5.30 swarm fixes (mkdir lock / IN_SUPERVISOR / volatile pidfile)" >&2; exit 1; }
 	grep -q 'id === "ferrum" ? "xray"\|member = id === "ferrum"' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& echo "  Ferrum unpack → xray member ok" \
 		|| { echo "missing Ferrum→xray unpack mapping in engines.mjs" >&2; exit 1; }

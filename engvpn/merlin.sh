@@ -801,12 +801,13 @@ export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
 export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
 # Hard timeout for panel boot (service.sh prints «ожидание панели…»)
-export ENGVPN_START_TIMEOUT="${ENGVPN_START_TIMEOUT:-45}"
+# 0.5.30: default 20s — losers no longer sit in a 45s waiter swarm.
+export ENGVPN_START_TIMEOUT="${ENGVPN_START_TIMEOUT:-20}"
 if [ "$skip_password" -eq 1 ]; then
 	export ENGVPN_OPEN_PANEL=1
 fi
 # Do NOT pre-start kill-strays here (that step hung on routers).
-# service.sh start one-shot-purges orphan service.sh/sleep, then starts ONE supervisor.
+# service.sh start: mkdir+flock single supervisor; lock losers wait without spawning.
 echo "  запуск одного supervisor (таймаут ${ENGVPN_START_TIMEOUT} с)…"
 if ! sh "$prefix/share/engvpn/service.sh" start; then
 	echo "  повторный запуск…"
