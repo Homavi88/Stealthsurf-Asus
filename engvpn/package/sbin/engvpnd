@@ -60,6 +60,7 @@ usage() {
 Usage: engvpnd <command> [options]
 
   serve [--data-dir DIR]       Start the EngVPN panel (foreground)
+  start                        Start panel via service.sh (supervisor + node)
   set-password [--data-dir DIR]
                                Read panel password from stdin; store pbkdf2 hash
   status | st                  Print running / stopped and port
@@ -95,7 +96,7 @@ Usage: engvpnd <command> [options]
   watchdog                     One-shot health: panel port + optional transparent restore
   version | ver                Print package version
 
-Быстрые команды: up | check | remove | reinstall | st | restart | clean | priv | fix | ver
+Быстрые команды: start | up | check | remove | reinstall | st | restart | clean | priv | fix | ver
 EOF
 }
 
@@ -348,6 +349,31 @@ cmd_reinstall() {
 	sh "$SHARE/update.sh" apply "$wait"
 }
 
+cmd_start() {
+	# Users naturally run `engvpnd start` after a dead panel. Pre-0.5.32 this was
+	# an unknown command (exit 2) — panel never came back. Prefer service.sh so
+	# one supervisor + run.mjs is restored (same path as Merlin hooks).
+	echo "engvpnd: start → $SHARE/service.sh (prefix=$PREFIX port=$PORT)"
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" start
+		_rc=$?
+		if [ "$_rc" -ne 0 ]; then
+			echo "engvpnd: start failed (rc=$_rc). Try: $SHARE/service.sh start" >&2
+			echo "engvpnd: or: engvpnd restart | engvpnd watchdog" >&2
+			echo "engvpnd: log: $LOGFILE  last-event: $DATA_DIR/last-event" >&2
+		fi
+		return $_rc
+	fi
+	echo "engvpnd: missing $SHARE/service.sh" >&2
+	if cmd_status >/dev/null 2>&1; then
+		echo "EngVPN already running (port $PORT)"
+		return 0
+	fi
+	mkdir -p "$VOLATILE_DIR" 2>/dev/null || true
+	cmd_serve >>"$LOGFILE" 2>&1 &
+	echo "EngVPN started (port $PORT) [no service.sh — background serve]"
+}
+
 cmd_restart() {
 	if [ -x "$SHARE/service.sh" ]; then
 		sh "$SHARE/service.sh" restart
@@ -519,6 +545,7 @@ ACTION=${1:-}
 
 case "$ACTION" in
 serve) cmd_serve "$@" ;;
+start) cmd_start ;;
 set-password) cmd_set_password "$@" ;;
 status | st) cmd_status ;;
 stop) cmd_stop ;;

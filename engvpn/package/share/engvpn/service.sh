@@ -40,6 +40,42 @@ fi
 ACTION=${1:-}
 DUP_EXIT=75
 CHILDREN_FILE=$VOLATILE_DIR/supervisor.children
+LAST_EVENT=$DATA_DIR/last-event
+LAST_EVENT_TMP=$VOLATILE_DIR/last-event
+KEEPALIVE_CRU=engvpn_alive
+KEEPALIVE_MARKER=$DATA_DIR/.keepalive-cru
+
+# Durable breadcrumb: why supervisor/panel last stopped or exited.
+# Survives on USB data/; also mirrored under /tmp for when USB is flaky.
+record_event() {
+	_why=${1:-unknown}
+	_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date 2>/dev/null || echo "?")
+	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
+	printf '%s %s\n' "$_ts" "$_why" >"$LAST_EVENT_TMP" 2>/dev/null || true
+	printf '%s %s\n' "$_ts" "$_why" >"$LAST_EVENT" 2>/dev/null || true
+	echo "EngVPN event: $_why" >>"$LOG" 2>/dev/null || true
+}
+
+# External keepalive: Merlin cru every 5 min runs engvpnd watchdog (NOT under
+# supervisor). If supervisor died (USB blip, OOM, services-stop without start),
+# watchdog restarts service.sh. services-start / do_start re-install (cru is RAM-only).
+install_keepalive_cru() {
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	_cmd="[ -x \"$DAEMON\" ] && \"$DAEMON\" watchdog >/dev/null 2>&1"
+	# BusyBox ash on some Merlin builds has no `command` builtin — prefer `type`.
+	if type cru >/dev/null 2>&1; then
+		cru d "$KEEPALIVE_CRU" 2>/dev/null || true
+		cru a "$KEEPALIVE_CRU" "*/5 * * * * $_cmd" 2>/dev/null || true
+	fi
+	printf '%s\n' "*/5 * * * * $_cmd" >"$KEEPALIVE_MARKER" 2>/dev/null || true
+}
+
+remove_keepalive_cru() {
+	if type cru >/dev/null 2>&1; then
+		cru d "$KEEPALIVE_CRU" 2>/dev/null || true
+	fi
+	rm -f "$KEEPALIVE_MARKER" 2>/dev/null || true
+}
 
 read_pid() {
 	[ -f "$1" ] || return 1
@@ -520,6 +556,7 @@ is_engvpn_process() {
 # Fast stop: path-scoped SIGKILL, one /proc pass, ≤1s settle. No nested O(n²) scans.
 kill_strays() {
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
+	record_event "stop-requested:kill-strays"
 	touch "$DATA_DIR/.stop-requested" 2>/dev/null || true
 
 	kill_dead_prefix_supervisors
@@ -660,12 +697,28 @@ spawn_supervisor() {
 			: >"$CHILDREN_FILE" 2>/dev/null || true
 			printf '%s\n' "$$" >"$SUPERVISOR_PIDFILE"
 			echo "EngVPN supervisor $$ holding $SUPERVISOR_LOCK prefix=$PREFIX" >>"$LOG" 2>/dev/null || true
+			record_event "supervisor-start:pid=$$"
 			ticks=0
+			_exit_why=
 			while :; do
-				[ -f "$DATA_DIR/.stop-requested" ] && break
-				if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
-					echo "EngVPN supervisor: daemon/data gone — exit" >>"$LOG" 2>/dev/null || true
+				if [ -f "$DATA_DIR/.stop-requested" ]; then
+					_exit_why="stop-requested"
 					break
+				fi
+				# USB / I/O blip: retry ~30s before permanent exit (keepalive cru recovers if we still die).
+				if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
+					_miss=0
+					while [ "$_miss" -lt 6 ]; do
+						echo "EngVPN supervisor: daemon/data missing — retry $((_miss + 1))/6" >>"$LOG" 2>/dev/null || true
+						supervisor_sleep 5
+						[ -x "$DAEMON" ] && [ -d "$DATA_DIR" ] && break
+						_miss=$((_miss + 1))
+					done
+					if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
+						_exit_why="daemon-or-data-gone"
+						echo "EngVPN supervisor: daemon/data gone — exit" >>"$LOG" 2>/dev/null || true
+						break
+					fi
 				fi
 
 				if panel_quick_ok; then
@@ -697,7 +750,10 @@ spawn_supervisor() {
 				child=$!
 				printf '%s\n' "$child" >"$PIDFILE"
 				while kill -0 "$child" 2>/dev/null; do
-					[ -f "$DATA_DIR/.stop-requested" ] && break
+					if [ -f "$DATA_DIR/.stop-requested" ]; then
+						_exit_why="stop-requested"
+						break
+					fi
 					[ -x "$DAEMON" ] || break
 					if panel_quick_ok; then
 						:
@@ -719,12 +775,18 @@ spawn_supervisor() {
 				code=$?
 				rm -f "$PIDFILE"
 				rm -rf "$PANEL_LOCK.d" 2>/dev/null || true
-				[ -f "$DATA_DIR/.stop-requested" ] && break
+				[ -n "${_exit_why:-}" ] && break
+				if [ -f "$DATA_DIR/.stop-requested" ]; then
+					_exit_why="stop-requested"
+					break
+				fi
 				if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
+					_exit_why="daemon-or-data-gone-after-child"
 					echo "EngVPN supervisor: daemon/data gone after child — exit" >>"$LOG" 2>/dev/null || true
 					break
 				fi
 				if [ "$code" = 127 ]; then
+					_exit_why="engvpnd-missing-127"
 					echo "EngVPN supervisor: engvpnd missing (127) — exit" >>"$LOG" 2>/dev/null || true
 					break
 				fi
@@ -733,9 +795,11 @@ spawn_supervisor() {
 					supervisor_sleep 15
 					continue
 				fi
+				record_event "panel-exited:code=$code"
 				echo "EngVPN panel exited ($code); restart in 5s" >>"$LOG" 2>/dev/null || true
 				supervisor_sleep 5
 			done
+			record_event "supervisor-exit:${_exit_why:-loop-end}"
 			rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"
 			rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true
 		# Double-fork: supervisor is not a job of this start script (no «Killed» on TTY).
@@ -755,9 +819,25 @@ spawn_supervisor() {
 			printf '%s\n' "$$" >"$SUPERVISOR_LOCK.d/pid" 2>/dev/null || true
 			: >"$CHILDREN_FILE" 2>/dev/null || true
 			printf '%s\n' "$$" >"$SUPERVISOR_PIDFILE"
+			record_event "supervisor-start:pid=$$:noflock"
+			_exit_why=
 			while :; do
-				[ -f "$DATA_DIR/.stop-requested" ] && break
-				[ -x "$DAEMON" ] && [ -d "$DATA_DIR" ] || break
+				if [ -f "$DATA_DIR/.stop-requested" ]; then
+					_exit_why="stop-requested"
+					break
+				fi
+				if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
+					_miss=0
+					while [ "$_miss" -lt 6 ]; do
+						supervisor_sleep 5
+						[ -x "$DAEMON" ] && [ -d "$DATA_DIR" ] && break
+						_miss=$((_miss + 1))
+					done
+					if [ ! -x "$DAEMON" ] || [ ! -d "$DATA_DIR" ]; then
+						_exit_why="daemon-or-data-gone"
+						break
+					fi
+				fi
 				if panel_quick_ok; then
 					n=1
 				else
@@ -775,19 +855,25 @@ spawn_supervisor() {
 				child=$!
 				printf '%s\n' "$child" >"$PIDFILE"
 				while kill -0 "$child" 2>/dev/null; do
-					[ -f "$DATA_DIR/.stop-requested" ] && break
+					if [ -f "$DATA_DIR/.stop-requested" ]; then
+						_exit_why="stop-requested"
+						break
+					fi
 					[ -x "$DAEMON" ] || break
 					supervisor_sleep 5
 				done
 				wait "$child" 2>/dev/null
 				code=$?
 				rm -f "$PIDFILE"
-				[ -f "$DATA_DIR/.stop-requested" ] && break
-				[ ! -x "$DAEMON" ] && break
-				[ "$code" = 127 ] && break
+				[ -n "${_exit_why:-}" ] && break
+				[ -f "$DATA_DIR/.stop-requested" ] && _exit_why="stop-requested" && break
+				[ ! -x "$DAEMON" ] && _exit_why="daemon-gone" && break
+				[ "$code" = 127 ] && _exit_why="engvpnd-missing-127" && break
 				[ "$code" = 75 ] && supervisor_sleep 15 && continue
+				record_event "panel-exited:code=$code"
 				supervisor_sleep 5
 			done
+			record_event "supervisor-exit:${_exit_why:-loop-end}"
 			rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"
 			rmdir "$SUPERVISOR_LOCK.d" 2>/dev/null || true
 		) >>"$LOG" 2>&1 &
@@ -804,16 +890,20 @@ do_start() {
 	: >>"$LOG" 2>/dev/null || true
 	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	rm -f "$DATA_DIR/.stop-requested" 2>/dev/null || true
+	record_event "start-requested"
+	install_keepalive_cru
 
 	if enforce_single_on_start; then
 		ensure_firewall
 		open_panel_port_hook
 		purge_orphans_oneshot
+		record_event "start-ok:already-up"
 		echo "EngVPN started (port $PORT)"
 		return 0
 	fi
 
 	[ -x "$DAEMON" ] || {
+		record_event "start-fail:missing-daemon"
 		echo "EngVPN: missing $DAEMON" >&2
 		return 1
 	}
@@ -845,15 +935,20 @@ do_start() {
 		# Final hard cull: at most one service.sh for this PREFIX (besides $$ which exits)
 		keep_sup=$(pick_keep_supervisor 2>/dev/null || true)
 		cull_extra_supervisors "$keep_sup"
+		record_event "start-ok:spawned"
 		echo "EngVPN started (port $PORT)"
 		return 0
 	fi
+	record_event "start-fail:timeout-${ENGVPN_START_TIMEOUT:-20}s"
 	echo "EngVPN failed to start (timeout ${ENGVPN_START_TIMEOUT:-20}s) — see $LOG" >&2
+	# Hint common recovery when engvpnd start was the wrong verb historically
+	echo "EngVPN: if CLI said unknown command, use: $SHARE/service.sh start" >&2
 	return 1
 }
 
 do_stop() {
 	mkdir -p "$DATA_DIR" "$VOLATILE_DIR" 2>/dev/null || true
+	record_event "stop-requested:do_stop"
 	kill_strays 2>/dev/null || true
 	rm -f "$PANEL_LOCK" 2>/dev/null || true
 	echo "EngVPN stopped"
@@ -896,8 +991,16 @@ kill | kill-strays)
 	kill_dead_prefix_supervisors 2>/dev/null || true
 	echo "EngVPN strays killed"
 	;;
+install-keepalive)
+	install_keepalive_cru
+	echo "EngVPN keepalive cru installed ($KEEPALIVE_CRU)"
+	;;
+remove-keepalive)
+	remove_keepalive_cru
+	echo "EngVPN keepalive cru removed"
+	;;
 *)
-	echo "Usage: $0 start|stop|restart|check|kill-strays" >&2
+	echo "Usage: $0 start|stop|restart|check|kill-strays|install-keepalive|remove-keepalive" >&2
 	exit 2
 	;;
 esac

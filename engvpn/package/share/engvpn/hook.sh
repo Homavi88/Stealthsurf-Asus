@@ -10,14 +10,16 @@ SCHEDULE=$SHARE/schedule-update.sh
 
 case "${1:-}" in
 services-start)
-	# Re-install cru (RAM-only on Merlin) then start panel.
+	# Re-install cru (RAM-only on Merlin) then start panel + keepalive watchdog.
 	[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
+	[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
 	[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
 	;;
 post-mount)
 	case "$PREFIX/" in
 	"${2:-/nonexistent}"/*)
 		[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
+		[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
 		[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
 		;;
 	esac
