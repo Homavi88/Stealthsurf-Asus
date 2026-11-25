@@ -1462,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — fast [10/10] start: one-shot purge orphan service.sh/sleep, single supervisor (no hang on «остановка лишних процессов»); diagnostics distinguish panel vs supervisor."
+RELEASE_NOTES="EngVPN $VERSION — stop [SERVICE] sh swarm: mkdir+flock single supervisor, lock losers never wait 45s; snappy engvpnd restart; watchdog no nested start."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

@@ -2061,10 +2061,15 @@ export function enrichProcessHints(processes, state) {
     const msg =
       "Обнаружено несколько процессов панели EngVPN (node …/run.mjs). Два экземпляра жрут ЦП — оставьте один: engvpnd stop && engvpnd restart.";
     if (!out.hints.some((h) => /несколько процессов панели|два экземпляр/i.test(h))) out.hints.push(msg);
-  } else if (supervisors.length > 1 || orphans.length > 0) {
+  } else if (supervisors.length > 1) {
     const msg =
-      "Лишние service.sh/sleep EngVPN в топе — перезапустите панель (engvpnd restart); start чистит orphans одним проходом.";
-    if (!out.hints.some((h) => /Лишние service\.sh|orphans/i.test(h))) out.hints.push(msg);
+      "Лишние service.sh EngVPN в топе — engvpnd stop; затем engvpnd restart (0.5.30+ чистит swarm за ≤2 с).";
+    if (!out.hints.some((h) => /Лишние service\.sh|swarm/i.test(h))) out.hints.push(msg);
+  } else if (orphans.length > 1) {
+    // One tracked sleep under the supervisor is normal; warn only on a pile.
+    const msg =
+      "Лишние sleep EngVPN в топе — engvpnd restart; start чистит orphans одним проходом.";
+    if (!out.hints.some((h) => /Лишние sleep|orphans/i.test(h))) out.hints.push(msg);
   }
   const log = readEngvpnLogTail();
   if (log) {
