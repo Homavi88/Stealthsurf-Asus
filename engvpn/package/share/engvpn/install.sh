@@ -707,6 +707,7 @@ do_install() {
 			if [ -x "$SHARE/schedule-update.sh" ]; then
 				ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
 			fi
+			[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
 			# Default: download Xray / Ferrum / sing-box / mihomo + geo DBs so Engines are ready
 			fetch_engine_assets
 			if [ "${ENGVPN_DEFER_START:-}" = 1 ]; then
@@ -765,6 +766,7 @@ do_upgrade() {
 		install_cli_path || true
 		[ -x "$SHARE/schedule-update.sh" ] &&
 			ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
+		[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
 		fetch_engine_assets
 		rm -rf "$STAGE"
 		start_service
@@ -828,6 +830,7 @@ do_uninstall() {
 
 	stage "Расписание" "Снятие расписания обновлений…"
 	[ -x "$SHARE/schedule-update.sh" ] && sh "$SHARE/schedule-update.sh" remove-cru >/dev/null 2>&1 || true
+	[ -x "$SERVICE" ] && "$SERVICE" remove-keepalive >/dev/null 2>&1 || true
 
 	stage "Хуки" "Снятие хуков…"
 	remove_hooks

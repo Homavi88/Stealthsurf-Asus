@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.31** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.32** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.31](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.31) (после публикации feed)
+Релиз: [engvpn-0.5.32](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.32) (после публикации feed)
 
 ---
 
@@ -132,6 +132,13 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.32
+
+- **`engvpnd start` работает:** раньше команда была unknown (exit 2) — после падения панели «start» ничего не поднимал. Теперь → `service.sh start`.
+- **last-event:** причина последнего stop/exit в `data/last-event` (+ `/tmp/engvpn-<hash>/`).
+- **Keepalive cru** `engvpn_alive` каждые 5 мин: `engvpnd watchdog` поднимает панель, если supervisor умер (USB blip / services-stop).
+- Supervisor при краткой пропаже USB/`data` ретраит ~30 с, не выходит сразу.
 
 ### Что нового в 0.5.31
 
@@ -369,6 +376,7 @@ engvpnd --help
 | `backup …` | Снимок / откат |
 | `smartdns …` | Обход доменов/IP |
 | `discover` | Устройства LAN (JSONL) |
+| `start` | Запуск панели через `service.sh` (supervisor + node) |
 | `reconnect` / `fix` | Transparent (+dpi/smartdns) + restart сервиса |
 | `cleanup` / `clean` | Снять transparent/dpi/smartdns/GRE и `/tmp/engvpn*` |
 | `watchdog` | Проверка панели и восстановление правил |
@@ -383,6 +391,7 @@ engvpnd --help
 | `engvpnd reinstall` | — | Переустановка пакета, **data/ сохраняется** |
 | `engvpnd reinstall --wipe` | — | Стереть data/ + пакет из feed (`ENGVPN_REINSTALL_WIPE=1`) |
 | `engvpnd st` | `status` | Статус панели |
+| `engvpnd start` | `service.sh start` | Запуск панели (если «stopped») |
 | `engvpnd restart` | `service.sh restart` | Перезапуск панели |
 | `engvpnd clean` | `cleanup` | Снять правила / tmp |
 | `engvpnd priv` | `privacy` | Проверки скрытности |

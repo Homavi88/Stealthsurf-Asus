@@ -1462,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — Diagnostics: system-wide CPU% and RAM used/total summary above process lists (/proc/stat · /proc/meminfo), same ~2s poll."
+RELEASE_NOTES="EngVPN $VERSION — engvpnd start restores panel via service.sh (was unknown command); last-event stop reason; cru keepalive watchdog every 5m; USB data blip retry."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

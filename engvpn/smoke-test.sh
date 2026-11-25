@@ -229,6 +229,10 @@ printf '%s\n' "$help_out" | grep -q 'uninstall | remove'
 printf '%s\n' "$help_out" | grep -q 'reinstall'
 printf '%s\n' "$help_out" | grep -q 'update | up'
 printf '%s\n' "$help_out" | grep -q 'Быстрые команды'
+printf '%s\n' "$help_out" | grep -qE '^  start ' || {
+	echo "help missing start verb" >&2
+	exit 1
+}
 # Dispatch aliases without side effects
 "$PREFIX/sbin/engvpnd" st >/dev/null 2>&1 || true
 "$PREFIX/sbin/engvpnd" priv dry-run | grep -q 'privacy-check'
@@ -577,6 +581,29 @@ if command -v node >/dev/null 2>&1; then
 		&& grep -q 'engvpn-\$PREFIX_HASH\|VOLATILE_DIR=/tmp/engvpn-' "$PREFIX/sbin/engvpnd" \
 		&& echo "  0.5.30 mkdir-lock + no nested watchdog start + per-prefix pidfile ok" \
 		|| { echo "missing 0.5.30 swarm fixes (mkdir lock / IN_SUPERVISOR / volatile pidfile)" >&2; exit 1; }
+	# 0.5.32: engvpnd start → service.sh; last-event; keepalive cru
+	grep -q 'cmd_start\|start) cmd_start' "$PREFIX/sbin/engvpnd" \
+		&& grep -q 'record_event\|install_keepalive_cru\|KEEPALIVE_CRU\|last-event' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q 'install-keepalive' "$PREFIX/share/engvpn/hook.sh" \
+		&& echo "  0.5.32 start alias + last-event + keepalive cru ok" \
+		|| { echo "missing 0.5.32 start/keepalive/last-event" >&2; exit 1; }
+	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
+	sleep 1
+	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-start.out 2>&1 || {
+		echo "engvpnd start failed:" >&2
+		cat /tmp/engvpn-smoke-start.out >&2
+		exit 1
+	}
+	grep -q 'EngVPN started\|already' /tmp/engvpn-smoke-start.out || {
+		echo "engvpnd start produced unexpected output:" >&2
+		cat /tmp/engvpn-smoke-start.out >&2
+		exit 1
+	}
+	[ -f "$PREFIX/data/last-event" ] || {
+		echo "missing $PREFIX/data/last-event after start" >&2
+		exit 1
+	}
+	echo "  engvpnd start + last-event ok"
 	grep -q 'id === "ferrum" ? "xray"\|member = id === "ferrum"' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& echo "  Ferrum unpack → xray member ok" \
 		|| { echo "missing Ferrum→xray unpack mapping in engines.mjs" >&2; exit 1; }

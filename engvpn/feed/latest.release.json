@@ -1,24 +1,24 @@
 {
-  "version": "0.5.31",
-  "notes": "EngVPN 0.5.31 — Diagnostics: system-wide CPU% and RAM used/total summary above process lists (/proc/stat · /proc/meminfo), same ~2s poll.",
+  "version": "0.5.32",
+  "notes": "EngVPN 0.5.32 — engvpnd start restores panel via service.sh (was unknown command); last-event stop reason; cru keepalive watchdog every 5m; USB data blip retry.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.31/engvpn_0.5.31_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "8f13c10f154ec2870e29686fa4c8e9d5afb892b9c2f84992e55d671f03957925",
-      "size": 176520
+      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
+      "size": 177877
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.31/engvpn_0.5.31_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "8f13c10f154ec2870e29686fa4c8e9d5afb892b9c2f84992e55d671f03957925",
-      "size": 176520
+      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
+      "size": 177877
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.31/engvpn_0.5.31_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "8f13c10f154ec2870e29686fa4c8e9d5afb892b9c2f84992e55d671f03957925",
-      "size": 176520
+      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
+      "size": 177877
     }
   }
 }
