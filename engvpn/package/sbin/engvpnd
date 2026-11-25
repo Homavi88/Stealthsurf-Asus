@@ -64,7 +64,9 @@ Usage: engvpnd <command> [options]
   set-password [--data-dir DIR]
                                Read panel password from stdin; store pbkdf2 hash
   status | st                  Print running / stopped and port
-  stop                         Stop the panel process
+  stop                         Stop the panel process (keepalive may restart)
+  off | poweroff | выкл        Full durable shutdown: panel, cores, keepalive
+                               (stays off until engvpnd start)
   restart                      Restart panel via service.sh
   update-check | check         Compare installed version to feed
   update | up                  Download feed package and upgrade in place
@@ -96,7 +98,7 @@ Usage: engvpnd <command> [options]
   watchdog                     One-shot health: panel port + optional transparent restore
   version | ver                Print package version
 
-Быстрые команды: start | up | check | remove | reinstall | st | restart | clean | priv | fix | ver
+Быстрые команды: start | off | up | check | remove | reinstall | st | restart | clean | priv | fix | ver
 EOF
 }
 
@@ -213,6 +215,11 @@ cmd_status() {
 }
 
 cmd_stop() {
+	# Soft stop: panel only. Keepalive cru may bring it back within ~5 min.
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" stop
+		return $?
+	fi
 	pid=""
 	[ -f "$PIDFILE" ] && read -r pid <"$PIDFILE" 2>/dev/null
 	if alive_pid "$pid"; then
@@ -226,6 +233,21 @@ cmd_stop() {
 	fi
 	rm -f "$PIDFILE"
 	echo "stopped"
+}
+
+cmd_off() {
+	# Durable full shutdown — no leftover panel/supervisor/cores/keepalive until start.
+	echo "engvpnd: power off → $SHARE/service.sh off (prefix=$PREFIX)"
+	if [ -x "$SHARE/service.sh" ]; then
+		sh "$SHARE/service.sh" off
+		return $?
+	fi
+	# Fallback without service.sh
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	printf '1\n' >"$DATA_DIR/.powered-off" 2>/dev/null || true
+	cmd_cleanup >/dev/null 2>&1 || true
+	cmd_stop >/dev/null 2>&1 || true
+	echo "EngVPN powered off (until engvpnd start)"
 }
 
 cmd_update_check() {
@@ -503,6 +525,11 @@ cmd_cleanup() {
 }
 
 cmd_watchdog() {
+	# Honor durable power-off: never auto-start until explicit engvpnd start.
+	if [ -f "$DATA_DIR/.powered-off" ]; then
+		echo "watchdog: powered off — skip"
+		return 0
+	fi
 	# Panel listen check
 	ok=1
 	if ! cmd_status >/dev/null 2>&1; then
@@ -559,6 +586,7 @@ start) cmd_start ;;
 set-password) cmd_set_password "$@" ;;
 status | st) cmd_status ;;
 stop) cmd_stop ;;
+off | poweroff | выкл) cmd_off ;;
 restart) cmd_restart ;;
 update-check | check) cmd_update_check ;;
 update | up) cmd_update "$@" ;;

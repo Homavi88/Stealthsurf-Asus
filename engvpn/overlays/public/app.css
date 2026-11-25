@@ -254,18 +254,19 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   display: block; height: 100%; width: 0;
   background: var(--blue); border-radius: inherit;
 }
-/* Own block AFTER CPU/RAM — not crammed under ЦП in the same grid */
+/* Own block AFTER CPU/RAM — two always-visible timers in one horizontal row */
 .sys-uptime {
-  display: flex; flex-direction: column; gap: 2px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
   margin: 0 0 12px; padding: 12px 14px;
   background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
 }
-.sys-uptime > b {
-  font-size: 22px; font-variant-numeric: tabular-nums; color: var(--blue-2);
+.sys-uptime-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sys-uptime-item b {
+  font-size: 18px; font-variant-numeric: tabular-nums; color: var(--blue-2);
   line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sys-uptime > .muted { font-size: 13px; }
-.sys-uptime-panel { margin-top: 2px; font-size: 12px; }
+.sys-uptime-item > .muted { font-size: 13px; }
 .proc-table { display: flex; flex-direction: column; gap: 0; margin: 4px 0 10px; }
 .proc-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center;

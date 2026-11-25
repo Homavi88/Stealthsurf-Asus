@@ -133,6 +133,12 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
 
+### Что нового в 0.5.35
+
+- **Диагностика → аптайм:** два таймера всегда в одном горизонтальном ряду — «EngVPN без перезапуска» (сессия аддона) и «панель Node»; без появления/исчезновения второй строки и прыжков вёрстки.
+- **Панель не «отваливается»:** опрос нагрузки не накладывается друг на друга, один retry при кратком сбое сети, SSE переподключается — тост «Сеть панели недоступна» не мигает при обычной работе Диагностики.
+- **`engvpnd off` / `poweroff` / `выкл`:** полное выключение (панель, supervisor, ядра, keepalive). Держится до явного `engvpnd start` (хуки Merlin и watchdog не поднимают). В панели: **Другое → Выключить EngVPN**.
+
 ### Что нового в 0.5.34
 
 - **Главная:** чип «Доступна версия…» показывается всегда (не только после настройки аккаунта); тихая проверка feed после входа.
@@ -404,6 +410,7 @@ engvpnd --help
 | `engvpnd reinstall --wipe` | — | Стереть data/ + пакет из feed (`ENGVPN_REINSTALL_WIPE=1`) |
 | `engvpnd st` | `status` | Статус панели |
 | `engvpnd start` | `service.sh start` | Запуск панели (если «stopped») |
+| `engvpnd off` | `service.sh off` | Полное выключение до `start` |
 | `engvpnd restart` | `service.sh restart` | Перезапуск панели |
 | `engvpnd clean` | `cleanup` | Снять правила / tmp |
 | `engvpnd priv` | `privacy` | Проверки скрытности |
@@ -426,6 +433,8 @@ ENGVPN_RESTORE=0 engvpnd remove   # полное удаление
 engvpnd fix
 engvpnd clean
 engvpnd restart
+engvpnd off                             # полное выключение до start
+engvpnd start                           # снова включить после off
 ```
 
 ### Панель и пароль
@@ -434,7 +443,8 @@ engvpnd restart
 engvpnd serve [--data-dir DIR]          # обычно через service.sh, не вручную
 echo 'secret-pass' | engvpnd set-password
 engvpnd status
-engvpnd stop
+engvpnd stop                            # мягкий стоп (keepalive может поднять)
+engvpnd off                             # полное выключение до engvpnd start
 ```
 
 ### Обновление и переустановка

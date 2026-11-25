@@ -43,8 +43,22 @@ CHILDREN_FILE=$VOLATILE_DIR/supervisor.children
 LAST_EVENT=$DATA_DIR/last-event
 LAST_EVENT_TMP=$VOLATILE_DIR/last-event
 UPTIME_SINCE=$DATA_DIR/.addon-uptime-since
+POWERED_OFF=$DATA_DIR/.powered-off
 KEEPALIVE_CRU=engvpn_alive
 KEEPALIVE_MARKER=$DATA_DIR/.keepalive-cru
+
+is_powered_off() {
+	[ -f "$POWERED_OFF" ]
+}
+
+mark_powered_off() {
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	printf '1\n' >"$POWERED_OFF" 2>/dev/null || true
+}
+
+clear_powered_off() {
+	rm -f "$POWERED_OFF" 2>/dev/null || true
+}
 
 # Durable breadcrumb: why supervisor/panel last stopped or exited.
 # Survives on USB data/; also mirrored under /tmp for when USB is flaky.
@@ -568,6 +582,27 @@ is_engvpn_process() {
 	own_panel "$1" || own_service_script "$1" || own_engvpnd_serve "$1" || is_engvpn_helper "$1"
 }
 
+# Kill EngVPN engine binaries (xray / ferrum / sing-box / mihomo / nfqws) under this PREFIX.
+kill_engvpn_cores() {
+	_core_dir="$DATA_DIR/cores"
+	if command -v pkill >/dev/null 2>&1; then
+		pkill -9 -f "$DATA_DIR/cores/" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/data/cores/" 2>/dev/null || true
+		pkill -9 -f "$SHARE/bin/nfqws" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/share/engvpn/.*/nfqws" 2>/dev/null || true
+	fi
+	for entry in /proc/[0-9]*; do
+		p=${entry#/proc/}
+		[ "$p" = "$$" ] && continue
+		cmd=$(read_cmdline "$p") || continue
+		case "$cmd" in
+		*"$DATA_DIR/cores/"* | *"$PREFIX/data/cores/"* | *"$SHARE"/*nfqws* | *"$PREFIX/share/engvpn/"*nfqws*)
+			kill -9 "$p" 2>/dev/null || true
+			;;
+		esac
+	done
+}
+
 # Fast stop: path-scoped SIGKILL, one /proc pass, ≤1s settle. No nested O(n²) scans.
 kill_strays() {
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
@@ -908,6 +943,8 @@ do_start() {
 	: >>"$LOG" 2>/dev/null || true
 	: >>"$SUPERVISOR_LOCK" 2>/dev/null || true
 	rm -f "$DATA_DIR/.stop-requested" 2>/dev/null || true
+	# Explicit start clears durable power-off (watchdog / Merlin hooks honor the marker).
+	clear_powered_off
 	record_event "start-requested"
 	install_keepalive_cru
 
@@ -974,6 +1011,28 @@ do_stop() {
 	echo "EngVPN stopped"
 }
 
+# Full durable shutdown: panel + supervisor + cores + rules helpers off.
+# Keeps .powered-off so keepalive/watchdog/Merlin hooks will NOT restart until
+# explicit `engvpnd start` / service.sh start.
+do_poweroff() {
+	mkdir -p "$DATA_DIR" "$VOLATILE_DIR" 2>/dev/null || true
+	record_event "poweroff-requested"
+	mark_powered_off
+	remove_keepalive_cru
+	clear_addon_uptime
+	# Tear down datapath helpers first (best-effort; ignore failures).
+	[ -x "$SHARE/transparent.sh" ] && sh "$SHARE/transparent.sh" stop >/dev/null 2>&1 || true
+	[ -x "$SHARE/dpi.sh" ] && sh "$SHARE/dpi.sh" stop >/dev/null 2>&1 || true
+	[ -x "$SHARE/smartdns.sh" ] && sh "$SHARE/smartdns.sh" stop >/dev/null 2>&1 || true
+	[ -x "$SHARE/warp.sh" ] && sh "$SHARE/warp.sh" gre-down >/dev/null 2>&1 || true
+	kill_engvpn_cores
+	kill_strays 2>/dev/null || true
+	# kill_strays clears .stop-requested; keep powered-off marker.
+	mark_powered_off
+	rm -f "$PANEL_LOCK" 2>/dev/null || true
+	echo "EngVPN powered off (until engvpnd start)"
+}
+
 do_check() {
 	if panel_quick_ok; then
 		n=$(panel_count)
@@ -1000,6 +1059,9 @@ do_check() {
 case "$ACTION" in
 start) do_start ;;
 stop | stop-held) do_stop ;;
+off | poweroff | выкл)
+	do_poweroff
+	;;
 restart)
 	# Snappy: SIGKILL storm clear, no long settle, then one start.
 	do_stop
@@ -1020,7 +1082,7 @@ remove-keepalive)
 	echo "EngVPN keepalive cru removed"
 	;;
 *)
-	echo "Usage: $0 start|stop|restart|check|kill-strays|install-keepalive|remove-keepalive" >&2
+	echo "Usage: $0 start|stop|off|restart|check|kill-strays|install-keepalive|remove-keepalive" >&2
 	exit 2
 	;;
 esac

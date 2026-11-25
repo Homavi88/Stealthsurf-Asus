@@ -66,10 +66,9 @@ else
 $(cat "$ROOT/feed/latest.release.json" 2>/dev/null | sed -n 's/.*"notes": "\(.*\)".*/\1/p' | head -n1)
 
 ### Highlights
-- Home update chip always visible + quiet feed check
-- Updates page: GitHub release changelog
-- Fast update: no \`.engvpn-backup\`, skip core re-download, defer panel kill until install; streaming journal + reconnect
-- Diagnostics: EngVPN uptime in its own block after CPU/RAM; durable session clock (\`data/.addon-uptime-since\`)
+- Diagnostics: always-visible dual uptime row — addon session + panel Node (no flicker)
+- Panel stay-up: serialize Diagnostics poll, fetch retry, SSE reconnect (no false «Сеть панели недоступна»)
+- \`engvpnd off\` / \`poweroff\`: durable full shutdown (panel + cores + keepalive) until \`engvpnd start\`
 
 Install: \`curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh\`
 

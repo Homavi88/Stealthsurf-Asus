@@ -1,24 +1,24 @@
 {
-  "version": "0.5.34",
-  "notes": "EngVPN 0.5.34 — Home update chip always; GitHub changelog on Updates; fast update (no .engvpn-backup, skip cores, defer storm until install, streaming journal); Diagnostics uptime own block + durable addon session clock.",
+  "version": "0.5.35",
+  "notes": "EngVPN 0.5.35 — Diagnostics dual uptime row (no flicker); panel stay-up (serialize /proc poll + fetch retry + SSE reconnect); engvpnd off/poweroff durable full shutdown.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
-      "size": 183522
+      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
+      "size": 185309
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
-      "size": 183522
+      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
+      "size": 185309
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
-      "size": 183522
+      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
+      "size": 185309
     }
   }
 }

@@ -265,7 +265,12 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnPowerOff, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from "./runtime-engvpn.mjs";',
+    )
+elif "engvpnPowerOff" not in text and "engvpnWatchdog" in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "engvpnReconnect, engvpnWatchdog,",
+        "engvpnReconnect, engvpnWatchdog, engvpnPowerOff,",
     )
 elif "engvpnUpdateChangelog" not in text and "engvpnUpdateApply" in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
@@ -371,6 +376,10 @@ insert = '''      case "transparent":
         return engvpnReconnect();
       case "engvpnWatchdog":
         return engvpnWatchdog();
+      case "engvpnPowerOff":
+      case "powerOff":
+      case "poweroff":
+        return engvpnPowerOff(body || {});
       case "engvpnDpi":
       case "dpi":
         return engvpnDpi(body.action || body.command || "status", body);
@@ -402,6 +411,14 @@ if "case \"transparent\":" not in text:
     if needle not in text:
         raise SystemExit("autoSetup case not found for inject")
     text = text.replace(needle, insert, 1)
+elif "case \"engvpnPowerOff\":" not in text and "case \"engvpnWatchdog\":" in text:
+    text = text.replace(
+        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n',
+        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n'
+        '      case "engvpnPowerOff":\n      case "powerOff":\n      case "poweroff":\n'
+        '        return engvpnPowerOff(body || {});\n',
+        1,
+    )
 elif "case \"saveAccount\":" not in text:
     text = text.replace(
         '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n      case "autoSetup":',
@@ -1480,7 +1497,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — Home update chip always; GitHub changelog on Updates; fast update (no .engvpn-backup, skip cores, defer storm until install, streaming journal); Diagnostics uptime own block + durable addon session clock."
+RELEASE_NOTES="EngVPN $VERSION — Diagnostics dual uptime row (no flicker); panel stay-up (serialize /proc poll + fetch retry + SSE reconnect); engvpnd off/poweroff durable full shutdown."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
