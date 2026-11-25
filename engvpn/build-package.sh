@@ -92,6 +92,8 @@ done
 # EngVPN overlays (catalog + daemon helpers + branded panel UI)
 cp -a "$ROOT/overlays/catalog.mjs" "$RUNTIME/lib/catalog.mjs"
 cp -a "$ROOT/overlays/runtime-engvpn.mjs" "$RUNTIME/lib/runtime-engvpn.mjs"
+# Isolated Diagnostics /proc sampler (child process — V8 Fatal cannot kill panel)
+cp -a "$ROOT/overlays/proc-sample.mjs" "$RUNTIME/lib/proc-sample.mjs"
 if [ -d "$ROOT/overlays/public" ]; then
 	mkdir -p "$RUNTIME/public"
 	cp -a "$ROOT/overlays/public/." "$RUNTIME/public/"
@@ -1497,7 +1499,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — Diagnostics dual uptime row (no flicker); panel stay-up (serialize /proc poll + fetch retry + SSE reconnect); engvpnd off/poweroff durable full shutdown."
+RELEASE_NOTES="EngVPN $VERSION — Stop Merlin V8 Fatal (exit 133) on Diagnostics: isolated proc-sample child, capped /proc, GC flags (--no-concurrent-sweeping), 10s poll/cache; faster keepalive */1 + 2s respawn; reclaim stale supervisor lockdir."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

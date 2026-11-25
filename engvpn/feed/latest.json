@@ -1,24 +1,24 @@
 {
-  "version": "0.5.35",
-  "notes": "EngVPN 0.5.35 — Diagnostics dual uptime row (no flicker); panel stay-up (serialize /proc poll + fetch retry + SSE reconnect); engvpnd off/poweroff durable full shutdown.",
+  "version": "0.5.36",
+  "notes": "EngVPN 0.5.36 — Stop Merlin V8 Fatal (exit 133) on Diagnostics: isolated proc-sample child, capped /proc, GC flags (--no-concurrent-sweeping), 10s poll/cache; faster keepalive */1 + 2s respawn; reclaim stale supervisor lockdir.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.36/engvpn_0.5.36_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
-      "size": 185309
+      "sha256": "88031e90a0d3490ddf0c3f1a36dceec6ad9f38a51d2176b76d9e4f865104cc85",
+      "size": 188640
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.36/engvpn_0.5.36_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
-      "size": 185309
+      "sha256": "88031e90a0d3490ddf0c3f1a36dceec6ad9f38a51d2176b76d9e4f865104cc85",
+      "size": 188640
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.35/engvpn_0.5.35_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.36/engvpn_0.5.36_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "82d97c52e6de3c5ae1c3786904879ee4f291fab21d7564b075a71fc8951f3325",
-      "size": 185309
+      "sha256": "88031e90a0d3490ddf0c3f1a36dceec6ad9f38a51d2176b76d9e4f865104cc85",
+      "size": 188640
     }
   }
 }

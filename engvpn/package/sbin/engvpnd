@@ -192,7 +192,17 @@ cmd_serve() {
 	export ENGVPN_TRANSPARENT_PID=$$
 	export ENGVPN_PANEL_LOCK="$PANEL_LOCK"
 	printf '%s\n' "$$" >"$PIDFILE" 2>/dev/null || true
-	# exec: same PID becomes node — supervisor child tracking stays correct
+	# Merlin aarch64 Entware Node: concurrent GC sweeper can Fatal
+	# (DiscardSystemPages → exit 133) under Diagnostics memory pressure.
+	# Cap old-space + disable concurrent / background GC when this node accepts the flags.
+	_gc_ok=$PREFIX/.node-gc-ok
+	_node_opts="${ENGVPN_NODE_OPTIONS:---max-old-space-size=96}"
+	export NODE_OPTIONS="$_node_opts"
+	if [ -f "$_gc_ok" ] || "$node" --max-old-space-size=96 --no-concurrent-sweeping --single-threaded-gc -e 'process.exit(0)' >/dev/null 2>&1; then
+		touch "$_gc_ok" 2>/dev/null || true
+		# exec: same PID becomes node — supervisor child tracking stays correct
+		exec "$node" --max-old-space-size=96 --no-concurrent-sweeping --single-threaded-gc "$RUNTIME/run.mjs"
+	fi
 	exec "$node" "$RUNTIME/run.mjs"
 }
 

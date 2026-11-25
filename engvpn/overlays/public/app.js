@@ -1511,8 +1511,9 @@ async function refreshProcs() {
 function ensureProcsPoll() {
   const want = !!(S?.diagnostics?.showLoad && ui.stack.at(-1) === "diagnostics");
   if (want && !procsPoll) {
-    // 3s: leave headroom for sync /proc scan on ARM Merlin without stacking.
-    procsPoll = setInterval(() => { refreshProcs(); }, 3000);
+    // 0.5.36: 10s — matches server proc cache; avoids hammering /proc child
+    // (Merlin aarch64 V8 Fatal under frequent Diagnostics polls).
+    procsPoll = setInterval(() => { refreshProcs(); }, 10000);
     refreshProcs();
   } else if (!want && procsPoll) {
     clearInterval(procsPoll);
