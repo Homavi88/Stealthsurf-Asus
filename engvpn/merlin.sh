@@ -823,7 +823,8 @@ echo
 echo "EngVPN $version установлен в $prefix."
 echo
 echo "Откройте панель:"
-echo "http://${lan}:${port}"
+# Trailing slash — iOS Safari can drop :port when resolving relative URLs against path-less http://IP:PORT
+echo "http://${lan}:${port}/"
 echo
 echo "Адрес: $lan"
 echo "Порт:  $port"

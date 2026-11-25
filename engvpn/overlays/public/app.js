@@ -76,12 +76,92 @@ const fmtBytes = (n) => {
 };
 const mem = (n) => `${(Number(n) / 1024 / 1024 / 1024).toFixed(1)} ГБ`;
 
+/**
+ * Absolute same-origin URL. iOS Safari can drop a non-default port when resolving
+ * relative paths against a path-less address-bar URL (`http://IP:8790` without `/`).
+ */
+function panelUrl(path) {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  try {
+    return new URL(p, `${location.protocol}//${location.host}/`).href;
+  } catch {
+    return p;
+  }
+}
+
+/** Human EngVPN panel/supervisor uptime from ms. */
+function fmtUptime(ms) {
+  const sec = Math.max(0, Math.floor(Number(ms) / 1000) || 0);
+  const d = Math.floor(sec / 86400);
+  const h = Math.floor((sec % 86400) / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  if (d > 0) return `${d}д ${h}ч ${m}м`;
+  if (h > 0) return `${h}ч ${m}м`;
+  if (m > 0) return `${m}м ${s}с`;
+  return `${s}с`;
+}
+
+/**
+ * Force pathname `/` (+ hash route) so Safari never treats `host:port` as a
+ * path-less base (relative resolution can navigate to port 80 / router LAN UI).
+ */
+function normalizePanelUrl() {
+  try {
+    const u = new URL(location.href);
+    let changed = false;
+    // Map accidental deep paths → hash (server also SPA-fallbacks these).
+    if (u.pathname && u.pathname !== "/") {
+      const segs = u.pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+      const leaf = segs[segs.length - 1] || "";
+      if (leaf && !leaf.includes(".") && (SETTINGS_TOP.has(leaf) || SETTINGS_PARENT[leaf] || leaf === "menu")) {
+        if (!u.hash || u.hash === "#" || u.hash === "#/") u.hash = `#/${segs.join("/")}`;
+        changed = true;
+      }
+      u.pathname = "/";
+      changed = true;
+    }
+    // Always land on `/` in the history URL (trailing slash after port).
+    if (changed || !/\/(?:\?|#|$)/.test(location.href.replace(/^[^:]+:\/\/[^/]+/, ""))) {
+      history.replaceState(null, "", `/${u.search || ""}${u.hash || "#/"}`);
+    } else if (!u.hash) {
+      history.replaceState(null, "", `/${u.search || ""}#/`);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+function stackFromHash() {
+  const raw = String(location.hash || "").replace(/^#\/?/, "").trim();
+  if (!raw) return [];
+  const parts = raw.split("/").filter(Boolean);
+  const out = ["menu"];
+  for (const id of parts) {
+    if (!id || id === "menu") continue;
+    if (SETTINGS_TOP.has(id) || SETTINGS_PARENT[id] || id === "menu") out.push(id);
+  }
+  return out.length > 1 ? out : [];
+}
+
+function syncHashFromStack() {
+  try {
+    const ids = (ui.stack || []).filter((id) => id && id !== "menu");
+    const want = ids.length ? `#/${ids.join("/")}` : "#/";
+    if (location.hash !== want) {
+      history.replaceState(null, "", `/${location.search || ""}${want}`);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 async function api(path, body) {
   const headers = { "X-EngVPN-Panel": "1" };
   if (body) headers["Content-Type"] = "application/json";
   let res;
   try {
-    res = await fetch(path, {
+    res = await fetch(panelUrl(path), {
       method: body ? "POST" : "GET",
       headers,
       credentials: "same-origin",
@@ -1283,11 +1363,12 @@ function procRowsHtml(list, kind) {
   }).join("")}</div>`;
 }
 
-function sysLoadBlockHtml(load) {
+function sysLoadBlockHtml(load, uptimeMs) {
   const cpu = Math.max(0, Math.min(100, Number(load?.cpu) || 0));
   const used = Number(load?.ramUsed) || 0;
   const total = Number(load?.ramTotal) || 0;
   const ramPct = total > 0 ? Math.max(0, Math.min(100, Math.round((used / total) * 100))) : 0;
+  const up = uptimeMs != null ? uptimeMs : (S?.runtime?.uptime ?? load?.uptime);
   return `<div class="h">НАГРУЗКА СИСТЕМЫ</div>
     <p class="muted">Общая загрузка роутера (/proc/stat · /proc/meminfo). Обновление ~2 с.</p>
     <div class="sys-load">
@@ -1301,13 +1382,17 @@ function sysLoadBlockHtml(load) {
         <span class="muted">ОЗУ · ${ramPct}%</span>
         <div class="sys-load-bar" aria-hidden="true"><i style="width:${ramPct}%"></i></div>
       </div>
+      <div class="sys-load-item sys-load-uptime">
+        <b class="kv" data-live="uptime">${esc(fmtUptime(up))}</b>
+        <span class="muted">EngVPN без перезапуска</span>
+      </div>
     </div>`;
 }
 
 function procsBlockHtml(procs, load) {
   const flagged = procs?.flagged || [];
   const hints = procs?.hints || [];
-  return `${sysLoadBlockHtml(load || S?.runtime?.load)}
+  return `${sysLoadBlockHtml(load || S?.runtime?.load, S?.runtime?.uptime)}
     <div class="h">КТО ГРУЗИТ РОУТЕР</div>
     <p class="muted">Топ по ЦП и ОЗУ (/proc). Подсвечены engvpnd / node / xray / sing-box / mihomo. Обновление ~2 с.</p>
     ${hints.length ? `<div class="proc-hints">${hints.map((h) => `<p class="proc-hint">${esc(h)}</p>`).join("")}</div>` : ""}
@@ -1336,6 +1421,7 @@ async function refreshProcs() {
       S.runtime.load.ramTotal = r.ramTotal ?? S.runtime.load.ramTotal;
       S.runtime.load.proc = r.proc ?? S.runtime.load.proc;
       S.runtime.load.processes = ui.processes;
+      if (r.uptime != null) S.runtime.uptime = r.uptime;
     }
     if (!paintProcs()) render();
     else paintLive();
@@ -1652,6 +1738,8 @@ function paintLive() {
   const rt = S.runtime;
   const load = document.querySelector("[data-live=load]");
   if (load) load.textContent = `ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}`;
+  const upEl = document.querySelector("[data-live=uptime]");
+  if (upEl) upEl.textContent = fmtUptime(rt.uptime);
   const speed = document.querySelector("[data-live=speed]");
   if (speed) speed.innerHTML = `<span class="spd-vpn">VPN ↓ ${fmt(rt.rates.vpnDown)} ↑ ${fmt(rt.rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rt.rates.directDown)} ↑ ${fmt(rt.rates.directUp)}</span>`;
   const sp = document.querySelector("[data-live=spark]");
@@ -1662,6 +1750,7 @@ function open(id) {
   if (!ui.stack.length) ui.stack = ["menu"];
   if (ui.stack.at(-1) !== id) ui.stack.push(id);
   ui.pop = false;
+  syncHashFromStack();
   render();
 }
 
@@ -1673,11 +1762,12 @@ document.addEventListener("click", (event) => {
     ui.form.id = t.dataset.id || ui.form.id;
     ui.stack = ["menu", t.dataset.goTop];
     ui.pop = false;
+    syncHashFromStack();
     render();
     return;
   }
   if (t.dataset.go) { ui.form.id = t.dataset.id || ui.form.id; open(t.dataset.go); return; }
-  if (t.dataset.goRoot) { ui.stack = ["menu", t.dataset.goRoot]; ui.pop = false; render(); return; }
+  if (t.dataset.goRoot) { ui.stack = ["menu", t.dataset.goRoot]; ui.pop = false; syncHashFromStack(); render(); return; }
   if (t.dataset.toggle) {
     const path = t.dataset.toggle;
     const on = !t.classList.contains("on");
@@ -1735,11 +1825,12 @@ document.addEventListener("click", (event) => {
     render();
     return;
   }
-  if (act === "settings") { ui.stack = ["menu"]; render(); return; }
-  if (act === "close") { ui.stack = []; ui.pop = false; render(); return; }
+  if (act === "settings") { ui.stack = ["menu"]; syncHashFromStack(); render(); return; }
+  if (act === "close") { ui.stack = []; ui.pop = false; syncHashFromStack(); render(); return; }
   if (act === "back") {
     ui.stack.pop();
     if (!ui.stack.length || (ui.stack.length === 1 && ui.stack[0] === "menu")) ui.stack = ["menu"];
+    syncHashFromStack();
     render();
     return;
   }
@@ -1749,6 +1840,7 @@ document.addEventListener("click", (event) => {
     if (!vpnNodes.length && !S.vpn.connected) {
       toast("Сначала добавьте ключ или URL: Аккаунт");
       ui.stack = ["menu", "account"];
+      syncHashFromStack();
       render();
       return;
     }
@@ -2180,7 +2272,7 @@ document.addEventListener("change", (event) => {
 });
 function listen() {
   if (es) es.close();
-  es = new EventSource("/api/events");
+  es = new EventSource(panelUrl("/api/events"));
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
     if (!S) return;
@@ -2214,6 +2306,11 @@ async function afterAuth() {
   S = await api("/api/snapshot");
   ui.auth = true;
   ui.toast = "";
+  if (!ui.stack.length) {
+    const fromHash = stackFromHash();
+    if (fromHash.length) ui.stack = fromHash;
+  }
+  syncHashFromStack();
   listen();
   render();
 }
@@ -2240,6 +2337,7 @@ async function doLogin(password) {
 }
 
 async function openPanel() {
+  normalizePanelUrl();
   render();
   const session = await api("/api/session");
   if (session.authenticated || session.openAccess) {
@@ -2249,6 +2347,18 @@ async function openPanel() {
   ui.auth = false;
   render();
 }
+
+normalizePanelUrl();
+window.addEventListener("hashchange", () => {
+  if (ui.auth !== true) return;
+  const next = stackFromHash();
+  const cur = (ui.stack || []).join("/");
+  const want = (next.length ? next : []).join("/");
+  if (cur === want || (!next.length && !ui.stack.length)) return;
+  ui.stack = next.length ? next : [];
+  ui.pop = false;
+  render();
+});
 
 openPanel().catch((err) => {
   ui.auth = false;

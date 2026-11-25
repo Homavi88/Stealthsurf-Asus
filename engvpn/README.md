@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.32** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.33** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.32](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.32) (после публикации feed)
+Релиз: [engvpn-0.5.33](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.33) (после публикации feed)
 
 ---
 
@@ -132,6 +132,11 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.33
+
+- **iOS Safari / trailing slash:** панель канонизирует URL на `/` + hash-маршруты (`/#/diagnostics`); absolute API/asset URLs и SPA-fallback на сервере — reload глубокого экрана больше не уводит на `:80` / «не удаётся подключиться».
+- **Диагностика → аптайм EngVPN:** в блоке «НАГРУЗКА СИСТЕМЫ» строка «EngVPN без перезапуска» (uptime процесса панели / `process.uptime`).
 
 ### Что нового в 0.5.32
 

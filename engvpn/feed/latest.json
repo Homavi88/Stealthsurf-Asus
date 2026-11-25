@@ -1,24 +1,24 @@
 {
-  "version": "0.5.32",
-  "notes": "EngVPN 0.5.32 — engvpnd start restores panel via service.sh (was unknown command); last-event stop reason; cru keepalive watchdog every 5m; USB data blip retry.",
+  "version": "0.5.33",
+  "notes": "EngVPN 0.5.33 — iOS Safari: canonical / + hash routes + absolute panel URLs (no port drop); Diagnostics EngVPN uptime; install banner URL with trailing slash.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
-      "size": 177877
+      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
+      "size": 179705
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
-      "size": 177877
+      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
+      "size": 179705
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.32/engvpn_0.5.32_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "1c380942c08030cf7a0a5e82967f790c5b1f81222242ac0ef61e0f85fbe9984a",
-      "size": 177877
+      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
+      "size": 179705
     }
   }
 }

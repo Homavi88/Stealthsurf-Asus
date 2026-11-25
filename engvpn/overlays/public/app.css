@@ -242,6 +242,7 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
 }
 .sys-load-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sys-load-item.sys-load-uptime { grid-column: 1 / -1; }
 .sys-load-item b {
   font-size: 18px; font-variant-numeric: tabular-nums; color: var(--blue-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

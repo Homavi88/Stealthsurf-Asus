@@ -1,5 +1,5 @@
 import http from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, extname, normalize, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createRuntime } from "./lib/runtime.mjs";
@@ -68,6 +68,35 @@ function setCookie(res, token) {
     ? `alfa_session=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600`
     : "alfa_session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0";
   res.setHeader("Set-Cookie", value);
+}
+
+/**
+ * Resolve a safe file under PUBLIC.
+ * Unknown non-API GET paths fall back to index.html (SPA / hash deep-links).
+ * iOS Safari: refreshing a deep path must still serve the panel, not 404.
+ */
+function resolvePublicFile(pathname) {
+  const clean = pathname || "/";
+  const candidates = clean === "/" || clean === ""
+    ? ["/index.html"]
+    : [clean, clean.endsWith("/") ? `${clean}index.html` : null].filter(Boolean);
+  for (const rel of candidates) {
+    const file = normalize(join(PUBLIC, rel));
+    if (!file.startsWith(PUBLIC + sep) && file !== PUBLIC) continue;
+    if (!existsSync(file)) continue;
+    try {
+      if (statSync(file).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    return file;
+  }
+  // SPA fallback — never 404 HTML navigations (hash routes / mistaken path segments).
+  if (!clean.startsWith("/api")) {
+    const index = join(PUBLIC, "index.html");
+    if (existsSync(index)) return index;
+  }
+  return null;
 }
 
 /** Всегда выдаёт рабочую сессию: при OPEN_PANEL — без пароля. */
@@ -146,9 +175,8 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === "GET") {
-      const rel = url.pathname === "/" ? "/index.html" : url.pathname;
-      const file = normalize(join(PUBLIC, rel));
-      if (!file.startsWith(PUBLIC + sep) && file !== PUBLIC || !existsSync(file)) {
+      const file = resolvePublicFile(url.pathname);
+      if (!file) {
         send(res, 404, "not found", { "Content-Type": "text/plain" });
         return;
       }

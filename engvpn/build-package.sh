@@ -234,7 +234,7 @@ text = text.replace(
 )
 text = text.replace(
     'referencePanel: "http://192.168.50.1:8800"',
-    'referencePanel: "http://192.168.50.1:8790"',
+    'referencePanel: "http://192.168.50.1:8790/"',
 )
 # Prefer live LAN discovery over demo devices (empty until scan fills)
 if "demoDevices()" in text and "devices: []" not in text:
@@ -1462,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — engvpnd start restores panel via service.sh (was unknown command); last-event stop reason; cru keepalive watchdog every 5m; USB data blip retry."
+RELEASE_NOTES="EngVPN $VERSION — iOS Safari: canonical / + hash routes + absolute panel URLs (no port drop); Diagnostics EngVPN uptime; install banner URL with trailing slash."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
