@@ -8,9 +8,8 @@ import { execFile, execFileSync, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { existsSync, readFileSync, writeFileSync, mkdirSync, unlinkSync, mkdtempSync, rmSync, readdirSync } from "node:fs";
 import { join, dirname } from "node:path";
-import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { hostname, totalmem, freemem, arch, platform, cpus, loadavg } from "node:os";
+import { hostname, totalmem, freemem, arch, platform, cpus, loadavg, tmpdir } from "node:os";
 import { randomUUID } from "node:crypto";
 
 const exec = promisify(execFile);
@@ -1879,13 +1878,12 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "get_load_monitor":
     case "get_top_processes":
     case "get_router_processes": {
-      const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
+      // Cheap sys load always; process list from cache / isolated child so a
+      // Merlin V8 GC Fatal (exit 133) in the sampler cannot kill this panel.
       const sys = sampleSystemLoad();
-      // Addon session uptime from data/.addon-uptime-since (survives panel Node
-      // restarts). Panel-only process.uptime is exposed as panelUptime.
+      const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
       const panelUptime = Math.max(0, Math.floor(process.uptime() * 1000));
       const uptime = readAddonUptimeMs(panelUptime);
-      // Keep latest sample on runtime for home loadline + Diagnostics summary
       if (state.runtime?.load) {
         state.runtime.load.cpu = sys.cpu;
         state.runtime.load.ramUsed = sys.ramUsed;
@@ -2068,9 +2066,23 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
 }
 
 
-/* ─── Top processes (Merlin BusyBox: /proc, optional ps/top) ─── */
+/* ─── Top processes (Merlin BusyBox: /proc, optional ps/top) ───
+ *
+ * 0.5.36: full sync /proc walks in the panel process caused Entware Node
+ * aarch64 V8 Fatal (DiscardSystemPages / concurrent sweeper → exit 133).
+ * Prefer isolated child (proc-sample.mjs) + 10s cache + capped light fallback.
+ */
 
-let _procSnap = null; // { at, totalJiffies, byPid: Map<number,number> }
+const PROC_CACHE_MS = 10_000;
+const PROC_SCAN_CAP = 64;
+const PROC_CMDLINE_CAP = 16;
+let _procCache = { at: 0, value: null };
+let _procSnap = null; // { at, totalJiffies, byPid: Map }
+let _procChildFailAt = 0;
+
+function emptyProcSample(at, source = "none") {
+  return { byCpu: [], byRam: [], flagged: [], hints: [], source, at, count: 0 };
+}
 
 function readTotalCpuJiffies() {
   try {
@@ -2092,10 +2104,11 @@ function parsePidStat(pid) {
     if (open < 0 || close < open) return null;
     const name = text.slice(open + 1, close);
     const rest = text.slice(close + 2).trim().split(/\s+/);
-    // after ")": state=3 → rest[0]; utime=14 → rest[11]; stime=15 → rest[12]
-    const utime = Number(rest[11]) || 0;
-    const stime = Number(rest[12]) || 0;
-    return { pid: Number(pid), name, ticks: utime + stime };
+    return {
+      pid: Number(pid),
+      name,
+      ticks: (Number(rest[11]) || 0) + (Number(rest[12]) || 0),
+    };
   } catch {
     return null;
   }
@@ -2113,23 +2126,24 @@ function readPidRssKb(pid) {
 
 function readPidCmdline(pid) {
   try {
-    return readFileSync(`/proc/${pid}/cmdline`, "utf8").replace(/\0+/g, " ").trim();
+    const buf = readFileSync(`/proc/${pid}/cmdline`);
+    const slice = buf.length > 256 ? buf.subarray(0, 256) : buf;
+    return slice.toString("utf8").replace(/\0+/g, " ").trim();
   } catch {
     return "";
   }
 }
 
 function shortCmdName(cmd, fallback) {
-  if (!cmd) return String(fallback || "").slice(0, 48);
+  if (!cmd) return String(fallback || "").slice(0, 40);
   const first = cmd.split(/\s+/)[0] || fallback || "";
   const base = first.includes("/") ? first.slice(first.lastIndexOf("/") + 1) : first;
-  return (base || fallback || "").slice(0, 48);
+  return (base || fallback || "").slice(0, 40);
 }
 
 /** Tag EngVPN panel / supervisor / Node / open cores so Diagnostics can highlight CPU suspects. */
 function classifyEngvpnProcess(name, cmdline) {
   const s = `${name || ""} ${cmdline || ""}`.toLowerCase();
-  // Distinguish supervisor shells + orphan sleeps from the panel — avoids false «несколько engvpnd».
   if (/share\/engvpn\/service\.sh|\/engvpn\/share\/engvpn\/service\.sh/.test(s)) {
     return { kind: "supervisor", label: "service" };
   }
@@ -2154,69 +2168,10 @@ function classifyEngvpnProcess(name, cmdline) {
   return { kind: "", label: "" };
 }
 
-/**
- * Top processes by CPU% and RSS. Primary path: /proc (works on Merlin BusyBox
- * without GNU ps/top). CPU% needs two samples — first call may show 0% CPU.
- * Always pins engvpnd / node / xray / sing-box / mihomo into `flagged`.
- */
-export function sampleTopProcesses(opts = {}) {
-  const limit = Math.min(30, Math.max(1, Number(opts.limit) || 8));
-  const at = Date.now();
-  const totalNow = readTotalCpuJiffies();
-  let entries = [];
-  try {
-    entries = readdirSync("/proc");
-  } catch {
-    return { byCpu: [], byRam: [], flagged: [], source: "none", at, count: 0 };
-  }
-  const prev = _procSnap;
-  const nextMap = new Map();
-  const rows = [];
-  for (const ent of entries) {
-    if (!/^\d+$/.test(ent)) continue;
-    const st = parsePidStat(ent);
-    if (!st) continue;
-    const rssKb = readPidRssKb(ent);
-    // Skip kernel threads with no userspace RSS and no CPU ticks
-    if (rssKb <= 0 && st.ticks <= 0) continue;
-    nextMap.set(st.pid, st.ticks);
-    let cpu = 0;
-    if (prev && prev.totalJiffies > 0 && totalNow > prev.totalJiffies) {
-      const prevTicks = prev.byPid.get(st.pid);
-      if (prevTicks != null) {
-        const dProc = Math.max(0, st.ticks - prevTicks);
-        const dTot = totalNow - prev.totalJiffies;
-        if (dTot > 0) cpu = Math.min(100, (dProc / dTot) * 100);
-      }
-    }
-    const cmdline = readPidCmdline(ent);
-    const name = shortCmdName(cmdline, st.name) || st.name || String(st.pid);
-    const cls = classifyEngvpnProcess(name, cmdline || st.name);
-    rows.push({
-      pid: st.pid,
-      name,
-      cpu: Math.round(cpu * 10) / 10,
-      rss: rssKb * 1024,
-      rssKb,
-      kind: cls.kind || undefined,
-      label: cls.label || undefined,
-      flag: !!cls.kind,
-    });
-  }
-  _procSnap = { at, totalJiffies: totalNow || prev?.totalJiffies || 0, byPid: nextMap };
-
-  // Optional BusyBox fallback when /proc yielded nothing (rare)
-  if (!rows.length) {
-    const fb = sampleTopProcessesViaPs(limit);
-    if (fb.count) return fb;
-  }
-
-  const flagged = rows
-    .filter((r) => r.flag)
-    .sort((a, b) => b.cpu - a.cpu || b.rss - a.rss);
-  const pinFlagged = (list) => {
+function pinFlaggedRows(rows, flagged, limit) {
+  const pin = (list) => {
     const seen = new Set(list.map((r) => r.pid));
-    const out = [...list];
+    const out = list.slice();
     for (const f of flagged) {
       if (seen.has(f.pid)) continue;
       out.push(f);
@@ -2224,9 +2179,145 @@ export function sampleTopProcesses(opts = {}) {
     }
     return out.slice(0, Math.max(limit, Math.min(limit + flagged.length, 16)));
   };
-  const byCpu = pinFlagged([...rows].sort((a, b) => b.cpu - a.cpu || b.rss - a.rss).slice(0, limit));
-  const byRam = pinFlagged([...rows].sort((a, b) => b.rss - a.rss || b.cpu - a.cpu).slice(0, limit));
-  return { byCpu, byRam, flagged, hints: [], source: "proc", at, count: rows.length };
+  const byCpu = pin(rows.slice().sort((a, b) => b.cpu - a.cpu || b.rss - a.rss).slice(0, limit));
+  const byRam = pin(rows.slice().sort((a, b) => b.rss - a.rss || b.cpu - a.cpu).slice(0, limit));
+  return { byCpu, byRam };
+}
+
+/**
+ * In-process capped scan (fallback only). Never walks unbounded /proc or
+ * reads cmdline for every PID — that path triggered V8 Fatal on RT-BE88U.
+ */
+function sampleTopProcessesLight(limit) {
+  const at = Date.now();
+  const totalNow = readTotalCpuJiffies();
+  let entries = [];
+  try {
+    entries = readdirSync("/proc");
+  } catch {
+    return emptyProcSample(at);
+  }
+  const raw = [];
+  let listed = 0;
+  for (const ent of entries) {
+    if (!/^\d+$/.test(ent)) continue;
+    listed += 1;
+    if (listed > PROC_SCAN_CAP * 3) break;
+    if (raw.length >= PROC_SCAN_CAP) break;
+    const st = parsePidStat(ent);
+    if (!st) continue;
+    const rssKb = readPidRssKb(ent);
+    if (rssKb <= 0 && st.ticks <= 0) continue;
+    raw.push({ pid: st.pid, name: st.name, ticks: st.ticks, rssKb });
+  }
+  raw.sort((a, b) => b.rssKb - a.rssKb || b.ticks - a.ticks);
+  const top = raw.slice(0, Math.min(PROC_CMDLINE_CAP, Math.max(limit * 2, 12)));
+  const prev = _procSnap;
+  const nextMap = new Map();
+  const rows = [];
+  for (const t of top) {
+    nextMap.set(t.pid, t.ticks);
+    let cpu = 0;
+    if (prev && prev.totalJiffies > 0 && totalNow > prev.totalJiffies) {
+      const prevTicks = prev.byPid.get(t.pid);
+      if (prevTicks != null) {
+        const dProc = Math.max(0, t.ticks - prevTicks);
+        const dTot = totalNow - prev.totalJiffies;
+        if (dTot > 0) cpu = Math.min(100, (dProc / dTot) * 100);
+      }
+    }
+    const cmdline = readPidCmdline(t.pid);
+    const name = shortCmdName(cmdline, t.name) || t.name || String(t.pid);
+    const cls = classifyEngvpnProcess(name, cmdline || t.name);
+    rows.push({
+      pid: t.pid,
+      name,
+      cpu: Math.round(cpu * 10) / 10,
+      rss: t.rssKb * 1024,
+      rssKb: t.rssKb,
+      kind: cls.kind || undefined,
+      label: cls.label || undefined,
+      flag: !!cls.kind,
+    });
+  }
+  _procSnap = { at, totalJiffies: totalNow || prev?.totalJiffies || 0, byPid: nextMap };
+  if (!rows.length) {
+    const fb = sampleTopProcessesViaPs(limit);
+    if (fb.count) return fb;
+    return emptyProcSample(at, "proc-light");
+  }
+  const flagged = rows.filter((r) => r.flag).sort((a, b) => b.cpu - a.cpu || b.rss - a.rss);
+  const { byCpu, byRam } = pinFlaggedRows(rows, flagged, limit);
+  return { byCpu, byRam, flagged, hints: [], source: "proc-light", at, count: raw.length };
+}
+
+/** Isolated child — V8 Fatal stays in the child (panel keeps serving). */
+function sampleTopProcessesViaChild(limit) {
+  const script = join(LIB, "proc-sample.mjs");
+  if (!existsSync(script)) return null;
+  // Back off briefly after a child crash (133) to avoid fork storms.
+  if (_procChildFailAt && Date.now() - _procChildFailAt < 5000) return null;
+  const snapPath = join(tmpdir(), `engvpn-proc-snap-${process.pid}.json`);
+  try {
+    const out = execFileSync(
+      process.execPath,
+      [
+        "--max-old-space-size=48",
+        "--no-concurrent-sweeping",
+        "--single-threaded-gc",
+        script,
+        String(limit),
+      ],
+      {
+        encoding: "utf8",
+        timeout: 2500,
+        maxBuffer: 64 * 1024,
+        env: {
+          ...process.env,
+          NODE_OPTIONS: "",
+          ENGVPN_PROC_SNAP: snapPath,
+        },
+      },
+    );
+    const parsed = JSON.parse(String(out || "").trim() || "{}");
+    if (!parsed || !Array.isArray(parsed.byCpu)) return null;
+    return parsed;
+  } catch (err) {
+    const code = err && (err.status ?? err.code);
+    if (code === 133 || code === "SIGTRAP") {
+      _procChildFailAt = Date.now();
+      try {
+        writeFileSync(
+          join(DATA, "last-event"),
+          `${new Date().toISOString()} proc-sample-v8-fatal:code=${code}\n`,
+          { mode: 0o600 },
+        );
+      } catch {
+        /* ignore */
+      }
+    }
+    return null;
+  }
+}
+
+/**
+ * Top processes by CPU% and RSS. Prefer child+cache; never unbounded /proc
+ * walk in the panel process (Merlin aarch64 V8 DiscardSystemPages fatal).
+ */
+export function sampleTopProcesses(opts = {}) {
+  const limit = Math.min(16, Math.max(1, Number(opts.limit) || 8));
+  const now = Date.now();
+  if (_procCache.value && now - _procCache.at < PROC_CACHE_MS) {
+    return _procCache.value;
+  }
+  const child = sampleTopProcessesViaChild(limit);
+  if (child) {
+    _procCache = { at: now, value: child };
+    return child;
+  }
+  const light = sampleTopProcessesLight(limit);
+  _procCache = { at: now, value: light };
+  return light;
 }
 
 /** Recent core PIDs — churn ⇒ crash-loop (e.g. sing-box failing to bind 20828). */
@@ -2368,7 +2459,7 @@ function sampleTopProcessesViaPs(limit) {
   const rows = [];
   const tryCmd = (bin, args) => {
     try {
-      return execFileSync(bin, args, { encoding: "utf8", timeout: 2000, maxBuffer: 512 * 1024 });
+      return execFileSync(bin, args, { encoding: "utf8", timeout: 1500, maxBuffer: 64 * 1024 });
     } catch {
       return "";
     }

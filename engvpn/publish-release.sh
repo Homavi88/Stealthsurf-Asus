@@ -66,9 +66,9 @@ else
 $(cat "$ROOT/feed/latest.release.json" 2>/dev/null | sed -n 's/.*"notes": "\(.*\)".*/\1/p' | head -n1)
 
 ### Highlights
-- Diagnostics: always-visible dual uptime row — addon session + panel Node (no flicker)
-- Panel stay-up: serialize Diagnostics poll, fetch retry, SSE reconnect (no false «Сеть панели недоступна»)
-- \`engvpnd off\` / \`poweroff\`: durable full shutdown (panel + cores + keepalive) until \`engvpnd start\`
+- Diagnostics no longer kills Entware Node (V8 DiscardSystemPages / exit 133): isolated \`proc-sample\` child, capped /proc, \`--no-concurrent-sweeping --single-threaded-gc\`, 10s poll
+- Faster recovery: keepalive cru \`*/1\`, supervisor respawn 2s, stale lockdir reclaim after SIGKILL
+- Stay on Node for now (Bun not on Entware; Go/Rust rewrite not shipable this release)
 
 Install: \`curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh\`
 

@@ -661,6 +661,18 @@ if command -v node >/dev/null 2>&1; then
 		exit 1
 	}
 	echo "  engvpnd off → start clears marker ok"
+	# 0.5.36: V8 Fatal mitigations — proc-sample child, GC flags, fast keepalive, light /proc
+	grep -q 'proc-sample\|sampleTopProcessesViaChild\|proc-light\|PROC_SCAN_CAP\|no-concurrent-sweeping' \
+		"$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& [ -f "$PREFIX/share/engvpn/runtime/lib/proc-sample.mjs" ] \
+		&& grep -q 'no-concurrent-sweeping\|single-threaded-gc\|node-gc-ok\|max-old-space-size=96' "$PREFIX/sbin/engvpnd" \
+		&& grep -q '\*/1 \* \* \* \*\|restart in 2s\|panel-exited:code=133:v8-fatal\|lockdir busy' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q '10000\|0.5.36' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& echo "  0.5.36 V8/proc-sample/keepalive markers ok" \
+		|| { echo "missing 0.5.36 V8 Fatal mitigation markers" >&2; exit 1; }
+	grep -q '\*/1 \* \* \* \*' "$PREFIX/data/.keepalive-cru" 2>/dev/null \
+		|| grep -q '\*/1 \* \* \* \*' "$PREFIX/share/engvpn/service.sh" \
+		|| { echo "keepalive not */1" >&2; exit 1; }
 	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
 	sleep 1
 	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-start.out 2>&1 || {
@@ -678,6 +690,97 @@ if command -v node >/dev/null 2>&1; then
 		exit 1
 	}
 	echo "  engvpnd start + last-event ok"
+	# 0.5.36 smoke: kill panel Node → supervisor must respawn; API recovers; no storm
+	echo "==> panel kill → supervisor respawn (0.5.36)"
+	"$PREFIX/share/engvpn/service.sh" start >/dev/null 2>&1 || true
+	_wait_api=0
+	while [ "$_wait_api" -lt 25 ]; do
+		if wget -qO- "http://127.0.0.1:${ENGVPN_PORT:-8790}/api/health" >/dev/null 2>&1 \
+			|| curl -fsS "http://127.0.0.1:${ENGVPN_PORT:-8790}/api/health" >/dev/null 2>&1; then
+			break
+		fi
+		sleep 1
+		_wait_api=$((_wait_api + 1))
+	done
+	_panel_before=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*run.mjs*) _panel_before=$((_panel_before + 1)) ;;
+		esac
+	done
+	[ "$_panel_before" -ge 1 ] || {
+		echo "no panel before kill test" >&2
+		exit 1
+	}
+	_sup_before=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*service.sh*) _sup_before=$((_sup_before + 1)) ;;
+		esac
+	done
+	pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
+	sleep 1
+	_ok=0
+	_i=0
+	while [ "$_i" -lt 20 ]; do
+		_n=0
+		for e in /proc/[0-9]*; do
+			cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+			case "$cmd" in
+			*"$PREFIX"*run.mjs*) _n=$((_n + 1)) ;;
+			esac
+		done
+		if [ "$_n" -ge 1 ]; then
+			if wget -qO- "http://127.0.0.1:${ENGVPN_PORT:-8790}/api/health" >/dev/null 2>&1 \
+				|| curl -fsS "http://127.0.0.1:${ENGVPN_PORT:-8790}/api/health" >/dev/null 2>&1; then
+				_ok=1
+				break
+			fi
+		fi
+		sleep 1
+		_i=$((_i + 1))
+	done
+	[ "$_ok" = 1 ] || {
+		echo "panel did not recover after kill within 20s" >&2
+		tail -40 /tmp/engvpn-*/engvpnd.log 2>/dev/null || true
+		cat "$PREFIX/data/last-event" 2>/dev/null || true
+		exit 1
+	}
+	_sup_after=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*service.sh*) _sup_after=$((_sup_after + 1)) ;;
+		esac
+	done
+	_panels_after=0
+	for e in /proc/[0-9]*; do
+		cmd=$(tr '\000' ' ' <"$e/cmdline" 2>/dev/null || true)
+		case "$cmd" in
+		*"$PREFIX"*run.mjs*) _panels_after=$((_panels_after + 1)) ;;
+		esac
+	done
+	[ "$_panels_after" -le 2 ] || {
+		echo "panel storm after kill recover: panels=$_panels_after" >&2
+		exit 1
+	}
+	[ "$_sup_after" -le 2 ] || {
+		echo "supervisor storm after kill recover: supervisors=$_sup_after" >&2
+		exit 1
+	}
+	# proc-sample child must produce JSON without killing parent
+	node --max-old-space-size=48 --no-concurrent-sweeping --single-threaded-gc \
+		"$PREFIX/share/engvpn/runtime/lib/proc-sample.mjs" 5 >/tmp/engvpn-proc-sample.json 2>/tmp/engvpn-proc-sample.err \
+		|| {
+			echo "proc-sample.mjs failed:" >&2
+			cat /tmp/engvpn-proc-sample.err >&2
+			exit 1
+		}
+	grep -q '"byCpu"' /tmp/engvpn-proc-sample.json \
+		&& echo "  panel kill→respawn + proc-sample ok (panels=$_panels_after supervisors=$_sup_after)" \
+		|| { echo "proc-sample bad JSON:" >&2; cat /tmp/engvpn-proc-sample.json >&2; exit 1; }
 	grep -q 'id === "ferrum" ? "xray"\|member = id === "ferrum"' "$PREFIX/share/engvpn/runtime/lib/engines.mjs" \
 		&& echo "  Ferrum unpack → xray member ok" \
 		|| { echo "missing Ferrum→xray unpack mapping in engines.mjs" >&2; exit 1; }

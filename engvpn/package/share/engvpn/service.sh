@@ -85,18 +85,19 @@ clear_addon_uptime() {
 	rm -f "$UPTIME_SINCE" 2>/dev/null || true
 }
 
-# External keepalive: Merlin cru every 5 min runs engvpnd watchdog (NOT under
-# supervisor). If supervisor died (USB blip, OOM, services-stop without start),
-# watchdog restarts service.sh. services-start / do_start re-install (cru is RAM-only).
+# External keepalive: Merlin cru every 1 min runs engvpnd watchdog (NOT under
+# supervisor). If supervisor died (USB blip, OOM/V8 Fatal, services-stop without
+# start), watchdog restarts service.sh. services-start / do_start re-install
+# (cru is RAM-only). 0.5.36: */1 was */5 — too slow after panel-exited:133.
 install_keepalive_cru() {
 	mkdir -p "$DATA_DIR" 2>/dev/null || true
 	_cmd="[ -x \"$DAEMON\" ] && \"$DAEMON\" watchdog >/dev/null 2>&1"
 	# BusyBox ash on some Merlin builds has no `command` builtin — prefer `type`.
 	if type cru >/dev/null 2>&1; then
 		cru d "$KEEPALIVE_CRU" 2>/dev/null || true
-		cru a "$KEEPALIVE_CRU" "*/5 * * * * $_cmd" 2>/dev/null || true
+		cru a "$KEEPALIVE_CRU" "*/1 * * * * $_cmd" 2>/dev/null || true
 	fi
-	printf '%s\n' "*/5 * * * * $_cmd" >"$KEEPALIVE_MARKER" 2>/dev/null || true
+	printf '%s\n' "*/1 * * * * $_cmd" >"$KEEPALIVE_MARKER" 2>/dev/null || true
 }
 
 remove_keepalive_cru() {
@@ -735,9 +736,19 @@ spawn_supervisor() {
 			trap '' HUP
 			trap 'kill_children_of $$; kill_orphan_helpers; rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"; rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true' EXIT
 			# Atomic slot: mkdir first (works even when flock is a no-op), then flock.
+			# Reclaim stale lockdir left by SIGKILL/OOM (EXIT trap never ran).
 			if ! mkdir "$SUPERVISOR_LOCK.d" 2>/dev/null; then
-				echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
-				exit 0
+				_lp=$(read_pid "$SUPERVISOR_LOCK.d/pid" 2>/dev/null || true)
+				if [ -z "${_lp:-}" ] || ! alive "$_lp"; then
+					rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true
+					mkdir "$SUPERVISOR_LOCK.d" 2>/dev/null || {
+						echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
+						exit 0
+					}
+				else
+					echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
+					exit 0
+				fi
 			fi
 			printf '%s\n' "$$" >"$SUPERVISOR_LOCK.d/pid" 2>/dev/null || true
 			flock -n 8 || {
@@ -847,9 +858,14 @@ spawn_supervisor() {
 					supervisor_sleep 15
 					continue
 				fi
-				record_event "panel-exited:code=$code"
-				echo "EngVPN panel exited ($code); restart in 5s" >>"$LOG" 2>/dev/null || true
-				supervisor_sleep 5
+				# 133 = SIGTRAP — Entware Node V8 Fatal (DiscardSystemPages).
+				if [ "$code" = 133 ]; then
+					record_event "panel-exited:code=133:v8-fatal"
+				else
+					record_event "panel-exited:code=$code"
+				fi
+				echo "EngVPN panel exited ($code); restart in 2s" >>"$LOG" 2>/dev/null || true
+				supervisor_sleep 2
 			done
 			record_event "supervisor-exit:${_exit_why:-loop-end}"
 			rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"
@@ -865,8 +881,17 @@ spawn_supervisor() {
 			trap '' HUP
 			trap 'kill_children_of $$; kill_orphan_helpers; rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"; rmdir "$SUPERVISOR_LOCK.d" 2>/dev/null || true' EXIT
 			if ! mkdir "$SUPERVISOR_LOCK.d" 2>/dev/null; then
-				echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
-				exit 0
+				_lp=$(read_pid "$SUPERVISOR_LOCK.d/pid" 2>/dev/null || true)
+				if [ -z "${_lp:-}" ] || ! alive "$_lp"; then
+					rm -rf "$SUPERVISOR_LOCK.d" 2>/dev/null || true
+					mkdir "$SUPERVISOR_LOCK.d" 2>/dev/null || {
+						echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
+						exit 0
+					}
+				else
+					echo "EngVPN supervisor: lockdir busy — not starting another" >>"$LOG" 2>/dev/null || true
+					exit 0
+				fi
 			fi
 			printf '%s\n' "$$" >"$SUPERVISOR_LOCK.d/pid" 2>/dev/null || true
 			: >"$CHILDREN_FILE" 2>/dev/null || true
@@ -923,8 +948,12 @@ spawn_supervisor() {
 				[ ! -x "$DAEMON" ] && _exit_why="daemon-gone" && break
 				[ "$code" = 127 ] && _exit_why="engvpnd-missing-127" && break
 				[ "$code" = 75 ] && supervisor_sleep 15 && continue
-				record_event "panel-exited:code=$code"
-				supervisor_sleep 5
+				if [ "$code" = 133 ]; then
+					record_event "panel-exited:code=133:v8-fatal"
+				else
+					record_event "panel-exited:code=$code"
+				fi
+				supervisor_sleep 2
 			done
 			record_event "supervisor-exit:${_exit_why:-loop-end}"
 			rm -f "$SUPERVISOR_PIDFILE" "$CHILDREN_FILE"
