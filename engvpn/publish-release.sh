@@ -66,6 +66,8 @@ else
 Панель — статический Rust \`engvpn-daemon\` (без Node/V8). Merlin aarch64: musl static binary в \`merlin-aarch64.tar.gz\`.
 
 ### Highlights
+- 1.0.1: ядра/гео через \`download-cores.sh\` (без Node/\`engines.mjs\` на шаге установки [8/10])
+- 1.0.1: Safari login — \`other.liveButton\` в snapshot + UI guards
 - Нет V8 Fatal 133 на Diagnostics: load из \`/proc\` в процессе Rust
 - CLI \`engvpnd\` start/stop/restart/off/update/status/ver
 - Feed SHA-256 (+ Minisign); StealthSurf API key + subscription URL

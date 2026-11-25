@@ -151,6 +151,7 @@ pub fn default_state(version: &str) -> AppState {
         "network": {
             "youtubeZapret": false,
             "discordZapret": false,
+            "telegramDirect": false,
             "zapret": { "lastCheck": 0, "checking": false, "note": "" },
         },
         "connection": {
@@ -162,15 +163,18 @@ pub fn default_state(version: &str) -> AppState {
         },
         "engine": {
             "selected": "auto",
+            "preference": "auto",
             "cores": {},
             "geo": { "geosite": 0, "geoip": 0, "updatedAt": 0 },
             "geoSource": "loyalsoldier",
             "geoUrl": "",
+            "httpPort": 20809,
+            "socksPort": 20808,
         },
         "routing": {
             "blockAds": true,
             "blockQuic": false,
-            "games": false,
+            "game": false,
             "rules": [],
         },
         "updates": {
@@ -186,7 +190,22 @@ pub fn default_state(version: &str) -> AppState {
             "notes": "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update. Расписание — Merlin cru.",
         },
         "devices": [],
+        "dismissedNew": [],
         "diagnostics": { "showLoad": true },
+        "appearance": {
+            "theme": "dark",
+            "accent": "engvpn",
+            "icon": "base",
+            "oled": false,
+        },
+        "other": {
+            "autoSetup": true,
+            "showAutoToggle": true,
+            "liveButton": true,
+            "speedChart": true,
+            "showPing": true,
+            "supportUrl": "https://github.com/Homavi88/Stealthsurf-Asus/blob/main/engvpn/README.md",
+        },
         "theme": "dark",
         "accent": "engvpn",
         "oled": false,
@@ -204,6 +223,16 @@ pub fn default_state(version: &str) -> AppState {
             "panelUptime": 0,
             "cores": {},
             "download": null,
+            "rates": { "vpnDown": 0, "vpnUp": 0, "directDown": 0, "directUp": 0 },
+            "history": [],
+            "session": {},
+            "tunnel": "",
+            "engineMessage": "",
+            "exitIp": "",
+            "publicIp": "",
+            "socksPort": 20808,
+            "httpPort": 20809,
+            "conns": [],
         },
     }))
 }
@@ -217,12 +246,41 @@ pub fn load_state(paths: &Paths) -> Result<AppState> {
     }
     let raw = fs::read_to_string(&path).with_context(|| format!("read {}", path.display()))?;
     let mut value: Value = serde_json::from_str(&raw).unwrap_or_else(|_| default_state(&paths.installed_version()).0);
-    // Ensure required keys
+    // Ensure required keys (upgrade from 1.0.0 missing other/appearance crashed Safari login home)
     if value.get("sessions").is_none() {
         value["sessions"] = json!({});
     }
     if value.get("password").is_none() {
         value["password"] = hash_password(DEFAULT_PANEL_PASSWORD);
+    }
+    let defaults = default_state(&paths.installed_version()).0;
+    for key in ["other", "appearance", "dismissedNew", "devices", "runtime", "diagnostics", "network", "engine"] {
+        if value.get(key).is_none() {
+            if let Some(v) = defaults.get(key) {
+                value[key] = v.clone();
+            }
+        }
+    }
+    // Deep-fill other.* so partial state still has liveButton etc.
+    if let (Some(def_other), Some(cur)) = (
+        defaults.get("other").and_then(|v| v.as_object()),
+        value.get_mut("other").and_then(|v| v.as_object_mut()),
+    ) {
+        for (k, v) in def_other {
+            if !cur.contains_key(k) {
+                cur.insert(k.clone(), v.clone());
+            }
+        }
+    }
+    if let (Some(def_app), Some(cur)) = (
+        defaults.get("appearance").and_then(|v| v.as_object()),
+        value.get_mut("appearance").and_then(|v| v.as_object_mut()),
+    ) {
+        for (k, v) in def_app {
+            if !cur.contains_key(k) {
+                cur.insert(k.clone(), v.clone());
+            }
+        }
     }
     let ver = paths.installed_version();
     value["version"] = json!(ver);
@@ -315,7 +373,15 @@ mod tests {
 
     #[test]
     fn set_path_blocks_proto() {
-        let mut st = default_state("1.0.0");
+        let mut st = default_state("1.0.1");
         assert!(set_path(&mut st, "router.__proto__.x", json!(1)).is_err());
+    }
+
+    #[test]
+    fn default_has_other_live_button() {
+        let st = default_state("1.0.1");
+        assert_eq!(st.0.pointer("/other/liveButton").and_then(|v| v.as_bool()), Some(true));
+        assert!(st.0.get("appearance").is_some());
+        assert!(st.0.get("dismissedNew").and_then(|v| v.as_array()).is_some());
     }
 }

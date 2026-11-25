@@ -805,6 +805,30 @@ async fn dispatch(app: &App, cmd: &str, body: &Value) -> Result<Value> {
             let snap = build_snapshot(app).await;
             Ok(json!({ "ok": true, "router": snap.get("router") }))
         }
+        "downloadCore" | "getCore" => {
+            let id = body
+                .get("id")
+                .or_else(|| body.get("core"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("xray");
+            let only = match id {
+                "xray" | "ferrum" | "sing-box" | "mihomo" | "geo" => id,
+                _ => "all",
+            };
+            shell::run_script(&app.paths, "download-cores.sh", &["--only", only]).await
+        }
+        "updateGeo" | "downloadGeo" | "getGeo" => {
+            shell::run_script(&app.paths, "download-cores.sh", &["--only", "geo"]).await
+        }
+        "deleteCore" => {
+            let id = body.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            let name = if id == "ferrum" { "ferrum" } else { id };
+            if matches!(name, "xray" | "ferrum" | "sing-box" | "mihomo") {
+                let path = app.paths.data.join("cores").join(name);
+                let _ = std::fs::remove_file(&path);
+            }
+            Ok(json!({ "ok": true }))
+        }
         "setPassword" => {
             let pass = body
                 .get("password")

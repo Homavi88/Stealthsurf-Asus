@@ -1199,7 +1199,7 @@ function screenEngine() {
 }
 
 function screenLook() {
-  const a = S.appearance;
+  const a = S.appearance || {};
   const themes = [["system", "Системная"], ["light", "Светлая"], ["dark", "Тёмная"], ["retro", "Ретро"], ["halloween", "Хэллоуин"]];
   return `${backBar("Оформление")}<div class="drawer-body">
     <p class="muted">По умолчанию тёмная тема (как StealthSurf VPN). Светлую можно включить здесь или через «Системная».</p>
@@ -1214,7 +1214,7 @@ function screenLook() {
   </div>`;
 }
 function screenOther() {
-  const o = S.other;
+  const o = S.other || {};
   return `${backBar("Другое")}<div class="drawer-body">
     <div class="group">
       ${cell("Автонастройка", "Если конфиг замолчал, подобрать другой. Тумблер на главной сам функцию не включает.", sw("other.autoSetup", o.autoSetup))}
@@ -1654,8 +1654,10 @@ function home() {
     : connected ? "Подключено" : direct ? "Без VPN" : "Отключено";
   const ip = (connected ? rt.exitIp : rt.publicIp) || "—";
   const shape = connected ? "round" : (direct || needsSetup) ? "diamond" : "triangle";
-  const news = S.devices.filter((d) => d.isNew && !S.dismissedNew.includes(d.id));
+  const dismissed = Array.isArray(S.dismissedNew) ? S.dismissedNew : [];
+  const news = (S.devices || []).filter((d) => d.isNew && !dismissed.includes(d.id));
   const rates = rt.rates || {};
+  const other = S.other || {};
   const showNode = hasProfiles ? node : null;
   const activeName = needsSetup
     ? "Нет активного профиля"
@@ -1666,25 +1668,26 @@ function home() {
   const locList = hasProfiles
     ? nodes().filter((n) => n.id !== showNode?.id && (n.protocol === "direct" || !n.alpha))
     : [];
+  const load = rt.load || {};
   return `<div class="shell">
     <div class="topbar"><div class="brand">${logo()} EngVPN</div><div class="spacer"></div>
       <button class="icon-btn" data-act="settings" aria-label="Настройки">${gear()}</button></div>
     <div class="layout">
       <div class="center">
         <div class="hero-wrap">
-          <button class="hero-btn ${S.other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте ключ или URL"}">${hero(shape)}</button>
+          <button class="hero-btn ${other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте ключ или URL"}">${hero(shape)}</button>
           <h2 class="status">${label}</h2>
           <button class="ip-pill" data-act="ip" ${needsSetup ? "disabled" : ""}>${flag(flagKind)} ${esc(needsSetup ? "—" : ip)}</button>
-          ${S.diagnostics.showLoad ? `<div class="loadline" data-live="load">ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}</div>` : `<div class="loadline"></div>`}
+          ${S.diagnostics?.showLoad ? `<div class="loadline" data-live="load">ЦП ${load.cpu || 0}% · ОЗУ ${mem(load.ramUsed)}/${mem(load.ramTotal)} · EngVPN ${fmtBytes(load.proc)}</div>` : `<div class="loadline"></div>`}
         </div>
         ${needsSetup ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Добавьте ключ или URL</h3><p>Пока нет API-ключа StealthSurf и URL подписки — локации не подтягиваются. Главный экран пустой, без «живых» серверов.</p></div></div>
           <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
         ${!needsSetup && !hasProfiles ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Нет профилей</h3><p>Ключ или URL заданы, но конфигов ещё нет — нажмите «Обновить» в аккаунте или проверьте ссылку.</p></div></div>
           <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
-        ${!needsSetup && S.other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">⇅</span><h3>Скорость</h3></div>
+        ${!needsSetup && other.speedChart ? `<div class="card"><button class="card-btn" data-go-root="speed"><div class="speed-grid"><div><div class="card-head"><span class="card-ico">⇅</span><h3>Скорость</h3></div>
           <div class="muted kv speed-lines" data-live="speed"><span class="spd-vpn">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</span></div></div>
           <span data-live="spark">${spark(rt.history)}</span><span class="chev">›</span></div></button></div>` : ""}
-        ${!needsSetup ? `<div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>` : ""}
+        ${!needsSetup ? `<div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network?.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>` : ""}
         ${homeUpdateChipHtml()}
         ${!needsSetup && news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
         ${!needsSetup ? `<p class="muted">Туннель: ${esc(rt.tunnel)} · ${esc(rt.engineMessage || "")}</p>` : `<p class="muted">Локальное состояние · синхронизация после ключа или URL</p>`}
@@ -1696,7 +1699,7 @@ function home() {
               ? "Добавьте ключ или URL"
               : locStatusLine(showNode)}</div></div>
             ${hasProfiles ? pingHtml(showNode?.id) : ""}</div>
-          ${hasProfiles && S.other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", S.other.autoSetup)}</div>` : ""}
+          ${hasProfiles && other.showAutoToggle ? `<div class="row-between" style="margin-top:12px"><div><b>Автонастройка</b> <span class="beta">бета</span></div>${sw("other.autoSetup", other.autoSetup)}</div>` : ""}
           ${hasProfiles ? `<button class="linkish" data-act="pop">Настройки конфига</button>` : `<button class="linkish" data-go-root="account">Настроить аккаунт</button>`}
           ${ui.pop ? `<div class="menu-pop">
             <button data-go-root="configroute">Маршрутизация (сервер)</button>
@@ -1947,7 +1950,7 @@ document.addEventListener("click", (event) => {
   });
   if (act === "ping") return run(async () => { await invoke("pingAll", {}, { quiet: true }); toast("Пинг обновлён"); });
   if (act === "ip") { const ip = S.runtime.exitIp || S.runtime.publicIp; if (ip) window.open(`https://2ip.io/${ip}`, "_blank"); return; }
-  if (act === "toggle-auto") return run(() => invoke("patch", { path: "other.autoSetup", value: !S.other.autoSetup }));
+  if (act === "toggle-auto") return run(() => invoke("patch", { path: "other.autoSetup", value: !(S.other && S.other.autoSetup) }));
   if (act === "new-devices") { ui.modal = "new"; render(); return; }
   if (act === "modal-close") { ui.modal = null; render(); return; }
   if (act === "keep-vpn") return run(() => { ui.modal = null; return invoke("dismissNew", { keepVpn: true }); });
