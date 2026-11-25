@@ -238,11 +238,10 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
 .loadline { text-align: center; color: var(--muted); font-size: 13px; margin: 14px 0; }
 .sys-load {
   display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
-  margin: 4px 0 12px; padding: 12px;
+  margin: 4px 0 8px; padding: 12px;
   background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
 }
 .sys-load-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sys-load-item.sys-load-uptime { grid-column: 1 / -1; }
 .sys-load-item b {
   font-size: 18px; font-variant-numeric: tabular-nums; color: var(--blue-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -255,6 +254,18 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   display: block; height: 100%; width: 0;
   background: var(--blue); border-radius: inherit;
 }
+/* Own block AFTER CPU/RAM — not crammed under ЦП in the same grid */
+.sys-uptime {
+  display: flex; flex-direction: column; gap: 2px;
+  margin: 0 0 12px; padding: 12px 14px;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
+}
+.sys-uptime > b {
+  font-size: 22px; font-variant-numeric: tabular-nums; color: var(--blue-2);
+  line-height: 1.2;
+}
+.sys-uptime > .muted { font-size: 13px; }
+.sys-uptime-panel { margin-top: 2px; font-size: 12px; }
 .proc-table { display: flex; flex-direction: column; gap: 0; margin: 4px 0 10px; }
 .proc-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center;
@@ -343,6 +354,19 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
 .update-notes-body {
   margin: 10px 0 14px; font-size: 13px; line-height: 1.4; color: var(--muted);
   white-space: pre-wrap; max-height: 40vh; overflow: auto;
+}
+.update-changelog {
+  margin-top: 12px; padding: 12px 14px; border-radius: 12px;
+  background: color-mix(in srgb, var(--card) 70%, #000);
+  border: 1px solid var(--line);
+}
+.update-changelog-head { font-size: 13px; margin-bottom: 8px; color: var(--text); }
+.update-changelog-body {
+  font-size: 13px; line-height: 1.45; color: var(--muted);
+  white-space: pre-wrap; max-height: 28vh; overflow: auto;
+}
+.update-changelog-link {
+  display: inline-block; margin-top: 8px; font-size: 12px; color: var(--blue-2);
 }
 .card h3 { margin: 0; font-size: 16px; }
 .card p, .muted { color: var(--muted); margin: 4px 0 0; font-size: 13px; line-height: 1.35; }

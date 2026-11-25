@@ -56,6 +56,11 @@ stage() {
 say() {
 	echo "$*"
 	logger -t engvpn "$*" 2>/dev/null || true
+	# Mirror into durable update journal when running under engvpnd update.
+	if [ -n "${ENGVPN_UPDATE_LOG:-}" ]; then
+		_ts=$(date '+%H:%M:%S' 2>/dev/null || true)
+		printf '%s\n' "${_ts:+[$_ts] }$*" >>"$ENGVPN_UPDATE_LOG" 2>/dev/null || true
+	fi
 }
 
 complain() {
@@ -747,29 +752,40 @@ do_upgrade() {
 	archive=$1
 	version=$2
 	wait=$3
+	# Updates never create sibling .engvpn-backup (user asked off completely).
+	export ENGVPN_SKIP_BACKUP=1
+	# Keep existing cores/geo — re-download only on fresh install or explicit fetch.
+	export ENGVPN_SKIP_CORES="${ENGVPN_SKIP_CORES:-1}"
 	drive_plugged || fail "Drive not mounted; upgrade aborted"
 	[ -x "$DAEMON" ] || fail "No EngVPN at $PREFIX"
+	say "распаковка пакета $version…"
 	unpack "$archive" || fail "Archive unpack failed"
-	user_backup
+	say "бэкап приложения пропущен (обновление)"
+	# Do NOT call user_backup — no .engvpn-backup during update/install-upgrade.
 	clear_leftovers
 	enough_room || fail "Not enough space for upgrade"
+	say "снимок /tmp для отката…"
 	back_up || {
 		rm -rf "$ROLLBACK"
 		fail "Not enough /tmp to back up"
 	}
 	hold_on
+	say "остановка сервиса…"
 	stop_service || {
 		rm -rf "$ROLLBACK" "$STAGE"
 		fail "Service did not stop"
 	}
+	say "установка файлов…"
 	if place && add_hooks; then
 		[ -f "$STAGE/share/engvpn/VERSION" ] && cp -p "$STAGE/share/engvpn/VERSION" "$SHARE/VERSION"
 		install_cli_path || true
 		[ -x "$SHARE/schedule-update.sh" ] &&
 			ENGVPN_DATA_DIR="$DATA_DIR" sh "$SHARE/schedule-update.sh" install-cru >/dev/null 2>&1 || true
 		[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
+		# Skip core re-download on upgrade (data/cores survives place).
 		fetch_engine_assets
 		rm -rf "$STAGE"
+		say "запуск сервиса…"
 		start_service
 		waited=0
 		while [ "$waited" -lt "$wait" ]; do
@@ -783,6 +799,7 @@ do_upgrade() {
 			rm -rf "$ROLLBACK"
 			return 1
 		fi
+		say "сервис $version запущен (${waited}с)"
 	else
 		complain "Upgrade placement failed; rolling back"
 		roll_back

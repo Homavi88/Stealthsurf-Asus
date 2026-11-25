@@ -38,6 +38,35 @@ export function readInstalledVersion() {
   return "";
 }
 
+const UPTIME_SINCE = join(DATA, ".addon-uptime-since");
+
+/**
+ * Addon session uptime in ms. Prefer durable marker written by service.sh on
+ * supervisor start (survives panel crash/restart). Falls back to process.uptime
+ * and seeds the marker so subsequent Node restarts keep the session clock.
+ */
+export function readAddonUptimeMs(panelUptimeMs = Math.floor(process.uptime() * 1000)) {
+  try {
+    if (existsSync(UPTIME_SINCE)) {
+      const sec = Number(String(readFileSync(UPTIME_SINCE, "utf8") || "").trim());
+      if (Number.isFinite(sec) && sec > 1_000_000_000) {
+        return Math.max(0, Date.now() - sec * 1000);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  // Seed marker from panel start so a later Node restart does not reset the clock.
+  try {
+    mkdirSync(DATA, { recursive: true });
+    const since = Math.max(0, Math.floor(Date.now() / 1000 - panelUptimeMs / 1000));
+    if (since > 0) writeFileSync(UPTIME_SINCE, `${since}\n`, { mode: 0o600 });
+  } catch {
+    /* ignore */
+  }
+  return Math.max(0, Math.floor(Number(panelUptimeMs) || 0));
+}
+
 function verParts(v) {
   return String(v || "").replace(/^v/i, "").split(/[.+-]/).map((p) => {
     const n = parseInt(p, 10);
@@ -273,6 +302,7 @@ export function readUpdatesConf() {
     coresWhenMissing: true,
     lastCheck: null,
     lastResult: "",
+    latest: "",
   };
   if (!existsSync(path)) return out;
   for (const line of readFileSync(path, "utf8").split("\n")) {
@@ -289,6 +319,7 @@ export function readUpdatesConf() {
       const t = Date.parse(v);
       out.lastCheck = Number.isFinite(t) ? t : v;
     } else if (k === "last_result") out.lastResult = v;
+    else if (k === "latest") out.latest = v || "";
   }
   return out;
 }
@@ -306,6 +337,7 @@ export function writeUpdatesConf(partial = {}) {
     `cores_when_missing=${next.coresWhenMissing !== false ? "1" : "0"}`,
     `last_check=${next.lastCheck ? new Date(next.lastCheck).toISOString() : ""}`,
     `last_result=${next.lastResult || ""}`,
+    `latest=${next.latest || ""}`,
     "",
   ].join("\n");
   writeFileSync(join(DATA, "updates.conf"), body, { mode: 0o600 });
@@ -359,6 +391,81 @@ export async function syncUpdatesSchedule(state) {
   }
 }
 
+const CHANGELOG_CACHE = join(DATA, "update-changelog.json");
+const GH_RELEASE_API =
+  process.env.ENGVPN_GH_RELEASE_API ||
+  "https://api.github.com/repos/Homavi88/Stealthsurf-Asus/releases/tags";
+
+/** Fetch GitHub release body for engvpn-{ver}; cache on disk. */
+export async function engvpnUpdateChangelog(state, body = {}) {
+  const ver = String(body.version || body.tag || state?.updates?.latest || "").replace(/^v/i, "").trim();
+  if (!ver) {
+    return { ok: false, error: "нет версии", changelog: "", note: state?.updates?.note || "" };
+  }
+  const tag = ver.startsWith("engvpn-") ? ver : `engvpn-${ver}`;
+  const feedNote = state?.updates?.note || "";
+  // Fresh cache (< 6h) for same tag
+  try {
+    if (existsSync(CHANGELOG_CACHE)) {
+      const cached = JSON.parse(readFileSync(CHANGELOG_CACHE, "utf8") || "{}");
+      if (cached?.tag === tag && cached?.body && cached?.at && Date.now() - cached.at < 6 * 3600_000) {
+        if (state?.updates) {
+          state.updates.changelog = cached.body;
+          state.updates.changelogTag = tag;
+          state.updates.changelogUrl = cached.html_url || "";
+        }
+        return {
+          ok: true,
+          version: ver,
+          tag,
+          changelog: cached.body,
+          note: feedNote,
+          url: cached.html_url || "",
+          cached: true,
+        };
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  let changelog = "";
+  let htmlUrl = `https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/${tag}`;
+  try {
+    const res = await fetch(`${GH_RELEASE_API}/${encodeURIComponent(tag)}`, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": "engvpn-panel",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      changelog = String(data.body || data.name || "").trim();
+      if (data.html_url) htmlUrl = String(data.html_url);
+    }
+  } catch {
+    /* network / DNS on router — fall through */
+  }
+  if (!changelog) changelog = feedNote || `Релиз ${tag}. Подробности: ${htmlUrl}`;
+  try {
+    mkdirSync(DATA, { recursive: true });
+    writeFileSync(
+      CHANGELOG_CACHE,
+      JSON.stringify({ tag, body: changelog, html_url: htmlUrl, at: Date.now() }, null, 0),
+      { mode: 0o600 },
+    );
+  } catch {
+    /* ignore */
+  }
+  if (state?.updates) {
+    state.updates.changelog = changelog;
+    state.updates.changelogTag = tag;
+    state.updates.changelogUrl = htmlUrl;
+    if (!state.updates.note && feedNote) state.updates.note = feedNote;
+  }
+  return { ok: true, version: ver, tag, changelog, note: feedNote, url: htmlUrl, cached: false };
+}
+
 export async function engvpnUpdateCheck(state) {
   const { stdout } = await shEngvpnd("update-check");
   const out = {};
@@ -393,9 +500,22 @@ export async function engvpnUpdateCheck(state) {
         : {}),
       lastCheck: now,
       lastResult: state?.updates?.lastResult || "",
+      latest: feedVer || "",
     });
   } catch {
     /* ignore */
+  }
+  // Pull GitHub release notes when an update is available (best-effort).
+  if (available && feedVer) {
+    try {
+      const notes = await engvpnUpdateChangelog(state, { version: feedVer });
+      if (notes?.changelog) {
+        out.changelog = notes.changelog;
+        out.changelogUrl = notes.url || "";
+      }
+    } catch {
+      /* ignore */
+    }
   }
   if (!out.message) {
     const parts = [];
@@ -415,14 +535,18 @@ export async function engvpnUpdateCheck(state) {
   out.version = installed; // installed package, not feed
   out.lastCheck = now;
   out.lastResult = state?.updates?.lastResult || "";
+  out.note = state?.updates?.note || out.notes || "";
+  out.changelog = state?.updates?.changelog || out.changelog || "";
   return out;
 }
 
 /** Apply feed package via engvpnd update (SHA-256 + Minisign).
  * Panel path: detach so kill-strays during upgrade does not abort the job.
+ * DEFER_STORM keeps panel up through download so the journal streams; storm
+ * clear runs only right before install.sh mutates files.
  * Smoke / body.sync=true: wait for completion (blocking). */
 export async function engvpnUpdateApply(state, body = {}) {
-  const wait = String(body.wait || body.timeout || "90");
+  const wait = String(body.wait || body.timeout || "30");
   const sync =
     body.sync === true ||
     body.waitFor === true ||
@@ -432,10 +556,22 @@ export async function engvpnUpdateApply(state, body = {}) {
   mkdirSync(DATA, { recursive: true });
   try {
     writeFileSync(UPDATE_STATUS, "running\n", { mode: 0o600 });
-    writeFileSync(UPDATE_LOG, "", { mode: 0o600 });
+    writeFileSync(UPDATE_LOG, "[панель] запуск обновления…\n", { mode: 0o600 });
   } catch {
     /* ignore */
   }
+
+  const updateEnv = {
+    ...process.env,
+    ENGVPN_DATA_DIR: process.env.ENGVPN_DATA_DIR || DATA,
+    ENGVPN_UPDATE_LOG: UPDATE_LOG,
+    ENGVPN_UPDATE_STATUS: UPDATE_STATUS,
+    ENGVPN_SKIP_BACKUP: "1",
+    ENGVPN_SKIP_CORES: "1",
+    // Keep panel alive for download+verify so updateActionLog poll works.
+    ENGVPN_DEFER_STORM: "1",
+    ENGVPN_KEEP_PANEL: "1",
+  };
 
   if (!sync) {
     const bin = existsSync(ENGVPND) ? ENGVPND : "engvpnd";
@@ -443,12 +579,7 @@ export async function engvpnUpdateApply(state, body = {}) {
     const child = spawn(bin, ["update", wait], {
       detached: true,
       stdio: "ignore",
-      env: {
-        ...process.env,
-        ENGVPN_DATA_DIR: process.env.ENGVPN_DATA_DIR || DATA,
-        ENGVPN_UPDATE_LOG: UPDATE_LOG,
-        ENGVPN_UPDATE_STATUS: UPDATE_STATUS,
-      },
+      env: updateEnv,
     });
     child.unref();
     if (state?.updates) {
@@ -458,7 +589,7 @@ export async function engvpnUpdateApply(state, body = {}) {
       ok: true,
       started: true,
       detached: true,
-      message: "Обновление запущено — следите за журналом. Панель перезапустится сама.",
+      message: "Обновление запущено — журнал заполняется. Панель перезапустится на этапе установки.",
       log: getUpdateActionLog(),
     };
   }
@@ -466,9 +597,13 @@ export async function engvpnUpdateApply(state, body = {}) {
   let stdout = "";
   let stderr = "";
   try {
-    const res = await shEngvpnd("update", wait);
-    stdout = res.stdout || "";
-    stderr = res.stderr || "";
+    const bin = existsSync(ENGVPND) ? ENGVPND : "engvpnd";
+    const res = await exec(bin, ["update", wait], {
+      env: updateEnv,
+      timeout: 180000,
+    });
+    stdout = String(res.stdout || "");
+    stderr = String(res.stderr || "");
   } catch (e) {
     stdout = String(e?.stdout || "");
     stderr = String(e?.stderr || e?.message || e);
@@ -1555,9 +1690,23 @@ export function hydratePanelSnapshot(snap, state) {
       snap.updates.available = /^(available|available-wait-window):/.test(snap.updates.lastResult);
     }
     if (mem?.latest) snap.updates.latest = mem.latest;
+    else if (uc.latest) snap.updates.latest = uc.latest;
     else if (typeof snap.updates.lastResult === "string") {
       const m = snap.updates.lastResult.match(/^(?:available|available-wait-window|up-to-date|applied):(.+)$/);
       if (m?.[1]) snap.updates.latest = m[1];
+    }
+    // Restore cached GitHub changelog when present
+    try {
+      if (existsSync(CHANGELOG_CACHE)) {
+        const cached = JSON.parse(readFileSync(CHANGELOG_CACHE, "utf8") || "{}");
+        if (cached?.body) {
+          snap.updates.changelog = cached.body;
+          snap.updates.changelogTag = cached.tag || "";
+          snap.updates.changelogUrl = cached.html_url || "";
+        }
+      }
+    } catch {
+      /* ignore */
     }
     if (state) {
       // Merge into state without letting stale conf wipe in-memory schedule toggles
@@ -1696,8 +1845,10 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "get_router_processes": {
       const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
       const sys = sampleSystemLoad();
-      // Panel Node process uptime (resets on crash/restart of engvpnd/run.mjs).
-      const uptime = Math.max(0, Math.floor(process.uptime() * 1000));
+      // Addon session uptime from data/.addon-uptime-since (survives panel Node
+      // restarts). Panel-only process.uptime is exposed as panelUptime.
+      const panelUptime = Math.max(0, Math.floor(process.uptime() * 1000));
+      const uptime = readAddonUptimeMs(panelUptime);
       // Keep latest sample on runtime for home loadline + Diagnostics summary
       if (state.runtime?.load) {
         state.runtime.load.cpu = sys.cpu;
@@ -1706,14 +1857,19 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
         state.runtime.load.proc = sys.proc;
         state.runtime.load.processes = processes;
         state.runtime.load.uptime = uptime;
+        state.runtime.load.panelUptime = panelUptime;
       }
-      if (state.runtime) state.runtime.uptime = uptime;
+      if (state.runtime) {
+        state.runtime.uptime = uptime;
+        state.runtime.panelUptime = panelUptime;
+      }
       return {
         cpu: sys.cpu,
         ramUsed: sys.ramUsed,
         ramTotal: sys.ramTotal,
         proc: sys.proc,
         uptime,
+        panelUptime,
         processes,
       };
     }

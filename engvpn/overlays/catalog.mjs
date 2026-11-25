@@ -1,6 +1,6 @@
 /** Domain lists and engine capability matrix used by the live policy and by config compilers. */
 
-export const VERSION = "0.5.33";
+export const VERSION = "0.5.34";
 export const PANEL_PORT = Number(process.env.ENGVPN_PORT || 8790);
 /** Installer sets a panel password; open LAN access only if ENGVPN_OPEN_PANEL=1. */
 export const OPEN_PANEL = process.env.ENGVPN_OPEN_PANEL === "1";

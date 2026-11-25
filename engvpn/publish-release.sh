@@ -59,9 +59,27 @@ if gh release view "$TAG" >/dev/null 2>&1; then
 	gh release upload "$TAG" $ASSETS --clobber
 else
 	# shellcheck disable=SC2086
+	NOTES_FILE=$(mktemp)
+	cat >"$NOTES_FILE" <<EOF
+## EngVPN $VERSION
+
+$(cat "$ROOT/feed/latest.release.json" 2>/dev/null | sed -n 's/.*"notes": "\(.*\)".*/\1/p' | head -n1)
+
+### Highlights
+- Home update chip always visible + quiet feed check
+- Updates page: GitHub release changelog
+- Fast update: no \`.engvpn-backup\`, skip core re-download, defer panel kill until install; streaming journal + reconnect
+- Diagnostics: EngVPN uptime in its own block after CPU/RAM; durable session clock (\`data/.addon-uptime-since\`)
+
+Install: \`curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh\`
+
+Feed: \`engvpn/feed/latest.json\` (SHA-256 + Minisign).
+EOF
+	# shellcheck disable=SC2086
 	gh release create "$TAG" $ASSETS \
 		--title "EngVPN $VERSION" \
-		--notes "EngVPN Merlin open addon ${VERSION}. Install via engvpn/merlin.sh (SHA-256 + Minisign feed)."
+		--notes-file "$NOTES_FILE"
+	rm -f "$NOTES_FILE"
 fi
 
 echo "Published $TAG. Commit feed/latest.json if needed."

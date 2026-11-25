@@ -42,6 +42,7 @@ DUP_EXIT=75
 CHILDREN_FILE=$VOLATILE_DIR/supervisor.children
 LAST_EVENT=$DATA_DIR/last-event
 LAST_EVENT_TMP=$VOLATILE_DIR/last-event
+UPTIME_SINCE=$DATA_DIR/.addon-uptime-since
 KEEPALIVE_CRU=engvpn_alive
 KEEPALIVE_MARKER=$DATA_DIR/.keepalive-cru
 
@@ -54,6 +55,20 @@ record_event() {
 	printf '%s %s\n' "$_ts" "$_why" >"$LAST_EVENT_TMP" 2>/dev/null || true
 	printf '%s %s\n' "$_ts" "$_why" >"$LAST_EVENT" 2>/dev/null || true
 	echo "EngVPN event: $_why" >>"$LOG" 2>/dev/null || true
+}
+
+# Addon uptime marker (unix epoch). Survives panel Node restarts / watchdog
+# respawns. Cleared only on intentional stop / kill-strays (update path).
+mark_addon_uptime() {
+	mkdir -p "$DATA_DIR" 2>/dev/null || true
+	if [ ! -f "$UPTIME_SINCE" ]; then
+		_now=$(date +%s 2>/dev/null || echo 0)
+		[ "${_now:-0}" -gt 0 ] 2>/dev/null && printf '%s\n' "$_now" >"$UPTIME_SINCE" 2>/dev/null || true
+	fi
+}
+
+clear_addon_uptime() {
+	rm -f "$UPTIME_SINCE" 2>/dev/null || true
 }
 
 # External keepalive: Merlin cru every 5 min runs engvpnd watchdog (NOT under
@@ -557,6 +572,7 @@ is_engvpn_process() {
 kill_strays() {
 	mkdir -p "$VOLATILE_DIR" "$DATA_DIR" 2>/dev/null || true
 	record_event "stop-requested:kill-strays"
+	clear_addon_uptime
 	touch "$DATA_DIR/.stop-requested" 2>/dev/null || true
 
 	kill_dead_prefix_supervisors
@@ -698,6 +714,7 @@ spawn_supervisor() {
 			printf '%s\n' "$$" >"$SUPERVISOR_PIDFILE"
 			echo "EngVPN supervisor $$ holding $SUPERVISOR_LOCK prefix=$PREFIX" >>"$LOG" 2>/dev/null || true
 			record_event "supervisor-start:pid=$$"
+			mark_addon_uptime
 			ticks=0
 			_exit_why=
 			while :; do
@@ -820,6 +837,7 @@ spawn_supervisor() {
 			: >"$CHILDREN_FILE" 2>/dev/null || true
 			printf '%s\n' "$$" >"$SUPERVISOR_PIDFILE"
 			record_event "supervisor-start:pid=$$:noflock"
+			mark_addon_uptime
 			_exit_why=
 			while :; do
 				if [ -f "$DATA_DIR/.stop-requested" ]; then
@@ -897,6 +915,7 @@ do_start() {
 		ensure_firewall
 		open_panel_port_hook
 		purge_orphans_oneshot
+		mark_addon_uptime
 		record_event "start-ok:already-up"
 		echo "EngVPN started (port $PORT)"
 		return 0
@@ -949,6 +968,7 @@ do_start() {
 do_stop() {
 	mkdir -p "$DATA_DIR" "$VOLATILE_DIR" 2>/dev/null || true
 	record_event "stop-requested:do_stop"
+	clear_addon_uptime
 	kill_strays 2>/dev/null || true
 	rm -f "$PANEL_LOCK" 2>/dev/null || true
 	echo "EngVPN stopped"

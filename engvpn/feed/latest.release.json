@@ -1,24 +1,24 @@
 {
-  "version": "0.5.33",
-  "notes": "EngVPN 0.5.33 — iOS Safari: canonical / + hash routes + absolute panel URLs (no port drop); Diagnostics EngVPN uptime; install banner URL with trailing slash.",
+  "version": "0.5.34",
+  "notes": "EngVPN 0.5.34 — Home update chip always; GitHub changelog on Updates; fast update (no .engvpn-backup, skip cores, defer storm until install, streaming journal); Diagnostics uptime own block + durable addon session clock.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
-      "size": 179705
+      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
+      "size": 183522
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
-      "size": 179705
+      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
+      "size": 183522
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.33/engvpn_0.5.33_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-0.5.34/engvpn_0.5.34_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "6a90e6f2e4d812617085253f1bf32eaa5b31fff7f74143e6c2898cd903841e21",
-      "size": 179705
+      "sha256": "5695fae9f4c671ea9329f697da9623f7d15f3ca673744fa1300ea938ac27a6b4",
+      "size": 183522
     }
   }
 }

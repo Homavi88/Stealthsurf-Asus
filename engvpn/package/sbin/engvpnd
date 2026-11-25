@@ -246,18 +246,28 @@ cmd_update() {
 		exit 1
 	}
 	export ENGVPN_FEED="${ENGVPN_FEED:-https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/feed/latest.json}"
-	# Storm survivors block flock / starve CPU — clear before fetch+upgrade.
-	if [ -x "$SHARE/service.sh" ]; then
-		echo "engvpnd: kill-strays before update"
-		sh "$SHARE/service.sh" kill-strays 2>/dev/null ||
-			sh "$SHARE/service.sh" stop 2>/dev/null || true
+	# Fast update path: never create .engvpn-backup; keep existing cores.
+	export ENGVPN_SKIP_BACKUP=1
+	export ENGVPN_SKIP_CORES="${ENGVPN_SKIP_CORES:-1}"
+	# Keep panel alive through download+verify so the UI can stream the journal.
+	# Storm clear happens inside update.sh right before install.sh upgrade.
+	if [ "${ENGVPN_DEFER_STORM:-}" = 1 ] || [ "${ENGVPN_KEEP_PANEL:-}" = 1 ]; then
+		echo "engvpnd: defer kill-strays until install (panel stays up for download)"
+		export ENGVPN_STORM_CLEARED=0
+	else
+		# CLI path: clear storm up front (no panel journal to preserve).
+		if [ -x "$SHARE/service.sh" ]; then
+			echo "engvpnd: kill-strays before update"
+			sh "$SHARE/service.sh" kill-strays 2>/dev/null ||
+				sh "$SHARE/service.sh" stop 2>/dev/null || true
+		fi
+		if command -v pkill >/dev/null 2>&1; then
+			pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
+			pkill -9 -f "$PREFIX/sbin/engvpnd serve" 2>/dev/null || true
+			pkill -9 -f "$PREFIX/share/engvpn/service.sh" 2>/dev/null || true
+		fi
+		export ENGVPN_STORM_CLEARED=1
 	fi
-	if command -v pkill >/dev/null 2>&1; then
-		pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
-		pkill -9 -f "$PREFIX/sbin/engvpnd serve" 2>/dev/null || true
-		pkill -9 -f "$PREFIX/share/engvpn/service.sh" 2>/dev/null || true
-	fi
-	export ENGVPN_STORM_CLEARED=1
 	sh "$SHARE/update.sh" apply "$@"
 }
 
