@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.33** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.34** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.33](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.33) (после публикации feed)
+Релиз: [engvpn-0.5.34](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.34) (после публикации feed)
 
 ---
 
@@ -128,15 +128,22 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Сеть** — zapret → реальный **dpi.sh/nfqws** + **SmartDNS** (IP в iptables + домены в routing ядер)  
 - **Подключение** — Cloudflare WARP + GRE (ошибка без `gre.conf`, без тихого ok)  
 - **Движок** — Xray / **Ferrum (Xray Reality)** / sing-box / mihomo  
-- **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA); живой журнал шагов обновления  
+- **Обновления** — feed SHA-256 + Minisign (пустой `minisig` = не подписано, только SHA); changelog с GitHub; живой журнал шагов обновления  
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
 
+### Что нового в 0.5.34
+
+- **Главная:** чип «Доступна версия…» показывается всегда (не только после настройки аккаунта); тихая проверка feed после входа.
+- **Обновления:** блок «Что нового» с телом релиза GitHub (`engvpnUpdateChangelog`); не одна строка из feed.
+- **Быстрый update:** без `.engvpn-backup`, без повторной загрузки ядер; storm/kill панели только перед установкой файлов — журнал качается, пока панель жива; UI переподключается после рестарта.
+- **Диагностика:** «EngVPN без перезапуска» — отдельный блок **после** полос ЦП/ОЗУ; счётчик = сессия аддона (`data/.addon-uptime-since`), не сбрасывается при рестарте Node-панели; при расхождении показан аптайм панели.
+
 ### Что нового в 0.5.33
 
 - **iOS Safari / trailing slash:** панель канонизирует URL на `/` + hash-маршруты (`/#/diagnostics`); absolute API/asset URLs и SPA-fallback на сервере — reload глубокого экрана больше не уводит на `:80` / «не удаётся подключиться».
-- **Диагностика → аптайм EngVPN:** в блоке «НАГРУЗКА СИСТЕМЫ» строка «EngVPN без перезапуска» (uptime процесса панели / `process.uptime`).
+- **Диагностика → аптайм EngVPN:** в блоке «НАГРУЗКА СИСТЕМЫ» строка «EngVPN без перезапуска» (в 0.5.34 вынесена отдельно и считает сессию аддона).
 
 ### Что нового в 0.5.32
 

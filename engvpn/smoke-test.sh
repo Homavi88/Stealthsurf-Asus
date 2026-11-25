@@ -606,6 +606,18 @@ if command -v node >/dev/null 2>&1; then
 		&& grep -q 'EngVPN без перезапуска\|data-live="uptime"' "$PREFIX/share/engvpn/runtime/public/app.js" \
 		&& echo "  0.5.33 safari slash + hash + uptime UI markers ok" \
 		|| { echo "missing 0.5.33 safari slash / uptime markers" >&2; exit 1; }
+	# 0.5.34: home chip always; GitHub changelog; fast update; durable uptime block
+	grep -q 'homeUpdateChipHtml()' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& ! grep -q 'needsSetup ? homeUpdateChipHtml' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'update-changelog\|engvpnUpdateChangelog\|changelogBodyHtml' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'sys-uptime\|EngVPN без перезапуска' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'sys-uptime' "$PREFIX/share/engvpn/runtime/public/app.css" \
+		&& grep -q 'ENGVPN_DEFER_STORM\|ENGVPN_KEEP_PANEL\|ENGVPN_SKIP_BACKUP' "$PREFIX/sbin/engvpnd" \
+		&& grep -q 'бэкап приложения пропущен\|ENGVPN_SKIP_BACKUP=1' "$PREFIX/share/engvpn/install.sh" \
+		&& grep -q 'mark_addon_uptime\|addon-uptime-since\|clear_addon_uptime' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q 'readAddonUptimeMs\|engvpnUpdateChangelog\|ENGVPN_DEFER_STORM' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& echo "  0.5.34 home chip + changelog + fast update + durable uptime ok" \
+		|| { echo "missing 0.5.34 update/uptime markers" >&2; exit 1; }
 	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
 	sleep 1
 	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-start.out 2>&1 || {
@@ -1013,7 +1025,8 @@ if command -v node >/dev/null 2>&1; then
 	  if(typeof r.cpu!=="number"||r.cpu<0||r.cpu>100){console.error("bad cpu",r.cpu);process.exit(1)}
 	  if(!(r.ramTotal>0)||!(r.ramUsed>=0)||r.ramUsed>r.ramTotal*1.05){console.error("bad ram",r.ramUsed,r.ramTotal);process.exit(1)}
 	  if(!(typeof r.uptime==="number")||!(r.uptime>=0)){console.error("bad addon uptime",r.uptime);process.exit(1)}
-	  console.log("  system load ok: cpu="+r.cpu+"% ramUsed="+r.ramUsed+" ramTotal="+r.ramTotal+" uptimeMs="+r.uptime);
+	  if(!(typeof r.panelUptime==="number")||!(r.panelUptime>=0)){console.error("bad panelUptime",r.panelUptime);process.exit(1)}
+	  console.log("  system load ok: cpu="+r.cpu+"% ramUsed="+r.ramUsed+" ramTotal="+r.ramTotal+" uptimeMs="+r.uptime+" panelUptimeMs="+r.panelUptime);
 	'
 	# Second poll so /proc/stat CPU delta is real (first may be loadavg fallback)
 	inv_ok "get_router_load.2" get_router_load '{"limit":5}'

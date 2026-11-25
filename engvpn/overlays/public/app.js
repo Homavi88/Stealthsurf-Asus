@@ -1033,10 +1033,12 @@ function dlProgressHtml(p) {
 }
 function startUpdateLogPoll() {
   stopUpdateLogPoll();
+  let miss = 0;
   updateLogPoll = setInterval(async () => {
     try {
       const res = await invoke("updateActionLog", {}, { quiet: true });
       if (!res) return;
+      miss = 0;
       ui.updateLog = res;
       if (res.running) ui.updateBusy = true;
       else if (res.status === "ok" || res.status === "fail") {
@@ -1053,7 +1055,36 @@ function startUpdateLogPoll() {
       }
       if (!paintUpdateLog()) render();
     } catch {
-      /* panel restarting during upgrade — keep polling */
+      /* Panel down mid-install — keep polling; show reconnect hint in journal. */
+      miss += 1;
+      if (ui.updateBusy) {
+        const hint = miss < 3
+          ? "Панель перезапускается — ждём журнал…"
+          : `Ожидание панели… (попытка ${miss})`;
+        const prev = ui.updateLog?.lines || [];
+        const last = prev[prev.length - 1] || "";
+        if (!last.includes("Ожидание панели") && !last.includes("перезапускается")) {
+          ui.updateLog = {
+            ...(ui.updateLog || {}),
+            status: "running",
+            running: true,
+            lines: [...prev, hint].slice(-40),
+          };
+          if (!paintUpdateLog()) render();
+        } else if (last !== hint) {
+          ui.updateLog = {
+            ...(ui.updateLog || {}),
+            status: "running",
+            running: true,
+            lines: [...prev.slice(0, -1), hint].slice(-40),
+          };
+          paintUpdateLog();
+        }
+        // Soft reconnect SSE after panel comes back
+        if (miss % 4 === 0) {
+          try { listen(); } catch { /* ignore */ }
+        }
+      }
     }
   }, 900);
 }
@@ -1240,11 +1271,18 @@ function updateActionLogHtml() {
   </div>`;
 }
 
+function changelogBodyHtml(u = S?.updates || {}) {
+  const text = String(u.changelog || u.note || "").trim();
+  if (!text) return `<p class="muted">Список изменений для этой версии ещё не загружен — нажмите «Список изменений».</p>`;
+  return `<div class="update-changelog-body">${esc(text)}</div>`;
+}
+
 function screenUpdates() {
   const u = S.updates || {};
   const avail = updateAvailable(u);
   const feedLabel = u.latest || "";
   const note = statusNote(u, avail);
+  const hasCl = !!(u.changelog || u.note);
   return `${backBar("Обновления")}<div class="drawer-body"><div class="group">
     ${cell("Автообновление", `По умолчанию выкл. При включении — engvpnd update в окне ${String(u.windowStart ?? 2).padStart(2, "0")}:00–${String(u.windowEnd ?? 5).padStart(2, "0")}:00 (SHA-256 + Minisign)`, sw("updates.auto", !!u.auto))}
     ${cell("Гео-базы раз в неделю", "", sw("updates.geoWeekly", u.geoWeekly))}
@@ -1253,10 +1291,15 @@ function screenUpdates() {
     <div class="row-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
       <button class="primary" data-act="check-updates">Проверить сейчас</button>
       ${avail ? `<button class="primary" data-act="install-update"${ui.updateBusy ? " disabled" : ""}>Установить обновление${feedLabel ? ` ${esc(feedLabel)}` : ""}</button>` : ""}
-      ${avail ? `<button class="ghost" data-act="update-notes">Список изменений</button>` : ""}
+      ${avail || hasCl ? `<button class="ghost" data-act="update-notes">Список изменений</button>` : ""}
     </div>
+    ${avail || hasCl ? `<div class="update-changelog" data-live="update-changelog">
+      <div class="update-changelog-head"><b>Что нового${feedLabel ? ` · ${esc(feedLabel)}` : ""}</b></div>
+      ${changelogBodyHtml(u)}
+      ${u.changelogUrl ? `<a class="update-changelog-link" href="${esc(u.changelogUrl)}" target="_blank" rel="noopener noreferrer">Открыть на GitHub</a>` : ""}
+    </div>` : ""}
     ${updateActionLogHtml()}
-    <p class="muted">Текущая сборка ${esc(S.version || "—")}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}${note ? ` · ${esc(note)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.${u.note ? ` ${esc(u.note)}` : ""}</p>
+    <p class="muted">Текущая сборка ${esc(S.version || "—")}${feedLabel ? ` · в feed ${esc(feedLabel)}` : ""}${note ? ` · ${esc(note)}` : ""}. Feed EngVPN (SHA-256 + Minisign). Последняя проверка: ${u.lastCheck ? new Date(u.lastCheck).toLocaleString() : "ещё не было"}.</p>
   </div></div>`;
 }
 function screenFeedback() {
@@ -1369,6 +1412,8 @@ function sysLoadBlockHtml(load, uptimeMs) {
   const total = Number(load?.ramTotal) || 0;
   const ramPct = total > 0 ? Math.max(0, Math.min(100, Math.round((used / total) * 100))) : 0;
   const up = uptimeMs != null ? uptimeMs : (S?.runtime?.uptime ?? load?.uptime);
+  const panelUp = S?.runtime?.panelUptime ?? load?.panelUptime;
+  const showPanel = panelUp != null && up != null && Math.abs(Number(panelUp) - Number(up)) > 5000;
   return `<div class="h">НАГРУЗКА СИСТЕМЫ</div>
     <p class="muted">Общая загрузка роутера (/proc/stat · /proc/meminfo). Обновление ~2 с.</p>
     <div class="sys-load">
@@ -1382,10 +1427,11 @@ function sysLoadBlockHtml(load, uptimeMs) {
         <span class="muted">ОЗУ · ${ramPct}%</span>
         <div class="sys-load-bar" aria-hidden="true"><i style="width:${ramPct}%"></i></div>
       </div>
-      <div class="sys-load-item sys-load-uptime">
-        <b class="kv" data-live="uptime">${esc(fmtUptime(up))}</b>
-        <span class="muted">EngVPN без перезапуска</span>
-      </div>
+    </div>
+    <div class="sys-uptime" data-live="uptime-block">
+      <b class="kv" data-live="uptime">${esc(fmtUptime(up))}</b>
+      <span class="muted">EngVPN без перезапуска</span>
+      ${showPanel ? `<span class="muted sys-uptime-panel">панель Node · ${esc(fmtUptime(panelUp))}</span>` : ""}
     </div>`;
 }
 
@@ -1422,6 +1468,7 @@ async function refreshProcs() {
       S.runtime.load.proc = r.proc ?? S.runtime.load.proc;
       S.runtime.load.processes = ui.processes;
       if (r.uptime != null) S.runtime.uptime = r.uptime;
+      if (r.panelUptime != null) S.runtime.panelUptime = r.panelUptime;
     }
     if (!paintProcs()) render();
     else paintLive();
@@ -1605,7 +1652,7 @@ function home() {
           <div class="muted kv speed-lines" data-live="speed"><span class="spd-vpn">VPN ↓ ${fmt(rates.vpnDown)} ↑ ${fmt(rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rates.directDown)} ↑ ${fmt(rates.directUp)}</span></div></div>
           <span data-live="spark">${spark(rt.history)}</span><span class="chev">›</span></div></button></div>` : ""}
         ${!needsSetup ? `<div class="card"><button class="card-btn" data-go-root="telegram"><div class="card-head"><span class="card-ico">✈</span><div><h3>${S.network.telegramDirect ? "Прямой путь к Telegram готов" : "Telegram через VPN"}</h3><p>Telegram пойдёт напрямую, как только подключится</p></div><span class="chev">›</span></div></button></div>` : ""}
-        ${!needsSetup ? homeUpdateChipHtml() : ""}
+        ${homeUpdateChipHtml()}
         ${!needsSetup && news.length ? `<div class="card"><button class="card-btn" data-act="new-devices"><div class="card-head"><span class="card-ico">⌂</span><div><h3>Новое устройство в сети</h3><p>${esc(news[0].ip)} · маршрут через VPN · ещё ${Math.max(news.length - 1, 0)} новых</p></div></div></button></div>` : ""}
         ${!needsSetup ? `<p class="muted">Туннель: ${esc(rt.tunnel)} · ${esc(rt.engineMessage || "")}</p>` : `<p class="muted">Локальное состояние · синхронизация после ключа или URL</p>`}
       </div>
@@ -1636,7 +1683,7 @@ function home() {
     </div>
     ${ui.stack.length ? `<div class="drawer-back" data-act="close"></div>${settingsDrawer()}` : ""}
     ${ui.modal === "new" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Новое устройство</h3><p class="muted">Оставить через VPN или пустить напрямую. Для случайного MAC отметку придётся ставить заново.</p><button class="primary" data-act="keep-vpn">Оставить через VPN</button><button class="ghost" data-act="let-direct">Пустить напрямую</button></div>` : ""}
-    ${ui.modal === "update-notes" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Список изменений</h3><p class="muted">Версия ${esc(S.updates?.latest || "—")}</p><div class="update-notes-body">${esc(S.updates?.note || "Подробности для этой версии не указаны")}</div><button class="primary" data-act="install-update"${ui.updateBusy ? " disabled" : ""}>Обновить</button><button class="ghost" data-act="modal-close">Закрыть</button></div>` : ""}
+    ${ui.modal === "update-notes" ? `<div class="drawer-back" data-act="modal-close"></div><div class="modal"><h3>Список изменений</h3><p class="muted">Версия ${esc(S.updates?.latest || "—")}</p><div class="update-notes-body">${esc(S.updates?.changelog || S.updates?.note || "Подробности для этой версии не указаны")}</div>${S.updates?.changelogUrl ? `<p class="muted"><a href="${esc(S.updates.changelogUrl)}" target="_blank" rel="noopener noreferrer">Релиз на GitHub</a></p>` : ""}<button class="primary" data-act="install-update"${ui.updateBusy ? " disabled" : ""}>Обновить</button><button class="ghost" data-act="modal-close">Закрыть</button></div>` : ""}
     ${ui.toast ? `<div class="toast">${esc(ui.toast)}</div>` : ""}
   </div>`;
 }
@@ -1740,6 +1787,13 @@ function paintLive() {
   if (load) load.textContent = `ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}`;
   const upEl = document.querySelector("[data-live=uptime]");
   if (upEl) upEl.textContent = fmtUptime(rt.uptime);
+  const panelEl = document.querySelector(".sys-uptime-panel");
+  if (panelEl && rt.panelUptime != null && rt.uptime != null && Math.abs(rt.panelUptime - rt.uptime) > 5000) {
+    panelEl.textContent = `панель Node · ${fmtUptime(rt.panelUptime)}`;
+    panelEl.hidden = false;
+  } else if (panelEl) {
+    panelEl.hidden = true;
+  }
   const speed = document.querySelector("[data-live=speed]");
   if (speed) speed.innerHTML = `<span class="spd-vpn">VPN ↓ ${fmt(rt.rates.vpnDown)} ↑ ${fmt(rt.rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rt.rates.directDown)} ↑ ${fmt(rt.rates.directUp)}</span>`;
   const sp = document.querySelector("[data-live=spark]");
@@ -2106,6 +2160,8 @@ document.addEventListener("click", (event) => {
     if (res.installed || res.current) S.version = res.installed || res.current;
     if (res.latest || res.feed) S.updates.latest = res.latest || res.feed;
     if (res.notes || res.note) S.updates.note = res.notes || res.note;
+    if (res.changelog) S.updates.changelog = res.changelog;
+    if (res.changelogUrl) S.updates.changelogUrl = res.changelogUrl;
     if (res.available != null) S.updates.available = !!res.available || res.update_available === "1" || res.update_available === 1;
     else if (res.update_available != null) S.updates.available = res.update_available === "1" || res.update_available === 1 || res.update_available === true;
     if (res.lastCheck) S.updates.lastCheck = res.lastCheck;
@@ -2121,6 +2177,19 @@ document.addEventListener("click", (event) => {
   if (act === "update-notes") {
     ui.modal = "update-notes";
     render();
+    // Refresh GitHub release body in background when missing/stale.
+    const ver = S.updates?.latest || "";
+    if (ver && !S.updates?.changelog) {
+      invoke("engvpnUpdateChangelog", { version: ver }, { quiet: true })
+        .then((res) => {
+          if (!S.updates) S.updates = {};
+          if (res?.changelog) S.updates.changelog = res.changelog;
+          if (res?.url) S.updates.changelogUrl = res.url;
+          if (res?.note) S.updates.note = res.note;
+          render();
+        })
+        .catch(() => {});
+    }
     return;
   }
   if (act === "install-update") return run(async () => {
@@ -2313,6 +2382,40 @@ async function afterAuth() {
   syncHashFromStack();
   listen();
   render();
+  // Quiet feed check so Home shows the update chip without visiting Updates.
+  invoke("engvpnUpdateCheck", {}, { quiet: true })
+    .then((res) => {
+      if (!res || !S) return;
+      if (!S.updates) S.updates = {};
+      if (res.installed || res.current) S.version = res.installed || res.current;
+      if (res.latest || res.feed) S.updates.latest = res.latest || res.feed;
+      if (res.notes || res.note) S.updates.note = res.notes || res.note;
+      if (res.changelog) S.updates.changelog = res.changelog;
+      if (res.changelogUrl) S.updates.changelogUrl = res.changelogUrl;
+      if (res.lastCheck) S.updates.lastCheck = res.lastCheck;
+      if (res.lastResult) S.updates.lastResult = res.lastResult;
+      S.updates.available = updateAvailable(S.updates);
+      if (!ui.stack.length) render();
+      else paintUpdateBanner();
+    })
+    .catch(() => {});
+}
+
+function paintUpdateBanner() {
+  const el = document.querySelector("[data-live=update-banner]");
+  const html = homeUpdateChipHtml();
+  if (!html) {
+    if (el) el.remove();
+    return;
+  }
+  if (el) {
+    const wrap = document.createElement("div");
+    wrap.innerHTML = html;
+    const next = wrap.firstElementChild;
+    if (next) el.replaceWith(next);
+  } else if (!ui.stack.length) {
+    render();
+  }
 }
 
 async function doLogin(password) {

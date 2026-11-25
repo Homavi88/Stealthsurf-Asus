@@ -448,14 +448,17 @@ cmd_check() {
 }
 
 cmd_apply() {
-	wait=${1:-60}
+	# Snappy path: short panel wait; never write .engvpn-backup; keep cores.
+	wait=${1:-30}
+	export ENGVPN_SKIP_BACKUP=1
+	export ENGVPN_SKIP_CORES="${ENGVPN_SKIP_CORES:-1}"
+	export ENGVPN_UPDATE_LOG="$ACTION_LOG"
+	export ENGVPN_UPDATE_STATUS="$ACTION_STATUS"
 	mkdir -p "$DATA_DIR" 2>/dev/null || true
 	: >"$ACTION_LOG" 2>/dev/null || true
 	action_status running
-	# Skip second kill if engvpnd already cleared (ENGVPN_STORM_CLEARED=1).
-	if [ "${ENGVPN_STORM_CLEARED:-}" != 1 ]; then
-		clear_storm
-	fi
+	# Download+verify with panel still up when DEFER_STORM/KEEP_PANEL (UI journal).
+	# Only clear storm right before install mutates files.
 	key=$(arch_key)
 	ulog "загрузка ленты…"
 	feed=$(fetch_feed)
@@ -501,6 +504,7 @@ cmd_apply() {
 		actual=$(openssl dgst -sha256 -r "$archive" | awk '{ print $1 }')
 	fi
 	[ "$actual" = "$sha256" ] || fail "checksum mismatch (expected $sha256 got $actual size $got_bytes)"
+	ulog "SHA-256 OK"
 	# Minisign verify when .minisig is published alongside the archive
 	sig_url=$(field "$feed" "$key" minisig)
 	case "$sig_url" in
@@ -534,12 +538,20 @@ cmd_apply() {
 	else
 		ulog "без Minisign (только SHA-256)"
 	fi
+	# Now stop panel / clear storm — download journal already flushed to disk.
+	if [ "${ENGVPN_STORM_CLEARED:-}" != 1 ]; then
+		ulog "остановка панели перед установкой…"
+		clear_storm
+		export ENGVPN_STORM_CLEARED=1
+	fi
 	# Hold transparent rules during upgrade if present
 	[ -x "$SHARE/netfilter.sh" ] && sh "$SHARE/netfilter.sh" set-hold 120 >/dev/null 2>&1 || true
 	export ENGVPN_SMOKE="${ENGVPN_SMOKE:-}"
 	export ENGVPN_SCRIPTS="${ENGVPN_SCRIPTS:-}"
 	export ENGVPN_LOCK_DIR="${ENGVPN_LOCK_DIR:-}"
-	ulog "установка $ver (остановка сервиса → распаковка → запуск)…"
+	export ENGVPN_SKIP_BACKUP=1
+	export ENGVPN_SKIP_CORES="${ENGVPN_SKIP_CORES:-1}"
+	ulog "установка $ver (без бэкапа · без ядер · распаковка → файлы → запуск)…"
 	sh "$INSTALL" upgrade "$archive" "$ver" "$wait" "$PREFIX" || fail "upgrade failed"
 	rm -rf "$WORK"
 	now=$(installed_version)

@@ -265,8 +265,18 @@ if "from \"./runtime-engvpn.mjs\"" not in text:
     text = text.replace(
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
         'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from "./runtime-engvpn.mjs";',
+        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from "./runtime-engvpn.mjs";',
     )
+elif "engvpnUpdateChangelog" not in text and "engvpnUpdateApply" in text and "from \"./runtime-engvpn.mjs\"" in text:
+    text = text.replace(
+        "engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate,",
+        "engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate,",
+    )
+    if "readAddonUptimeMs" not in text:
+        text = text.replace(
+            "getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
+            "getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from \"./runtime-engvpn.mjs\";",
+        )
 elif "getUpdateActionLog" not in text and "getDownloadProgress" in text and "from \"./runtime-engvpn.mjs\"" in text:
     text = text.replace(
         "getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
@@ -343,6 +353,14 @@ insert = '''      case "transparent":
       case "installUpdate":
         {
           const res = await engvpnUpdateApply(state, body || {});
+          saveState(state);
+          return res;
+        }
+      case "engvpnUpdateChangelog":
+      case "updateChangelog":
+      case "getUpdateChangelog":
+        {
+          const res = await engvpnUpdateChangelog(state, body || {});
           saveState(state);
           return res;
         }
@@ -1462,7 +1480,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — iOS Safari: canonical / + hash routes + absolute panel URLs (no port drop); Diagnostics EngVPN uptime; install banner URL with trailing slash."
+RELEASE_NOTES="EngVPN $VERSION — Home update chip always; GitHub changelog on Updates; fast update (no .engvpn-backup, skip cores, defer storm until install, streaming journal); Diagnostics uptime own block + durable addon session clock."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
