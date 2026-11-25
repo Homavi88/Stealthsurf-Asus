@@ -618,6 +618,49 @@ if command -v node >/dev/null 2>&1; then
 		&& grep -q 'readAddonUptimeMs\|engvpnUpdateChangelog\|ENGVPN_DEFER_STORM' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
 		&& echo "  0.5.34 home chip + changelog + fast update + durable uptime ok" \
 		|| { echo "missing 0.5.34 update/uptime markers" >&2; exit 1; }
+	# 0.5.35: dual always-visible uptime timers (addon + panel Node) in one row
+	grep -q 'data-live="panel-uptime"' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'sys-uptime-item' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'sys-uptime-item' "$PREFIX/share/engvpn/runtime/public/app.css" \
+		&& ! grep -q 'showPanel\|sys-uptime-panel' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& echo "  0.5.35 dual horizontal uptime timers ok" \
+		|| { echo "missing 0.5.35 dual uptime markers" >&2; exit 1; }
+	# 0.5.35: panel stay-up + durable poweroff
+	grep -q 'procsInFlight\|isNetworkFetchError\|esRetryTimer' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'engvpnPowerOff\|data-act="power-off"' "$PREFIX/share/engvpn/runtime/public/app.js" \
+		&& grep -q 'engvpnPowerOff' "$PREFIX/share/engvpn/runtime/lib/runtime-engvpn.mjs" \
+		&& grep -q 'do_poweroff\|POWERED_OFF\|kill_engvpn_cores' "$PREFIX/share/engvpn/service.sh" \
+		&& grep -q 'off | poweroff\|cmd_off\|powered-off' "$PREFIX/sbin/engvpnd" \
+		&& grep -q 'POWERED_OFF\|powered-off' "$PREFIX/share/engvpn/hook.sh" \
+		&& echo "  0.5.35 panel stay-up + engvpnd off markers ok" \
+		|| { echo "missing 0.5.35 stay-up / poweroff markers" >&2; exit 1; }
+	# Durable off: panel down, marker set, watchdog skip, start clears
+	"$PREFIX/sbin/engvpnd" off >/tmp/engvpn-smoke-off.out 2>&1 || {
+		echo "engvpnd off failed:" >&2
+		cat /tmp/engvpn-smoke-off.out >&2
+		exit 1
+	}
+	[ -f "$PREFIX/data/.powered-off" ] || {
+		echo "missing $PREFIX/data/.powered-off after engvpnd off" >&2
+		exit 1
+	}
+	if "$PREFIX/share/engvpn/service.sh" check >/dev/null 2>&1; then
+		echo "panel still running after engvpnd off" >&2
+		exit 1
+	fi
+	"$PREFIX/sbin/engvpnd" watchdog 2>/dev/null | grep -qi 'powered off' \
+		&& echo "  engvpnd off + watchdog skip ok" \
+		|| { echo "watchdog did not honor powered-off" >&2; exit 1; }
+	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-on.out 2>&1 || {
+		echo "engvpnd start after off failed:" >&2
+		cat /tmp/engvpn-smoke-on.out >&2
+		exit 1
+	}
+	[ ! -f "$PREFIX/data/.powered-off" ] || {
+		echo ".powered-off still present after start" >&2
+		exit 1
+	}
+	echo "  engvpnd off → start clears marker ok"
 	"$PREFIX/share/engvpn/service.sh" kill-strays >/dev/null 2>&1 || true
 	sleep 1
 	"$PREFIX/sbin/engvpnd" start >/tmp/engvpn-smoke-start.out 2>&1 || {

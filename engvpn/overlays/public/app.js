@@ -156,28 +156,43 @@ function syncHashFromStack() {
   }
 }
 
-async function api(path, body) {
+function isNetworkFetchError(err) {
+  const raw = err?.message || String(err);
+  return /load failed|failed to fetch|networkerror|сете.*панел/i.test(raw);
+}
+
+async function api(path, body, opts = {}) {
   const headers = { "X-EngVPN-Panel": "1" };
   if (body) headers["Content-Type"] = "application/json";
-  let res;
-  try {
-    res = await fetch(panelUrl(path), {
-      method: body ? "POST" : "GET",
-      headers,
-      credentials: "same-origin",
-      cache: "no-store",
-      body: body ? JSON.stringify(body) : undefined,
-    });
-  } catch (err) {
-    // Safari iOS: TypeError "Load failed" on aborted / timed-out panel calls
-    const raw = err?.message || String(err);
-    throw new Error(/load failed|failed to fetch|networkerror/i.test(raw)
-      ? "Сеть панели недоступна (повторите или проверьте engvpnd)"
-      : raw);
+  const attempts = opts.retry === false ? 1 : 2;
+  let lastErr;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(panelUrl(path), {
+        method: body ? "POST" : "GET",
+        headers,
+        credentials: "same-origin",
+        cache: "no-store",
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || data.message || "Ошибка");
+      return data;
+    } catch (err) {
+      lastErr = err;
+      // Brief event-loop stalls on Merlin (Diagnostics /proc scan) look like
+      // Safari "Load failed" — one short retry usually recovers without toast.
+      if (i + 1 < attempts && isNetworkFetchError(err)) {
+        await new Promise((r) => setTimeout(r, 450));
+        continue;
+      }
+      const raw = err?.message || String(err);
+      throw new Error(isNetworkFetchError(err)
+        ? "Сеть панели недоступна (повторите или проверьте engvpnd)"
+        : raw);
+    }
   }
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.ok === false) throw new Error(data.error || data.message || "Ошибка");
-  return data;
+  throw lastErr;
 }
 function absorb(result) {
   if (result?.vpn && result?.subscriptions) S = result;
@@ -1210,6 +1225,9 @@ function screenOther() {
       ${cell("График скорости", "", sw("other.speedChart", o.speedChart))}
       ${cell("Показывать пинг конфигов", "", sw("other.showPing", o.showPing))}
     </div>
+    <div class="group">
+      ${cell("Выключить EngVPN", "Панель, ядра и keepalive — до engvpnd start (или кнопки «Включить» нет: SSH)", `<button class="danger" data-act="power-off">Выключить</button>`)}
+    </div>
   </div>`;
 }
 function verParts(v) {
@@ -1413,7 +1431,7 @@ function sysLoadBlockHtml(load, uptimeMs) {
   const ramPct = total > 0 ? Math.max(0, Math.min(100, Math.round((used / total) * 100))) : 0;
   const up = uptimeMs != null ? uptimeMs : (S?.runtime?.uptime ?? load?.uptime);
   const panelUp = S?.runtime?.panelUptime ?? load?.panelUptime;
-  const showPanel = panelUp != null && up != null && Math.abs(Number(panelUp) - Number(up)) > 5000;
+  // Always show both timers side-by-side (no conditional row → no layout jump).
   return `<div class="h">НАГРУЗКА СИСТЕМЫ</div>
     <p class="muted">Общая загрузка роутера (/proc/stat · /proc/meminfo). Обновление ~2 с.</p>
     <div class="sys-load">
@@ -1429,9 +1447,14 @@ function sysLoadBlockHtml(load, uptimeMs) {
       </div>
     </div>
     <div class="sys-uptime" data-live="uptime-block">
-      <b class="kv" data-live="uptime">${esc(fmtUptime(up))}</b>
-      <span class="muted">EngVPN без перезапуска</span>
-      ${showPanel ? `<span class="muted sys-uptime-panel">панель Node · ${esc(fmtUptime(panelUp))}</span>` : ""}
+      <div class="sys-uptime-item">
+        <b class="kv" data-live="uptime">${esc(up != null ? fmtUptime(up) : "—")}</b>
+        <span class="muted">EngVPN без перезапуска</span>
+      </div>
+      <div class="sys-uptime-item">
+        <b class="kv" data-live="panel-uptime">${esc(panelUp != null ? fmtUptime(panelUp) : "—")}</b>
+        <span class="muted">панель Node</span>
+      </div>
     </div>`;
 }
 
@@ -1456,8 +1479,14 @@ function paintProcs() {
   return true;
 }
 
+let procsInFlight = false;
+
 async function refreshProcs() {
   if (!S?.diagnostics?.showLoad || ui.stack.at(-1) !== "diagnostics") return;
+  // Never pile overlapping /proc scans — Merlin Node blocks and Safari sees
+  // "Сеть панели недоступна" while the previous poll still runs.
+  if (procsInFlight) return;
+  procsInFlight = true;
   try {
     const r = await invoke("get_router_load", { limit: 8 }, { quiet: true });
     ui.processes = r?.processes || null;
@@ -1474,13 +1503,16 @@ async function refreshProcs() {
     else paintLive();
   } catch {
     /* diagnostics poll best-effort */
+  } finally {
+    procsInFlight = false;
   }
 }
 
 function ensureProcsPoll() {
   const want = !!(S?.diagnostics?.showLoad && ui.stack.at(-1) === "diagnostics");
   if (want && !procsPoll) {
-    procsPoll = setInterval(() => { refreshProcs(); }, 2000);
+    // 3s: leave headroom for sync /proc scan on ARM Merlin without stacking.
+    procsPoll = setInterval(() => { refreshProcs(); }, 3000);
     refreshProcs();
   } else if (!want && procsPoll) {
     clearInterval(procsPoll);
@@ -1786,14 +1818,9 @@ function paintLive() {
   const load = document.querySelector("[data-live=load]");
   if (load) load.textContent = `ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}`;
   const upEl = document.querySelector("[data-live=uptime]");
-  if (upEl) upEl.textContent = fmtUptime(rt.uptime);
-  const panelEl = document.querySelector(".sys-uptime-panel");
-  if (panelEl && rt.panelUptime != null && rt.uptime != null && Math.abs(rt.panelUptime - rt.uptime) > 5000) {
-    panelEl.textContent = `панель Node · ${fmtUptime(rt.panelUptime)}`;
-    panelEl.hidden = false;
-  } else if (panelEl) {
-    panelEl.hidden = true;
-  }
+  if (upEl) upEl.textContent = rt.uptime != null ? fmtUptime(rt.uptime) : "—";
+  const panelUpEl = document.querySelector("[data-live=panel-uptime]");
+  if (panelUpEl) panelUpEl.textContent = rt.panelUptime != null ? fmtUptime(rt.panelUptime) : "—";
   const speed = document.querySelector("[data-live=speed]");
   if (speed) speed.innerHTML = `<span class="spd-vpn">VPN ↓ ${fmt(rt.rates.vpnDown)} ↑ ${fmt(rt.rates.vpnUp)}</span><span class="spd-direct">Напрямую ↓ ${fmt(rt.rates.directDown)} ↑ ${fmt(rt.rates.directUp)}</span>`;
   const sp = document.querySelector("[data-live=spark]");
@@ -2252,6 +2279,11 @@ document.addEventListener("click", (event) => {
     window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
+  if (act === "power-off") return run(async () => {
+    toast("Выключаю EngVPN…", 8000);
+    await invoke("engvpnPowerOff", {}, { quiet: true });
+    toast("EngVPN выключен. Включить: engvpnd start", 10000);
+  });
   if (act === "speedtest") return run(async () => { ui.result = await invoke("speedTest", {}, { quiet: true }); render(); });
   if (act === "leak" || act === "privacy-run") return run(async () => {
     toast("Проверяю скрытность…", 8000);
@@ -2339,8 +2371,16 @@ document.addEventListener("change", (event) => {
   if (event.target.dataset.rename) run(() => invoke("deviceRename", { id: event.target.dataset.rename, name: event.target.value }));
   if (event.target.dataset.local) ui.form[event.target.dataset.local] = event.target.value;
 });
+let esRetryTimer = null;
+
 function listen() {
-  if (es) es.close();
+  if (es) {
+    try { es.close(); } catch { /* ignore */ }
+  }
+  if (esRetryTimer) {
+    clearTimeout(esRetryTimer);
+    esRetryTimer = null;
+  }
   es = new EventSource(panelUrl("/api/events"));
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
@@ -2368,6 +2408,15 @@ function listen() {
       S.logs.unshift(msg);
       render();
     }
+  };
+  // Soft reconnect after brief panel stalls (Diagnostics /proc / Node hiccup).
+  es.onerror = () => {
+    if (ui.auth !== true) return;
+    if (esRetryTimer) return;
+    esRetryTimer = setTimeout(() => {
+      esRetryTimer = null;
+      if (ui.auth === true) listen();
+    }, 2000);
   };
 }
 

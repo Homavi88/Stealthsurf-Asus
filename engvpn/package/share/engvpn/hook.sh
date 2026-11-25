@@ -8,19 +8,28 @@ STATE=$PREFIX/data/netfilter/rules
 
 SCHEDULE=$SHARE/schedule-update.sh
 
+POWERED_OFF=$PREFIX/data/.powered-off
+
 case "${1:-}" in
 services-start)
-	# Re-install cru (RAM-only on Merlin) then start panel + keepalive watchdog.
+	# Re-install schedule cru (RAM-only on Merlin). Skip panel/keepalive when
+	# user explicitly powered off (engvpnd off) — stays down until engvpnd start.
 	[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
-	[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
-	[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
+	if [ -f "$POWERED_OFF" ]; then
+		:
+	else
+		[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
+		[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
+	fi
 	;;
 post-mount)
 	case "$PREFIX/" in
 	"${2:-/nonexistent}"/*)
 		[ -x "$SCHEDULE" ] && sh "$SCHEDULE" install-cru >/dev/null 2>&1 || true
-		[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
-		[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
+		if [ ! -f "$POWERED_OFF" ]; then
+			[ -x "$SERVICE" ] && "$SERVICE" install-keepalive >/dev/null 2>&1 || true
+			[ -x "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 &
+		fi
 		;;
 	esac
 	;;

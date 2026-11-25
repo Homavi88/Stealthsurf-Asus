@@ -679,6 +679,42 @@ export async function engvpnWatchdog() {
 }
 
 /**
+ * Durable full shutdown via engvpnd off (panel + cores + keepalive).
+ * Detach by default — this process is about to be killed with the panel.
+ */
+export async function engvpnPowerOff(body = {}) {
+  const sync =
+    body.sync === true ||
+    process.env.ENGVPN_SMOKE === "1" ||
+    body.detach === false;
+  const bin = existsSync(ENGVPND) ? ENGVPND : "engvpnd";
+  const env = {
+    ...process.env,
+    ENGVPN_DATA_DIR: process.env.ENGVPN_DATA_DIR || DATA,
+  };
+  if (!sync) {
+    const child = spawn(bin, ["off"], {
+      detached: true,
+      stdio: "ignore",
+      env,
+    });
+    child.unref();
+    return {
+      ok: true,
+      started: true,
+      detached: true,
+      message: "Выключаю EngVPN — панель закроется. Включить: engvpnd start",
+    };
+  }
+  const { stdout, stderr } = await exec(bin, ["off"], { env, timeout: 60000 });
+  return {
+    ok: true,
+    output: String(stdout || stderr || "").trim() || "EngVPN powered off",
+    message: "EngVPN выключен до engvpnd start",
+  };
+}
+
+/**
  * Router-side privacy / stealth checks (exit IP, DNS, IPv6, kill-switch, DPI fingerprint).
  * Prefer engvpnd privacy → privacy-check.sh; enrich with panel VPN context.
  */
@@ -1982,6 +2018,10 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "apply_router_update":
     case "install_router_update":
       return { alias: "engvpnUpdateApply", ...body };
+    case "engvpn_power_off":
+    case "power_off":
+    case "poweroff":
+      return { alias: "engvpnPowerOff", ...body };
     case "update_router_settings": {
       const patch = body?.patch || body || {};
       if (!state.router) state.router = {};
@@ -2192,23 +2232,31 @@ export function sampleTopProcesses(opts = {}) {
 /** Recent core PIDs — churn ⇒ crash-loop (e.g. sing-box failing to bind 20828). */
 let _corePidHist = Object.create(null);
 
-function readEngvpnLogTail(maxBytes = 24 * 1024) {
+/** Cache log tail — reading 24KB on every 2s Diagnostics poll blocks Merlin Node. */
+let _logTailCache = { at: 0, text: "" };
+
+function readEngvpnLogTail(maxBytes = 16 * 1024) {
+  const now = Date.now();
+  if (_logTailCache.text && now - _logTailCache.at < 12000) return _logTailCache.text;
   const candidates = [
     "/tmp/engvpn/engvpnd.log",
     "/tmp/engvpn-panel.log",
     join(DATA, "..", "..", "tmp", "engvpn", "engvpnd.log"),
   ];
+  let text = "";
   for (const path of candidates) {
     try {
       if (!existsSync(path)) continue;
       const buf = readFileSync(path);
       const slice = buf.length > maxBytes ? buf.subarray(buf.length - maxBytes) : buf;
-      return slice.toString("utf8");
+      text = slice.toString("utf8");
+      break;
     } catch {
       /* try next */
     }
   }
-  return "";
+  _logTailCache = { at: now, text };
+  return text;
 }
 
 /**
