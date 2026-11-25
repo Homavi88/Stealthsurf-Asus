@@ -1462,7 +1462,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — stop [SERVICE] sh swarm: mkdir+flock single supervisor, lock losers never wait 45s; snappy engvpnd restart; watchdog no nested start."
+RELEASE_NOTES="EngVPN $VERSION — Diagnostics: system-wide CPU% and RAM used/total summary above process lists (/proc/stat · /proc/meminfo), same ~2s poll."
 
 # Committed / published feed MUST use GitHub release HTTPS URLs only.
 # Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).

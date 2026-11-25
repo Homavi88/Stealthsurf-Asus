@@ -236,6 +236,24 @@ textarea.text, textarea.ios-field { line-height: 1.35; }
   background: var(--chip); color: var(--text); border-radius: 999px; padding: 4px 10px; border: 0; font-size: 14px;
 }
 .loadline { text-align: center; color: var(--muted); font-size: 13px; margin: 14px 0; }
+.sys-load {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px;
+  margin: 4px 0 12px; padding: 12px;
+  background: var(--card-2); border: 1px solid var(--line); border-radius: 14px;
+}
+.sys-load-item { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sys-load-item b {
+  font-size: 18px; font-variant-numeric: tabular-nums; color: var(--blue-2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sys-load-bar {
+  height: 4px; border-radius: 999px; background: var(--track);
+  margin-top: 6px; overflow: hidden;
+}
+.sys-load-bar > i {
+  display: block; height: 100%; width: 0;
+  background: var(--blue); border-radius: inherit;
+}
 .proc-table { display: flex; flex-direction: column; gap: 0; margin: 4px 0 10px; }
 .proc-row {
   display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 8px; align-items: center;
