@@ -4,7 +4,7 @@
 # Single-instance (Merlin CPU / restart storm):
 #   1. ONE supervisor per PREFIX — mkdir lockdir (atomic) + flock on
 #      $DATA_DIR/.supervisor.lock for the supervisor's entire lifetime.
-#   2. ONE node …/run.mjs — engvpnd serve holds $DATA_DIR/.panel.lock (exit 75).
+#   2. ONE engvpn-daemon (Rust) — engvpnd serve holds $DATA_DIR/.panel.lock (exit 75).
 #   3. Per-prefix pid/log under /tmp/engvpn-<hash>/ (never share global pidfiles).
 #   4. Supervisor EXITS if engvpnd is missing (exit 127) or DATA_DIR gone —
 #      prevents orphan loops after rm -rf / uninstall / USB unmount.
@@ -159,21 +159,27 @@ port_listening() {
 	return 1
 }
 
-# Node panel only (run.mjs). engvpnd serve parent holds flock and is tracked separately.
+# Rust panel (engvpn-daemon serve). engvpnd serve parent holds flock and is tracked separately.
 own_panel() {
 	alive "$1" || return 1
 	cmd=$(read_cmdline "$1") || cmd=
 	case "$cmd" in
-	*"$PREFIX"*run.mjs* | *"$SHARE"/runtime/run.mjs*) return 0 ;;
-	*engvpn/share/engvpn/runtime/run.mjs*)
+	*"$PREFIX/sbin/engvpn-daemon"* | *"$DAEMON"*engvpn-daemon* | *engvpn-daemon*serve*)
 		case "$cmd" in
-		*"$PREFIX"* | *"$SHARE"*) return 0 ;;
+		*"$PREFIX"* | *engvpn-daemon*) return 0 ;;
 		esac
 		;;
+	# Legacy Node panel (archived) — still recognize during upgrade
+	*"$PREFIX"*run.mjs* | *"$SHARE"/runtime/run.mjs*) return 0 ;;
 	esac
-	cwd=$(readlink "/proc/$1/cwd" 2>/dev/null || true)
-	case "$cwd" in
-	"$SHARE"/runtime | "$SHARE"/runtime/*) return 0 ;;
+	# engvpnd serve that already exec'd into daemon keeps ENGVPN_DATA_DIR
+	envtxt=$(read_environ "$1") || envtxt=
+	case "$envtxt" in
+	*"ENGVPN_DATA_DIR=$DATA_DIR"*)
+		case "$cmd" in
+		*engvpn-daemon* | *engvpnd*serve*) return 0 ;;
+		esac
+		;;
 	esac
 	return 1
 }
@@ -361,8 +367,9 @@ kill_orphan_helpers() {
 # Path-scoped SIGKILL. Never pkill our own service.sh argv (would kill $$).
 brute_kill_prefix() {
 	if command -v pkill >/dev/null 2>&1; then
-		pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/sbin/engvpn-daemon" 2>/dev/null || true
 		pkill -9 -f "$PREFIX/sbin/engvpnd serve" 2>/dev/null || true
+		pkill -9 -f "$PREFIX/share/engvpn/runtime/run.mjs" 2>/dev/null || true
 		pkill -9 -f "$SHARE/runtime/run.mjs" 2>/dev/null || true
 	fi
 	for entry in /proc/[0-9]*; do
@@ -372,7 +379,7 @@ brute_kill_prefix() {
 		case "$cmd" in
 		*"$PREFIX"* | *"$SHARE"*)
 			case "$cmd" in
-			*run.mjs* | *service.sh* | *engvpnd*serve* | *engvpnd\ serve*)
+			*engvpn-daemon* | *run.mjs* | *service.sh* | *engvpnd*serve* | *engvpnd\ serve*)
 				kill -9 "$p" 2>/dev/null || true
 				;;
 			esac

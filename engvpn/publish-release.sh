@@ -63,12 +63,13 @@ else
 	cat >"$NOTES_FILE" <<EOF
 ## EngVPN $VERSION
 
-$(cat "$ROOT/feed/latest.release.json" 2>/dev/null | sed -n 's/.*"notes": "\(.*\)".*/\1/p' | head -n1)
+Панель — статический Rust \`engvpn-daemon\` (без Node/V8). Merlin aarch64: musl static binary в \`merlin-aarch64.tar.gz\`.
 
 ### Highlights
-- Diagnostics no longer kills Entware Node (V8 DiscardSystemPages / exit 133): isolated \`proc-sample\` child, capped /proc, \`--no-concurrent-sweeping --single-threaded-gc\`, 10s poll
-- Faster recovery: keepalive cru \`*/1\`, supervisor respawn 2s, stale lockdir reclaim after SIGKILL
-- Stay on Node for now (Bun not on Entware; Go/Rust rewrite not shipable this release)
+- Нет V8 Fatal 133 на Diagnostics: load из \`/proc\` в процессе Rust
+- CLI \`engvpnd\` start/stop/restart/off/update/status/ver
+- Feed SHA-256 (+ Minisign); StealthSurf API key + subscription URL
+- Ядра xray/sing-box/mihomo/ferrum; transparent / DPI / WARP — shell
 
 Install: \`curl -fsSL https://raw.githubusercontent.com/Homavi88/Stealthsurf-Asus/main/engvpn/merlin.sh | sh\`
 

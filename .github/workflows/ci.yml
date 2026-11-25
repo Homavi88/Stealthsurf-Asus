@@ -148,3 +148,52 @@ jobs:
           grep -q 'tun_table=251' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'dnsmasq_strip_addon_block' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q '10185' /tmp/ss-ci-pkg/ssurf/stealthsurf
+
+  engvpn:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engvpn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.100.0"
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-musl,aarch64-unknown-linux-gnu,armv7-unknown-linux-musleabihf
+      - name: Install Zig + cargo-zigbuild + aarch64 gcc
+        run: |
+          set -eux
+          ZIG_VER=0.15.1
+          curl -fsSL -o /tmp/zig.tar.xz "https://ziglang.org/download/${ZIG_VER}/zig-x86_64-linux-${ZIG_VER}.tar.xz"
+          mkdir -p "$HOME/.local/zig15"
+          tar -xJf /tmp/zig.tar.xz -C "$HOME/.local/zig15" --strip-components=1
+          echo "$HOME/.local/zig15" >>"$GITHUB_PATH"
+          cargo install --locked cargo-zigbuild --version 0.20.1
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-aarch64-linux-gnu
+      - name: Cargo test
+        run: cargo test -p engvpn-daemon
+      - name: Build packages (real aarch64-musl for Merlin)
+        run: ./build-package.sh
+      - name: Assert merlin-aarch64 is AArch64 (not host fallback)
+        run: |
+          set -eux
+          PKG=$(ls dist/engvpn_*_merlin-aarch64.tar.gz)
+          tmp=$(mktemp -d)
+          tar -xzf "$PKG" -C "$tmp"
+          file "$tmp/sbin/engvpn-daemon" | tee /tmp/engvpn-a64.file
+          grep -Eq 'ARM aarch64|AArch64|aarch64' /tmp/engvpn-a64.file
+          ! grep -Eqi 'x86-64|x86_64|Intel 80386' /tmp/engvpn-a64.file
+          readelf -h "$tmp/sbin/engvpn-daemon" | grep -q 'AArch64'
+          grep -q '"version": "1.0.0"' feed/latest.json
+          ! grep -qE 'file://|/agent/repos/' feed/latest.json
+          # Feed sha must match the aarch64 tarball
+          want=$(sha256sum "$PKG" | awk '{print $1}')
+          grep -q "$want" feed/latest.json
+      - name: Smoke (host x86 package only)
+        env:
+          ENGVPN_SKIP_CROSS: "1"
+        run: ./smoke-test.sh
+      - name: Assert Rust binary packaged
+        run: |
+          tar -tzf dist/engvpn_*_merlin-x86_64.tar.gz | grep -q sbin/engvpn-daemon
