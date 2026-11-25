@@ -949,7 +949,7 @@ if command -v node >/dev/null 2>&1; then
 	inv_ok "patch.router.mode" patch '{"path":"router.mode","value":"all"}'
 	inv_ok "patch.transparentMethod" patch '{"path":"router.transparentMethod","value":"redirect"}'
 	inv_ok "get_router_settings" get_router_settings '{}'
-	# Diagnostics: top processes by CPU/RAM (BusyBox /proc)
+	# Diagnostics: system CPU/RAM + top processes by CPU/RAM (BusyBox /proc)
 	inv_ok "get_router_load" get_router_load '{"limit":5}'
 	grep -q '"processes"' /tmp/engvpn-inv-out.json || {
 		echo "get_router_load missing processes" >&2
@@ -961,6 +961,21 @@ if command -v node >/dev/null 2>&1; then
 		head -c 800 /tmp/engvpn-inv-out.json >&2
 		exit 1
 	}
+	node -e '
+	  const j=JSON.parse(require("fs").readFileSync("/tmp/engvpn-inv-out.json","utf8"));
+	  const r=j.result||j;
+	  if(typeof r.cpu!=="number"||r.cpu<0||r.cpu>100){console.error("bad cpu",r.cpu);process.exit(1)}
+	  if(!(r.ramTotal>0)||!(r.ramUsed>=0)||r.ramUsed>r.ramTotal*1.05){console.error("bad ram",r.ramUsed,r.ramTotal);process.exit(1)}
+	  console.log("  system load ok: cpu="+r.cpu+"% ramUsed="+r.ramUsed+" ramTotal="+r.ramTotal);
+	'
+	# Second poll so /proc/stat CPU delta is real (first may be loadavg fallback)
+	inv_ok "get_router_load.2" get_router_load '{"limit":5}'
+	node -e '
+	  const j=JSON.parse(require("fs").readFileSync("/tmp/engvpn-inv-out.json","utf8"));
+	  const r=j.result||j;
+	  if(typeof r.cpu!=="number"||r.cpu<0||r.cpu>100){console.error("bad cpu#2",r.cpu);process.exit(1)}
+	  console.log("  system load poll#2 ok: cpu="+r.cpu+"%");
+	'
 	# Second sample so CPU deltas can populate (first may be 0%)
 	inv_ok "get_top_processes" get_top_processes '{"limit":5}'
 	node -e '

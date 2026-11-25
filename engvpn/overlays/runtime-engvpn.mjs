@@ -1062,6 +1062,67 @@ function loadAvgCpuPct() {
   }
 }
 
+/** BusyBox-friendly /proc/stat idle+iowait ratio (two samples → real CPU%). */
+let _sysCpuSnap = null; // { total, idle }
+
+function readCpuTimes() {
+  try {
+    const line = String(readFileSync("/proc/stat", "utf8") || "").split("\n")[0] || "";
+    const parts = line.trim().split(/\s+/).slice(1).map((x) => Number(x) || 0);
+    let total = 0;
+    for (const p of parts) total += p;
+    // idle (4) + iowait (5) — matches typical Linux %idle
+    const idle = (parts[3] || 0) + (parts[4] || 0);
+    return { total, idle };
+  } catch {
+    return { total: 0, idle: 0 };
+  }
+}
+
+/**
+ * System-wide CPU % + RAM used/total for Diagnostics summary.
+ * CPU from /proc/stat deltas when polled (~2s); first sample falls back to loadavg.
+ */
+export function sampleSystemLoad() {
+  const times = readCpuTimes();
+  let cpu = loadAvgCpuPct();
+  if (_sysCpuSnap && times.total > _sysCpuSnap.total) {
+    const dTot = times.total - _sysCpuSnap.total;
+    const dIdle = Math.max(0, times.idle - _sysCpuSnap.idle);
+    if (dTot > 0) cpu = Math.max(0, Math.min(100, Math.round((1 - dIdle / dTot) * 100)));
+  }
+  _sysCpuSnap = times;
+  let ramTotal = 0;
+  let ramUsed = 0;
+  try {
+    ramTotal = totalmem() || 0;
+    ramUsed = Math.max(0, ramTotal - (freemem() || 0));
+  } catch {
+    ramTotal = 0;
+    ramUsed = 0;
+  }
+  // Prefer MemAvailable from /proc/meminfo when Node freemem is coarse/wrong on Merlin
+  try {
+    const mi = String(readFileSync("/proc/meminfo", "utf8") || "");
+    const totKb = Number((mi.match(/^MemTotal:\s+(\d+)/m) || [])[1]) || 0;
+    let availKb = Number((mi.match(/^MemAvailable:\s+(\d+)/m) || [])[1]) || 0;
+    if (!availKb) availKb = Number((mi.match(/^MemFree:\s+(\d+)/m) || [])[1]) || 0;
+    if (totKb > 0) {
+      ramTotal = totKb * 1024;
+      ramUsed = Math.max(0, (totKb - availKb) * 1024);
+    }
+  } catch {
+    /* keep os.* values */
+  }
+  let proc = 0;
+  try {
+    proc = process.memoryUsage().rss || 0;
+  } catch {
+    proc = 0;
+  }
+  return { cpu, ramUsed, ramTotal, proc };
+}
+
 function readDpiStatus() {
   const path = join(DATA, "dpi.conf");
   const cur = { enabled: false };
@@ -1634,13 +1695,20 @@ export function engvpnParityInvoke(command, body, state, snapshotFn) {
     case "get_top_processes":
     case "get_router_processes": {
       const processes = enrichProcessHints(sampleTopProcesses({ limit: body?.limit }), state);
-      // Keep latest sample on runtime for optional UI reuse
-      if (state.runtime?.load) state.runtime.load.processes = processes;
+      const sys = sampleSystemLoad();
+      // Keep latest sample on runtime for home loadline + Diagnostics summary
+      if (state.runtime?.load) {
+        state.runtime.load.cpu = sys.cpu;
+        state.runtime.load.ramUsed = sys.ramUsed;
+        state.runtime.load.ramTotal = sys.ramTotal;
+        state.runtime.load.proc = sys.proc;
+        state.runtime.load.processes = processes;
+      }
       return {
-        cpu: state.runtime?.load?.cpu ?? loadAvgCpuPct(),
-        ramUsed: state.runtime?.load?.ramUsed ?? totalmem() - freemem(),
-        ramTotal: state.runtime?.load?.ramTotal ?? totalmem(),
-        proc: state.runtime?.load?.proc ?? 0,
+        cpu: sys.cpu,
+        ramUsed: sys.ramUsed,
+        ramTotal: sys.ramTotal,
+        proc: sys.proc,
         processes,
       };
     }

@@ -1283,10 +1283,32 @@ function procRowsHtml(list, kind) {
   }).join("")}</div>`;
 }
 
-function procsBlockHtml(procs) {
+function sysLoadBlockHtml(load) {
+  const cpu = Math.max(0, Math.min(100, Number(load?.cpu) || 0));
+  const used = Number(load?.ramUsed) || 0;
+  const total = Number(load?.ramTotal) || 0;
+  const ramPct = total > 0 ? Math.max(0, Math.min(100, Math.round((used / total) * 100))) : 0;
+  return `<div class="h">НАГРУЗКА СИСТЕМЫ</div>
+    <p class="muted">Общая загрузка роутера (/proc/stat · /proc/meminfo). Обновление ~2 с.</p>
+    <div class="sys-load">
+      <div class="sys-load-item">
+        <b class="kv">${cpu}%</b>
+        <span class="muted">ЦП</span>
+        <div class="sys-load-bar" aria-hidden="true"><i style="width:${cpu}%"></i></div>
+      </div>
+      <div class="sys-load-item">
+        <b class="kv">${mem(used)} / ${mem(total)}</b>
+        <span class="muted">ОЗУ · ${ramPct}%</span>
+        <div class="sys-load-bar" aria-hidden="true"><i style="width:${ramPct}%"></i></div>
+      </div>
+    </div>`;
+}
+
+function procsBlockHtml(procs, load) {
   const flagged = procs?.flagged || [];
   const hints = procs?.hints || [];
-  return `<div class="h">КТО ГРУЗИТ РОУТЕР</div>
+  return `${sysLoadBlockHtml(load || S?.runtime?.load)}
+    <div class="h">КТО ГРУЗИТ РОУТЕР</div>
     <p class="muted">Топ по ЦП и ОЗУ (/proc). Подсвечены engvpnd / node / xray / sing-box / mihomo. Обновление ~2 с.</p>
     ${hints.length ? `<div class="proc-hints">${hints.map((h) => `<p class="proc-hint">${esc(h)}</p>`).join("")}</div>` : ""}
     ${flagged.length ? `<div class="h">EngVPN / ЯДРА</div>${procRowsHtml(flagged, "cpu")}` : ""}
@@ -1299,7 +1321,7 @@ function procsBlockHtml(procs) {
 function paintProcs() {
   const el = document.querySelector("[data-live=procs]");
   if (!el) return false;
-  el.innerHTML = procsBlockHtml(ui.processes || S?.runtime?.load?.processes);
+  el.innerHTML = procsBlockHtml(ui.processes || S?.runtime?.load?.processes, S?.runtime?.load);
   return true;
 }
 
@@ -1340,8 +1362,8 @@ function screenDiag() {
     ${cell("Тест скорости", "Пинг, загрузка через VPN и напрямую", `<button class="ghost" data-act="speedtest">Запустить</button>`)}
     ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${fmt(ui.result.direct.down || 0)}. VPN: ${ui.result.vpn ? (typeof ui.result.vpn.down === "number" ? fmt(ui.result.vpn.down) : esc(ui.result.vpn.error || ui.result.vpn.down || "—")) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
     ${cell("Проверки скрытности", "Exit IP, DNS, IPv6, DPI, kill-switch", `<button class="ghost" data-go="privacy">Открыть</button>`)}
-    ${cell("Нагрузка на роутер", "Пока панель открыта — строка на главной и топ процессов", sw("diagnostics.showLoad", d.showLoad))}
-    ${d.showLoad ? `<div data-live="procs">${procsBlockHtml(procs)}</div>` : ""}
+    ${cell("Нагрузка на роутер", "Пока панель открыта — сводка ЦП/ОЗУ, строка на главной и топ процессов", sw("diagnostics.showLoad", d.showLoad))}
+    ${d.showLoad ? `<div data-live="procs">${procsBlockHtml(procs, S.runtime?.load)}</div>` : ""}
     ${cell("Режим разработчика", "Логи ядра и подробности", sw("diagnostics.devMode", d.devMode))}
     ${cell("Отправлять отчёты об ошибках", "В EngVPN отчёты остаются локально", sw("diagnostics.errorReports", d.errorReports))}
     ${cell("Проверка туннеля после подключения", "Три неудачи подряд включают резерв или автонастройку", sw("diagnostics.tunnelCheck", d.tunnelCheck))}

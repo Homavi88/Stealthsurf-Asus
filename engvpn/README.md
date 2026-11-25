@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **0.5.30** ([`VERSION`](./VERSION)) |
+| Версия | **0.5.31** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (пароль по умолчанию; можно пропустить при установке) |
 | Префикс установки | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`$PREFIX/sbin/engvpnd`; symlink `/opt/bin/engvpnd` + `profile.add`) |
 | Изоляция | Не трогает SurfGate `:1131`, официальный StealthSurf `:8800` и alfa `:8788` |
 
-Релиз: [engvpn-0.5.30](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.30) (после публикации feed)
+Релиз: [engvpn-0.5.31](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-0.5.31) (после публикации feed)
 
 ---
 
@@ -132,6 +132,10 @@ UI по карте экранов StealthSurf, бренд **EngVPN**, русск
 - **Проверки скрытности** — exit IP, DNS, IPv6, kill-switch, DPI/отпечаток, WebRTC-подсказка  
 - **MQTT/HA** — публикация в `engvpn/vpn`; поддержка — ссылка на README/GitHub (не live-чат SS)  
 
+
+### Что нового в 0.5.31
+
+- **Диагностика → нагрузка системы:** отдельный блок с общей загрузкой ЦП (%) и ОЗУ (занято / всего · %) выше списков процессов; те же данные `/proc/stat` · `/proc/meminfo`, опрос ~2 с.
 
 ### Что нового в 0.5.30
 
