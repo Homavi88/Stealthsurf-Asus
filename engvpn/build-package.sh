@@ -1,26 +1,82 @@
 #!/bin/sh
-# Build EngVPN Merlin packages (arch keys for feed parity; payload is arch-independent JS+shell).
+# Build EngVPN Merlin packages — Rust engvpn-daemon + shell helpers + static www.
 set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-REPO=$(CDPATH= cd -- "$ROOT/.." && pwd)
 VERSION=$(cat "$ROOT/VERSION")
 OUT=$ROOT/dist
 STAGE=$OUT/stage
-ALFA=$REPO/alfa-addon
+BIN_DIR=$OUT/bins
 
 rm -rf "$OUT"
-mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn" "$OUT"
+mkdir -p "$STAGE/sbin" "$STAGE/share/engvpn/www" "$OUT" "$BIN_DIR"
 
-# Daemon + share scripts
+export PATH="${HOME}/.local/zig:/usr/local/cargo/bin:${PATH:-}"
+
+echo "Building engvpn-daemon $VERSION (Rust)…"
+cd "$ROOT"
+
+# Host binary (smoke / merlin-x86_64)
+cargo build -p engvpn-daemon --release
+HOST_BIN=$ROOT/target/release/engvpn-daemon
+[ -x "$HOST_BIN" ] || HOST_BIN=$(find "$ROOT/target" -name engvpn-daemon -type f -executable | head -n1)
+cp -a "$HOST_BIN" "$BIN_DIR/engvpn-daemon-x86_64"
+chmod 0755 "$BIN_DIR/engvpn-daemon-x86_64"
+
+# Prefer musl aarch64 via cargo-zigbuild when zig is available
+build_aarch64() {
+	if [ "${ENGVPN_SKIP_CROSS:-}" = 1 ]; then
+		echo "  ENGVPN_SKIP_CROSS=1 — host binary for aarch64 slot"
+		cp -a "$BIN_DIR/engvpn-daemon-x86_64" "$BIN_DIR/engvpn-daemon-aarch64"
+		return 0
+	fi
+	if command -v cargo-zigbuild >/dev/null 2>&1 && command -v zig >/dev/null 2>&1; then
+		echo "  cross aarch64-unknown-linux-musl (zigbuild)…"
+		if cargo zigbuild -p engvpn-daemon --release --target aarch64-unknown-linux-musl; then
+			cp -a "$ROOT/target/aarch64-unknown-linux-musl/release/engvpn-daemon" "$BIN_DIR/engvpn-daemon-aarch64"
+			chmod 0755 "$BIN_DIR/engvpn-daemon-aarch64"
+			return 0
+		fi
+		echo "  zigbuild aarch64 failed — falling back to host binary for package layout" >&2
+	fi
+	echo "  packaging host binary for aarch64 slot (set ENGVPN_SKIP_CROSS=0 + working zig for real musl)" >&2
+	cp -a "$BIN_DIR/engvpn-daemon-x86_64" "$BIN_DIR/engvpn-daemon-aarch64"
+}
+
+build_armv7() {
+	if [ "${ENGVPN_SKIP_CROSS:-}" = 1 ]; then
+		cp -a "$BIN_DIR/engvpn-daemon-x86_64" "$BIN_DIR/engvpn-daemon-armv7"
+		return 0
+	fi
+	if command -v cargo-zigbuild >/dev/null 2>&1 && command -v zig >/dev/null 2>&1; then
+		echo "  cross armv7-unknown-linux-musleabihf (zigbuild)…"
+		if cargo zigbuild -p engvpn-daemon --release --target armv7-unknown-linux-musleabihf 2>/dev/null; then
+			cp -a "$ROOT/target/armv7-unknown-linux-musleabihf/release/engvpn-daemon" "$BIN_DIR/engvpn-daemon-armv7"
+			chmod 0755 "$BIN_DIR/engvpn-daemon-armv7"
+			return 0
+		fi
+	fi
+	echo "  armv7 cross skipped — reuse aarch64/host placeholder" >&2
+	cp -a "$BIN_DIR/engvpn-daemon-aarch64" "$BIN_DIR/engvpn-daemon-armv7" 2>/dev/null \
+		|| cp -a "$BIN_DIR/engvpn-daemon-x86_64" "$BIN_DIR/engvpn-daemon-armv7"
+}
+
+build_aarch64
+build_armv7
+
+# CLI wrapper + share scripts (no Node set-password.mjs required)
 cp -a "$ROOT/package/sbin/engvpnd" "$STAGE/sbin/engvpnd"
 chmod 0755 "$STAGE/sbin/engvpnd"
 
-for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh set-password.mjs verify-minisign.mjs download-cores.mjs; do
-	cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
-	chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
+for f in install.sh service.sh hook.sh netfilter.sh transparent.sh update.sh schedule-update.sh dpi.sh warp.sh privacy-check.sh backup.sh discover-devices.sh smartdns.sh verify-minisign.mjs download-cores.mjs; do
+	if [ -f "$ROOT/package/share/engvpn/$f" ]; then
+		cp -a "$ROOT/package/share/engvpn/$f" "$STAGE/share/engvpn/$f"
+		chmod 0755 "$STAGE/share/engvpn/$f" 2>/dev/null || chmod 0644 "$STAGE/share/engvpn/$f"
+	fi
 done
+# Keep set-password.mjs in archive path only — Rust handles set-password
 cp -a "$ROOT/VERSION" "$STAGE/share/engvpn/VERSION"
+
 cat >"$STAGE/share/engvpn/updates.conf.example" <<'EOF'
 interval=1d
 auto=0
@@ -31,13 +87,11 @@ cores_when_missing=1
 last_check=
 last_result=
 EOF
-# Minisign public key (verify on install/update)
 if [ -f "$ROOT/keys/engvpn.minisign.pub" ]; then
 	cp -a "$ROOT/keys/engvpn.minisign.pub" "$STAGE/share/engvpn/engvpn.minisign.pub"
 elif [ -f "$ROOT/package/share/engvpn/engvpn.minisign.pub" ]; then
 	cp -a "$ROOT/package/share/engvpn/engvpn.minisign.pub" "$STAGE/share/engvpn/engvpn.minisign.pub"
 fi
-# Default transparent config template (mode=off; prefer TPROXY when modules allow)
 cat >"$STAGE/share/engvpn/transparent.conf.example" <<'EOF'
 mode=off
 method=auto
@@ -69,1378 +123,47 @@ enabled=0
 EOF
 cat >"$STAGE/share/engvpn/smartdns-bypass.txt.example" <<'EOF'
 # domain, IP or CIDR — traffic to these goes direct (no VPN)
-# example.com
-# 1.2.3.4
-# 10.0.0.0/8
 EOF
 
-# Vendor open panel runtime from alfa-addon (no proprietary binaries).
-RUNTIME=$STAGE/share/engvpn/runtime
-mkdir -p "$RUNTIME"
-if [ ! -d "$ALFA" ]; then
-	echo "build-package: missing $ALFA" >&2
-	exit 1
+# Static www UI (overlays/public is tracked; engvpn/www is local-only via root .gitignore)
+if [ -d "$ROOT/overlays/public" ] && [ -f "$ROOT/overlays/public/index.html" ]; then
+	cp -a "$ROOT/overlays/public/." "$STAGE/share/engvpn/www/"
+elif [ -d "$ROOT/www" ]; then
+	cp -a "$ROOT/www/." "$STAGE/share/engvpn/www/"
+fi
+if [ -f "$STAGE/share/engvpn/www/index.html" ]; then
+	sed -i "s/__ENGVPN_VERSION__/$VERSION/g" "$STAGE/share/engvpn/www/index.html"
 fi
 
-# Copy runtime sources (exclude data, tests, install.sh that targets /jffs/addons/alfa)
-for item in lib public scripts server.mjs run.mjs package.json README.md; do
-	if [ -e "$ALFA/$item" ]; then
-		cp -a "$ALFA/$item" "$RUNTIME/$item"
-	fi
-done
+# Short note in package
+cat >"$STAGE/share/engvpn/RUNTIME.md" <<EOF
+# EngVPN $VERSION runtime
 
-# EngVPN overlays (catalog + daemon helpers + branded panel UI)
-cp -a "$ROOT/overlays/catalog.mjs" "$RUNTIME/lib/catalog.mjs"
-cp -a "$ROOT/overlays/runtime-engvpn.mjs" "$RUNTIME/lib/runtime-engvpn.mjs"
-# Isolated Diagnostics /proc sampler (child process — V8 Fatal cannot kill panel)
-cp -a "$ROOT/overlays/proc-sample.mjs" "$RUNTIME/lib/proc-sample.mjs"
-if [ -d "$ROOT/overlays/public" ]; then
-	mkdir -p "$RUNTIME/public"
-	cp -a "$ROOT/overlays/public/." "$RUNTIME/public/"
-	# Cache-bust so laptop Safari picks up new CSS/JS after upgrade (hard refresh still recommended)
-	if [ -f "$RUNTIME/public/index.html" ]; then
-		sed -i "s/__ENGVPN_VERSION__/$VERSION/g" "$RUNTIME/public/index.html"
-	fi
-fi
-
-# Brand run.mjs / server cookie name for EngVPN
-cat >"$RUNTIME/run.mjs" <<'EOF'
-/**
- * EngVPN panel entry — SIGHUP ignored before loading the server.
- * Exit 75 = duplicate / EADDRINUSE (supervisor backs off; do not spin).
- */
-try {
-  process.on("SIGHUP", () => {});
-} catch {
-  /* ignore */
-}
-
-const fs = await import("node:fs");
-if (process.env.ENGVPN_PID_FILE) {
-  try {
-    fs.writeFileSync(process.env.ENGVPN_PID_FILE, `${process.pid}\n`);
-  } catch {
-    /* ignore */
-  }
-}
-
-process.env.ENGVPN_OPEN_PANEL = process.env.ENGVPN_OPEN_PANEL || "0";
-
-const { start } = await import("./server.mjs");
-const { PANEL_PORT } = await import("./lib/catalog.mjs");
-
-start().then(() => {
-  console.log(`EngVPN panel http://0.0.0.0:${PANEL_PORT} openAccess=${process.env.ENGVPN_OPEN_PANEL === "1"}`);
-}).catch((err) => {
-  const code = err && (err.code === "EADDRINUSE" || err.errno === -98) ? 75 : 1;
-  console.error(err);
-  process.exit(code);
-});
+Panel: \`sbin/engvpn-daemon\` (Rust). CLI: \`sbin/engvpnd\`.
+Static UI: \`share/engvpn/www/\`.
+Node.js is **not** required.
 EOF
 
-# Patch server/runtime branding + EngVPN invoke commands (transparent / update)
-RUNTIME="$RUNTIME" python3 - <<'PY'
-from pathlib import Path
-import os
-rt = Path(os.environ["RUNTIME"])
-p = rt / "server.mjs"
-# Reject EADDRINUSE so a second panel exits 75 instead of hanging / burning CPU
-st = p.read_text()
-old_listen = '''export function start(port = PANEL_PORT, host = "0.0.0.0") {
-  return new Promise((resolve) => {
-    server.listen(port, host, async () => {
-      await runtime.boot();
-      resolve(server);
-    });
-  });
-}'''
-new_listen = '''export function start(port = PANEL_PORT, host = "0.0.0.0") {
-  return new Promise((resolve, reject) => {
-    server.once("error", (err) => reject(err));
-    server.listen(port, host, async () => {
-      try {
-        await runtime.boot();
-        resolve(server);
-      } catch (err) {
-        reject(err);
-      }
-    });
-  });
-}'''
-if old_listen in st:
-    st = st.replace(old_listen, new_listen, 1)
-    p.write_text(st)
-    print("patched server.mjs start() → EADDRINUSE reject")
-else:
-    print("server.mjs start() already patched or shape changed")
-p = rt / "server.mjs"
-text = p.read_text()
-text = text.replace("alfa_session", "engvpn_session")
-text = text.replace("StealthSurf alfa", "EngVPN")
-p.write_text(text)
-print("patched server.mjs cookies/brand")
-st = rt / "lib/state.mjs"
-text = st.read_text()
-text = text.replace('export const DEFAULT_PANEL_PASSWORD = "alfa";', 'export const DEFAULT_PANEL_PASSWORD = "changeme";')
-# Keep dark default (StealthSurf-like home on Merlin / iPhone Safari)
-text = text.replace('theme: "light"', 'theme: "dark"')
-text = text.replace('accent: "stealth"', 'accent: "engvpn"')
-text = text.replace('oled: true', 'oled: false')
-text = text.replace(
-    '''    account: {
-      email: "",
-      balance: 0,
-      subscriptionName: "Основная подписка",
-      nextCharge: "",
-      consoleUrl: "",
-      consoleConnected: false,
-      inviteCode: "",
-    },''',
-    '''    account: {
-      email: "",
-      balance: null,
-      subscriptionName: "Локальные подписки",
-      subscriptionUrl: "",
-      apiKeySet: false,
-      apiKeyMasked: "",
-      cloud: false,
-      nextCharge: "",
-      consoleUrl: "",
-      consoleConnected: false,
-      inviteCode: "",
-    },''',
-)
-# Transparent method default for panel selector
-if "transparentMethod" not in text:
-    text = text.replace(
-        '      mode: "except",\n      dnsViaVpn: true,',
-        '      mode: "except",\n      transparentMethod: "auto",\n      dnsViaVpn: true,',
-        1,
-    )
-text = text.replace(
-    'note: "Альфа собрана локально и не ставится поверх прошивки сама."',
-    'note: "EngVPN обновляется из своего feed (SHA-256 + Minisign) через engvpnd update. Расписание — Merlin cru."',
-)
-# Scheduled update defaults: check daily, auto-apply off
-text = text.replace("    updates: {\n      auto: true,", "    updates: {\n      auto: false,")
-if 'interval: "6h"' in text and "updates:" in text:
-    # Only the updates.interval default (first occurrence after updates block is fine)
-    text = text.replace(
-        '      auto: false,\n      windowStart: 2,\n      windowEnd: 5,\n      geoWeekly: true,\n      coresWhenMissing: true,\n      interval: "6h",',
-        '      auto: false,\n      windowStart: 2,\n      windowEnd: 5,\n      geoWeekly: true,\n      coresWhenMissing: true,\n      interval: "1d",',
-        1,
-    )
-text = text.replace(
-    'firmware: `${platform()} / стенд альфы`',
-    'firmware: `${platform()} / EngVPN`',
-)
-text = text.replace(
-    'referencePanel: "http://192.168.50.1:8800"',
-    'referencePanel: "http://192.168.50.1:8790/"',
-)
-# Prefer live LAN discovery over demo devices (empty until scan fills)
-if "demoDevices()" in text and "devices: []" not in text:
-    text = text.replace("devices: demoDevices(),", "devices: [],  // filled by EngVPN LAN discovery (ARP/dnsmasq)")
-# No fake NL/Trojan locations until API key or subscription URL is set
-if 'nodes: demoNodes()' in text:
-    text = text.replace(
-        '{ id: "main", name: "Основная", url: "", builtin: true, nodes: demoNodes() },',
-        '{ id: "main", name: "Локальные", url: "", builtin: true, nodes: ['
-        '{ id: "direct", name: "Без VPN", protocol: "direct", country: "", flag: "direct", until: "", online: true }'
-        '] },',
-    )
-if 'selectedId: "nl-trojan"' in text:
-    text = text.replace('selectedId: "nl-trojan"', 'selectedId: "direct"', 1)
-    text = text.replace('lastVpnId: "nl-trojan"', 'lastVpnId: ""', 1)
-st.write_text(text)
-print("patched state.mjs EngVPN defaults")
-# runtime.mjs: EngVPN invoke + brand strings + StealthSurf-shaped get_* aliases
-rtm = rt / "lib/runtime.mjs"
-text = rtm.read_text()
-text = text.replace("stealthsurf-alfa", "engvpn")
-text = text.replace("Сброс: /jffs/scripts/alfa reset-password", "Сброс: engvpnd set-password")
-text = text.replace('filename: "stealthsurf-alfa.json"', 'filename: "engvpn-settings.json"')
-text = text.replace('await mqttPublish(mqtt, "stealthsurf/vpn", payload);', 'await mqttPublish(mqtt, "engvpn/vpn", payload);')
-text = text.replace("Альфа ", "EngVPN ")
-text = text.replace("слушает панель на порту 8788", "слушает панель на порту 8790")
-if "from \"./runtime-engvpn.mjs\"" not in text:
-    text = text.replace(
-        'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";',
-        'import { ENGINES, engineSupports, pickEngine } from "./catalog.mjs";\n'
-        'import { engvpnTransparent, engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate, engvpnReconnect, engvpnWatchdog, engvpnPowerOff, engvpnDpi, engvpnWarp, engvpnPrivacyCheck, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from "./runtime-engvpn.mjs";',
-    )
-elif "engvpnPowerOff" not in text and "engvpnWatchdog" in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "engvpnReconnect, engvpnWatchdog,",
-        "engvpnReconnect, engvpnWatchdog, engvpnPowerOff,",
-    )
-elif "engvpnUpdateChangelog" not in text and "engvpnUpdateApply" in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate,",
-        "engvpnUpdateCheck, engvpnUpdateApply, engvpnUpdateChangelog, engvpnScheduleUpdate,",
-    )
-    if "readAddonUptimeMs" not in text:
-        text = text.replace(
-            "getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
-            "getUpdateActionLog, readInstalledVersion, readAddonUptimeMs } from \"./runtime-engvpn.mjs\";",
-        )
-elif "getUpdateActionLog" not in text and "getDownloadProgress" in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "getDownloadProgress, setDownloadProgress, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
-        "getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
-    )
-elif "getDownloadProgress" not in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-        "sampleRouterTraffic, probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
-    )
-    text = text.replace(
-        "probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-        "probeCoresHealth, getDownloadProgress, setDownloadProgress, getUpdateActionLog, readInstalledVersion } from \"./runtime-engvpn.mjs\";",
-    )
-elif "engvpnUpdateApply" not in text and "engvpnUpdateCheck" in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "engvpnUpdateCheck, engvpnScheduleUpdate,",
-        "engvpnUpdateCheck, engvpnUpdateApply, engvpnScheduleUpdate,",
-    )
-elif "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
-        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-    )
-    if "engvpnPrivacyCheck" not in text:
-        text = text.replace(
-            "engvpnDpi, engvpnWarp,",
-            "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
-        )
-elif "engvpnPrivacyCheck" not in text and "engvpnDpi" in text:
-    text = text.replace(
-        "engvpnDpi, engvpnWarp,",
-        "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
-    )
-elif "syncUpdatesSchedule" not in text and "hydratePanelSnapshot" in text:
-    text = text.replace(
-        "readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
-        "readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, engvpnScheduleUpdate } from \"./runtime-engvpn.mjs\";",
-    )
-elif "hydratePanelSnapshot" not in text and "engvpnParityInvoke" in text:
-    text = text.replace(
-        "engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
-        "engvpnParityInvoke, readAccountFile, hydratePanelSnapshot, syncUpdatesSchedule, engvpnScheduleUpdate } from \"./runtime-engvpn.mjs\";",
-    )
-elif "readSmartDns" not in text and "engvpnSmartDns" in text:
-    text = text.replace(
-        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, writeTransparentConf",
-        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf",
-    )
-elif "engvpnSmartDns" not in text:
-    text = text.replace(
-        "writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile } from \"./runtime-engvpn.mjs\";",
-        "engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
-    )
-elif "engvpnSaveAccount" not in text:
-    text = text.replace(
-        "writeTransparentConf, modeFromRouter, engvpnParityInvoke } from \"./runtime-engvpn.mjs\";",
-        "engvpnDpi, engvpnWarp, engvpnSaveAccount, engvpnSyncAccount, engvpnSmartDns, engvpnBackup, mergeDiscoveredDevices, readSmartDns, writeTransparentConf, modeFromRouter, engvpnParityInvoke, readAccountFile, hydratePanelSnapshot } from \"./runtime-engvpn.mjs\";",
-    )
-needle = '      case "autoSetup":'
-insert = '''      case "transparent":
-        return engvpnTransparent(body.action || body.command || "status", body);
-      case "transparentApply":
-        return engvpnTransparent("apply", body);
-      case "engvpnUpdateCheck":
-      case "checkEngvpnUpdates":
-        {
-          const res = await engvpnUpdateCheck(state);
-          saveState(state);
-          return res;
-        }
-      case "engvpnUpdateApply":
-      case "applyEngvpnUpdate":
-      case "installUpdate":
-        {
-          const res = await engvpnUpdateApply(state, body || {});
-          saveState(state);
-          return res;
-        }
-      case "engvpnUpdateChangelog":
-      case "updateChangelog":
-      case "getUpdateChangelog":
-        {
-          const res = await engvpnUpdateChangelog(state, body || {});
-          saveState(state);
-          return res;
-        }
-      case "engvpnScheduleUpdate":
-      case "scheduleUpdate":
-        return engvpnScheduleUpdate(body.action || body.command || "status", ...(body.args || []));
-      case "engvpnReconnect":
-        return engvpnReconnect();
-      case "engvpnWatchdog":
-        return engvpnWatchdog();
-      case "engvpnPowerOff":
-      case "powerOff":
-      case "poweroff":
-        return engvpnPowerOff(body || {});
-      case "engvpnDpi":
-      case "dpi":
-        return engvpnDpi(body.action || body.command || "status", body);
-      case "engvpnWarp":
-        return engvpnWarp(body.action || body.command || "status", body);
-      case "saveAccount":
-      case "save_account":
-        return engvpnSaveAccount(body, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
-      case "syncAccount":
-      case "sync_account":
-        return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
-      case "clearAccount":
-      case "clear_account":
-        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });
-      case "smartdns":
-      case "smartDns":
-      case "engvpnSmartDns":
-        return engvpnSmartDns(body.action || body.command || "apply", body);
-      case "engvpnBackup":
-      case "backup":
-        return engvpnBackup(body.action || body.command || "create", body.prefix);
-      case "scanDevices":
-      case "refreshDevices":
-        mergeDiscoveredDevices(state);
-        saveState(state);
-        return snapshot();
-      case "autoSetup":'''
-if "case \"transparent\":" not in text:
-    if needle not in text:
-        raise SystemExit("autoSetup case not found for inject")
-    text = text.replace(needle, insert, 1)
-elif "case \"engvpnPowerOff\":" not in text and "case \"engvpnWatchdog\":" in text:
-    text = text.replace(
-        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n',
-        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n'
-        '      case "engvpnPowerOff":\n      case "powerOff":\n      case "poweroff":\n'
-        '        return engvpnPowerOff(body || {});\n',
-        1,
-    )
-elif "case \"saveAccount\":" not in text:
-    text = text.replace(
-        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n      case "autoSetup":',
-        '      case "engvpnWatchdog":\n        return engvpnWatchdog();\n'
-        '      case "engvpnDpi":\n      case "dpi":\n        return engvpnDpi(body.action || body.command || "status", body);\n'
-        '      case "engvpnWarp":\n        return engvpnWarp(body.action || body.command || "status", body);\n'
-        '      case "saveAccount":\n      case "save_account":\n'
-        '        return engvpnSaveAccount(body, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
-        '      case "syncAccount":\n      case "sync_account":\n'
-        '        return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
-        '      case "clearAccount":\n      case "clear_account":\n'
-        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
-        '      case "smartdns":\n      case "smartDns":\n      case "engvpnSmartDns":\n'
-        '        return engvpnSmartDns(body.action || body.command || "apply", body);\n'
-        '      case "engvpnBackup":\n      case "backup":\n'
-        '        return engvpnBackup(body.action || body.command || "create", body.prefix);\n'
-        '      case "scanDevices":\n      case "refreshDevices":\n'
-        '        mergeDiscoveredDevices(state);\n'
-        '        saveState(state);\n'
-        '        return snapshot();\n'
-        '      case "autoSetup":',
-        1,
-    )
-elif "case \"smartdns\":" not in text:
-    text = text.replace(
-        '      case "clearAccount":\n      case "clear_account":\n'
-        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
-        '      case "autoSetup":',
-        '      case "clearAccount":\n      case "clear_account":\n'
-        '        return engvpnSaveAccount({ clearKey: true }, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n'
-        '      case "smartdns":\n      case "smartDns":\n      case "engvpnSmartDns":\n'
-        '        return engvpnSmartDns(body.action || body.command || "apply", body);\n'
-        '      case "engvpnBackup":\n      case "backup":\n'
-        '        return engvpnBackup(body.action || body.command || "create", body.prefix);\n'
-        '      case "scanDevices":\n      case "refreshDevices":\n'
-        '        mergeDiscoveredDevices(state);\n'
-        '        saveState(state);\n'
-        '        return snapshot();\n'
-        '      case "autoSetup":',
-        1,
-    )
-
-# Define transparent sync helper BEFORE invoke / parity wrappers reference it
-if "async function engvpnSyncTransparent()" not in text:
-    if "async function invoke(command, body = {}) {" not in text:
-        raise SystemExit("invoke() not found for engvpnSyncTransparent")
-    text = text.replace(
-        "async function invoke(command, body = {}) {",
-        "async function engvpnSyncTransparent() {\n"
-        "    if (!state.router) return { ok: true };\n"
-        "    const mode = modeFromRouter(state.router.mode);\n"
-        "    const dnsFlags = transparentDnsFlags(state);\n"
-        "    const devices = selectedDeviceIds(state);\n"
-        "    syncDevicesSelect(state);\n"
-        "    writeTransparentConf({\n"
-        "      mode,\n"
-        "      killswitch: state.router.blockWithoutVpn ? \"1\" : \"0\",\n"
-        "      method: state.router.transparentMethod || \"auto\",\n"
-        "      ...dnsFlags,\n"
-        "    });\n"
-        "    if (mode !== \"off\" || dnsFlags.dns_hijack === \"1\" || dnsFlags.captive_open === \"1\") {\n"
-        "      await engvpnTransparent(\"apply\", { mode, devices, ...dnsFlags });\n"
-        "    } else {\n"
-        "      await engvpnTransparent(\"stop\", {});\n"
-        "    }\n"
-        "    return { ok: true };\n"
-        "  }\n\n"
-        "  async function invoke(command, body = {}) {",
-        1,
-    )
-
-# Hook router.mode / DNS / captive / DPI / updates patches — propagate failures + revert UI state
-old_patch = '      case "patch":\n        return patch(body.path, body.value);'
-new_patch = (
-    '      case "patch": {\n'
-    "        const path = body.path;\n"
-    "        const parts = String(path || \"\").split(\".\").filter(Boolean);\n"
-    "        let prev;\n"
-    "        try {\n"
-    "          let cur = state;\n"
-    "          for (const p of parts) cur = cur?.[p];\n"
-    "          prev = cur;\n"
-    "        } catch { prev = undefined; }\n"
-    "        const result = await patch(path, body.value);\n"
-    "        const needsTransparent =\n"
-    "          path === \"router.mode\" || path === \"router.transparentMethod\" || path === \"router.blockWithoutVpn\" ||\n"
-    "          path === \"router.dnsViaVpn\" || path === \"router.dnsLock\" || path === \"router.adblock\" ||\n"
-    "          path === \"router.trips\" || path === \"router.captive\";\n"
-    "        try {\n"
-    "          if (needsTransparent) {\n"
-    "            if (path === \"router.transparentMethod\") writeTransparentConf({ method: body.value || \"auto\" });\n"
-    "            if (path === \"router.blockWithoutVpn\") writeTransparentConf({ killswitch: body.value ? \"1\" : \"0\" });\n"
-    "            await engvpnSyncTransparent();\n"
-    "          }\n"
-    "          if (path === \"network.youtubeZapret\" || path === \"network.discordZapret\") {\n"
-    "            const want = !!(state.network?.youtubeZapret || state.network?.discordZapret);\n"
-    "            await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n"
-    "          }\n"
-    "          if (typeof path === \"string\" && path.startsWith(\"updates.\")) {\n"
-    "            // Re-apply after snapshot hydrate (stale updates.conf must not wipe the toggle),\n"
-    "            // then persist conf + Merlin cru and return a fresh snapshot.\n"
-    "            setPath(state, path, body.value);\n"
-    "            const sched = await syncUpdatesSchedule(state);\n"
-    "            if (sched && sched.ok === false) throw new Error(sched.error || \"Не удалось установить расписание обновлений\");\n"
-    "            saveState(state);\n"
-    "            return snapshot();\n"
-    "          }\n"
-    "        } catch (e) {\n"
-    "          setPath(state, path, prev);\n"
-    "          saveState(state);\n"
-    "          const err = new Error(e.message || String(e));\n"
-    "          err.status = 500;\n"
-    "          throw err;\n"
-    "        }\n"
-    "        return result;\n"
-    "      }"
-)
-if old_patch in text and 'engvpnSyncTransparent()' not in text.split('case "patch"')[1][:800]:
-    text = text.replace(old_patch, new_patch, 1)
-elif old_patch in text and 'needsTransparent' not in text:
-    text = text.replace(old_patch, new_patch, 1)
-
-# Sync Updates already folded into patch handler above when inserting fresh.
-# If an older dpi-only hook exists without updates., extend it:
-if "syncUpdatesSchedule" in text and 'path.startsWith("updates.")' not in text and "needsTransparent" not in text:
-    needle_upd = '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {'
-    if needle_upd in text:
-        text = text.replace(
-            needle_upd,
-            '        if (typeof body?.path === "string" && body.path.startsWith("updates.")) {\n'
-            '          setPath(state, body.path, body.value);\n'
-            '          const sched = await syncUpdatesSchedule(state);\n'
-            '          if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
-            '          saveState(state);\n'
-            '          return snapshot();\n'
-            '        }\n'
-            '        if (body?.path === "network.youtubeZapret" || body?.path === "network.discordZapret") {',
-            1,
-        )
-# Harden older builds that synced updates.conf without re-applying the toggle after hydrate
-if 'path.startsWith("updates.")' in text and "setPath(state, path, body.value)" not in text.split('path.startsWith("updates.")')[1][:400]:
-    text = text.replace(
-        '          if (typeof path === "string" && path.startsWith("updates.")) {\n'
-        '            const sched = await syncUpdatesSchedule(state);\n'
-        '            if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
-        '          }',
-        '          if (typeof path === "string" && path.startsWith("updates.")) {\n'
-        '            setPath(state, path, body.value);\n'
-        '            const sched = await syncUpdatesSchedule(state);\n'
-        '            if (sched && sched.ok === false) throw new Error(sched.error || "Не удалось установить расписание обновлений");\n'
-        '            saveState(state);\n'
-        '            return snapshot();\n'
-        '          }',
-        1,
-    )
-
-# Override alfa checkUpdates stub → real feed check + schedule stamp
-if 'return await engvpnUpdateCheck(state)' not in text and 'case "checkUpdates":' in text:
-    import re as _re_chk
-    text2, n_chk = _re_chk.subn(
-        r'case "checkUpdates":\s*state\.updates\.lastCheck = Date\.now\(\);\s*'
-        r'state\.updates\.latest = state\.version;\s*saveState\(state\);\s*'
-        r'return \{ ok: true, latest: state\.version, message: "[^"]*" \};',
-        'case "checkUpdates": {\n'
-        '        const res = await engvpnUpdateCheck(state);\n'
-        '        saveState(state);\n'
-        '        return res;\n'
-        '      }',
-        text,
-        count=1,
-    )
-    if n_chk:
-        text = text2
-        print("patched checkUpdates → engvpnUpdateCheck")
-
-# Enrich snapshot with account/transparent/smartdns + one-shot LAN discover
-import re as _re
-if "hydratePanelSnapshot(" not in text:
-    m = _re.search(r"function snapshot\(\)\s*\{.*?^\s*(return publicState\([^;]+;)", text, _re.S | _re.M)
-    if m:
-        ret = m.group(1)
-        replacement = (
-            "const __snap = " + ret[len("return "):].rstrip(";") + ";\n"
-            "    try { hydratePanelSnapshot(__snap, state); } catch { /* ignore */ }\n"
-            "    try { if (!__snap.smartdns) __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n"
-            "    try {\n"
-            "      const onlyDemo = !(state.devices || []).length || (state.devices || []).every((d) => d.demo);\n"
-            "      if (onlyDemo) mergeDiscoveredDevices(state);\n"
-            "    } catch { /* ignore */ }\n"
-            "    return __snap;"
-        )
-        text = text[: m.start(1)] + replacement + text[m.end(1) :]
-        print("patched snapshot() with account hydrate + smartdns + discover")
-elif "__snap.smartdns" in text and "hydratePanelSnapshot(" not in text:
-    text = text.replace(
-        "    try { __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n",
-        "    try { hydratePanelSnapshot(__snap, state); } catch { /* ignore */ }\n"
-        "    try { if (!__snap.smartdns) __snap.smartdns = readSmartDns(); } catch { __snap.smartdns = { enabled: false, entries: [] }; }\n",
-        1,
-    )
-    print("patched snapshot() to hydrate account/transparent")
-
-if "engvpnSmartDns" in text and "alias === \"engvpnSmartDns\"" not in text and "engvpnParityInvoke(" in text:
-    text = text.replace(
-        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n",
-        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
-        "      if (parity && parity.alias === \"engvpnSmartDns\") return engvpnSmartDns(parity.action || \"apply\", parity);\n"
-        "      if (parity && parity.alias === \"engvpnBackup\") return engvpnBackup(parity.action || \"create\", parity.prefix);\n",
-        1,
-    )
-
-# StealthSurf-compatible get_* / update_router_settings before switch body
-if "engvpnParityInvoke(" not in text:
-    text = text.replace(
-        "  async function invoke(command, body = {}) {\n    switch (command) {",
-        "  async function invoke(command, body = {}) {\n"
-        "    const parity = engvpnParityInvoke(command, body, state, snapshot);\n"
-        "    if (parity !== undefined) {\n"
-        "      if (parity && parity.alias === \"selectNode\") return selectNode(parity.id);\n"
-        "      if (parity && parity.alias === \"setPassword\") return setPassword({ oldPassword: parity.oldPassword || parity.current || \"\", password: parity.password || parity.newPassword || \"\" });\n"
-        "      if (parity && parity.alias === \"engvpnSaveAccount\") return engvpnSaveAccount(parity, state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
-        "      if (parity && parity.alias === \"engvpnSyncAccount\") return engvpnSyncAccount(state, { parseShareLink, parseSubscriptionBody, directNode, saveState, snapshot, refreshSubscription });\n"
-        "      if (parity && parity.alias === \"engvpnSmartDns\") return engvpnSmartDns(parity.action || \"apply\", parity);\n"
-        "      if (parity && parity.alias === \"engvpnBackup\") return engvpnBackup(parity.action || \"create\", parity.prefix);\n"
-        "      if (command === \"update_router_settings\") {\n"
-        "        saveState(state);\n"
-        "        await engvpnSyncTransparent();\n"
-        "        return snapshot();\n"
-        "      }\n"
-        "      if (parity && typeof parity.then === \"function\") return parity;\n"
-        "      return parity;\n"
-        "    }\n"
-        "    switch (command) {",
-        1,
-    )
-# Override stub leakTest → real EngVPN privacy checks (+ aliases)
-if "engvpnPrivacyCheck(state" not in text:
-    text = text.replace(
-        '      case "leakTest":\n        return leakTest();',
-        '      case "leakTest":\n'
-        '      case "privacyCheck":\n'
-        '      case "stealthCheck":\n'
-        '      case "engvpnPrivacy":\n'
-        '        return engvpnPrivacyCheck(state, { httpPort: live.httpPort, socksPort: live.socksPort, action: body?.action || "all" });',
-        1,
-    )
-# Ensure import includes engvpnPrivacyCheck on rebuild
-if "engvpnPrivacyCheck" not in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "engvpnDpi, engvpnWarp,",
-        "engvpnDpi, engvpnWarp, engvpnPrivacyCheck,",
-        1,
-    )
-# Override closed WARP stubs with open engvpnWarp
-if "engvpnWarp(\"create\")" not in text:
-    text = text.replace(
-        '''      case "warpCreate":
-        state.connection.warpProfile = {
-          id: randomUUID().slice(0, 8),
-          createdAt: Date.now(),
-          method: state.connection.warpMethod,
-          status: "local",
-          note: "Локальная заготовка. Для настоящего WARP импортируйте профиль wgcf.",
-        };
-        saveState(state);
-        return snapshot();
-      case "warpImport":
-        state.connection.warpProfile = { ...parseWireGuardIni(body.text || ""), status: "imported", createdAt: Date.now() };
-        saveState(state);
-        return snapshot();''',
-        '''      case "warpCreate": {
-        const wr = await engvpnWarp("create", body);
-        const iniPath = (await import("node:path")).join(DATA, "warp.profile.ini");
-        let ini = "";
-        try { ini = (await import("node:fs")).readFileSync(iniPath, "utf8"); } catch { /* ignore */ }
-        state.connection.warpProfile = { ...parseWireGuardIni(ini || body.text || ""), status: "warp-open", createdAt: Date.now(), note: wr.output || "Cloudflare WARP (open)" };
-        state.connection.warpMode = state.connection.warpMode === "off" ? "proxy" : state.connection.warpMode;
-        saveState(state);
-        return snapshot();
-      }
-      case "warpImport": {
-        await engvpnWarp("import", body);
-        state.connection.warpProfile = { ...parseWireGuardIni(body.text || ""), status: "imported", createdAt: Date.now() };
-        saveState(state);
-        return snapshot();
-      }''',
-        1,
-    )
-# Hook zapret recheck → also apply open DPI when youtube/discord zapret enabled (fail loudly)
-if "engvpnDpi(\"apply\"" not in text:
-    text = text.replace(
-        "    state.network.zapret.lastCheck = Date.now();\n"
-        "    state.network.zapret.checking = false;\n"
-        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена, сервисы возвращены из запасного VPN\" : \"Рабочие прямые пути подтверждены\");\n"
-        "    if (state.vpn.connected) await connect();\n"
-        "    else saveState(state);\n"
-        "    return snapshot();\n"
-        "  }",
-        "    state.network.zapret.lastCheck = Date.now();\n"
-        "    state.network.zapret.checking = false;\n"
-        "    const want = !!(state.network.youtubeZapret || state.network.discordZapret);\n"
-        "    const dpiRes = await engvpnDpi(want ? \"apply\" : \"stop\", { enabled: want, youtube: !!state.network.youtubeZapret, discord: !!state.network.discordZapret });\n"
-        "    state.network.zapret.note = want ? (dpiRes?.output || \"DPI nfqws apply\") : \"DPI stop\";\n"
-        "    ctx.hooks.log(\"info\", want ? \"DPI nfqws: apply\" : \"DPI nfqws: stop\");\n"
-        "    ctx.hooks.log(\"info\", all ? \"Проверка способов завершена + DPI\" : \"Прямые пути + DPI\");\n"
-        "    if (state.vpn.connected) await connect();\n"
-        "    else saveState(state);\n"
-        "    return snapshot();\n"
-        "  }",
-        1,
-    )
-# Honest zapret method note (open nfqws, not proprietary SS strategies)
-if "Подмена пакетов на этом стенде не выполняется" in text:
-    text = text.replace(
-        "Подмена пакетов на этом стенде не выполняется.",
-        "EngVPN: способ выбирает прямой/VPN; реальный mangling — open zapret/nfqws (dpi.sh), не стратегии StealthSurf.",
-    )
-# Wire deviceSet → devices.select + transparent re-apply for selected/exclude
-if "syncDevicesSelect(state)" not in text.split("function deviceSet")[1][:600] if "function deviceSet" in text else True:
-    old_ds = (
-        "  function deviceSet(body) {\n"
-        "    const device = ensureDevice(body);\n"
-        "    if (body.excluded != null) device.excluded = Boolean(body.excluded);\n"
-        "    if (body.route) device.route = body.route;\n"
-        "    if (body.configId) device.configId = body.configId;\n"
-        "    if (Array.isArray(body.bypass)) device.bypass = body.bypass;\n"
-        "    if (body.online != null) device.online = Boolean(body.online);\n"
-        "    saveState(state);\n"
-        "    return snapshot();\n"
-        "  }"
-    )
-    new_ds = (
-        "  async function deviceSet(body) {\n"
-        "    const device = ensureDevice(body);\n"
-        "    if (body.excluded != null) device.excluded = Boolean(body.excluded);\n"
-        "    if (body.route) device.route = body.route;\n"
-        "    if (body.configId) device.configId = body.configId;\n"
-        "    if (Array.isArray(body.bypass)) device.bypass = body.bypass;\n"
-        "    if (body.online != null) device.online = Boolean(body.online);\n"
-        "    saveState(state);\n"
-        "    syncDevicesSelect(state);\n"
-        "    const mode = modeFromRouter(state.router?.mode);\n"
-        "    if (mode === \"selected\" || mode === \"exclude\") {\n"
-        "      await engvpnTransparent(\"apply\", { mode, devices: selectedDeviceIds(state), ...transparentDnsFlags(state) });\n"
-        "    }\n"
-        "    return snapshot();\n"
-        "  }"
-    )
-    if old_ds in text:
-        text = text.replace(old_ds, new_ds, 1)
-        print("patched deviceSet → devices.select sync")
-# Ensure syncDevicesSelect imported even if primary import already existed
-if "syncDevicesSelect" not in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        "hydratePanelSnapshot, syncUpdatesSchedule } from \"./runtime-engvpn.mjs\";",
-        "hydratePanelSnapshot, syncUpdatesSchedule, syncDevicesSelect, selectedDeviceIds, transparentDnsFlags, sampleRouterTraffic, probeCoresHealth } from \"./runtime-engvpn.mjs\";",
-        1,
-    )
-if "sampleRouterTraffic" not in text and "from \"./runtime-engvpn.mjs\"" in text:
-    text = text.replace(
-        '} from "./runtime-engvpn.mjs";',
-        ', sampleRouterTraffic, probeCoresHealth } from "./runtime-engvpn.mjs";',
-        1,
-    )
-    # avoid double-comma if replace landed oddly
-    text = text.replace(",, sampleRouterTraffic", ", sampleRouterTraffic")
-    text = text.replace("{, sampleRouterTraffic", "{ sampleRouterTraffic")
-
-# Zapret toggles: persist immediately; apply DPI in background (Safari "Load failed" on long nfqws install)
-text = text.replace(
-    '            await engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret });\n',
-    '            engvpnDpi(want ? "apply" : "stop", { enabled: want, youtube: !!state.network?.youtubeZapret, discord: !!state.network?.discordZapret }).catch((e) => {\n'
-    '              try { appendLog(state, "warn", `dpi: ${e.message || e}`); } catch { /* ignore */ }\n'
-    '            });\n',
-)
-
-# Tick: idle panels must nearly sleep (dual run.mjs was ~50% CPU on Merlin).
-# When no SSE clients: skip traffic sample + skip broadcast (keep cheap load counters every 10th tick).
-# When clients connected: sample traffic (iptables throttled inside sampleRouterTraffic to ≥10s).
-if "ENGVPN_IDLE_TICK" not in text and "function tick()" in text:
-    old_tick = (
-        "  function tick() {\n"
-        "    const cpu = cpuPercent();\n"
-        "    const free = os.freemem();\n"
-        "    live.load = {\n"
-        "      cpu,\n"
-        "      ramUsed: os.totalmem() - free,\n"
-        "      ramTotal: os.totalmem(),\n"
-        "      proc: process.memoryUsage().rss,\n"
-        "    };\n"
-        "    live.rates = { ...live.window };\n"
-        "    live.history.push({ t: Date.now(), ...live.rates });\n"
-        "    if (live.history.length > 180) live.history.splice(0, live.history.length - 180);\n"
-        "    live.window = emptyBytes();\n"
-        "    broadcast({ type: \"tick\", runtime: runtimeView(), connected: state.vpn.connected, directMode: state.vpn.directMode });\n"
-        "  }"
-    )
-    new_tick = (
-        "  function tick() {\n"
-        "    // ENGVPN_IDLE_TICK: no browser SSE → do almost nothing (fixes Merlin CPU with stray panels)\n"
-        "    const hasClients = !!(live.sse && live.sse.size);\n"
-        "    live._idleTicks = (live._idleTicks || 0) + 1;\n"
-        "    if (!hasClients && (live._idleTicks % 10) !== 0) return;\n"
-        "    const cpu = cpuPercent();\n"
-        "    const free = os.freemem();\n"
-        "    live.load = {\n"
-        "      cpu,\n"
-        "      ramUsed: os.totalmem() - free,\n"
-        "      ramTotal: os.totalmem(),\n"
-        "      proc: process.memoryUsage().rss,\n"
-        "    };\n"
-        "    if (!hasClients) return;\n"
-        "    try {\n"
-        "      const sampled = sampleRouterTraffic(live);\n"
-        "      const proxySum = (live.window.vpnDown + live.window.vpnUp + live.window.directDown + live.window.directUp) || 0;\n"
-        "      if (sampled && proxySum === 0) {\n"
-        "        live.window.vpnDown += sampled.vpnDown;\n"
-        "        live.window.vpnUp += sampled.vpnUp;\n"
-        "        live.window.directDown += sampled.directDown;\n"
-        "        live.window.directUp += sampled.directUp;\n"
-        "        live.session.vpnDown += sampled.vpnDown;\n"
-        "        live.session.vpnUp += sampled.vpnUp;\n"
-        "        live.session.directDown += sampled.directDown;\n"
-        "        live.session.directUp += sampled.directUp;\n"
-        "      } else if (sampled) {\n"
-        "        live.window.directDown = Math.max(live.window.directDown, sampled.directDown);\n"
-        "        live.window.directUp = Math.max(live.window.directUp, sampled.directUp);\n"
-        "      }\n"
-        "    } catch { /* traffic sample best-effort */ }\n"
-        "    live.rates = { ...live.window };\n"
-        "    live.history.push({ t: Date.now(), ...live.rates });\n"
-        "    if (live.history.length > 180) live.history.splice(0, live.history.length - 180);\n"
-        "    live.window = emptyBytes();\n"
-        "    broadcast({ type: \"tick\", runtime: runtimeView(), connected: state.vpn.connected, directMode: state.vpn.directMode });\n"
-        "  }"
-    )
-    if old_tick in text:
-        text = text.replace(old_tick, new_tick, 1)
-        print("patched tick() → ENGVPN_IDLE_TICK + SSE traffic sample")
-elif "sampleRouterTraffic(live)" not in text and "function tick()" in text:
-    old_tick_rates = "    live.rates = { ...live.window };\n    live.history.push({ t: Date.now(), ...live.rates });"
-    new_tick_rates = (
-        "    try {\n"
-        "      if (live.sse && live.sse.size) {\n"
-        "        const sampled = sampleRouterTraffic(live);\n"
-        "        const proxySum = (live.window.vpnDown + live.window.vpnUp + live.window.directDown + live.window.directUp) || 0;\n"
-        "        if (sampled && proxySum === 0) {\n"
-        "          live.window.vpnDown += sampled.vpnDown;\n"
-        "          live.window.vpnUp += sampled.vpnUp;\n"
-        "          live.window.directDown += sampled.directDown;\n"
-        "          live.window.directUp += sampled.directUp;\n"
-        "          live.session.vpnDown += sampled.vpnDown;\n"
-        "          live.session.vpnUp += sampled.vpnUp;\n"
-        "          live.session.directDown += sampled.directDown;\n"
-        "          live.session.directUp += sampled.directUp;\n"
-        "        } else if (sampled) {\n"
-        "          live.window.directDown = Math.max(live.window.directDown, sampled.directDown);\n"
-        "          live.window.directUp = Math.max(live.window.directUp, sampled.directUp);\n"
-        "        }\n"
-        "      }\n"
-        "    } catch { /* traffic sample best-effort */ }\n"
-        "    live.rates = { ...live.window };\n"
-        "    live.history.push({ t: Date.now(), ...live.rates });"
-    )
-    if old_tick_rates in text:
-        text = text.replace(old_tick_rates, new_tick_rates, 1)
-        print("patched tick() → sampleRouterTraffic (SSE-gated)")
-
-# Soft-probe cores after boot (libresolv / missing) without toasting Load failed
-if "probeCoresHealth" not in text.split("async function boot()")[1][:800]:
-    boot_needle = "    refreshPublicIp().catch(() => {});\n"
-    if boot_needle in text and "probeCoresHealth(state)" not in text:
-        text = text.replace(
-            boot_needle,
-            "    refreshPublicIp().catch(() => {});\n"
-            "    probeCoresHealth(state).catch(() => {});\n",
-            1,
-        )
-        print("patched boot() → probeCoresHealth")
-
-# Expose download progress on runtime snapshot + poll endpoint
-if "download: getDownloadProgress()" not in text and "function runtimeView()" in text:
-    text = text.replace(
-        "      cores: coreStatus(state),\n",
-        "      cores: coreStatus(state),\n"
-        "      download: getDownloadProgress(),\n",
-        1,
-    )
-    print("patched runtimeView() → download progress")
-
-# Refresh state.version from VERSION file on boot
-if "readInstalledVersion()" not in text.split("async function boot()")[1][:900]:
-    boot_ver = "    refreshPublicIp().catch(() => {});\n"
-    if boot_ver in text:
-        text = text.replace(
-            boot_ver,
-            "    try {\n"
-            "      const __ver = readInstalledVersion();\n"
-            "      if (__ver) state.version = __ver;\n"
-            "    } catch { /* ignore */ }\n"
-            + boot_ver,
-            1,
-        )
-        print("patched boot() → readInstalledVersion")
-
-# fetchCore / updateGeo emit SSE progress for panel bar
-if "setDownloadProgress({" not in text and "async function fetchCore(id)" in text:
-    text = text.replace(
-        '''  async function fetchCore(id) {
-    const result = await downloadCore(id, (line) => ctx.hooks.log("info", line));
-    state.engine.cores[id] = { version: result.version, note: result.tag, bytes: result.bytes, at: Date.now() };
-    saveState(state, true);
-    ctx.hooks.log("info", `${ENGINES[id].title} ${result.version} скачан`);
-    return snapshot();
-  }''',
-        '''  async function fetchCore(id) {
-    const emit = (info) => {
-      const base = typeof info === "string"
-        ? { phase: /распак|установ/i.test(info) ? "install" : /скач|зеркал|напрям/i.test(info) ? "download" : "lookup", label: info }
-        : (info || {});
-      const prog = setDownloadProgress({ id, kind: "core", ...base });
-      broadcast({ type: "progress", ...prog });
-      if (base.label) ctx.hooks.log("info", base.label);
-    };
-    emit({ phase: "lookup", percent: 0, label: `смотрю релиз ${id}…` });
-    try {
-      const result = await downloadCore(id, emit);
-      state.engine.cores[id] = { version: result.version, note: result.tag, bytes: result.bytes, at: Date.now() };
-      saveState(state, true);
-      ctx.hooks.log("info", `${ENGINES[id].title} ${result.version} скачан`);
-      return snapshot();
-    } finally {
-      setDownloadProgress({ done: true });
-      broadcast({ type: "progress", done: true, id, kind: "core" });
-    }
-  }''',
-        1,
-    )
-    print("patched fetchCore → progress SSE")
-
-if "kind: \"geo\"" not in text and "async function updateGeo(customUrl)" in text:
-    old_geo = '''  async function updateGeo(customUrl) {
-    mkdirSync(GEO_DIR, { recursive: true });
-    const base = state.engine.geoSource === "custom" && (customUrl || state.engine.geoUrl)
-      ? (customUrl || state.engine.geoUrl).replace(/\\/$/, "")
-      : "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
-    const files = state.engine.geoSource === "custom" && customUrl && !customUrl.endsWith("/")
-      ? [customUrl]
-      : [`${base}/geosite.dat`, `${base}/geoip.dat`];
-    let geosite = state.engine.geo.geosite;
-    let geoip = state.engine.geo.geoip;
-    for (const url of files) {
-      const name = url.split("/").pop().split("?")[0] || "geo.dat";
-      const response = await fetch(url, { signal: AbortSignal.timeout(30000), headers: { "User-Agent": "stealthsurf-alfa" } });
-      if (!response.ok) throw new Error(`${name}: ${response.status}`);
-      const buf = Buffer.from(await response.arrayBuffer());
-      writeFileSync(join(GEO_DIR, name), buf);
-      if (name.includes("geosite")) geosite = buf.length;
-      if (name.includes("geoip")) geoip = buf.length;
-    }
-    state.engine.geo = { geosite, geoip, updatedAt: Date.now() };
-    saveState(state, true);
-    return state.engine.geo;
-  }'''
-    # UA may already be engvpn after replace
-    old_geo2 = old_geo.replace("stealthsurf-alfa", "engvpn")
-    new_geo = '''  async function updateGeo(customUrl) {
-    mkdirSync(GEO_DIR, { recursive: true });
-    const base = state.engine.geoSource === "custom" && (customUrl || state.engine.geoUrl)
-      ? (customUrl || state.engine.geoUrl).replace(/\\/$/, "")
-      : "https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download";
-    const files = state.engine.geoSource === "custom" && customUrl && !customUrl.endsWith("/")
-      ? [customUrl]
-      : [`${base}/geosite.dat`, `${base}/geoip.dat`];
-    let geosite = state.engine.geo.geosite;
-    let geoip = state.engine.geo.geoip;
-    const emit = (info) => {
-      const prog = setDownloadProgress({ id: "geo", kind: "geo", ...info });
-      broadcast({ type: "progress", ...prog });
-    };
-    emit({ phase: "download", percent: 0, label: "гео-базы…", received: 0, total: 0 });
-    try {
-      let done = 0;
-      for (const url of files) {
-        const name = url.split("/").pop().split("?")[0] || "geo.dat";
-        emit({ phase: "download", label: `скачиваю ${name}`, percent: Math.round((done / files.length) * 100) });
-        const response = await fetch(url, { signal: AbortSignal.timeout(120000), headers: { "User-Agent": "engvpn" } });
-        if (!response.ok) throw new Error(`${name}: ${response.status}`);
-        const total = Number(response.headers.get("content-length")) || 0;
-        let buf;
-        if (response.body && typeof response.body.getReader === "function") {
-          const reader = response.body.getReader();
-          const chunks = [];
-          let received = 0;
-          for (;;) {
-            const { done: d, value } = await reader.read();
-            if (d) break;
-            chunks.push(Buffer.from(value));
-            received += value.byteLength;
-            const pctFile = total > 0 ? received / total : 0;
-            emit({
-              phase: "download",
-              label: name,
-              received,
-              total,
-              percent: Math.min(99, Math.round(((done + pctFile) / files.length) * 100)),
-            });
-          }
-          buf = Buffer.concat(chunks);
-        } else {
-          buf = Buffer.from(await response.arrayBuffer());
-        }
-        writeFileSync(join(GEO_DIR, name), buf);
-        if (name.includes("geosite")) geosite = buf.length;
-        if (name.includes("geoip")) geoip = buf.length;
-        done += 1;
-        emit({ phase: "install", label: `${name} сохранён`, percent: Math.round((done / files.length) * 100), received: buf.length, total: buf.length });
-      }
-      state.engine.geo = { geosite, geoip, updatedAt: Date.now() };
-      saveState(state, true);
-      return state.engine.geo;
-    } finally {
-      setDownloadProgress({ done: true });
-      broadcast({ type: "progress", done: true, id: "geo", kind: "geo" });
-    }
-  }'''
-    if old_geo2 in text:
-        text = text.replace(old_geo2, new_geo, 1)
-        print("patched updateGeo → progress SSE")
-    elif old_geo in text:
-        text = text.replace(old_geo, new_geo, 1)
-        print("patched updateGeo → progress SSE")
-
-# Poll endpoint for download progress (panel fallback when SSE lags)
-if 'case "downloadProgress":' not in text:
-    text = text.replace(
-        '      case "downloadCore":\n',
-        '      case "downloadProgress":\n'
-        '      case "engvpnDownloadProgress":\n'
-        '        return { ok: true, progress: getDownloadProgress() };\n'
-        '      case "downloadCore":\n',
-        1,
-    )
-    print("patched invoke → downloadProgress")
-
-# Live update action log (panel polls while engvpnd update runs detached)
-if 'case "updateActionLog":' not in text:
-    text = text.replace(
-        '      case "downloadProgress":\n',
-        '      case "updateActionLog":\n'
-        '      case "engvpnUpdateActionLog":\n'
-        '        return getUpdateActionLog();\n'
-        '      case "downloadProgress":\n',
-        1,
-    )
-    print("patched invoke → updateActionLog")
-elif 'case "engvpnUpdateActionLog":' not in text and 'case "updateActionLog":' in text:
-    text = text.replace(
-        '      case "updateActionLog":\n',
-        '      case "updateActionLog":\n'
-        '      case "engvpnUpdateActionLog":\n',
-        1,
-    )
-
-
-rtm.write_text(text)
-print("patched runtime.mjs EngVPN commands")
-# dokodemo inbound injection into xray plan when transparent mode != off
-eng = rt / "lib/engines.mjs"
-et = eng.read_text()
-et = et.replace("stealthsurf-alfa", "engvpn")
-# Expose softHidden / broken from probeCoresHealth in panel snapshot
-if "softHidden:" not in et:
-    et = et.replace(
-        '''      note: state.engine.cores?.[id]?.note || "",
-      version: state.engine.cores?.[id]?.version || "",
-    };''',
-        '''      note: state.engine.cores?.[id]?.note || "",
-      version: state.engine.cores?.[id]?.version || "",
-      broken: !!state.engine.cores?.[id]?.broken,
-      softHidden: !!state.engine.cores?.[id]?.softHidden,
-      brokenReason: state.engine.cores?.[id]?.brokenReason || "",
-    };''',
-        1,
-    )
-# Ferrum open slot: download Xray-core as ferrum binary (musl/libresolv-aware loop)
-if 'if (id === "ferrum")' in et and "open-xray-reality" not in et:
-    et = et.replace(
-        '''export async function downloadCore(id, onProgress) {
-  if (id === "ferrum") {
-    throw new Error("Ferrum — ядро StealthSurf. Его нет в открытых релизах, положите бинарник в data/cores/ferrum");
-  }
-  const spec = ENGINES[id];
-  if (!spec?.repo) throw new Error("Неизвестное ядро");
-  onProgress?.(`смотрю релиз ${spec.repo}`);
-  const release = await githubLatest(spec.repo);
-  const assets = id === "sing-box"
-    ? pickSingBoxAssets(release)
-    : [pickCoreAsset(id, release)].filter(Boolean);''',
-        '''export async function downloadCore(id, onProgress) {
-  const spec = ENGINES[id];
-  if (!spec?.repo) throw new Error("Неизвестное ядро");
-  // Ferrum slot: open Xray-core (Reality-capable), saved as data/cores/ferrum
-  const assetId = id === "ferrum" ? "xray" : id;
-  onProgress?.(id === "ferrum" ? `Ferrum-слот: скачиваю открытый Xray (${spec.repo})` : `смотрю релиз ${spec.repo}`);
-  const release = await githubLatest(spec.repo);
-  const assets = assetId === "sing-box"
-    ? pickSingBoxAssets(release)
-    : [pickCoreAsset(assetId, release)].filter(Boolean);''',
-    )
-    print("patched downloadCore → open Ferrum + musl candidates")
-# Ferrum zip member is "xray" — unpack into data/cores/ferrum (not look for member "ferrum")
-if "async function unpackCore(id, assetName, tmp, dest)" in et and 'id === "ferrum" ? "xray"' not in et:
-    _old_unpack = '''async function unpackCore(id, assetName, tmp, dest) {
-  const spec = ENGINES[id];
-  if (assetName.endsWith(".zip")) {
-    let unzipped = false;
-    try {
-      await execFile("unzip", ["-o", "-j", tmp, spec.bin, "-d", CORE_DIR], { timeout: 60000 });
-      unzipped = true;
-    } catch {
-      writeFileSync(dest, extractZipMember(readFileSync(tmp), spec.bin));
-      return;
-    }
-    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
-    return;
-  }
-  if (assetName.endsWith(".tar.gz")) {
-    let last = "";
-    for (const args of [
-      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${spec.bin}`],
-      ["-xzf", tmp, "-C", CORE_DIR],
-    ]) {
-      try {
-        await execFile("tar", args, { timeout: 60000 });
-        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, spec.bin), dest);
-        if (existsSync(dest)) return;
-      } catch (error) {
-        last = error.message || String(error);
-      }
-    }
-    throw new Error(`tar не смог распаковать: ${last || "бинарник не найден"}`);
-  }'''
-    _new_unpack = '''async function unpackCore(id, assetName, tmp, dest) {
-  const spec = ENGINES[id];
-  // Ferrum open slot: Xray zip member is "xray" → place as data/cores/ferrum
-  const member = id === "ferrum" ? "xray" : (spec?.bin || id);
-  if (assetName.endsWith(".zip")) {
-    let unzipped = false;
-    try {
-      await execFile("unzip", ["-o", "-j", tmp, member, "-d", CORE_DIR], { timeout: 60000 });
-      unzipped = true;
-    } catch {
-      writeFileSync(dest, extractZipMember(readFileSync(tmp), member));
-      return;
-    }
-    if (unzipped && !existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
-    return;
-  }
-  if (assetName.endsWith(".tar.gz")) {
-    let last = "";
-    for (const args of [
-      ["-xzf", tmp, "-C", CORE_DIR, "--strip-components=1", "--wildcards", `*/${member}`],
-      ["-xzf", tmp, "-C", CORE_DIR],
-    ]) {
-      try {
-        await execFile("tar", args, { timeout: 60000 });
-        if (!existsSync(dest)) moveIntoPlace(findNamedFile(CORE_DIR, member), dest);
-        if (existsSync(dest)) return;
-      } catch (error) {
-        last = error.message || String(error);
-      }
-    }
-    throw new Error(`tar не смог распаковать: ${last || "бинарник не найден"}`);
-  }'''
-    if _old_unpack in et:
-        et = et.replace(_old_unpack, _new_unpack, 1)
-        print("patched unpackCore → Ferrum extracts xray member as ferrum")
-    else:
-        print("WARN: unpackCore Ferrum member patch skipped (shape changed)")
-elif 'id === "ferrum" ? "xray"' in et:
-    print("unpackCore already has Ferrum→xray member mapping")
-# Stream core downloads with byte/% progress (panel + install terminal)
-if "response.body.getReader" not in et and "async function downloadToFile" in et:
-    et = et.replace(
-        '''async function downloadToFile(url, dest, onProgress) {
-  let last = "";
-  mkdirSync(dirname(dest), { recursive: true });
-  for (const candidate of mirrorUrls(url)) {
-    try {
-      onProgress?.(`скачиваю ${candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую"}…`);
-      const response = await fetch(candidate, {
-        headers: { "User-Agent": FETCH_UA },
-        signal: AbortSignal.timeout(DOWNLOAD_MS),
-        redirect: "follow",
-      });
-      if (!response.ok) {
-        last = `HTTP ${response.status}`;
-        continue;
-      }
-      const buf = Buffer.from(await response.arrayBuffer());
-      if (!buf.length) {
-        last = "пустой ответ";
-        continue;
-      }
-      writeFileSync(dest, buf);
-      return buf.length;
-    } catch (error) {
-      last = error.name === "TimeoutError" || error.name === "AbortError"
-        ? "таймаут загрузки"
-        : (error.message || String(error));
-    }
-  }
-  throw new Error(`не удалось скачать файл: ${last}`);
-}''',
-        '''async function downloadToFile(url, dest, onProgress) {
-  let last = "";
-  mkdirSync(dirname(dest), { recursive: true });
-  for (const candidate of mirrorUrls(url)) {
-    try {
-      const via = candidate.includes("ghfast") || candidate.includes("ghproxy") ? "через зеркало" : "напрямую";
-      onProgress?.({ phase: "download", label: `скачиваю ${via}…`, percent: 0, received: 0, total: 0 });
-      const response = await fetch(candidate, {
-        headers: { "User-Agent": FETCH_UA },
-        signal: AbortSignal.timeout(DOWNLOAD_MS),
-        redirect: "follow",
-      });
-      if (!response.ok) {
-        last = `HTTP ${response.status}`;
-        continue;
-      }
-      const total = Number(response.headers.get("content-length")) || 0;
-      let buf;
-      if (response.body && typeof response.body.getReader === "function") {
-        const reader = response.body.getReader();
-        const chunks = [];
-        let received = 0;
-        let lastPct = -1;
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          chunks.push(Buffer.from(value));
-          received += value.byteLength;
-          const percent = total > 0 ? Math.min(99, Math.floor((received / total) * 100)) : 0;
-          if (percent >= lastPct + 2 || !total) {
-            lastPct = percent;
-            onProgress?.({ phase: "download", label: via, received, total, percent });
-          }
-        }
-        buf = Buffer.concat(chunks);
-      } else {
-        buf = Buffer.from(await response.arrayBuffer());
-      }
-      if (!buf.length) {
-        last = "пустой ответ";
-        continue;
-      }
-      writeFileSync(dest, buf);
-      onProgress?.({ phase: "download", label: "скачано", received: buf.length, total: buf.length || total, percent: 100 });
-      return buf.length;
-    } catch (error) {
-      last = error.name === "TimeoutError" || error.name === "AbortError"
-        ? "таймаут загрузки"
-        : (error.message || String(error));
-    }
-  }
-  throw new Error(`не удалось скачать файл: ${last}`);
-}''',
-        1,
-    )
-    print("patched downloadToFile → streamed progress")
-if "engvpn-transparent" not in et:
-    marker = "  if (!tunnelOnly) {\n    inbounds.push({\n      tag: \"http-in\","
-    doko = '''  // EngVPN: dokodemo for iptables REDIRECT/TPROXY when data/transparent.conf mode != off
-  try {
-    const fs = await import("node:fs");
-    const path = await import("node:path");
-    const confPath = path.join(DATA, "transparent.conf");
-    // DATA may be unavailable in this scope — use GEO_DIR parent
-    const dataDir = path.join(GEO_DIR, "..");
-    const cpath = path.join(dataDir, "transparent.conf");
-    if (fs.existsSync(cpath)) {
-      const conf = Object.fromEntries(
-        fs.readFileSync(cpath, "utf8").split("\\n").map((l) => l.split("=")).filter((p) => p.length === 2)
-      );
-      if (conf.mode && conf.mode !== "off") {
-        const tpPort = Number(conf.port || 12345);
-        const useTp = conf.method === "tproxy";
-        inbounds.push({
-          tag: "engvpn-transparent",
-          listen: "0.0.0.0",
-          port: tpPort,
-          protocol: "dokodemo-door",
-          settings: { network: "tcp,udp", followRedirect: true },
-          sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
-          streamSettings: { sockopt: { tproxy: useTp ? "tproxy" : "off" } },
-        });
-      }
-    }
-  } catch { /* ignore */ }
-  if (!tunnelOnly) {
-    inbounds.push({
-      tag: "http-in",'''
-    # xrayPlan is sync function — can't use await import. Use sync fs.
-    doko_sync = '''  // EngVPN: dokodemo for iptables REDIRECT/TPROXY when transparent.conf mode != off
-  try {
-    const confPath = join(DATA, "transparent.conf");
-    if (existsSync(confPath)) {
-      const conf = Object.fromEntries(
-        readFileSync(confPath, "utf8").split("\\n").map((l) => l.split("=")).filter((p) => p.length === 2)
-      );
-      if (conf.mode && conf.mode !== "off") {
-        const tpPort = Number(conf.port || 12345);
-        const useTp = conf.method === "tproxy";
-        inbounds.push({
-          tag: "engvpn-transparent",
-          listen: "0.0.0.0",
-          port: tpPort,
-          protocol: "dokodemo-door",
-          settings: { network: "tcp,udp", followRedirect: true },
-          sniffing: { enabled: true, destOverride: ["http", "tls", "quic"] },
-          streamSettings: { sockopt: { tproxy: useTp ? "tproxy" : "off" } },
-        });
-      }
-    }
-  } catch { /* ignore */ }
-  if (!tunnelOnly) {
-    inbounds.push({
-      tag: "http-in",'''
-    if marker not in et:
-        print("WARN: dokodemo inject marker missing")
-    else:
-        et = et.replace(marker, doko_sync, 1)
-        # Ensure imports
-        if "existsSync" not in et.split("from \"node:fs\"")[0] + et.split("from \"node:fs\"")[1][:200]:
-            et = et.replace(
-                'import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync, statSync, createWriteStream } from "node:fs";',
-                'import { mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, readdirSync, statSync, createWriteStream } from "node:fs";',
-            )
-# SmartDNS domain/IP bypass: merge data/run/bypass.routing.json into engine rules
-if "smartdnsBypassRules" not in et:
-    helper = r'''
-function smartdnsBypassRules() {
-  try {
-    const path = join(DATA, "run", "bypass.routing.json");
-    if (!existsSync(path)) return [];
-    const doc = JSON.parse(readFileSync(path, "utf8"));
-    if (!doc || doc.enabled === false) return [];
-    const domains = [];
-    const ips = [];
-    for (const r of doc.rules || []) {
-      for (const d of r.domain || []) {
-        const s = String(d).replace(/^domain:/, "").replace(/^full:/, "").trim();
-        if (s) domains.push(s);
-      }
-      for (const ip of r.ip || []) if (ip) ips.push(String(ip));
-    }
-    const domFile = join(DATA, "run", "bypass.domains");
-    const ipFile = join(DATA, "run", "bypass.ips");
-    if (existsSync(domFile)) {
-      for (const line of readFileSync(domFile, "utf8").split("\n")) {
-        const t = line.trim();
-        if (t && !t.startsWith("#")) domains.push(t);
-      }
-    }
-    if (existsSync(ipFile)) {
-      for (const line of readFileSync(ipFile, "utf8").split("\n")) {
-        const t = line.trim();
-        if (t && !t.startsWith("#")) ips.push(t);
-      }
-    }
-    const uniqDom = [...new Set(domains)];
-    const uniqIp = [...new Set(ips)];
-    if (!uniqDom.length && !uniqIp.length) return [];
-    return [{ id: "smartdns-bypass", action: "direct", reason: "SmartDNS bypass", match: { suffixes: uniqDom, cidrs: uniqIp } }];
-  } catch {
-    return [];
-  }
+stage_bin_for_arch() {
+	arch=$1
+	case $arch in
+	merlin-aarch64) src=$BIN_DIR/engvpn-daemon-aarch64 ;;
+	merlin-armv7) src=$BIN_DIR/engvpn-daemon-armv7 ;;
+	merlin-x86_64) src=$BIN_DIR/engvpn-daemon-x86_64 ;;
+	*) src=$BIN_DIR/engvpn-daemon-x86_64 ;;
+	esac
+	cp -a "$src" "$STAGE/sbin/engvpn-daemon"
+	chmod 0755 "$STAGE/sbin/engvpn-daemon"
 }
 
-'''
-    if "function domainStrategy(state)" in et:
-        et = et.replace("function domainStrategy(state)", helper + "function domainStrategy(state)", 1)
-    et = et.replace(
-        "const rules = tunnelOnly ? [] : ruleList(state).map(xrayRule).filter(Boolean);",
-        "const rules = tunnelOnly ? [] : [...smartdnsBypassRules(), ...ruleList(state)].map(xrayRule).filter(Boolean);",
-        1,
-    )
-    et = et.replace(
-        "const rules = tunnelOnly || plan.reject ? [] : ruleList(state).map(singRule).filter(Boolean);",
-        "const rules = tunnelOnly || plan.reject ? [] : [...smartdnsBypassRules(), ...ruleList(state)].map(singRule).filter(Boolean);",
-        1,
-    )
-    et = et.replace(
-        'const rules = tunnelOnly ? ["  - MATCH,PROXY"] : ruleList(state).flatMap(mihomoRule);',
-        'const rules = tunnelOnly ? ["  - MATCH,PROXY"] : [...smartdnsBypassRules(), ...ruleList(state)].flatMap(mihomoRule);',
-        1,
-    )
-    print("patched engines.mjs SmartDNS bypass merge")
-eng.write_text(et)
-print("patched engines.mjs")
-PY
-
-# Manifest of all packaged files (relative to prefix)
-(
-	cd "$STAGE"
-	find . -type f -o -type l | sed 's|^\./||' | sort
-) >"$STAGE/share/engvpn/files"
-
-# Ensure files list includes itself (already does via find after write — rewrite once more)
-(
-	cd "$STAGE"
-	find . -type f -o -type l | sed 's|^\./||' | sort
-) >"$STAGE/share/engvpn/files"
-
-# Reproducible archives: fixed mtime + gzip -n so rebuild SHA matches the feed.
 pack_one() {
 	arch=$1
+	stage_bin_for_arch "$arch"
+	(
+		cd "$STAGE"
+		find . -type f -o -type l | sed 's|^\./||' | sort
+	) >"$STAGE/share/engvpn/files"
 	name="engvpn_${VERSION}_${arch}.tar.gz"
-	# GNU tar: stable order/ownership; BusyBox fallback keeps gzip -n only.
 	if tar --help 2>&1 | grep -q -- '--mtime'; then
 		tar -C "$STAGE" --sort=name --mtime='UTC 2020-01-01' --owner=0 --group=0 --numeric-owner -cf - . |
 			gzip -n >"$OUT/$name"
@@ -1452,7 +175,7 @@ pack_one() {
 	echo "$arch $name $sum $size"
 }
 
-echo "Building EngVPN $VERSION packages…"
+echo "Packaging EngVPN $VERSION…"
 A64=$(pack_one merlin-aarch64)
 A7=$(pack_one merlin-armv7)
 X86=$(pack_one merlin-x86_64)
@@ -1464,7 +187,6 @@ size7=$(echo "$A7" | awk '{ print $4 }')
 shax=$(echo "$X86" | awk '{ print $3 }')
 sizex=$(echo "$X86" | awk '{ print $4 }')
 
-# Minisign: sign archives when secret key is available
 MINISIGN_KEY=${ENGVPN_MINISIGN_KEY:-$ROOT/keys/engvpn.minisign.key}
 sign_one() {
 	arch=$1
@@ -1499,11 +221,8 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — Stop Merlin V8 Fatal (exit 133) on Diagnostics: isolated proc-sample child, capped /proc, GC flags (--no-concurrent-sweeping), 10s poll/cache; faster keepalive */1 + 2s respawn; reclaim stale supervisor lockdir."
+RELEASE_NOTES="EngVPN $VERSION — полная замена Node-панели на Rust engvpn-daemon (musl aarch64); без V8; Diagnostics /proc без Fatal; CLI engvpnd без Node; www UI сохранён; shell transparent/DPI/WARP."
 
-# Committed / published feed MUST use GitHub release HTTPS URLs only.
-# Never write file:// or build-host paths into latest.json (that broke routers on 0.5.17).
-# Use spaces only (no tabs): older merlin.sh/update.sh sed matched /^  "version"/.
 write_release_feed() {
 	_dest=$1
 	cat >"$_dest" <<EOF
@@ -1538,7 +257,6 @@ FEED=$ROOT/feed/latest.json
 write_release_feed "$FEED"
 write_release_feed "$ROOT/feed/latest.release.json"
 
-# Optional local smoke feed (gitignored) — never commit this file.
 LOCAL_FEED=$ROOT/feed/latest.local.json
 cat >"$LOCAL_FEED" <<EOF
 {
@@ -1567,10 +285,8 @@ cat >"$LOCAL_FEED" <<EOF
 }
 EOF
 
-# Guard: committed feed must never ship build-machine paths.
 if grep -E 'file://|/agent/repos/|"url":[[:space:]]*"/' "$FEED" >/dev/null 2>&1; then
 	echo "build-package: REFUSING to leave local/file paths in $FEED" >&2
-	grep -nE 'file://|/agent/repos/|"url":' "$FEED" >&2 || true
 	exit 1
 fi
 case "$(grep -oE '"url":[[:space:]]*"[^"]+"' "$FEED" | head -1)" in
@@ -1583,4 +299,5 @@ esac
 
 echo "Wrote $FEED (+ latest.release.json; local smoke → $LOCAL_FEED)"
 ls -la "$OUT"
+file "$BIN_DIR"/* 2>/dev/null || true
 echo "Done."

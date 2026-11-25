@@ -33,6 +33,7 @@ SHARE=$(cd "${argv0%/*}/../share/engvpn" 2>/dev/null && pwd -P) || {
 }
 PREFIX=${SHARE%/share/engvpn}
 RUNTIME=$SHARE/runtime
+DAEMON_BIN=$PREFIX/sbin/engvpn-daemon
 DATA_DIR=${ENGVPN_DATA_DIR:-$PREFIX/data}
 PORT=${ENGVPN_PORT:-8790}
 # Same per-prefix volatile dir as service.sh (never the global /tmp/engvpn-panel.pid —
@@ -59,8 +60,8 @@ usage() {
 	cat <<EOF
 Usage: engvpnd <command> [options]
 
-  serve [--data-dir DIR]       Start the EngVPN panel (foreground)
-  start                        Start panel via service.sh (supervisor + node)
+  serve [--data-dir DIR]       Start the EngVPN panel (foreground, Rust engvpn-daemon)
+  start                        Start panel via service.sh (supervisor + engvpn-daemon)
   set-password [--data-dir DIR]
                                Read panel password from stdin; store pbkdf2 hash
   status | st                  Print running / stopped and port
@@ -102,35 +103,27 @@ Usage: engvpnd <command> [options]
 EOF
 }
 
-resolve_node() {
-	if [ -n "${ENGVPN_NODE:-}" ] && [ -x "$ENGVPN_NODE" ]; then
-		echo "$ENGVPN_NODE"
-		return 0
-	fi
-	if [ -f "$PREFIX/.node-bin" ]; then
-		saved=$(cat "$PREFIX/.node-bin" 2>/dev/null)
-		[ -x "$saved" ] && echo "$saved" && return 0
-	fi
-	for c in /opt/bin/node /opt/bin/nodejs \
-		"$(command -v node 2>/dev/null)" \
-		/usr/bin/node /usr/local/bin/node; do
-		[ -n "$c" ] && [ -x "$c" ] && echo "$c" && return 0
-	done
-	return 1
-}
-
-remember_node() {
-	node=$1
-	[ -n "$node" ] || return 0
-	printf '%s\n' "$node" >"$PREFIX/.node-bin" 2>/dev/null || true
-}
-
 ensure_data() {
 	mkdir -p "$DATA_DIR" || return 1
 	chmod 700 "$DATA_DIR" 2>/dev/null || true
-	if [ ! -e "$RUNTIME/data" ]; then
-		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || mkdir -p "$RUNTIME/data"
+}
+
+resolve_daemon() {
+	if [ -n "${ENGVPN_DAEMON:-}" ] && [ -x "$ENGVPN_DAEMON" ]; then
+		echo "$ENGVPN_DAEMON"
+		return 0
 	fi
+	if [ -x "$DAEMON_BIN" ]; then
+		echo "$DAEMON_BIN"
+		return 0
+	fi
+	# Dev/smoke: binary next to engvpnd or on PATH
+	if [ -x "$PREFIX/sbin/engvpn-daemon" ]; then
+		echo "$PREFIX/sbin/engvpn-daemon"
+		return 0
+	fi
+	command -v engvpn-daemon 2>/dev/null && return 0
+	return 1
 }
 
 alive_pid() {
@@ -142,34 +135,22 @@ cmd_set_password() {
 		echo "engvpnd: cannot create $DATA_DIR" >&2
 		exit 1
 	}
-	node=$(resolve_node) || {
-		echo "engvpnd: Node.js required for set-password (Entware: opkg install node)" >&2
+	daemon=$(resolve_daemon) || {
+		echo "engvpnd: missing engvpn-daemon binary at $DAEMON_BIN" >&2
 		exit 1
 	}
-	remember_node "$node"
-	"$node" "$SHARE/set-password.mjs" --data-dir "$DATA_DIR" || exit $?
-	# Password replaces open LAN access from a skip-password install.
+	"$daemon" --data-dir "$DATA_DIR" set-password || exit $?
 	rm -f "$DATA_DIR/open-panel" 2>/dev/null || true
 }
 
 cmd_serve() {
 	ensure_data || exit 1
-	node=$(resolve_node) || {
-		echo "engvpnd: Node.js required (Entware: opkg install node)" >&2
-		exit 1
-	}
-	remember_node "$node"
-	[ -f "$RUNTIME/run.mjs" ] || {
-		echo "engvpnd: missing runtime at $RUNTIME" >&2
+	daemon=$(resolve_daemon) || {
+		echo "engvpnd: missing engvpn-daemon (Rust panel) at $DAEMON_BIN" >&2
 		exit 1
 	}
 	trap '' HUP
-	cd "$RUNTIME" || exit 1
-	if [ ! -d "$RUNTIME/data" ]; then
-		ln -sfn "$DATA_DIR" "$RUNTIME/data" 2>/dev/null || true
-	fi
-	# Exclusive panel lock. Prefer flock (held across exec into Node). Also create
-	# PANEL_LOCK.d so kill-strays can see a live panel even if Node closes fd 9.
+	# Exclusive panel lock (held across exec into engvpn-daemon).
 	PANEL_LOCK=$DATA_DIR/.panel.lock
 	: >>"$PANEL_LOCK" 2>/dev/null || true
 	if type flock >/dev/null 2>&1; then
@@ -184,26 +165,15 @@ cmd_serve() {
 	else
 		echo $$ >"$PANEL_LOCK.d/pid" 2>/dev/null || true
 	fi
-	# Durable marker (flock may be dropped if Node closes inherited fds)
 	rm -rf "$PANEL_LOCK.d" 2>/dev/null || true
 	mkdir -p "$PANEL_LOCK.d" 2>/dev/null || true
 	printf '%s\n' "$$" >"$PANEL_LOCK.d/pid" 2>/dev/null || true
-	# Record panel pid into transparent state for rule replay ownership
 	export ENGVPN_TRANSPARENT_PID=$$
 	export ENGVPN_PANEL_LOCK="$PANEL_LOCK"
+	export ENGVPN_PID_FILE="$PIDFILE"
 	printf '%s\n' "$$" >"$PIDFILE" 2>/dev/null || true
-	# Merlin aarch64 Entware Node: concurrent GC sweeper can Fatal
-	# (DiscardSystemPages → exit 133) under Diagnostics memory pressure.
-	# Cap old-space + disable concurrent / background GC when this node accepts the flags.
-	_gc_ok=$PREFIX/.node-gc-ok
-	_node_opts="${ENGVPN_NODE_OPTIONS:---max-old-space-size=96}"
-	export NODE_OPTIONS="$_node_opts"
-	if [ -f "$_gc_ok" ] || "$node" --max-old-space-size=96 --no-concurrent-sweeping --single-threaded-gc -e 'process.exit(0)' >/dev/null 2>&1; then
-		touch "$_gc_ok" 2>/dev/null || true
-		# exec: same PID becomes node — supervisor child tracking stays correct
-		exec "$node" --max-old-space-size=96 --no-concurrent-sweeping --single-threaded-gc "$RUNTIME/run.mjs"
-	fi
-	exec "$node" "$RUNTIME/run.mjs"
+	# exec: same PID becomes engvpn-daemon — supervisor child tracking stays correct
+	exec "$daemon" --data-dir "$DATA_DIR" --port "$PORT" serve
 }
 
 cmd_status() {
@@ -213,7 +183,9 @@ cmd_status() {
 	if alive_pid "$pid"; then
 		panel="running pid=$pid"
 	else
-		extra=$(ps w 2>/dev/null | awk -v rt="$RUNTIME" '/[r]un\.mjs/ && index($0, rt) { print $1; exit }')
+		extra=$(ps w 2>/dev/null | awk -v bin="$DAEMON_BIN" '
+			index($0, "engvpn-daemon") && (index($0, bin) || index($0, "serve")) { print $1; exit }
+		')
 		[ -n "$extra" ] && panel="running pid=$extra"
 	fi
 	tp=inactive

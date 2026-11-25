@@ -12,7 +12,7 @@
 # ENGVPN_SKIP_PASSWORD=1 skips the password (open LAN panel, no login).
 #
 # Open reimplementation — does not ship StealthSurf proprietary binaries.
-# Requires Entware Node.js for the panel runtime (opkg install node).
+# Panel runtime: static engvpn-daemon (Rust). Node.js is NOT required.
 #
 # Progress: prints [n/N] stages (RU). On failure: stage name + reason, exit 1.
 # Non-interactive: ENGVPN_PASSWORD, ENGVPN_PREFIX, ENGVPN_LOCAL_PACKAGE, ENGVPN_FEED, …
@@ -757,9 +757,11 @@ tar -xzOf "$archive" ./share/engvpn/install.sh >"$WORK/install.sh" ||
 	fail "в пакете нет install.sh"
 chmod +x "$WORK/install.sh"
 
-# Hint: Node is required at runtime
-if ! { [ -x /opt/bin/node ] || command -v node >/dev/null 2>&1; }; then
-	echo "Примечание: панели нужен Node.js (Entware: opkg update && opkg install node)"
+# Hint: Rust panel binary ships in the package (no Entware Node)
+if [ -x "${PREFIX:-}/sbin/engvpn-daemon" ] || [ -x /jffs/addons/engvpn/sbin/engvpn-daemon ]; then
+	:
+else
+	echo "Примечание: после установки панель — sbin/engvpn-daemon (Rust), Node не нужен"
 fi
 
 trap ':' INT TERM HUP

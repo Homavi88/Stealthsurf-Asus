@@ -148,3 +148,28 @@ jobs:
           grep -q 'tun_table=251' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q 'dnsmasq_strip_addon_block' /tmp/ss-ci-pkg/ssurf/stealthsurf
           grep -q '10185' /tmp/ss-ci-pkg/ssurf/stealthsurf
+
+  engvpn:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: engvpn
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.100.0"
+          targets: x86_64-unknown-linux-gnu,aarch64-unknown-linux-musl
+      - name: Cargo test
+        run: cargo test -p engvpn-daemon
+      - name: Build package (host arches for smoke)
+        env:
+          ENGVPN_SKIP_CROSS: "1"
+        run: ./build-package.sh
+      - name: Smoke
+        run: ./smoke-test.sh
+      - name: Assert Rust binary packaged
+        run: |
+          test -x dist/stage/sbin/engvpn-daemon || tar -tzf dist/engvpn_*_merlin-x86_64.tar.gz | grep -q sbin/engvpn-daemon
+          grep -q '"version": "1.0.0"' feed/latest.json
+          ! grep -qE 'file://|/agent/repos/' feed/latest.json

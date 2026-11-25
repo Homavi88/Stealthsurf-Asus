@@ -1,4 +1,6 @@
 dist/
+target/
 *.tar.gz
 runtime-data/
 keys/engvpn.minisign.key
+feed/latest.local.json

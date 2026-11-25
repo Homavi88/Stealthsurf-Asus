@@ -1,0 +1,42 @@
+[package]
+name = "engvpn-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "EngVPN Merlin panel daemon (Rust) — replaces Node runtime"
+default-run = "engvpn-daemon"
+
+[[bin]]
+name = "engvpn-daemon"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.7", default-features = false, features = ["http1", "json", "tokio", "query", "original-uri"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "fs", "io-util", "process", "signal", "sync", "time"] }
+tower-http = { version = "0.5", features = ["fs", "set-header"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac", "sha2"] }
+sha2 = "0.10"
+hmac = "0.12"
+hex = "0.4"
+rand = "0.8"
+uuid = { version = "1", features = ["v4", "serde"] }
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std", "env-filter"] }
+mime_guess = "2"
+bytes = "1"
+parking_lot = "0.12"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+base64 = "0.22"
+clap = { version = "4", features = ["derive", "env"] }
+libc = "0.2"
+futures-util = "0.3"
+
+[dev-dependencies]
+tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"
