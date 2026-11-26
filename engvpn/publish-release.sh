@@ -66,6 +66,8 @@ else
 Панель — статический Rust \`engvpn-daemon\` (без Node/V8). Merlin aarch64: musl static binary в \`merlin-aarch64.tar.gz\`.
 
 ### Highlights
+- 1.0.2: xray/ferrum zip на Merlin без unzip/python3 (gzip-wrap + busybox/bsdtar)
+- 1.0.2: Safari — меню настроек без \`Array.prototype.at\`; ЦП с округлением
 - 1.0.1: ядра/гео через \`download-cores.sh\` (без Node/\`engines.mjs\` на шаге установки [8/10])
 - 1.0.1: Safari login — \`other.liveButton\` в snapshot + UI guards
 - Нет V8 Fatal 133 на Diagnostics: load из \`/proc\` в процессе Rust

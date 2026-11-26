@@ -4,13 +4,13 @@
 
 | | |
 | --- | --- |
-| Версия | **1.0.1** ([`VERSION`](./VERSION)) |
+| Версия | **1.0.2** ([`VERSION`](./VERSION)) |
 | Панель | `http://<lan_ip>:8790/` (Rust `engvpn-daemon`) |
 | Префикс | `/jffs/addons/engvpn` или `/tmp/mnt/<USB>/engvpn` |
 | CLI | `engvpnd` (`start` / `stop` / `restart` / `off` / `update` / `status` / `ver` …) |
 | Runtime | **без Node**; musl aarch64 предпочтительно (RT-BE88U) |
 
-Релиз: [engvpn-1.0.1](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-1.0.1)
+Релиз: [engvpn-1.0.2](https://github.com/Homavi88/Stealthsurf-Asus/releases/tag/engvpn-1.0.2)
 
 Старый Node-стек: [`archive/`](./archive/README.md).
 
@@ -73,8 +73,13 @@ $PREFIX/
 - Supervisor / keepalive / flock — по-прежнему `service.sh` (без шторма процессов).  
 - Diagnostics читает `/proc` **в процессе Rust** (нет V8 Fatal 133).  
 - Dual uptime: сессия аддона (`data/.addon-uptime-since`) + аптайм панели.  
-- Feed `latest.json` — SHA-256 (+ Minisign), GitHub Releases `engvpn-1.0.1`.  
+- Feed `latest.json` — SHA-256 (+ Minisign), GitHub Releases `engvpn-1.0.2`.  
 - Ядра/гео при установке: `share/engvpn/download-cores.sh` (curl, **без** Node/`engines.mjs`).
+
+### Что нового в 1.0.2
+
+- Установка [8/10]: xray/ferrum `.zip` распаковываются на stock Merlin **без** `unzip`/`python3` (gzip-wrap raw deflate + busybox/bsdtar fallback).  
+- Safari: меню настроек (gear) больше не ломается на `Array.prototype.at`; строка ЦП округляется (не `6.350550381033027%`).
 
 ### Что нового в 1.0.1
 
