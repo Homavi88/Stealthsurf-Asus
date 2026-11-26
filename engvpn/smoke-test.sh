@@ -799,6 +799,17 @@ if test -x "$PREFIX/sbin/engvpn-daemon"; then
 	grep -q 'other\.liveButton\|other = S.other\|S.other ||' "$_ui_js" \
 		&& echo "  UI guards S.other ok" \
 		|| { echo "missing S.other guards in app.js" >&2; exit 1; }
+	# Safari <15.4: no Array.prototype.at — settings drawer must use lastOf()
+	! grep -qE '\.at\(-1\)' "$_ui_js" \
+		&& grep -q 'function lastOf' "$_ui_js" \
+		&& grep -q 'function fmtCpu' "$_ui_js" \
+		&& echo "  Safari lastOf/fmtCpu (no Array.at) ok" \
+		|| { echo "app.js still uses Array.at(-1) or missing lastOf/fmtCpu" >&2; exit 1; }
+	# BusyBox Merlin: zip extract without unzip/python3
+	grep -q 'extract_zip_via_gzip' "$PREFIX/share/engvpn/download-cores.sh" \
+		&& grep -q 'zip_write_u32_le' "$PREFIX/share/engvpn/download-cores.sh" \
+		&& echo "  download-cores gzip-wrap zip extract ok" \
+		|| { echo "missing extract_zip_via_gzip in download-cores.sh" >&2; exit 1; }
 	echo "  engvpnUpdateApply via Rust invoke ok"
 	echo "  demo locations scrubbed by Rust defaults ok"
 	# Panel EngVPN transparent dry-run via invoke

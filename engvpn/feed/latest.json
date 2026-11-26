@@ -1,24 +1,24 @@
 {
-  "version": "1.0.1",
-  "notes": "EngVPN 1.0.1 — hotfix: shell download-cores (без Node/engines.mjs на шаге [8/10]); snapshot other.liveButton + UI guards (Safari login); Rust engvpn-daemon musl aarch64.",
+  "version": "1.0.2",
+  "notes": "EngVPN 1.0.2 — BusyBox zip unpack for xray/ferrum (gzip-wrap, без unzip/python3); Safari: menu без Array.at + округление ЦП; Rust engvpn-daemon musl aarch64.",
   "packages": {
     "merlin-aarch64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-aarch64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.2/engvpn_1.0.2_merlin-aarch64.tar.gz",
       "minisig": "",
-      "sha256": "688fda7d16304ddf818c9e5a76634a4d99293220872bf41ee8b59b5e6ced9989",
-      "size": 1820126
+      "sha256": "eaedb0c85249fb92b913be7c7a820a9345c0018c17ee539a0ceeac679437339b",
+      "size": 1822398
     },
     "merlin-armv7": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-armv7.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.2/engvpn_1.0.2_merlin-armv7.tar.gz",
       "minisig": "",
-      "sha256": "3bc0ef6fded6cea0e41c1afa5b0f50a52c2587b0ea51d55d2a1bf94783ae4f7a",
-      "size": 1697682
+      "sha256": "a667c22a4c5ca7c4e59d1ffaf829a7be92f39da459fb0dce59090c27f36a87ae",
+      "size": 1701463
     },
     "merlin-x86_64": {
-      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.1/engvpn_1.0.1_merlin-x86_64.tar.gz",
+      "url": "https://github.com/Homavi88/Stealthsurf-Asus/releases/download/engvpn-1.0.2/engvpn_1.0.2_merlin-x86_64.tar.gz",
       "minisig": "",
-      "sha256": "34d25214d7c8da9ac307b21f9b550be633205fb694a55f579c8f33f30158ff4e",
-      "size": 1886773
+      "sha256": "ca2f76df7a8193aac3e89fa4053702bd913e6d3cec9f0232c79b113e944b642c",
+      "size": 1888395
     }
   }
 }

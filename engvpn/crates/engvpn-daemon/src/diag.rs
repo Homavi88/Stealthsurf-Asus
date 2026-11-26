@@ -75,6 +75,8 @@ fn read_load(prev: &mut Option<(u64, u64)>) -> (f64, u64, u64) {
     } else {
         0.0
     };
+    // One decimal for panel loadline (avoid raw f64 like 6.350550381033027%).
+    let cpu = (cpu * 10.0).round() / 10.0;
     *prev = Some((idle, total));
     let (ram_total, ram_avail) = read_mem();
     let ram_used = ram_total.saturating_sub(ram_avail);

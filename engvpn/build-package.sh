@@ -303,7 +303,7 @@ minisig_release() {
 	fi
 }
 
-RELEASE_NOTES="EngVPN $VERSION — hotfix: shell download-cores (без Node/engines.mjs на шаге [8/10]); snapshot other.liveButton + UI guards (Safari login); Rust engvpn-daemon musl aarch64."
+RELEASE_NOTES="EngVPN $VERSION — BusyBox zip unpack for xray/ferrum (gzip-wrap, без unzip/python3); Safari: menu без Array.at + округление ЦП; Rust engvpn-daemon musl aarch64."
 
 FEED=$ROOT/feed/latest.json
 LOCAL_FEED=$ROOT/feed/latest.local.json

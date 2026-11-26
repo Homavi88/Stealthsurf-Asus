@@ -76,6 +76,17 @@ const fmtBytes = (n) => {
 };
 const mem = (n) => `${(Number(n) / 1024 / 1024 / 1024).toFixed(1)} ГБ`;
 
+/** CPU % for UI — one decimal, no raw float (Safari home loadline). */
+function fmtCpu(n) {
+  const v = Math.max(0, Math.min(100, Number(n) || 0));
+  return String(Math.round(v * 10) / 10);
+}
+
+/** Last array element without Array.prototype.at (Safari <15.4). */
+function lastOf(arr) {
+  return arr && arr.length ? arr[arr.length - 1] : undefined;
+}
+
 /**
  * Absolute same-origin URL. iOS Safari can drop a non-default port when resolving
  * relative paths against a path-less address-bar URL (`http://IP:8790` without `/`).
@@ -523,7 +534,7 @@ function backBar(title, { hideBack = false } = {}) {
 function settingsActiveTop() {
   const ids = (ui.stack || []).filter((id) => id && id !== "menu");
   if (!ids.length) return null;
-  const last = ids.at(-1);
+  const last = lastOf(ids);
   if (SETTINGS_TOP.has(last)) return last;
   if (SETTINGS_PARENT[last]) return SETTINGS_PARENT[last];
   return ids.find((id) => SETTINGS_TOP.has(id)) || null;
@@ -575,7 +586,7 @@ function screenMenu() {
 
 function settingsDrawer() {
   const stack = ui.stack || [];
-  const contentId = stack.at(-1);
+  const contentId = lastOf(stack);
   const hasPane = contentId && contentId !== "menu";
   const top = settingsActiveTop();
   const nested = hasPane && contentId !== top;
@@ -1134,7 +1145,7 @@ function startProgressPoll() {
       const p = res?.progress || res;
       if (p && (p.id || p.phase || p.percent != null)) {
         ui.downloadProgress = p;
-        if (ui.stack.at(-1) === "engine" && !paintDownloadProgress()) render();
+        if (lastOf(ui.stack) === "engine" && !paintDownloadProgress()) render();
       }
     } catch { /* ignore */ }
   }, 600);
@@ -1409,7 +1420,7 @@ function procRowsHtml(list, kind) {
   if (!list?.length) return `<p class="muted">Нет данных процессов</p>`;
   return `<div class="proc-table">${list.map((p) => {
     const metric = kind === "cpu"
-      ? `${Number(p.cpu) || 0}%`
+      ? `${fmtCpu(p.cpu)}%`
       : fmtBytes(p.rss != null ? p.rss : (Number(p.rssKb) || 0) * 1024);
     const badge = p.label || p.kind
       ? `<span class="proc-flag kind-${esc(p.kind || "engvpn")}${p.crashLoop || p.missing ? " warn" : ""}">${esc(p.missing ? `${p.label || p.name} ?` : (p.label || p.kind))}</span>`
@@ -1425,7 +1436,7 @@ function procRowsHtml(list, kind) {
 }
 
 function sysLoadBlockHtml(load, uptimeMs) {
-  const cpu = Math.max(0, Math.min(100, Number(load?.cpu) || 0));
+  const cpu = Number(fmtCpu(load?.cpu));
   const used = Number(load?.ramUsed) || 0;
   const total = Number(load?.ramTotal) || 0;
   const ramPct = total > 0 ? Math.max(0, Math.min(100, Math.round((used / total) * 100))) : 0;
@@ -1436,7 +1447,7 @@ function sysLoadBlockHtml(load, uptimeMs) {
     <p class="muted">Общая загрузка роутера (/proc/stat · /proc/meminfo). Обновление ~2 с.</p>
     <div class="sys-load">
       <div class="sys-load-item">
-        <b class="kv">${cpu}%</b>
+        <b class="kv">${fmtCpu(cpu)}%</b>
         <span class="muted">ЦП</span>
         <div class="sys-load-bar" aria-hidden="true"><i style="width:${cpu}%"></i></div>
       </div>
@@ -1482,7 +1493,7 @@ function paintProcs() {
 let procsInFlight = false;
 
 async function refreshProcs() {
-  if (!S?.diagnostics?.showLoad || ui.stack.at(-1) !== "diagnostics") return;
+  if (!S?.diagnostics?.showLoad || lastOf(ui.stack) !== "diagnostics") return;
   // Never pile overlapping /proc scans — Merlin Node blocks and Safari sees
   // "Сеть панели недоступна" while the previous poll still runs.
   if (procsInFlight) return;
@@ -1509,7 +1520,7 @@ async function refreshProcs() {
 }
 
 function ensureProcsPoll() {
-  const want = !!(S?.diagnostics?.showLoad && ui.stack.at(-1) === "diagnostics");
+  const want = !!(S?.diagnostics?.showLoad && lastOf(ui.stack) === "diagnostics");
   if (want && !procsPoll) {
     // 0.5.36: 10s — matches server proc cache; avoids hammering /proc child
     // (Merlin aarch64 V8 Fatal under frequent Diagnostics polls).
@@ -1526,7 +1537,7 @@ function screenDiag() {
   const procs = ui.processes || S.runtime?.load?.processes;
   return `${backBar("Диагностика")}<div class="drawer-body"><div class="group">
     ${cell("Тест скорости", "Пинг, загрузка через VPN и напрямую", `<button class="ghost" data-act="speedtest">Запустить</button>`)}
-    ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${fmt(ui.result.direct.down || 0)}. VPN: ${ui.result.vpn ? (typeof ui.result.vpn.down === "number" ? fmt(ui.result.vpn.down) : esc(ui.result.vpn.error || ui.result.vpn.down || "—")) : "не подключён"}. ЦП ${ui.result.cpu}%.</p>` : ""}
+    ${ui.result?.direct ? `<p class="muted">Напрямую: пинг ${ui.result.direct.ping ?? "—"} мс, ${fmt(ui.result.direct.down || 0)}. VPN: ${ui.result.vpn ? (typeof ui.result.vpn.down === "number" ? fmt(ui.result.vpn.down) : esc(ui.result.vpn.error || ui.result.vpn.down || "—")) : "не подключён"}. ЦП ${fmtCpu(ui.result.cpu)}%.</p>` : ""}
     ${cell("Проверки скрытности", "Exit IP, DNS, IPv6, DPI, kill-switch", `<button class="ghost" data-go="privacy">Открыть</button>`)}
     ${cell("Нагрузка на роутер", "Пока панель открыта — сводка ЦП/ОЗУ, строка на главной и топ процессов", sw("diagnostics.showLoad", d.showLoad))}
     ${d.showLoad ? `<div data-live="procs">${procsBlockHtml(procs, S.runtime?.load)}</div>` : ""}
@@ -1671,14 +1682,14 @@ function home() {
   const load = rt.load || {};
   return `<div class="shell">
     <div class="topbar"><div class="brand">${logo()} EngVPN</div><div class="spacer"></div>
-      <button class="icon-btn" data-act="settings" aria-label="Настройки">${gear()}</button></div>
+      <button type="button" class="icon-btn" data-act="settings" aria-label="Настройки">${gear()}</button></div>
     <div class="layout">
       <div class="center">
         <div class="hero-wrap">
           <button class="hero-btn ${other.liveButton ? "live" : ""}" data-act="toggle" ${ui.busy || !hasProfiles ? "disabled" : ""} title="${hasProfiles ? "" : "Сначала добавьте ключ или URL"}">${hero(shape)}</button>
           <h2 class="status">${label}</h2>
           <button class="ip-pill" data-act="ip" ${needsSetup ? "disabled" : ""}>${flag(flagKind)} ${esc(needsSetup ? "—" : ip)}</button>
-          ${S.diagnostics?.showLoad ? `<div class="loadline" data-live="load">ЦП ${load.cpu || 0}% · ОЗУ ${mem(load.ramUsed)}/${mem(load.ramTotal)} · EngVPN ${fmtBytes(load.proc)}</div>` : `<div class="loadline"></div>`}
+          ${S.diagnostics?.showLoad ? `<div class="loadline" data-live="load">ЦП ${fmtCpu(load.cpu)}% · ОЗУ ${mem(load.ramUsed)}/${mem(load.ramTotal)} · EngVPN ${fmtBytes(load.proc)}</div>` : `<div class="loadline"></div>`}
         </div>
         ${needsSetup ? `<div class="card empty-card"><div class="card-head"><span class="card-ico">◎</span><div><h3>Добавьте ключ или URL</h3><p>Пока нет API-ключа StealthSurf и URL подписки — локации не подтягиваются. Главный экран пустой, без «живых» серверов.</p></div></div>
           <button class="primary" data-go-root="account" style="margin-top:10px">Открыть аккаунт</button></div>` : ""}
@@ -1820,7 +1831,7 @@ function render() {
 function paintLive() {
   const rt = S.runtime;
   const load = document.querySelector("[data-live=load]");
-  if (load) load.textContent = `ЦП ${rt.load.cpu}% · ОЗУ ${mem(rt.load.ramUsed)}/${mem(rt.load.ramTotal)} · EngVPN ${fmtBytes(rt.load.proc)}`;
+  if (load) load.textContent = `ЦП ${fmtCpu(rt.load?.cpu)}% · ОЗУ ${mem(rt.load?.ramUsed)}/${mem(rt.load?.ramTotal)} · EngVPN ${fmtBytes(rt.load?.proc)}`;
   const upEl = document.querySelector("[data-live=uptime]");
   if (upEl) upEl.textContent = rt.uptime != null ? fmtUptime(rt.uptime) : "—";
   const panelUpEl = document.querySelector("[data-live=panel-uptime]");
@@ -1833,14 +1844,19 @@ function paintLive() {
 
 function open(id) {
   if (!ui.stack.length) ui.stack = ["menu"];
-  if (ui.stack.at(-1) !== id) ui.stack.push(id);
+  if (lastOf(ui.stack) !== id) ui.stack.push(id);
   ui.pop = false;
   syncHashFromStack();
   render();
 }
 
 document.addEventListener("click", (event) => {
-  const t = event.target.closest("[data-act],[data-go],[data-go-top],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]");
+  // SVG/text targets: prefer Element.closest; fall back for older WebKit.
+  const raw = event.target;
+  const el = raw && raw.nodeType === 1 ? raw : raw && raw.parentElement;
+  const t = (el && typeof el.closest === "function")
+    ? el.closest("[data-act],[data-go],[data-go-top],[data-go-root],[data-toggle],[data-hour],[data-theme],[data-icon],[data-engine],[data-mux],[data-source],[data-geo],[data-copy]")
+    : null;
   if (!t || (!S && t.dataset.act !== "eye" && ui.auth !== false)) return;
   const act = t.dataset.act;
   if (t.dataset.goTop) {
@@ -2402,13 +2418,13 @@ function listen() {
       } else {
         ui.downloadProgress = msg;
       }
-      if (ui.stack.at(-1) === "engine") {
+      if (lastOf(ui.stack) === "engine") {
         if (!paintDownloadProgress()) render();
       }
     } else if (msg.type === "snapshot") {
       S = msg.state;
       if (!ui.stack.length) render();
-    } else if (msg.type === "log" && ui.stack.at(-1) === "logs") {
+    } else if (msg.type === "log" && lastOf(ui.stack) === "logs") {
       S.logs.unshift(msg);
       render();
     }

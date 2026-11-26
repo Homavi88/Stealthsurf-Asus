@@ -167,7 +167,150 @@ PY
 	sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$_json" | head -1
 }
 
-# Extract zip member → dest (Merlin often lacks unzip; try several tools).
+# Little-endian u16/u32 from file offset (BusyBox od; host-endian safe).
+zip_u16() {
+	_f=$1
+	_o=$2
+	_b=$(dd if="$_f" bs=1 skip="$_o" count=2 2>/dev/null | od -An -tu1)
+	# shellcheck disable=SC2086
+	set -- $_b
+	[ $# -eq 2 ] || return 1
+	echo $(( $1 + ($2 * 256) ))
+}
+
+zip_u32() {
+	_f=$1
+	_o=$2
+	_b=$(dd if="$_f" bs=1 skip="$_o" count=4 2>/dev/null | od -An -tu1)
+	# shellcheck disable=SC2086
+	set -- $_b
+	[ $# -eq 4 ] || return 1
+	echo $(( $1 + ($2 * 256) + ($3 * 65536) + ($4 * 16777216) ))
+}
+
+# Write LE u32 as raw bytes (no awk /^ power — BusyBox-safe).
+zip_write_u32_le() {
+	_n=${1:-0}
+	printf "%b" "$(printf '\\%03o\\%03o\\%03o\\%03o' \
+		"$((_n & 255))" "$(((_n >> 8) & 255))" "$(((_n >> 16) & 255))" "$(((_n >> 24) & 255))")"
+}
+
+# Merlin stock BusyBox often has no unzip applet and no python3.
+# Zip method 8 (deflate) → prepend gzip header + CRC/ISIZE trailer → gzip -dc.
+extract_zip_via_gzip() {
+	_zip=$1
+	_member=$2
+	_dest=$3
+	_off=0
+	_size=$(wc -c <"$_zip" | tr -d ' ')
+	[ -n "$_size" ] && [ "$_size" -gt 30 ] || return 1
+	while [ "$_off" -lt "$_size" ]; do
+		_sig=$(zip_u32 "$_zip" "$_off") || break
+		# PK\x03\x04 local file header
+		[ "$_sig" -eq 67324752 ] || break
+		_flags=$(zip_u16 "$_zip" $((_off + 6))) || break
+		_method=$(zip_u16 "$_zip" $((_off + 8))) || break
+		_crc=$(zip_u32 "$_zip" $((_off + 14))) || break
+		_csz=$(zip_u32 "$_zip" $((_off + 18))) || break
+		_usz=$(zip_u32 "$_zip" $((_off + 22))) || break
+		_nlen=$(zip_u16 "$_zip" $((_off + 26))) || break
+		_xlen=$(zip_u16 "$_zip" $((_off + 28))) || break
+		_name=$(dd if="$_zip" bs=1 skip=$((_off + 30)) count="$_nlen" 2>/dev/null) || break
+		_data=$((_off + 30 + _nlen + _xlen))
+		_base=${_name##*/}
+		if [ "$_base" = "$_member" ] || [ "$_name" = "$_member" ]; then
+			# Bit 3 = data descriptor (sizes after payload) — unsupported here.
+			case $((_flags & 8)) in
+			8) return 1 ;;
+			esac
+			_part=${_dest}.zpart
+			_gz=${_dest}.gzwrap
+			rm -f "$_part" "$_gz" "$_dest"
+			# Prefer tail|head (fast); fall back to dd.
+			if ! tail -c "+$((_data + 1))" "$_zip" 2>/dev/null | head -c "$_csz" >"$_part" 2>/dev/null; then
+				dd if="$_zip" of="$_part" bs=1 skip="$_data" count="$_csz" 2>/dev/null || {
+					rm -f "$_part"
+					return 1
+				}
+			fi
+			_got=$(wc -c <"$_part" | tr -d ' ')
+			[ "$_got" -eq "$_csz" ] || {
+				rm -f "$_part"
+				return 1
+			}
+			case "$_method" in
+			0)
+				mv -f "$_part" "$_dest"
+				;;
+			8)
+				# gzip header (CM=8, FLG=0, OS=255) + raw deflate + CRC32 + ISIZE
+				printf '\037\213\010\000\000\000\000\000\000\377' >"$_gz"
+				cat "$_part" >>"$_gz"
+				zip_write_u32_le "$_crc" >>"$_gz"
+				zip_write_u32_le "$_usz" >>"$_gz"
+				rm -f "$_part"
+				if command -v gzip >/dev/null 2>&1; then
+					gzip -dc "$_gz" >"$_dest" 2>/dev/null || {
+						rm -f "$_gz" "$_dest"
+						return 1
+					}
+				else
+					# BusyBox often only has gzip applet via gunzip name
+					gunzip -c "$_gz" >"$_dest" 2>/dev/null || {
+						rm -f "$_gz" "$_dest"
+						return 1
+					}
+				fi
+				rm -f "$_gz"
+				;;
+			*)
+				rm -f "$_part"
+				return 1
+				;;
+			esac
+			[ -f "$_dest" ] && [ -s "$_dest" ] && return 0
+			return 1
+		fi
+		_off=$((_data + _csz))
+	done
+	return 1
+}
+
+# Try busybox unzip (with/without -j) at common Merlin paths.
+try_busybox_unzip() {
+	_zip=$1
+	_member=$2
+	_dir=$3
+	_dest=$4
+	_bb=
+	if command -v busybox >/dev/null 2>&1; then
+		_bb=$(command -v busybox)
+	elif [ -x /bin/busybox ]; then
+		_bb=/bin/busybox
+	elif [ -x /usr/bin/busybox ]; then
+		_bb=/usr/bin/busybox
+	else
+		return 1
+	fi
+	# Applet may be missing — probe quietly.
+	"$_bb" unzip >/dev/null 2>&1 || true
+	for _args in "-o -j" "-o"; do
+		# shellcheck disable=SC2086
+		if "$_bb" unzip $_args "$_zip" "$_member" -d "$_dir" >/dev/null 2>&1; then
+			if [ -f "$_dir/$_member" ] && [ "$_dir/$_member" != "$_dest" ]; then
+				mv -f "$_dir/$_member" "$_dest"
+			fi
+			_hit=$(find_named "$_dir" "$_member" 0) || _hit=""
+			if [ -n "$_hit" ] && [ "$_hit" != "$_dest" ]; then
+				mv -f "$_hit" "$_dest"
+			fi
+			[ -f "$_dest" ] && return 0
+		fi
+	done
+	return 1
+}
+
+# Extract zip member → dest (Merlin often lacks unzip; prefer gzip-wrap).
 extract_zip_member() {
 	_zip=$1
 	_member=$2
@@ -181,14 +324,37 @@ extract_zip_member() {
 			fi
 			[ -f "$_dest" ] && return 0
 		fi
-	fi
-	if command -v busybox >/dev/null 2>&1 && busybox unzip -h >/dev/null 2>&1; then
-		if busybox unzip -o -j "$_zip" "$_member" -d "$_dir" >/dev/null 2>&1; then
-			if [ -f "$_dir/$_member" ] && [ "$_dir/$_member" != "$_dest" ]; then
-				mv -f "$_dir/$_member" "$_dest"
+		# Some BusyBox unzip ports reject -j
+		if unzip -o "$_zip" "$_member" -d "$_dir" >/dev/null 2>&1; then
+			_hit=$(find_named "$_dir" "$_member" 0) || _hit=""
+			if [ -n "$_hit" ]; then
+				[ "$_hit" != "$_dest" ] && mv -f "$_hit" "$_dest"
+				[ -f "$_dest" ] && return 0
 			fi
-			[ -f "$_dest" ] && return 0
 		fi
+	fi
+	if try_busybox_unzip "$_zip" "$_member" "$_dir" "$_dest"; then
+		return 0
+	fi
+	# bsdtar / libarchive tar (Entware) can read zip
+	if command -v bsdtar >/dev/null 2>&1; then
+		_ex=$TMP_DIR/zip-extract-$$
+		rm -rf "$_ex"
+		mkdir -p "$_ex"
+		if bsdtar -xf "$_zip" -C "$_ex" "$_member" >/dev/null 2>&1 \
+			|| bsdtar -xf "$_zip" -C "$_ex" >/dev/null 2>&1; then
+			_hit=$(find_named "$_ex" "$_member" 0) || _hit=""
+			if [ -n "$_hit" ]; then
+				mv -f "$_hit" "$_dest"
+				rm -rf "$_ex"
+				[ -f "$_dest" ] && return 0
+			fi
+		fi
+		rm -rf "$_ex"
+	fi
+	# Pure shell + gzip (always available on Merlin — tar.gz path already works)
+	if extract_zip_via_gzip "$_zip" "$_member" "$_dest"; then
+		return 0
 	fi
 	if command -v python3 >/dev/null 2>&1; then
 		python3 - "$_zip" "$_member" "$_dest" <<'PY'
@@ -284,7 +450,7 @@ download_xrayish() {
 	fi
 	rm -f "$_dest"
 	if ! extract_zip_member "$_tmp" xray "$_dest"; then
-		echo "  → $_dest_name: ошибка — распаковка (нужен unzip или python3)"
+		echo "  → $_dest_name: ошибка — распаковка (unzip/gzip)"
 		FAILED=$((FAILED + 1))
 		rm -f "$_tmp"
 		return 1
